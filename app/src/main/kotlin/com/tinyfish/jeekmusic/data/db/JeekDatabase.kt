@@ -50,8 +50,9 @@ object DatabaseModule {
     @Singleton
     fun database(@ApplicationContext context: Context): JeekDatabase =
         Room.databaseBuilder(context, JeekDatabase::class.java, "jeek.db")
-            // 1.0 发布前数据库结构还会频繁变化，直接重建；发布后改为正式迁移（docs/design.md §3）
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            // 1.0 起数据库结构变化必须提供 Migration（app/schemas/ 中导出了每个版本的结构），
+            // 不再直接重建，以免丢失播放列表等用户数据；只有降级时才重建（docs/design.md §3）
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 
     @Provides

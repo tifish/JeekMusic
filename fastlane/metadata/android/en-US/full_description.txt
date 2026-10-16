@@ -1,0 +1,33 @@
+<p>JeekMusic is a simple music player for the music files on your phone. It is built around the folders you choose, works completely offline by default, and doesn't track you.</p>
+
+<p><b>Library</b></p>
+<ul>
+<li>Add several music folders, including folders on an SD card, and browse them side by side</li>
+<li>Artist view with A–Z index; multiple artists in one tag ("A/B", "A feat. B") are split</li>
+<li>Songs without tags get their artist and title from the file name ("Artist - Title.mp3")</li>
+<li>Fixes garbled Chinese tags (GBK stored as Latin-1)</li>
+<li>CUE sheets: whole-album FLAC/WAV files are split into tracks</li>
+<li>Pin your favourite artists to the tab bar</li>
+</ul>
+
+<p><b>Playback</b></p>
+<ul>
+<li>Lossless output: no resampling, no effects, 24-bit sources are not truncated</li>
+<li>Low-power playback (audio offload) when the screen is off</li>
+<li>Resumes where you left off; sleep timer with fade-out</li>
+<li>Playlists with m3u import/export</li>
+</ul>
+
+<p><b>Lyrics</b></p>
+<ul>
+<li>.lrc files next to the song and embedded lyrics; synced scrolling, translations, per-song offset</li>
+<li>Optional online lyrics from LRCLIB (off by default), saved as .lrc next to the song</li>
+</ul>
+
+<p><b>Smart tags</b></p>
+<ul>
+<li>"Workout" and "Calm" tags detected on the device from tempo, loudness and spectrum — nothing is uploaded</li>
+<li>Analysis runs only while charging by default; tags can be corrected manually</li>
+</ul>
+
+<p>Playlists, pinned tabs and settings are backed up automatically to a small JSON file in your music folder, so they move with your music to a new phone.</p>

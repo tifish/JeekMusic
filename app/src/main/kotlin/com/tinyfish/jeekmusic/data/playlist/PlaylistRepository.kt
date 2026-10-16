@@ -7,16 +7,21 @@ import com.tinyfish.jeekmusic.data.db.PlaylistEntity
 import com.tinyfish.jeekmusic.data.db.PlaylistEntry
 import com.tinyfish.jeekmusic.data.db.PlaylistItemEntity
 import com.tinyfish.jeekmusic.data.db.PlaylistWithCount
+import com.tinyfish.jeekmusic.data.backup.BackupRefs
+import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 播放列表（需求 PL-1 ~ PL-3）。条目引用 track_key，文件不可用时保留条目。 */
+data class ImportResult(val playlistId: Long, val matched: Int, val missing: Int)
+
+/** 播放列表（需求 PL-1 ~ PL-4）。条目引用 track_key，文件不可用时保留条目。 */
 @Singleton
 class PlaylistRepository @Inject constructor(
     private val db: JeekDatabase,
     private val dao: PlaylistDao,
+    private val trackDao: TrackDao,
 ) {
     val playlists: Flow<List<PlaylistWithCount>> = dao.observeAll()
 
@@ -46,6 +51,31 @@ class PlaylistRepository @Inject constructor(
     suspend fun removeItem(id: Long, itemId: Long) = db.withTransaction {
         dao.deleteItem(itemId)
         dao.touch(id, System.currentTimeMillis())
+    }
+
+    /** 导出为扩展 m3u（需求 PL-4）。不可用的条目跳过。 */
+    suspend fun exportM3u(id: Long): String {
+        val tracks = dao.items(id).mapNotNull { item -> trackDao.byTrackKeys(listOf(item.trackKey)).firstOrNull() }
+        return M3u.format(
+            tracks.map { t ->
+                val artist = t.artistDisplay.ifEmpty { null }
+                M3u.Entry(M3u.storagePath(t.volumeName, t.relativePath, t.fileName), t.durationMs / 1000, listOfNotNull(artist, t.title).joinToString(" - "))
+            },
+        )
+    }
+
+    /**
+     * 从 m3u 导入为新的播放列表（需求 PL-4）。路径按"后缀匹配"对应到曲库中的歌曲，
+     * 所以别的设备、别的播放器导出的列表也能用（docs/design.md §3.1 的匹配规则）。
+     */
+    suspend fun importM3u(name: String, text: String): ImportResult {
+        val tracks = trackDao.all().filter { it.cueTrackNo == null || it.cueTrackNo == 1 }
+        val matcher = BackupRefs.Matcher(tracks.associate { (it.relativePath + it.fileName) to it.trackKey })
+        val entries = M3u.parse(text)
+        val keys = entries.mapNotNull { segments -> matcher.match(segments.joinToString("/")) }
+        val id = create(name)
+        if (keys.isNotEmpty()) addKeys(id, keys)
+        return ImportResult(id, keys.size, entries.size - keys.size)
     }
 
     /** 按新的顺序重写整个列表（拖动排序后调用）。 */

@@ -58,7 +58,6 @@
         <item quantity="other">跳过了 %d 个不支持的文件（APE、WMA 等），转换成 FLAC 后即可播放。</item>
     </plurals>
     <string name="settings_appearance">外观</string>
-    <string name="settings_theme">主题</string>
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
@@ -142,7 +141,6 @@
     <string name="artist_exceptions_hint">每行一个</string>
     <string name="infer_from_file_name">从文件名推断艺术家</string>
     <string name="infer_from_file_name_summary">歌曲没有艺术家标签时</string>
-    <string name="file_name_format">文件名格式</string>
     <string name="format_artist_title">艺术家 - 标题</string>
     <string name="format_title_artist">标题 - 艺术家</string>
     <string name="legacy_charset">旧标签编码</string>
@@ -182,4 +180,36 @@
     <string name="sensitivity_loose">宽松（歌更多）</string>
     <string name="sensitivity_normal">标准</string>
     <string name="sensitivity_strict">严格（歌更少）</string>
+
+    <string name="lyrics_search">在线搜索歌词</string>
+    <string name="lyrics_search_title">搜索歌词（LRCLIB）</string>
+    <string name="lyrics_search_button">搜索</string>
+    <string name="lyrics_title_field">歌名</string>
+    <string name="lyrics_artist_field">艺术家</string>
+    <string name="lyrics_synced">同步</string>
+    <string name="lyrics_plain">纯文本</string>
+    <string name="lyrics_search_failed">搜索失败，请检查网络连接。</string>
+    <string name="lyrics_saved_folder">歌词已保存为歌曲旁边的 .lrc 文件</string>
+    <string name="lyrics_saved_cache">歌词已缓存在 App 内，未能保存到音乐目录</string>
+    <string name="settings_lyrics">歌词</string>
+    <string name="online_lyrics">在线歌词（LRCLIB）</string>
+    <string name="online_lyrics_summary">默认关闭。歌曲没有本地歌词时，可以在 lrclib.net 上搜索</string>
+    <string name="online_lyrics_privacy_title">开启在线歌词？</string>
+    <string name="online_lyrics_privacy">搜索时会把歌曲的标题、艺术家、专辑和时长发送给 lrclib.net，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
+    <string name="auto_fetch_lyrics">仅 Wi-Fi 下自动获取</string>
+    <string name="auto_fetch_lyrics_summary">只在不计流量的网络下获取；没有找到的歌曲 7 天内不再重试</string>
+    <string name="lyrics_save_location">在线歌词保存位置</string>
+    <string name="lyrics_save_folder">音乐目录，保存为 .lrc（推荐）</string>
+    <string name="lyrics_save_app">仅 App 内缓存</string>
+    <string name="lyrics_clear_cache">清除歌词缓存</string>
+    <string name="lyrics_cache_cleared">已清除歌词缓存</string>
+
+    <string name="m3u_import">导入 m3u</string>
+    <string name="m3u_export">导出为 m3u8</string>
+    <string name="m3u_imported">已导入（找到 / 未找到）：%s</string>
+    <string name="m3u_exported">已导出播放列表</string>
+    <string name="m3u_export_failed">导出失败</string>
+
+    <string name="settings_licenses">开源许可</string>
+    <string name="settings_source">源代码</string>
 </resources>

@@ -10,7 +10,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
 import com.tinyfish.jeekmusic.ui.navigation.Tab
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,7 +44,20 @@ class StartupSnapshot @Inject constructor(
         val ARTIST = stringPreferencesKey("now_playing_artist")
     }
 
-    suspend fun read(): Snapshot {
+    @Volatile private var preloaded: CompletableDeferred<Snapshot>? = null
+
+    /** 在 Application.onCreate 中调用：在后台线程预读，不阻塞主线程。 */
+    fun preload() {
+        val deferred = CompletableDeferred<Snapshot>().also { preloaded = it }
+        Thread({
+            deferred.complete(runCatching { runBlocking { load() } }.getOrDefault(Snapshot()))
+        }, "snapshot-preload").start()
+    }
+
+    /** 预读过就等预读的结果，否则现读。 */
+    suspend fun read(): Snapshot = preloaded?.await() ?: load()
+
+    private suspend fun load(): Snapshot {
         val p = context.snapshotStore.data.first()
         return Snapshot(
             tabs = p[Keys.TABS]?.lines()?.mapNotNull(::decodeTab).orEmpty(),

@@ -60,7 +60,6 @@
         <item quantity="other">%d unsupported files (APE, WMA…) were skipped. Convert them to FLAC to play them.</item>
     </plurals>
     <string name="settings_appearance">Appearance</string>
-    <string name="settings_theme">Theme</string>
     <string name="theme_system">Follow system</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
@@ -145,7 +144,6 @@
     <string name="artist_exceptions_hint">One name per line</string>
     <string name="infer_from_file_name">Infer artist from file name</string>
     <string name="infer_from_file_name_summary">When a song has no artist tag</string>
-    <string name="file_name_format">File name format</string>
     <string name="format_artist_title">Artist - Title</string>
     <string name="format_title_artist">Title - Artist</string>
     <string name="legacy_charset">Legacy tag encoding</string>
@@ -187,4 +185,36 @@
     <string name="sensitivity_loose">Loose (more songs)</string>
     <string name="sensitivity_normal">Normal</string>
     <string name="sensitivity_strict">Strict (fewer songs)</string>
+
+    <string name="lyrics_search">Search lyrics online</string>
+    <string name="lyrics_search_title">Search lyrics (LRCLIB)</string>
+    <string name="lyrics_search_button">Search</string>
+    <string name="lyrics_title_field">Title</string>
+    <string name="lyrics_artist_field">Artist</string>
+    <string name="lyrics_synced">Synced</string>
+    <string name="lyrics_plain">Plain text</string>
+    <string name="lyrics_search_failed">Search failed. Check your network connection.</string>
+    <string name="lyrics_saved_folder">Lyrics saved as .lrc next to the song</string>
+    <string name="lyrics_saved_cache">Lyrics saved in the app; they couldn’t be saved to the music folder</string>
+    <string name="settings_lyrics">Lyrics</string>
+    <string name="online_lyrics">Online lyrics (LRCLIB)</string>
+    <string name="online_lyrics_summary">Off by default. When a song has no local lyrics, you can search lrclib.net</string>
+    <string name="online_lyrics_privacy_title">Turn on online lyrics?</string>
+    <string name="online_lyrics_privacy">When searching, the song’s title, artist, album and duration are sent to lrclib.net. Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
+    <string name="auto_fetch_lyrics">Fetch automatically on Wi-Fi</string>
+    <string name="auto_fetch_lyrics_summary">Only on unmetered networks; songs that weren’t found are not retried for 7 days</string>
+    <string name="lyrics_save_location">Save online lyrics to</string>
+    <string name="lyrics_save_folder">Music folder, as .lrc (recommended)</string>
+    <string name="lyrics_save_app">App only</string>
+    <string name="lyrics_clear_cache">Clear lyrics cache</string>
+    <string name="lyrics_cache_cleared">Lyrics cache cleared</string>
+
+    <string name="m3u_import">Import m3u</string>
+    <string name="m3u_export">Export as m3u8</string>
+    <string name="m3u_imported">Imported (found / not found): %s</string>
+    <string name="m3u_exported">Playlist exported</string>
+    <string name="m3u_export_failed">Export failed</string>
+
+    <string name="settings_licenses">Open-source licenses</string>
+    <string name="settings_source">Source code</string>
 </resources>

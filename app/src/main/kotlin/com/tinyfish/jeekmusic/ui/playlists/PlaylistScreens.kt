@@ -41,7 +41,18 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.tinyfish.jeekmusic.R
+import com.tinyfish.jeekmusic.data.scanner.CharsetDetector
+import com.tinyfish.jeekmusic.ui.navigation.MessageBus
+import com.tinyfish.jeekmusic.ui.navigation.UiMessage
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.tinyfish.jeekmusic.data.db.PlaylistEntity
 import com.tinyfish.jeekmusic.data.db.PlaylistEntry
 import com.tinyfish.jeekmusic.data.db.PlaylistWithCount
@@ -69,11 +80,26 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import javax.inject.Inject
 
 @HiltViewModel
-class PlaylistListViewModel @Inject constructor(private val repository: PlaylistRepository) : ViewModel() {
+class PlaylistListViewModel @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val repository: PlaylistRepository,
+    private val messages: MessageBus,
+) : ViewModel() {
     val playlists: StateFlow<List<PlaylistWithCount>?> = repository.playlists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun create(name: String) = viewModelScope.launch { repository.create(name) }
+
+    fun import(uri: Uri) = viewModelScope.launch {
+        val (name, text) = withContext(Dispatchers.IO) {
+            val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }?.substringBeforeLast('.') ?: "m3u"
+            name to context.contentResolver.openInputStream(uri)?.use { CharsetDetector.decode(it.readBytes()) }
+        }
+        if (text == null) return@launch
+        val result = repository.importM3u(name, text)
+        messages.post(UiMessage(R.string.m3u_imported, "${result.matched} / ${result.missing}"))
+    }
 }
 
 /** 播放列表标签页（需求 PL-1）。 */
@@ -81,7 +107,12 @@ class PlaylistListViewModel @Inject constructor(private val repository: Playlist
 fun PlaylistListScreen(onOpen: (Long) -> Unit, viewModel: PlaylistListViewModel = hiltViewModel()) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
+    val pickM3u = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) viewModel.import(uri) }
     Box(Modifier.fillMaxSize()) {
+        TextButton(
+            onClick = { pickM3u.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "*/*")) },
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp).testTag("import_m3u"),
+        ) { Text(stringResource(R.string.m3u_import)) }
         val list = playlists
         when {
             list == null -> Unit
@@ -120,11 +151,21 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     @Assisted private val playlistId: Long,
     private val repository: PlaylistRepository,
     private val player: PlayerConnection,
+    @param:ApplicationContext private val context: Context,
+    private val messages: MessageBus,
 ) : ViewModel() {
 
     @AssistedFactory
     interface Factory {
         fun create(playlistId: Long): PlaylistDetailViewModel
+    }
+
+    fun export(uri: Uri) = viewModelScope.launch {
+        val text = repository.exportM3u(playlistId)
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null }.getOrDefault(false)
+        }
+        messages.post(UiMessage(if (ok) R.string.m3u_exported else R.string.m3u_export_failed))
     }
 
     val playlist: StateFlow<PlaylistEntity?> = repository.playlist(playlistId)
@@ -169,6 +210,7 @@ fun PlaylistDetailScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    val exportM3u = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/x-mpegurl")) { uri -> if (uri != null) viewModel.export(uri) }
 
     Column(Modifier.fillMaxSize()) {
         SubScreenHeader(
@@ -181,6 +223,7 @@ fun PlaylistDetailScreen(
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.playlist_rename)) }, onClick = { menuOpen = false; renaming = true })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.m3u_export)) }, onClick = { menuOpen = false; exportM3u.launch("${playlist?.name ?: "playlist"}.m3u8") })
                     DropdownMenuItem(text = { Text(stringResource(R.string.playlist_delete)) }, onClick = { menuOpen = false; deleting = true })
                 }
             },

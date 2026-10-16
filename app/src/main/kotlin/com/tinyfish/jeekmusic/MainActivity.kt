@@ -1,6 +1,7 @@
 package com.tinyfish.jeekmusic
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,8 +19,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // 启动快照读完之前保持启动画面（通常 < 30ms），避免首帧闪一下空白标签栏（docs/design.md §9.2）
-        splash.setKeepOnScreenCondition { !viewModel.ready.value }
+        // 启动快照读完之前保持启动画面，避免首帧闪一下空白标签栏；最多等 200ms（docs/design.md §9.2）
+        val deadline = SystemClock.uptimeMillis() + 200
+        splash.setKeepOnScreenCondition { !viewModel.ready.value && SystemClock.uptimeMillis() < deadline }
         enableEdgeToEdge()
         setContent { JeekMusicApp(viewModel) }
     }

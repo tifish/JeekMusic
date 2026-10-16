@@ -10,7 +10,14 @@ import kotlinx.coroutines.flow.Flow
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.lyrics.Lyrics
+import com.tinyfish.jeekmusic.R
+import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
+import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
+import com.tinyfish.jeekmusic.data.lyrics.SaveResult
+import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import com.tinyfish.jeekmusic.ui.navigation.MessageBus
+import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,9 +44,27 @@ class PlayerViewModel @Inject constructor(
     private val searchDao: SearchDao,
     private val trackDao: TrackDao,
     private val lyricsRepository: LyricsRepository,
+    private val settings: SettingsRepository,
+    private val messages: MessageBus,
 ) : ViewModel() {
 
     private val offsetChanged = MutableStateFlow(0)
+
+    val onlineLyricsEnabled: StateFlow<Boolean> = settings.settings.map { it.onlineLyrics }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    suspend fun currentTrack(): TrackEntity? = player.state.value.nowPlaying?.trackId?.let { trackDao.byId(it) }
+
+    suspend fun searchLyrics(title: String, artist: String?): List<OnlineLyrics>? =
+        runCatching { lyricsRepository.search(title, artist) }.getOrNull()
+
+    /** 保存选中的在线歌词并刷新播放页（需求 LY-10）。 */
+    fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) = viewModelScope.launch {
+        val text = lyrics.text ?: return@launch
+        val result = lyricsRepository.save(track, text)
+        messages.post(UiMessage(if (result == SaveResult.MUSIC_FOLDER) R.string.lyrics_saved_folder else R.string.lyrics_saved_cache))
+        offsetChanged.value++
+    }
 
     /** 切歌时加载歌词（docs/design.md §8.1）；调整偏移后重新读取偏移。 */
     val lyrics: StateFlow<LyricsState> = combine(
@@ -56,7 +81,10 @@ class PlayerViewModel @Inject constructor(
                 emit(LyricsState.None)
                 return@transformLatest
             }
-            val lyrics = lyricsRepository.load(track)
+            val lyrics = lyricsRepository.load(track) ?: run {
+                emit(LyricsState.None)
+                lyricsRepository.autoFetch(track)
+            }
             emit(if (lyrics == null) LyricsState.None else LyricsState.Loaded(lyrics, track.trackKey, lyricsRepository.offset(track.trackKey)))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsState.Loading)

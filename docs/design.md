@@ -18,7 +18,7 @@
 | 图片 | Coil 3 + 自定义 Fetcher | 加载内嵌封面和文件夹封面，内存和磁盘两级缓存 |
 | 标签解析 | **TagLib (JNI)**：`io.github.kyant0:taglib` | M0 已验证，见 §4.3 |
 | 音频分析 | MediaCodec 解码 + 自写 FFT 和特征提取 | 不引入额外依赖，见 §6 |
-| 网络 | OkHttp + kotlinx.serialization | 只用于 LRCLIB，懒加载 |
+| 网络 | 系统自带的 `HttpURLConnection` + `org.json` | 只用于 LRCLIB；请求量很小，不值得引入 OkHttp |
 | 启动优化 | Baseline Profile + ProfileInstaller；Macrobenchmark 测量 | 见 §9 |
 | 构建 | Gradle Kotlin DSL + Version Catalog | |
 | CI | GitHub Actions | 构建、lint、单元测试、Release APK |
@@ -203,7 +203,7 @@ lyrics_offset
 
 **关键决策：用 `track_key` 而不是 `mediastore_id` 作为跨表引用。** MediaStore 的 `_ID` 在重建索引或卷重新挂载时可能变化，`track.id` 在"重建曲库"时也会重新生成。基于路径的 `track_key` 能保证播放列表、手动标签、分析结果、歌词缓存和续播队列在重扫后依然有效（需求 PL-3、M-4）。代价是文件移动或重命名后会失联，对于以文件夹组织曲库的用户来说可以接受。同样的道理，固定艺术家引用的是 `artist.name_key`，而不是 `artist.id`。
 
-**数据库版本**：1.0 发布前使用 `fallbackToDestructiveMigration`，结构变化时直接重建（曲库可以重新扫描）；发布后改为正式迁移，`app/schemas/` 中导出了每个版本的结构。
+**数据库版本**：1.0 发布前使用 `fallbackToDestructiveMigration`，结构变化时直接重建。**从 1.0（数据库版本 4）起**只在降级时重建（`fallbackToDestructiveMigrationOnDowngrade`），结构变化必须提供 `Migration`，以免丢失播放列表等用户数据；`app/schemas/` 中导出了每个版本的结构，可以用 `MigrationTestHelper` 测试迁移。
 
 **孤儿清理**：每次扫描事务结束时删除没有歌曲的 artist。`track_features`、`mood_override`、`lyrics_*` 这些表中的孤儿行**不立即删除**，因为文件可能只是暂时不可用（比如 SD 卡拔出）；在"重建曲库"时，或孤儿行超过 30 天时再清理。
 
@@ -726,7 +726,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 搜索：`GET https://lrclib.net/api/search?track_name=&artist_name=`，结果列表展示标题、艺术家、专辑、时长差和"同步/纯文本"标记，由用户选择
 - 设置 `User-Agent: JeekMusic/<version> (https://github.com/tifish/JeekMusic)`，这是 LRCLIB 的要求
 - 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内不再重复请求
-- OkHttp 等网络组件只在开关打开后第一次使用时才初始化，不影响启动
+- 网络客户端（`LrcLibClient`）通过 `dagger.Lazy` 注入，只在开关打开后第一次使用时才创建，不影响启动
 
 ### 8.5 歌词写回音乐目录（LyricsWriter）
 
@@ -769,7 +769,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
      ├ 在 IO 线程开始读 StartupSnapshot（DataStore，约 1–2KB）
      └ 在 IO 线程预热 Room（打开数据库，执行一次首屏查询）
  └ MainActivity.onCreate
-     ├ installSplashScreen()；setKeepOnScreenCondition { 快照尚未读完 }（快照读取通常 < 30ms，最多等 150ms）
+     ├ installSplashScreen()；setKeepOnScreenCondition { 快照尚未读完 }（快照读取通常 < 30ms，最多等 200ms）
      └ setContent
          ├ 标签栏：来自快照（不用等数据库）
          ├ 当前页：恢复上次的标签和滚动位置（来自快照）；列表数据来自已在预热中的 Room 查询
@@ -809,8 +809,10 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
   |---|---|---|---|---|
   | M0（2026-10-16） | X200 Ultra | M0 验证页，启动时查询全部 1687 首 MediaStore 音频 | 134 / 153 ms | **116 / 133 ms** |
   | M1（2026-10-16） | Pixel_10 模拟器 | 正式主界面：标签栏 + 文件夹列表（Room），173 首 | 366 / 447 ms | 395 / 445 ms |
+  | M5（2026-10-17） | Pixel_10 模拟器 | 1.0 主界面：5 个标签 + 艺术家列表 + 迷你播放条，1604 首 | 547 / 492 ms（刚开机，波动大） | 408 / 412 ms |
 
   M0 的页面很简单，这组数据只是起点。之后每个里程碑都要对比：正式主界面加入数据库、标签栏和封面以后，仍然要满足 X200 Ultra 上的内部标准（TTID < 250ms，TTFD < 450ms）
+- 模拟器必须使用硬件 GPU 渲染（`dumpsys SurfaceFlinger | grep GLES` 应显示宿主显卡）。从非交互会话（如 PowerShell `Start-Process`）启动时，模拟器会退回 SwiftShader 软件渲染，每帧要 100–400ms，冷启动会变成 700–1000ms，看起来像性能退化
 - 没有用 Macrobenchmark 测启动：OriginOS 会拦截它发给 App 的 profileinstaller 广播（`DROP_SHADER_CACHE`、安装 profile），测试直接失败。`baselineprofile` 模块中的 `StartupBenchmarks` 保留着，可以在类原生系统的设备上使用
 
 ## 10. UI 结构
@@ -870,6 +872,10 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 ## 13. 构建与发布
 
 - Version Catalog 统一管理依赖版本；开启 R8 full mode 和资源压缩
+- 签名：本地从 `keystore.properties` 读取，CI 从环境变量（GitHub Secrets）读取，都没有时退回 debug 签名
+- 发布：推送 `v*` 标签时 `.github/workflows/release.yml` 构建签名 APK 并发布到 GitHub Releases
+- F-Droid：`fastlane/metadata/android/{en-US,zh-CN}/` 中有标题、简介、更新说明和截图（`tools/store-screenshots.sh` 截取）
+- 多语言：`androidResources.generateLocaleConfig = true`，Android 13+ 可以在系统设置里单独设置 App 语言
 - GitHub Actions：PR 时跑 `lint` + `testDebugUnitTest` + `assembleDebug`；打 tag 时构建签名的 release APK 并上传到 Releases（签名密钥放在 Secrets 中）。Baseline Profile 在本地真机上生成后提交到仓库
 - 许可证：MIT。依赖库的许可证要与之兼容：TagLib 是 LGPL/MPL，以动态链接库（.so）形式分发即可满足 LGPL 要求；在"关于 → 开源许可"中列出所有第三方许可证
 - F-Droid：不引入任何闭源依赖（不使用 Firebase / GMS），保证可复现构建

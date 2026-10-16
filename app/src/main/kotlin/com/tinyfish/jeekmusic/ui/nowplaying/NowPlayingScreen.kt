@@ -57,6 +57,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
+    var showLyricsSearch by remember { mutableStateOf(false) }
     var artistChoices by remember { mutableStateOf<List<ArtistEntity>>(emptyList()) }
     val navigator = LocalNavigator.current
     val openMenu = LocalTrackMenuById.current
@@ -130,8 +131,15 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
                 LyricsOffsetBar(loaded.offsetMs, onChange = { viewModel.setLyricsOffset(loaded.trackKey, it) }, modifier = Modifier.fillMaxWidth())
             }
         } else {
-            Box(Modifier.weight(1f).fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.aspectRatio(1f), cornerRadius = 16.dp)
+            val online by viewModel.onlineLyricsEnabled.collectAsStateWithLifecycle()
+            Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.weight(1f, fill = false).aspectRatio(1f), cornerRadius = 16.dp)
+                // 开启在线歌词后，没有歌词时提供"搜索歌词"（需求 NP-2）
+                if (online && lyricsState == LyricsState.None) {
+                    TextButton(onClick = { showLyricsSearch = true }, modifier = Modifier.testTag("search_lyrics")) {
+                        Text(stringResource(R.string.lyrics_search))
+                    }
+                }
             }
         }
 
@@ -160,6 +168,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
 
     if (showQueue) QueueSheet(viewModel, state, onDismiss = { showQueue = false })
     if (showSleepTimer) SleepTimerDialog(viewModel, state.sleepTimer, onDismiss = { showSleepTimer = false })
+    if (showLyricsSearch) LyricsSearchDialog(viewModel, onDismiss = { showLyricsSearch = false })
     if (artistChoices.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { artistChoices = emptyList() },

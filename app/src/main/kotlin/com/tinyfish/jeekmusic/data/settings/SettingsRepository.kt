@@ -22,6 +22,9 @@ import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** 在线歌词保存位置（需求 LY-11）。 */
+enum class LyricsSaveLocation { MUSIC_FOLDER, APP_CACHE }
+
 /** 智能标签的分析时机（需求 M-5）。 */
 enum class AnalysisMode { CHARGING, ANYTIME }
 
@@ -44,6 +47,10 @@ data class Settings(
     val lowPowerMode: LowPowerMode = LowPowerMode.BACKGROUND,
     val analysisMode: AnalysisMode = AnalysisMode.CHARGING,
     val sensitivity: Sensitivity = Sensitivity.NORMAL,
+    /** 在线歌词，默认关闭（需求 LY-8）。 */
+    val onlineLyrics: Boolean = false,
+    val autoFetchLyricsOnWifi: Boolean = false,
+    val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -63,6 +70,9 @@ class SettingsRepository @Inject constructor(
         val LOW_POWER = stringPreferencesKey("low_power_mode")
         val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
         val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
+        val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
+        val AUTO_FETCH = booleanPreferencesKey("auto_fetch_lyrics_wifi")
+        val LYRICS_SAVE = stringPreferencesKey("lyrics_save_location")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -76,6 +86,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setAnalysisMode(mode: AnalysisMode) = context.dataStore.edit { it[Keys.ANALYSIS_MODE] = mode.name }
 
     suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = sensitivity.name }
+
+    suspend fun setOnlineLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_LYRICS] = enabled }
+
+    suspend fun setAutoFetchLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_FETCH] = enabled }
+
+    suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit { it[Keys.LYRICS_SAVE] = location.name }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -103,5 +119,8 @@ class SettingsRepository @Inject constructor(
         lowPowerMode = this[Keys.LOW_POWER]?.let { runCatching { LowPowerMode.valueOf(it) }.getOrNull() } ?: LowPowerMode.BACKGROUND,
         analysisMode = this[Keys.ANALYSIS_MODE]?.let { runCatching { AnalysisMode.valueOf(it) }.getOrNull() } ?: AnalysisMode.CHARGING,
         sensitivity = this[Keys.SENSITIVITY]?.let { runCatching { Sensitivity.valueOf(it) }.getOrNull() } ?: Sensitivity.NORMAL,
+        onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
+        autoFetchLyricsOnWifi = this[Keys.AUTO_FETCH] ?: false,
+        lyricsSaveLocation = this[Keys.LYRICS_SAVE]?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.MUSIC_FOLDER,
     )
 }

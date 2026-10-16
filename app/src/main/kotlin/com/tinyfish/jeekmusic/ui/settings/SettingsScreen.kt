@@ -57,7 +57,10 @@ import java.util.Date
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.analysis.MoodRepository
 import com.tinyfish.jeekmusic.analysis.Sensitivity
+import androidx.compose.material3.Switch
+import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
+import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
@@ -82,6 +85,7 @@ class SettingsViewModel @Inject constructor(
     private val messages: MessageBus,
     private val moods: MoodRepository,
     private val analysis: AnalysisScheduler,
+    private val lyrics: LyricsRepository,
 ) : ViewModel() {
     val lastBackup: StateFlow<Long?> = backups.lastBackupTime
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -129,6 +133,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
+
+    fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setOnlineLyrics(enabled) }
+    fun setAutoFetchLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoFetchLyrics(enabled) }
+    fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch { settingsRepository.setLyricsSaveLocation(location) }
+    fun clearLyricsCache() = viewModelScope.launch {
+        lyrics.clearCache()
+        messages.post(UiMessage(R.string.lyrics_cache_cleared))
+    }
 }
 
 @Composable
@@ -144,6 +156,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         if (uri != null) viewModel.restoreFrom(uri)
     }
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
+    var confirmOnline by remember { mutableStateOf(false) }
+    var showLicenses by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
         SubScreenHeader(title = stringResource(R.string.settings_title), onBack = onBack)
@@ -236,6 +250,37 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
 
+            item { SectionHeader(stringResource(R.string.settings_lyrics)) }
+            item {
+                SwitchRow(
+                    title = stringResource(R.string.online_lyrics),
+                    summary = stringResource(R.string.online_lyrics_summary),
+                    checked = settings.onlineLyrics,
+                    // 开启时先说明会发送哪些信息、发给谁（需求 LY-9）
+                    onChange = { if (it) confirmOnline = true else viewModel.setOnlineLyrics(false) },
+                    modifier = Modifier.testTag("online_lyrics"),
+                )
+            }
+            if (settings.onlineLyrics) {
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.auto_fetch_lyrics),
+                        summary = stringResource(R.string.auto_fetch_lyrics_summary),
+                        checked = settings.autoFetchLyricsOnWifi,
+                        onChange = viewModel::setAutoFetchLyrics,
+                    )
+                }
+                item { Text(stringResource(R.string.lyrics_save_location), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(LyricsSaveLocation.entries) { location ->
+                    RadioRow(
+                        selected = settings.lyricsSaveLocation == location,
+                        text = stringResource(if (location == LyricsSaveLocation.MUSIC_FOLDER) R.string.lyrics_save_folder else R.string.lyrics_save_app),
+                        onClick = { viewModel.setLyricsSaveLocation(location) },
+                    )
+                }
+                item { SettingItem(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
+            }
+
             item { SectionHeader(stringResource(R.string.settings_moods)) }
             item {
                 SettingItem(
@@ -325,7 +370,21 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             item {
                 SettingItem(title = stringResource(R.string.app_name), summary = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME))
             }
+            item { SettingItem(title = stringResource(R.string.settings_licenses), onClick = { showLicenses = true }) }
+            item { SettingItem(title = stringResource(R.string.settings_source), summary = "github.com/tifish/JeekMusic") }
         }
+    }
+
+    if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
+
+    if (confirmOnline) {
+        AlertDialog(
+            onDismissRequest = { confirmOnline = false },
+            title = { Text(stringResource(R.string.online_lyrics_privacy_title)) },
+            text = { Text(stringResource(R.string.online_lyrics_privacy)) },
+            confirmButton = { TextButton(onClick = { viewModel.setOnlineLyrics(true); confirmOnline = false }) { Text(stringResource(R.string.confirm)) } },
+            dismissButton = { TextButton(onClick = { confirmOnline = false }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 
     removing?.let { folder ->
@@ -338,6 +397,20 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             },
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

@@ -1,0 +1,1 @@
+Simple, offline music player for your local folders, with lyrics and smart tags

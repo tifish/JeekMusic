@@ -6,19 +6,17 @@ import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.filters.LargeTest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * 冷启动耗时：对比不编译和使用 Baseline Profile 两种情况。
- * ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest
+ * ANDROID_SERIAL=<真机序列号> ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest（在真机上跑，模拟器的数据没有参考价值）
  *
  * 结果里的 timeToInitialDisplayMs 即 TTID，timeToFullDisplayMs 即 TTFD（由 ReportDrawnWhen 上报）。
  */
 @RunWith(AndroidJUnit4::class)
-@LargeTest
 class StartupBenchmarks {
 
     @get:Rule
@@ -36,7 +34,10 @@ class StartupBenchmarks {
         compilationMode = compilationMode,
         startupMode = StartupMode.COLD,
         iterations = 10,
-        setupBlock = { pressHome() },
+        setupBlock = {
+            device.executeShellCommand("pm grant $TARGET_PACKAGE android.permission.READ_MEDIA_AUDIO")
+            pressHome()
+        },
     ) {
         startActivityAndWait()
     }

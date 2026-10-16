@@ -299,9 +299,32 @@ JeekMusic 是一个 **Android 端本地音乐播放器**，开源，以作者自
 | 项 | 情况 |
 |---|---|
 | 开发机 | Windows 11；JDK 21（Liberica）；Android Studio；Android SDK（platforms 34–37，build-tools 34–37） |
+| 工具链 | Gradle 9.8.1、AGP 9.4.1（内置 Kotlin）、Kotlin 2.4.21、KSP 2.3.12；compileSdk / targetSdk 37，minSdk 31。具体依赖版本见 `gradle/libs.versions.toml` |
 | 主力测试机 | **vivo X200 Ultra**：Android 16（API 36），OriginOS 6，骁龙 8 至尊版（SM8750） |
+| 模拟器 | **Pixel_10**：API 36.1，Google Play 镜像，x86_64，4 核，2GB 内存 |
+
+分工：
+
+| 用途 | 设备 | 原因 |
+|---|---|---|
+| 启动基准测试、耗电、低功耗播放、OriginOS 后台行为 | X200 Ultra | 这些数据和行为只有真机才有意义 |
+| 功能验证、自动化仪器测试、生成 Baseline Profile | Pixel_10 模拟器 | 安装不需要在手机上确认，也不碰真机上的数据 |
+| 边界测试素材（24-bit FLAC、GBK 标签、CUE 整轨、多值艺术家、损坏文件等） | Pixel_10 模拟器 | 可以随意推送测试文件，不污染真机的音乐库 |
+
+测试素材：
+
+| 来源 | 工具 | 内容 |
+|---|---|---|
+| 合成音频 | `tools/push-testdata.sh` | 60 首带中文、多艺术家标签的 MP3，1 首无标签（文件名推断），3 首 24-bit/96kHz FLAC |
+| 真实曲库子集 | `tools/pick_library_sample.py` | 从 `D:\Mobile\Song\散曲`（1604 个文件，16GB）中挑出边界情况：带 .lrc 的歌曲、ogg/flac/wma、无标签、多艺术家、内嵌歌词、疑似 GBK 乱码，约 1.2GB |
+| 标签统计 | `tools/scan_id3.py` | 统计 ID3 版本、编码、分隔符、内嵌歌词，用来校准设计中的假设 |
+
+`D:\Mobile\Song\散曲` 的统计结果（2026-10-16）：MP3 1578 首（ID3v2.3 占 80%，v2.4 占 20%，无 ID3v2 的 5 首），ogg 16、flac 2、wma 1、lrc 5；无标题和艺术家标签 21 首；内嵌歌词 5 首；疑似 GBK 乱码 1 首；**艺术家标签中出现 `/` 187 次、`&` 13 次、`,` 5 次、`feat.` 2 次**。文件名几乎都是"艺术家 - 标题"格式。
 
 注意事项：
+
+- **OriginOS 的 USB 安装需要在手机上确认**（"继续安装"），超时就会失败。所以需要反复安装的工作优先放在模拟器上做
+- 开发期间真机开启了"插 USB 时保持唤醒"（`adb shell svc power stayon usb`），恢复默认用 `adb shell svc power stayon false`
 
 - **启动目标是按中端机定的**，旗舰机的测量结果会偏乐观。在 X200 Ultra 上测量时，内部按更严格的标准要求（TTID < 250ms，TTFD < 450ms）；最好再找一台中端机或低配模拟器复核
 - **OriginOS 的后台管理比较激进**：要验证三件事，一是前台服务播放时长时间熄屏不被杀，二是充电时 WorkManager 的分析任务能被调度，三是从系统媒体控件"恢复播放"能正常工作。必要时在设置里加一个指引，引导用户把 App 加入"允许后台高耗电"

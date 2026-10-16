@@ -16,7 +16,7 @@
 | 依赖注入 | Hilt | 重对象一律用 `Lazy<T>` 注入，避免拖慢启动 |
 | 异步 | Coroutines + Flow | |
 | 图片 | Coil 3 + 自定义 Fetcher | 加载内嵌封面和文件夹封面，内存和磁盘两级缓存 |
-| 标签解析 | **TagLib (JNI)**，候选：jaudiotagger | 见 §4.3，M0 阶段做技术验证 |
+| 标签解析 | **TagLib (JNI)**：`io.github.kyant0:taglib` | M0 已验证，见 §4.3 |
 | 音频分析 | MediaCodec 解码 + 自写 FFT 和特征提取 | 不引入额外依赖，见 §6 |
 | 网络 | OkHttp + kotlinx.serialization | 只用于 LRCLIB，懒加载 |
 | 启动优化 | Baseline Profile + ProfileInstaller；Macrobenchmark 测量 | 见 §9 |
@@ -312,11 +312,20 @@ interface TagReader {
 }
 ```
 
-**选型：TagLib（通过 JNI 封装）为首选。** 它对 mp3、flac、m4a、ogg/opus、ape、wav 的标签支持最全，能正确读出多值字段，可以通过文件描述符（`ParcelFileDescriptor`）读取，不需要真实路径。M0 阶段的验证内容：
+**选型：TagLib（通过 JNI 封装）。** 它对 mp3、flac、m4a、ogg/opus、wav 的标签支持最全，能正确读出多值字段，可以通过文件描述符（`ParcelFileDescriptor`）读取，不需要真实路径。
 
-1. 选定一个现成的 Android TagLib 封装库，或自己写薄 JNI 层；确认许可证兼容（TagLib 本身是 LGPL/MPL）
-2. 用包含中文、多值、各种格式的测试曲库验证正确性，并测出 1 万首的解析耗时
-3. 如果不可行，备选 jaudiotagger（纯 Java，在 Android 上需要处理部分兼容问题）
+**M0 验证结论（2026-10-16，已采用）**：使用 [Kyant0/taglib](https://github.com/Kyant0/taglib) `io.github.kyant0:taglib:1.0.6`（Apache-2.0 封装，内含 TagLib 原生库）。
+
+| 项目 | 结果 |
+|---|---|
+| 正确性 | vivo X200 Ultra 上的真实曲库 1687 首，全部读取成功，失败 0 |
+| 性能 | 4 路并发共 1248ms，平均 0.74ms/首（不读封面）。按此推算 1 万首约 7s，远低于 60s 的目标 |
+| GBK 乱码 | TagLib 把 GBK 字节按 Latin-1 原样返回，`CharsetFixer` 能无损还原，真机上修复了 3 首（如 `ÉíÆï°×Âí → 身骑白马`） |
+| fd 所有权 | 原生层的 `FileStream` 会关闭传入的 fd，所以每次调用都要传 `pfd.dup().detachFd()` |
+| 不足 | `AudioProperties` 只有时长、码率、采样率和声道数，没有位深。位深需要另外获取（MediaExtractor 的 `KEY_PCM_ENCODING` 或解析 FLAC STREAMINFO），留到 M1 解决 |
+| 体积 | `libtaglib.so` 随 AAR 分发，release 包按 ABI 拆分后再评估 |
+
+备选方案 jaudiotagger 不再需要。
 
 **中文乱码处理（CharsetFixer）**：在 ID3v2.3 / ID3v1 中，标签声明为 ISO-8859-1 但实际存的是 GBK 字节，这种情况非常常见。处理规则：
 
@@ -767,7 +776,9 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - App Startup 中只保留 `ProfileInstaller`
 - 使用系统字体，不加载自定义字体；图标使用 Material Symbols 中的少量矢量图
 - debug 构建开启 StrictMode，主线程出现磁盘或网络 IO 时直接报错
-- **测量**：Macrobenchmark `StartupTimingMetric`（冷启动 / 温启动 / 热启动）在真机上运行，每个里程碑记录一次结果
+- **生成 Profile**：在模拟器上执行 `ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateReleaseBaselineProfile`，结果写入 `app/src/release/generated/baselineProfiles/`，提交到仓库。Profile 与 CPU 架构无关，模拟器生成的可以直接用于真机
+- **测量**：在真机上运行 `tools/measure-startup.sh`，对比"不编译"和"Baseline Profile"两种编译状态下的冷启动 TTID / TTFD 中位数。每个里程碑记录一次结果
+- 没有用 Macrobenchmark 测启动：OriginOS 会拦截它发给 App 的 profileinstaller 广播（`DROP_SHADER_CACHE`、安装 profile），测试直接失败。`baselineprofile` 模块中的 `StartupBenchmarks` 保留着，可以在类原生系统的设备上使用
 
 ## 10. UI 结构
 

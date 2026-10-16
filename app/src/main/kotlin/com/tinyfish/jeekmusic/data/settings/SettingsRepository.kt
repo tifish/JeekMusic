@@ -1,0 +1,85 @@
+package com.tinyfish.jeekmusic.data.settings
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.tinyfish.jeekmusic.data.scanner.ArtistSplitConfig
+import com.tinyfish.jeekmusic.data.scanner.FileNameFormat
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import java.nio.charset.Charset
+import javax.inject.Inject
+import javax.inject.Singleton
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** 扫描相关设置。修改后需要重建艺术家索引（docs/design.md §4.4）。 */
+data class ScanConfig(
+    val split: ArtistSplitConfig = ArtistSplitConfig(),
+    val inferFromFileName: Boolean = true,
+    val fileNameFormat: FileNameFormat = FileNameFormat.ARTIST_TITLE,
+    /** 强制指定的旧标签编码；null 表示自动判断。 */
+    val legacyCharset: Charset? = null,
+)
+
+data class Settings(
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val scan: ScanConfig = ScanConfig(),
+    val unsupportedFileCount: Int = 0,
+)
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+@Singleton
+class SettingsRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+) {
+    private object Keys {
+        val THEME = stringPreferencesKey("theme")
+        val SEPARATORS = stringSetPreferencesKey("artist_separators")
+        val EXCEPTIONS = stringPreferencesKey("artist_exceptions")
+        val INFER = booleanPreferencesKey("infer_from_file_name")
+        val FILE_NAME_FORMAT = stringPreferencesKey("file_name_format")
+        val LEGACY_CHARSET = stringPreferencesKey("legacy_charset")
+        val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
+    }
+
+    val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
+
+    suspend fun current(): Settings = settings.first()
+
+    suspend fun setThemeMode(mode: ThemeMode) = context.dataStore.edit { it[Keys.THEME] = mode.name }
+
+    suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
+
+    suspend fun setScanConfig(config: ScanConfig) = context.dataStore.edit {
+        it[Keys.SEPARATORS] = config.split.separators
+        it[Keys.EXCEPTIONS] = config.split.exceptions.joinToString("\n")
+        it[Keys.INFER] = config.inferFromFileName
+        it[Keys.FILE_NAME_FORMAT] = config.fileNameFormat.name
+        if (config.legacyCharset == null) it.remove(Keys.LEGACY_CHARSET) else it[Keys.LEGACY_CHARSET] = config.legacyCharset.name()
+    }
+
+    private fun Preferences.toSettings() = Settings(
+        themeMode = this[Keys.THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+        scan = ScanConfig(
+            split = ArtistSplitConfig(
+                separators = this[Keys.SEPARATORS] ?: ArtistSplitConfig.DEFAULT_SEPARATORS,
+                exceptions = this[Keys.EXCEPTIONS]?.split('\n')?.filter { it.isNotBlank() } ?: ArtistSplitConfig.DEFAULT_EXCEPTIONS,
+            ),
+            inferFromFileName = this[Keys.INFER] ?: true,
+            fileNameFormat = this[Keys.FILE_NAME_FORMAT]?.let { runCatching { FileNameFormat.valueOf(it) }.getOrNull() }
+                ?: FileNameFormat.ARTIST_TITLE,
+            legacyCharset = this[Keys.LEGACY_CHARSET]?.let { runCatching { Charset.forName(it) }.getOrNull() },
+        ),
+        unsupportedFileCount = this[Keys.UNSUPPORTED] ?: 0,
+    )
+}

@@ -8,7 +8,7 @@
 |---|---|---|
 | 语言 | Kotlin 2.x | |
 | UI | Jetpack Compose + Material 3 | 支持动态取色（minSdk 31 原生支持） |
-| 导航 | Navigation Compose（类型安全路由） | 每个标签页内有独立的返回栈，见 §10 |
+| 导航 | **Navigation 3**（`NavDisplay` + 自管理的返回栈） | 每个标签页一个 `NavDisplay` 和独立的返回栈；`rememberViewModelStoreNavEntryDecorator` 让每个页面有自己的 ViewModel，见 §10 |
 | 播放 | **Media3**：ExoPlayer + `MediaLibraryService` | 后台播放、通知栏、媒体按键、音频焦点、系统恢复播放都由官方支持；支持浮点输出和音频 offload；以后加 Android Auto 时不用重构 |
 | 数据库 | Room | 曲库缓存、播放列表、标签栏、智能标签、歌词缓存 |
 | 配置 | DataStore (Preferences) | 设置项、启动快照 |
@@ -203,6 +203,8 @@ lyrics_offset
 
 **关键决策：用 `track_key` 而不是 `mediastore_id` 作为跨表引用。** MediaStore 的 `_ID` 在重建索引或卷重新挂载时可能变化，`track.id` 在"重建曲库"时也会重新生成。基于路径的 `track_key` 能保证播放列表、手动标签、分析结果、歌词缓存和续播队列在重扫后依然有效（需求 PL-3、M-4）。代价是文件移动或重命名后会失联，对于以文件夹组织曲库的用户来说可以接受。同样的道理，固定艺术家引用的是 `artist.name_key`，而不是 `artist.id`。
 
+**数据库版本**：1.0 发布前使用 `fallbackToDestructiveMigration`，结构变化时直接重建（曲库可以重新扫描）；发布后改为正式迁移，`app/schemas/` 中导出了每个版本的结构。
+
 **孤儿清理**：每次扫描事务结束时删除没有歌曲的 artist。`track_features`、`mood_override`、`lyrics_*` 这些表中的孤儿行**不立即删除**，因为文件可能只是暂时不可用（比如 SD 卡拔出）；在"重建曲库"时，或孤儿行超过 30 天时再清理。
 
 ### 3.1 备份与恢复（BackupManager）
@@ -379,6 +381,8 @@ interface TagReader {
 | `A feat. B - Song.mp3` | A、B（经拆分） | Song |
 
 推断结果写入 `artist_display`，同时设置 `artist_inferred = true`，在歌曲信息页标注"推断自文件名"。
+
+推断出的艺术家除了用户设置的分隔符，**还额外按 `,` 拆分**：文件名里不能出现 `/`，网易云等下载的文件名用逗号分隔多个艺术家（如 `Panta.Q,周深 - 对不起.mp3`）。
 
 ### 4.6 CUE 整轨（CueResolver）
 
@@ -780,11 +784,13 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - debug 构建开启 StrictMode，主线程出现磁盘或网络 IO 时直接报错
 - **生成 Profile**：在模拟器上执行 `ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateReleaseBaselineProfile`，结果写入 `app/src/release/generated/baselineProfiles/`，提交到仓库。Profile 与 CPU 架构无关，模拟器生成的可以直接用于真机
 - **测量**：在真机上运行 `tools/measure-startup.sh`，对比"不编译"和"Baseline Profile"两种编译状态下的冷启动 TTID / TTFD 中位数。每个里程碑记录一次结果
+- 模拟器的数据只用于和自身的历史数据对比，不能和真机比较
 - **测量记录**：
 
   | 里程碑 | 设备 | 页面 | 不编译 TTID / TTFD | Baseline Profile TTID / TTFD |
   |---|---|---|---|---|
   | M0（2026-10-16） | X200 Ultra | M0 验证页，启动时查询全部 1687 首 MediaStore 音频 | 134 / 153 ms | **116 / 133 ms** |
+  | M1（2026-10-16） | Pixel_10 模拟器 | 正式主界面：标签栏 + 文件夹列表（Room），173 首 | 366 / 447 ms | 395 / 445 ms |
 
   M0 的页面很简单，这组数据只是起点。之后每个里程碑都要对比：正式主界面加入数据库、标签栏和封面以后，仍然要满足 X200 Ultra 上的内部标准（TTID < 250ms，TTFD < 450ms）
 - 没有用 Macrobenchmark 测启动：OriginOS 会拦截它发给 App 的 profileinstaller 广播（`DROP_SHADER_CACHE`、安装 profile），测试直接失败。`baselineprofile` 模块中的 `StartupBenchmarks` 保留着，可以在类原生系统的设备上使用

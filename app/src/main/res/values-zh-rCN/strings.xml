@@ -1,4 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">JeekMusic</string>
+
+    <string name="tab_folders">文件夹</string>
+    <string name="tab_artists">艺术家</string>
+    <string name="tab_playlists">播放列表</string>
+
+    <string name="action_settings">设置</string>
+    <string name="action_search">搜索</string>
+    <string name="action_back">返回</string>
+    <string name="action_add_folder">添加音乐文件夹</string>
+    <string name="action_play_all">播放全部</string>
+    <string name="action_play_all_recursive">播放全部（含子文件夹）</string>
+    <string name="action_shuffle">随机播放</string>
+    <string name="action_play">播放</string>
+    <string name="action_pause">暂停</string>
+    <string name="action_next">下一首</string>
+    <string name="action_previous">上一首</string>
+    <string name="action_shuffle_mode">随机模式</string>
+    <string name="action_repeat">循环模式</string>
+    <string name="action_queue">播放队列</string>
+    <string name="action_more">更多</string>
+    <string name="action_collapse">收起</string>
+    <string name="action_remove">移除</string>
+    <string name="action_reorder">拖动排序</string>
+    <string name="action_locate_current">定位到正在播放</string>
+    <string name="confirm">确定</string>
+    <string name="cancel">取消</string>
+    <string name="replace">替换</string>
+
+    <string name="unknown_artist">未知艺术家</string>
+    <string name="unknown_album">未知专辑</string>
+    <plurals name="song_count">
+        <item quantity="other">%d 首</item>
+    </plurals>
+    <string name="disc_number">第 %d 碟</string>
+
+    <string name="empty_library_title">添加你的音乐文件夹</string>
+    <string name="empty_library_message">JeekMusic 播放你所选文件夹中的音乐。可以添加多个文件夹，包括 SD 卡上的文件夹。</string>
+    <string name="permission_needed">JeekMusic 需要读取音频文件的权限。</string>
+    <string name="scan_progress">正在扫描 %1$d / %2$d</string>
+    <string name="folder_already_covered">这个文件夹已经包含在"%s"中。</string>
+    <string name="folder_replace_title">替换子文件夹？</string>
+    <string name="folder_replace_message">新文件夹包含以下音乐文件夹，它们将被新文件夹替换：\n%s</string>
+    <string name="folder_unsupported">只能添加本机存储上的文件夹。</string>
+    <string name="folder_empty">这个文件夹里没有歌曲</string>
+
+    <string name="settings_title">设置</string>
+    <string name="settings_library">曲库</string>
+    <string name="settings_rescan">重新扫描</string>
+    <string name="settings_rescan_summary">查找新增、修改和删除的歌曲</string>
+    <string name="settings_rebuild">重建曲库</string>
+    <string name="settings_rebuild_summary">重新读取所有歌曲的标签</string>
+    <string name="settings_remove_folder_title">移除文件夹？</string>
+    <string name="settings_remove_folder_message">"%s"中的歌曲将从曲库中移除，文件本身不会被删除。</string>
+    <plurals name="settings_unsupported_files">
+        <item quantity="other">跳过了 %d 个不支持的文件（APE、WMA 等），转换成 FLAC 后即可播放。</item>
+    </plurals>
+    <string name="settings_appearance">外观</string>
+    <string name="settings_theme">主题</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本 %s</string>
+
+    <string name="queue_title">播放队列</string>
+    <string name="queue_count">%1$d / %2$d</string>
 </resources>

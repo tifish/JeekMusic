@@ -1,0 +1,166 @@
+package com.tinyfish.jeekmusic.ui.nowplaying
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tinyfish.jeekmusic.R
+import com.tinyfish.jeekmusic.playback.PlayerUiState
+import com.tinyfish.jeekmusic.playback.RepeatMode
+import com.tinyfish.jeekmusic.ui.components.Artwork
+import com.tinyfish.jeekmusic.ui.components.formatDuration
+
+/**
+ * 播放页（需求 NP-1 ~ NP-3）：顶部是小封面和歌曲信息，中间是歌词（M3；目前和没有歌词时一样显示大封面），
+ * 底部是进度和控制。
+ */
+@Composable
+fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var showQueue by remember { mutableStateOf(false) }
+    BackHandler(onBack = onCollapse)
+
+    val nowPlaying = state.nowPlaying
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .systemBarsPadding()
+            .testTag("now_playing"),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onCollapse) {
+                Icon(painterResource(R.drawable.ic_expand_more), contentDescription = stringResource(R.string.action_collapse))
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(nowPlaying?.artworkUri, 56.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(nowPlaying?.title.orEmpty(), style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    nowPlaying?.artist ?: stringResource(R.string.unknown_artist),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                nowPlaying?.album?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
+        Box(Modifier.weight(1f).fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+            Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.aspectRatio(1f), cornerRadius = 16.dp)
+        }
+
+        SeekBar(viewModel, state)
+        Controls(viewModel, state)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            IconButton(onClick = { showQueue = true }, modifier = Modifier.testTag("open_queue")) {
+                Icon(painterResource(R.drawable.ic_queue), contentDescription = stringResource(R.string.action_queue))
+            }
+        }
+    }
+
+    if (showQueue) QueueSheet(viewModel, state, onDismiss = { showQueue = false })
+}
+
+@Composable
+private fun SeekBar(viewModel: PlayerViewModel, state: PlayerUiState) {
+    // 播放页可见时每 200ms 刷新进度
+    val position by remember { viewModel.position(200) }.collectAsStateWithLifecycle(0L)
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val duration = state.durationMs.coerceAtLeast(1)
+    val shown = dragging?.let { (it * duration).toLong() } ?: position
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+        Slider(
+            value = dragging ?: (position.toFloat() / duration).coerceIn(0f, 1f),
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { viewModel.seekTo((it * duration).toLong()) }
+                dragging = null
+            },
+            modifier = Modifier.testTag("seek_bar"),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatDuration(shown), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatDuration(state.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun Controls(viewModel: PlayerViewModel, state: PlayerUiState) {
+    val active = MaterialTheme.colorScheme.primary
+    val inactive = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = viewModel::toggleShuffle, modifier = Modifier.testTag("shuffle")) {
+            Icon(
+                painterResource(R.drawable.ic_shuffle),
+                contentDescription = stringResource(R.string.action_shuffle_mode),
+                tint = if (state.shuffle) active else inactive,
+            )
+        }
+        IconButton(onClick = viewModel::previous, modifier = Modifier.size(56.dp)) {
+            Icon(painterResource(R.drawable.ic_skip_previous), contentDescription = stringResource(R.string.action_previous), modifier = Modifier.size(32.dp))
+        }
+        FilledIconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.size(72.dp).testTag("play_pause")) {
+            Icon(
+                painterResource(if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                contentDescription = stringResource(if (state.isPlaying) R.string.action_pause else R.string.action_play),
+                modifier = Modifier.size(36.dp),
+            )
+        }
+        IconButton(onClick = viewModel::next, modifier = Modifier.size(56.dp)) {
+            Icon(painterResource(R.drawable.ic_skip_next), contentDescription = stringResource(R.string.action_next), modifier = Modifier.size(32.dp))
+        }
+        IconButton(onClick = viewModel::cycleRepeat, modifier = Modifier.testTag("repeat")) {
+            Icon(
+                painterResource(if (state.repeat == RepeatMode.ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
+                contentDescription = stringResource(R.string.action_repeat),
+                tint = if (state.repeat == RepeatMode.OFF) inactive else active,
+            )
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+}

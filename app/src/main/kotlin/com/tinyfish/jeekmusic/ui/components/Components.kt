@@ -1,0 +1,197 @@
+package com.tinyfish.jeekmusic.ui.components
+
+import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import com.tinyfish.jeekmusic.R
+import com.tinyfish.jeekmusic.data.db.TrackEntity
+import com.tinyfish.jeekmusic.playback.MediaItemMapper
+
+/**
+ * 封面；没有封面时显示音符占位图。
+ * 占位图始终画在下面、图片叠在上面，避免 SubcomposeAsyncImage 在长列表中的子组合开销（docs/design.md §5.7）。
+ */
+@Composable
+fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp = 6.dp) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(cornerRadius)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_music_note),
+            contentDescription = null,
+            modifier = Modifier.size(size / 2),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (uri != null) {
+            AsyncImage(
+                model = uri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * 歌曲列表项（docs/design.md §5.7）。只接收不可变数据，"正在播放"通过 [isCurrent] 单独传入。
+ */
+@Composable
+fun TrackRow(
+    track: TrackEntity,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String = trackSubtitle(track),
+    showArtwork: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    val highlight = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when {
+            leading != null -> leading()
+            showArtwork -> Artwork(MediaItemMapper.artworkUri(track.id), 48.dp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                track.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = highlight,
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                subtitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            formatDuration(track.durationMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+fun trackSubtitle(track: TrackEntity): String {
+    val artist = track.artistDisplay.ifEmpty { stringResource(R.string.unknown_artist) }
+    return if (track.album.isNullOrEmpty()) artist else "$artist · ${track.album}"
+}
+
+/** 标签页内二级页面的标题栏（全局顶栏之下）。 */
+@Composable
+fun SubScreenHeader(title: String, onBack: () -> Unit, modifier: Modifier = Modifier, subtitle: String? = null, actions: @Composable () -> Unit = {}) {
+    Row(
+        modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        actions()
+    }
+}
+
+/** "播放全部 / 随机播放"按钮行。 */
+@Composable
+fun PlayButtons(onPlayAll: () -> Unit, onShuffle: () -> Unit, modifier: Modifier = Modifier, extra: @Composable () -> Unit = {}) {
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Button(onClick = onPlayAll) {
+            Icon(painterResource(R.drawable.ic_play), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.action_play_all))
+        }
+        FilledTonalButton(onClick = onShuffle) {
+            Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.action_shuffle))
+        }
+        extra()
+    }
+}
+
+@Composable
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+fun songCount(count: Int): String = pluralStringResource(R.plurals.song_count, count, count)
+
+@Composable
+fun CenteredMessage(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+fun VerticalSpace(height: Dp) = Spacer(Modifier.height(height))
+
+fun formatDuration(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
+}

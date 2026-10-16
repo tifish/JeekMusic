@@ -7,6 +7,7 @@
     <style name="Theme.JeekMusic.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/launcher_background</item>
         <item name="postSplashScreenTheme">@style/Theme.JeekMusic</item>
     </style>
 </resources>

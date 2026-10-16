@@ -281,3 +281,57 @@ interface LyricsDao {
     @Query("DELETE FROM lyrics_cache")
     suspend fun clearCache()
 }
+
+@Dao
+interface MoodDao {
+    /** 还没分析、文件变了、或者分析算法升级了的歌曲。 */
+    @Query(
+        """
+        SELECT t.* FROM track t LEFT JOIN track_features f ON f.track_key = t.track_key
+        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version < :version
+        LIMIT :limit
+        """,
+    )
+    suspend fun pending(version: Int, limit: Int): List<TrackEntity>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM track t LEFT JOIN track_features f ON f.track_key = t.track_key
+        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version < :version
+        """,
+    )
+    fun observePendingCount(version: Int): Flow<Int>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveFeatures(features: TrackFeaturesEntity)
+
+    @Query("SELECT * FROM track_features WHERE failed = 0")
+    suspend fun allFeatures(): List<TrackFeaturesEntity>
+
+    @Query("SELECT * FROM track_features WHERE track_key = :trackKey")
+    suspend fun features(trackKey: String): TrackFeaturesEntity?
+
+    @Query("SELECT * FROM mood_override")
+    suspend fun overrides(): List<MoodOverrideEntity>
+
+    @Query("SELECT * FROM mood_override WHERE track_key = :trackKey")
+    suspend fun override(trackKey: String): MoodOverrideEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setOverride(entity: MoodOverrideEntity)
+
+    @Query("DELETE FROM mood_override WHERE track_key = :trackKey")
+    suspend fun clearOverride(trackKey: String)
+
+    @Query("DELETE FROM track_mood")
+    suspend fun clearMoods()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMoods(moods: List<TrackMoodEntity>)
+
+    @Query("SELECT * FROM track_mood WHERE track_key = :trackKey")
+    suspend fun mood(trackKey: String): TrackMoodEntity?
+
+    @Query("SELECT t.* FROM track_mood m JOIN track t ON t.track_key = m.track_key WHERE m.mood = :mood ORDER BY t.title COLLATE NOCASE")
+    fun observeTracks(mood: String): Flow<List<TrackEntity>>
+}

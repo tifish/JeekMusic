@@ -3,6 +3,7 @@ package com.tinyfish.jeekmusic.data.scanner
 import android.os.Process
 import android.util.Log
 import androidx.room.withTransaction
+import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.data.db.ArtistDao
 import com.tinyfish.jeekmusic.data.db.ArtistEntity
 import com.tinyfish.jeekmusic.data.db.FolderDao
@@ -51,6 +52,7 @@ class LibraryScanner @Inject constructor(
     private val mediaStore: MediaStoreSource,
     private val tagReader: TagReader,
     private val cueResolver: CueResolver,
+    private val analysisScheduler: dagger.Lazy<AnalysisScheduler>,
     private val settings: SettingsRepository,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
@@ -189,6 +191,7 @@ class LibraryScanner @Inject constructor(
         settings.setUnsupportedFileCount(unsupported)
 
         val result = ScanResult(added, updated, removedIds.size, unsupported, System.currentTimeMillis() - start)
+        if (added + updated > 0) analysisScheduler.get().schedule()
         Log.i(TAG, "scan(full=$full) $result")
         _lastResult.value = result
         _state.value = ScanState.Idle

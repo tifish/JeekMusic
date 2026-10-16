@@ -54,6 +54,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
+import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
+import com.tinyfish.jeekmusic.analysis.MoodRepository
+import com.tinyfish.jeekmusic.analysis.Sensitivity
+import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
@@ -76,6 +80,8 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val backups: BackupManager,
     private val messages: MessageBus,
+    private val moods: MoodRepository,
+    private val analysis: AnalysisScheduler,
 ) : ViewModel() {
     val lastBackup: StateFlow<Long?> = backups.lastBackupTime
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -107,6 +113,22 @@ class SettingsViewModel @Inject constructor(
     fun rebuild() = scanner.requestScan(full = true)
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     fun setLowPower(mode: LowPowerMode) = viewModelScope.launch { settingsRepository.setLowPowerMode(mode) }
+
+    val pendingAnalysis: StateFlow<Int> = moods.pendingCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun setAnalysisMode(mode: AnalysisMode) = viewModelScope.launch {
+        settingsRepository.setAnalysisMode(mode)
+        analysis.schedule()
+    }
+
+    /** 调整灵敏度后立即生效，不需要重新分析音频（需求 M-8）。 */
+    fun setSensitivity(sensitivity: Sensitivity) = viewModelScope.launch {
+        settingsRepository.setSensitivity(sensitivity)
+        moods.recomputeAll()
+    }
+
+    fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 }
 
 @Composable
@@ -117,6 +139,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val addFolder = rememberAddFolder()
     val navigator = LocalNavigator.current
     val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
+    val pendingAnalysis by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
     val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.restoreFrom(uri)
     }
@@ -213,6 +236,38 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
 
+            item { SectionHeader(stringResource(R.string.settings_moods)) }
+            item {
+                SettingItem(
+                    title = stringResource(R.string.mood_analyze_now),
+                    summary = pluralStringResource(R.plurals.mood_pending, pendingAnalysis, pendingAnalysis),
+                    onClick = viewModel::analyzeNow,
+                    modifier = Modifier.testTag("settings_analyze_now"),
+                )
+            }
+            item { Text(stringResource(R.string.settings_analysis_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            items(AnalysisMode.entries) { mode ->
+                RadioRow(
+                    selected = settings.analysisMode == mode,
+                    text = stringResource(if (mode == AnalysisMode.CHARGING) R.string.analysis_charging else R.string.analysis_anytime),
+                    onClick = { viewModel.setAnalysisMode(mode) },
+                )
+            }
+            item { Text(stringResource(R.string.settings_sensitivity), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            items(Sensitivity.entries) { s ->
+                RadioRow(
+                    selected = settings.sensitivity == s,
+                    text = stringResource(
+                        when (s) {
+                            Sensitivity.LOOSE -> R.string.sensitivity_loose
+                            Sensitivity.NORMAL -> R.string.sensitivity_normal
+                            Sensitivity.STRICT -> R.string.sensitivity_strict
+                        },
+                    ),
+                    onClick = { viewModel.setSensitivity(s) },
+                )
+            }
+
             item { SectionHeader(stringResource(R.string.settings_playback)) }
             item { Text(stringResource(R.string.settings_low_power), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
             items(LowPowerMode.entries) { mode ->
@@ -283,6 +338,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             },
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
+}
+
+@Composable
+private fun RadioRow(selected: Boolean, text: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(text)
     }
 }
 

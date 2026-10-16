@@ -127,7 +127,6 @@
     <string name="info_genre">Genre</string>
     <string name="info_track">Track</string>
 
-    <string name="mood_not_ready">Songs will appear here after audio analysis.</string>
 
     <string name="settings_tabs">Tab bar</string>
     <string name="settings_tabs_summary">Reorder or unpin tabs</string>
@@ -168,4 +167,24 @@
     </plurals>
     <string name="restore_done">Restored (playlists / songs / not found): %s</string>
     <string name="restore_invalid">Not a JeekMusic backup file</string>
+
+    <string name="menu_mark_sport">Mark as Workout</string>
+    <string name="menu_mark_quiet">Mark as Calm</string>
+    <string name="menu_mark_none">Remove from smart tags</string>
+    <string name="menu_mark_auto">Use automatic detection</string>
+    <string name="info_analysis">Audio analysis</string>
+    <plurals name="mood_pending">
+        <item quantity="one">%d song not analyzed yet</item>
+        <item quantity="other">%d songs not analyzed yet</item>
+    </plurals>
+    <string name="mood_analyze_now">Analyze now</string>
+    <string name="mood_empty">No songs here yet. Songs are tagged automatically after audio analysis, or you can tag them from a song’s menu.</string>
+    <string name="settings_moods">Smart tags</string>
+    <string name="settings_analysis_mode">When to analyze</string>
+    <string name="analysis_charging">Only while charging (recommended)</string>
+    <string name="analysis_anytime">Any time</string>
+    <string name="settings_sensitivity">Detection sensitivity</string>
+    <string name="sensitivity_loose">Loose (more songs)</string>
+    <string name="sensitivity_normal">Normal</string>
+    <string name="sensitivity_strict">Strict (fewer songs)</string>
 </resources>

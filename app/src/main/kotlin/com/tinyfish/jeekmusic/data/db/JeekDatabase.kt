@@ -23,8 +23,11 @@ import javax.inject.Singleton
         QueueItemEntity::class,
         LyricsOffsetEntity::class,
         LyricsCacheEntity::class,
+        TrackFeaturesEntity::class,
+        MoodOverrideEntity::class,
+        TrackMoodEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class JeekDatabase : RoomDatabase() {
@@ -36,6 +39,7 @@ abstract class JeekDatabase : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun searchDao(): SearchDao
     abstract fun lyricsDao(): LyricsDao
+    abstract fun moodDao(): MoodDao
 }
 
 @Module
@@ -73,4 +77,7 @@ object DatabaseModule {
 
     @Provides
     fun lyricsDao(db: JeekDatabase) = db.lyricsDao()
+
+    @Provides
+    fun moodDao(db: JeekDatabase) = db.moodDao()
 }

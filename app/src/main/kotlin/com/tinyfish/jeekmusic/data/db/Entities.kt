@@ -169,3 +169,38 @@ data class LyricsCacheEntity(
     val synced: Boolean,
     @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
 )
+
+/** 音频分析结果（docs/design.md §6）。 */
+@Entity(tableName = "track_features")
+data class TrackFeaturesEntity(
+    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
+    /** date_modified + ":" + size；文件变了就要重新分析。 */
+    val signature: String,
+    @ColumnInfo(name = "analyzer_version") val analyzerVersion: Int,
+    val bpm: Double?,
+    @ColumnInfo(name = "bpm_confidence") val bpmConfidence: Double,
+    val loudness: Double,
+    @ColumnInfo(name = "loudness_range") val loudnessRange: Double,
+    @ColumnInfo(name = "onset_rate") val onsetRate: Double,
+    @ColumnInfo(name = "centroid_hz") val centroidHz: Double,
+    @ColumnInfo(name = "low_ratio") val lowRatio: Double,
+    @ColumnInfo(name = "analyzed_at") val analyzedAt: Long,
+    /** 解码失败；不再重试，除非文件签名变了。 */
+    val failed: Boolean = false,
+)
+
+/** 手动修正（需求 M-4）。mood 为 null 表示"明确不属于任何标签"。 */
+@Entity(tableName = "mood_override")
+data class MoodOverrideEntity(
+    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
+    val mood: String?,
+)
+
+/** 物化的分类结果 = 手动修正优先，否则取自动分类。 */
+@Entity(tableName = "track_mood", indices = [Index(value = ["mood"])])
+data class TrackMoodEntity(
+    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
+    val mood: String,
+    /** AUTO | MANUAL */
+    val source: String,
+)

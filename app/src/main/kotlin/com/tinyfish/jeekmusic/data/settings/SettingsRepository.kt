@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.tinyfish.jeekmusic.analysis.Sensitivity
 import com.tinyfish.jeekmusic.data.scanner.ArtistSplitConfig
 import com.tinyfish.jeekmusic.data.scanner.FileNameFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +21,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** 智能标签的分析时机（需求 M-5）。 */
+enum class AnalysisMode { CHARGING, ANYTIME }
 
 /** 低功耗播放（音频 offload）的三档设置（docs/design.md §7.2）。 */
 enum class LowPowerMode { BACKGROUND, ALWAYS, OFF }
@@ -38,6 +42,8 @@ data class Settings(
     val scan: ScanConfig = ScanConfig(),
     val unsupportedFileCount: Int = 0,
     val lowPowerMode: LowPowerMode = LowPowerMode.BACKGROUND,
+    val analysisMode: AnalysisMode = AnalysisMode.CHARGING,
+    val sensitivity: Sensitivity = Sensitivity.NORMAL,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -55,6 +61,8 @@ class SettingsRepository @Inject constructor(
         val LEGACY_CHARSET = stringPreferencesKey("legacy_charset")
         val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
         val LOW_POWER = stringPreferencesKey("low_power_mode")
+        val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
+        val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -64,6 +72,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setThemeMode(mode: ThemeMode) = context.dataStore.edit { it[Keys.THEME] = mode.name }
 
     suspend fun setLowPowerMode(mode: LowPowerMode) = context.dataStore.edit { it[Keys.LOW_POWER] = mode.name }
+
+    suspend fun setAnalysisMode(mode: AnalysisMode) = context.dataStore.edit { it[Keys.ANALYSIS_MODE] = mode.name }
+
+    suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = sensitivity.name }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -89,5 +101,7 @@ class SettingsRepository @Inject constructor(
         ),
         unsupportedFileCount = this[Keys.UNSUPPORTED] ?: 0,
         lowPowerMode = this[Keys.LOW_POWER]?.let { runCatching { LowPowerMode.valueOf(it) }.getOrNull() } ?: LowPowerMode.BACKGROUND,
+        analysisMode = this[Keys.ANALYSIS_MODE]?.let { runCatching { AnalysisMode.valueOf(it) }.getOrNull() } ?: AnalysisMode.CHARGING,
+        sensitivity = this[Keys.SENSITIVITY]?.let { runCatching { Sensitivity.valueOf(it) }.getOrNull() } ?: Sensitivity.NORMAL,
     )
 }

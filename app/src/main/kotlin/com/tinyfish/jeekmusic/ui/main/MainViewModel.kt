@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.scanner.LibraryObserver
 import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
@@ -42,6 +43,7 @@ class MainViewModel @Inject constructor(
     private val observer: LibraryObserver,
     private val player: PlayerConnection,
     private val backups: BackupManager,
+    private val analysis: AnalysisScheduler,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
 
@@ -144,6 +146,7 @@ class MainViewModel @Inject constructor(
             delay(1_000)
             scanner.requestScan()
             backups.startAutoBackup()
+            analysis.schedule()
         }
     }
 }

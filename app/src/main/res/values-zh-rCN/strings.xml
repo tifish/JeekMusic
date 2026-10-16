@@ -124,7 +124,6 @@
     <string name="info_genre">流派</string>
     <string name="info_track">音轨</string>
 
-    <string name="mood_not_ready">完成音频分析后，歌曲会出现在这里。</string>
 
     <string name="settings_tabs">标签栏</string>
     <string name="settings_tabs_summary">调整顺序或取消固定</string>
@@ -164,4 +163,23 @@
     </plurals>
     <string name="restore_done">已恢复（播放列表 / 歌曲 / 未找到）：%s</string>
     <string name="restore_invalid">这不是 JeekMusic 的备份文件</string>
+
+    <string name="menu_mark_sport">标为运动</string>
+    <string name="menu_mark_quiet">标为安静</string>
+    <string name="menu_mark_none">移出智能标签</string>
+    <string name="menu_mark_auto">恢复自动识别</string>
+    <string name="info_analysis">音频分析</string>
+    <plurals name="mood_pending">
+        <item quantity="other">还有 %d 首未分析</item>
+    </plurals>
+    <string name="mood_analyze_now">立即分析</string>
+    <string name="mood_empty">这里还没有歌曲。音频分析完成后会自动归类，也可以在歌曲菜单里手动标记。</string>
+    <string name="settings_moods">智能标签</string>
+    <string name="settings_analysis_mode">分析时机</string>
+    <string name="analysis_charging">仅充电时（推荐）</string>
+    <string name="analysis_anytime">随时</string>
+    <string name="settings_sensitivity">识别灵敏度</string>
+    <string name="sensitivity_loose">宽松（歌更多）</string>
+    <string name="sensitivity_normal">标准</string>
+    <string name="sensitivity_strict">严格（歌更少）</string>
 </resources>

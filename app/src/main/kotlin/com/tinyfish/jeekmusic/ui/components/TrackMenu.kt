@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -42,6 +43,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.R
+import com.tinyfish.jeekmusic.analysis.Mood
+import com.tinyfish.jeekmusic.analysis.MoodInfo
+import com.tinyfish.jeekmusic.analysis.MoodRepository
 import com.tinyfish.jeekmusic.data.db.ArtistEntity
 import com.tinyfish.jeekmusic.data.db.FolderDao
 import com.tinyfish.jeekmusic.data.db.PlaylistEntity
@@ -74,7 +78,17 @@ class TrackMenuViewModel @Inject constructor(
     private val folderDao: FolderDao,
     private val trackDao: TrackDao,
     private val messages: MessageBus,
+    private val moods: MoodRepository,
 ) : ViewModel() {
+
+    suspend fun moodInfo(track: TrackEntity): MoodInfo = moods.info(track.trackKey)
+
+    fun scores(info: MoodInfo): Map<Mood, Double?>? = info.features?.takeIf { !it.failed }?.let(moods::scores)
+
+    /** 手动修正（需求 M-4）。 */
+    fun setMood(track: TrackEntity, mood: Mood?) = viewModelScope.launch { moods.setManual(track.trackKey, mood) }
+
+    fun resetMood(track: TrackEntity) = viewModelScope.launch { moods.clearManual(track.trackKey) }
 
     private val _track = MutableStateFlow<TrackEntity?>(null)
     val track = _track.asStateFlow()
@@ -146,7 +160,12 @@ fun TrackMenuHost(
 
     val current = track
     if (current != null) {
-        ModalBottomSheet(onDismissRequest = viewModel::dismiss, modifier = Modifier.testTag("track_menu")) {
+        // 菜单项较多，直接完全展开，避免下面的选项被截掉
+        ModalBottomSheet(
+            onDismissRequest = viewModel::dismiss,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            modifier = Modifier.testTag("track_menu"),
+        ) {
             Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState())) {
                 Text(current.title, Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(trackSubtitle(current), Modifier.padding(horizontal = 24.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -180,6 +199,7 @@ fun TrackMenuHost(
                         }
                     }
                 }
+                MoodItems(viewModel, current)
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
             }
         }
@@ -204,7 +224,7 @@ fun TrackMenuHost(
             confirmButton = {},
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.cancel)) } },
         )
-        MenuDialog.Info -> if (target != null) SongInfoDialog(target) { dialog = null }
+        MenuDialog.Info -> if (target != null) SongInfoDialog(target, viewModel) { dialog = null }
         null -> Unit
     }
 }
@@ -257,9 +277,23 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
     )
 }
 
-/** 歌曲信息（需求 U-3 的简化版）。 */
+/** "标为运动 / 标为安静 / 不属于智能标签 / 恢复自动识别"（需求 M-4）。 */
 @Composable
-private fun SongInfoDialog(track: TrackEntity, onDismiss: () -> Unit) {
+private fun MoodItems(viewModel: TrackMenuViewModel, track: TrackEntity) {
+    var info by remember(track.id) { mutableStateOf<MoodInfo?>(null) }
+    androidx.compose.runtime.LaunchedEffect(track.id) { info = viewModel.moodInfo(track) }
+    val current = info ?: return
+    if (current.mood != Mood.SPORT) MenuItem(R.drawable.ic_bolt, R.string.menu_mark_sport) { viewModel.setMood(track, Mood.SPORT); viewModel.dismiss() }
+    if (current.mood != Mood.QUIET) MenuItem(R.drawable.ic_bedtime, R.string.menu_mark_quiet) { viewModel.setMood(track, Mood.QUIET); viewModel.dismiss() }
+    if (current.mood != null) MenuItem(R.drawable.ic_close, R.string.menu_mark_none) { viewModel.setMood(track, null); viewModel.dismiss() }
+    if (current.manual) MenuItem(R.drawable.ic_refresh, R.string.menu_mark_auto) { viewModel.resetMood(track); viewModel.dismiss() }
+}
+
+/** 歌曲信息（需求 U-3、M-7）。 */
+@Composable
+private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) {
+    var mood by remember(track.id) { mutableStateOf<MoodInfo?>(null) }
+    androidx.compose.runtime.LaunchedEffect(track.id) { mood = viewModel.moodInfo(track) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(track.title) },
@@ -276,6 +310,20 @@ private fun SongInfoDialog(track: TrackEntity, onDismiss: () -> Unit) {
                 InfoRow(R.string.info_sample_rate, track.sampleRate?.let { "$it Hz" })
                 if (track.artistInferred) {
                     Text(stringResource(R.string.info_artist_inferred), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                mood?.features?.takeIf { !it.failed }?.let { f ->
+                    val scores = mood?.let { viewModel.scores(it) }.orEmpty()
+                    InfoRow(
+                        R.string.info_analysis,
+                        listOfNotNull(
+                            f.bpm?.let { "BPM %.0f (×%.1f)".format(it, f.bpmConfidence) },
+                            "%.1f LUFS".format(f.loudness),
+                            "LRA %.1f".format(f.loudnessRange),
+                            "%.1f onsets/s".format(f.onsetRate),
+                            "%.0f Hz".format(f.centroidHz),
+                            "low %.0f%%".format(f.lowRatio * 100),
+                        ).joinToString(" · ") + "\n" + scores.entries.joinToString(" · ") { (m, s) -> "$m ${s?.let { "%.2f".format(it) } ?: "–"}" },
+                    )
                 }
             }
         },

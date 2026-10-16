@@ -49,5 +49,17 @@
             android:authorities="${applicationId}.artwork"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <!-- WorkManager 按需初始化（docs/design.md §9.3） -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 </manifest>

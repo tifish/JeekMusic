@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.coil.compose)
     implementation(libs.reorderable)
+    implementation(libs.androidx.work.runtime)
     ksp(libs.hilt.compiler)
     ksp(libs.androidx.room.compiler)
 

@@ -20,6 +20,7 @@ object LrcParser {
 
     private val TIME_TAG = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val META_TAG = Regex("""^\[([a-zA-Z#]+):(.*)]$""")
+    private val BOM = Char(0xFEFF).toString()
     private val WORD_TAG = Regex("""<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>""")
 
     fun parse(text: String): Lyrics {
@@ -28,7 +29,7 @@ object LrcParser {
         val plain = mutableListOf<String>()
 
         for (raw in text.lineSequence()) {
-            val line = raw.trim().removePrefix("﻿")
+            val line = raw.trim().removePrefix(BOM)
             if (line.isEmpty()) {
                 plain += ""
                 continue

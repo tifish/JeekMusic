@@ -49,11 +49,17 @@ import com.tinyfish.jeekmusic.playback.MediaItemMapper
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.ui.components.Artwork
 import com.tinyfish.jeekmusic.ui.components.CenteredMessage
+import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
 import com.tinyfish.jeekmusic.ui.components.PlayButtons
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.TrackRow
 import com.tinyfish.jeekmusic.ui.components.songCount
+import com.tinyfish.jeekmusic.data.tabs.TabRepository
+import com.tinyfish.jeekmusic.ui.navigation.Tab
 import com.tinyfish.jeekmusic.ui.navigation.TabRoute
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.res.painterResource
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -182,7 +188,16 @@ class ArtistDetailViewModel @AssistedInject constructor(
     @Assisted private val nameKey: String,
     library: LibraryRepository,
     private val player: PlayerConnection,
+    private val tabs: TabRepository,
 ) : ViewModel() {
+
+    val pinned: StateFlow<Boolean> = tabs.pinnedArtistKeys.map { nameKey in it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** 固定到标签栏 / 取消固定（需求 T-3）。 */
+    fun togglePin() = viewModelScope.launch {
+        if (pinned.value) tabs.unpin(Tab.PinnedArtist(nameKey, "")) else tabs.pinArtist(nameKey)
+    }
 
     @AssistedFactory
     interface Factory {
@@ -229,21 +244,42 @@ fun ArtistDetailScreen(
     val artist by viewModel.artist.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
+    val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val pinAction = @Composable {
+        IconButton(onClick = viewModel::togglePin, modifier = Modifier.testTag("pin_artist")) {
+            Icon(
+                painterResource(R.drawable.ic_push_pin),
+                contentDescription = stringResource(if (pinned) R.string.menu_unpin_tab else R.string.menu_pin_tab),
+                tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         val name = artist?.let { artistName(it) }.orEmpty()
         val subtitle = artist?.let { songCount(it.trackCount) }
         if (route.isTabRoot) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(name, style = MaterialTheme.typography.titleLarge)
-                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(name, style = MaterialTheme.typography.titleLarge)
+                    if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                pinAction()
             }
         } else {
-            SubScreenHeader(title = name, subtitle = subtitle, onBack = onBack)
+            SubScreenHeader(title = name, subtitle = subtitle, onBack = onBack, actions = { pinAction() })
         }
         val data = groups ?: return@Column
         PlayButtons(onPlayAll = { viewModel.playAll(false) }, onShuffle = { viewModel.playAll(true) })
-        LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks")) {
+        var row = 0
+        var currentRow = -1
+        data.forEach { group ->
+            row++
+            group.tracks.forEach { if (it.value.id == currentTrackId) currentRow = row; row++ }
+        }
+        Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks"), state = listState) {
             data.forEach { group ->
                 stickyHeader(key = "album:" + (group.albumKey ?: "none"), contentType = "album") {
                     AlbumHeader(group, onClick = group.albumKey?.let { key -> { onOpenAlbum(key) } })
@@ -265,6 +301,8 @@ fun ArtistDetailScreen(
                     )
                 }
             }
+        }
+        LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
         }
     }
 }

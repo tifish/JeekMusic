@@ -93,7 +93,7 @@ interface TrackDao {
     @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path = :relativePath")
     fun observeInDirectory(folderId: Long, relativePath: String): Flow<List<TrackEntity>>
 
-    @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\'")
+    @Query("""SELECT * FROM track WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\'""")
     suspend fun under(folderId: Long, prefix: String): List<TrackEntity>
 
     @Query(
@@ -136,4 +136,124 @@ interface ArtistDao {
 
     @Query("SELECT * FROM artist WHERE name_key = :nameKey")
     fun observeByNameKey(nameKey: String): Flow<ArtistEntity?>
+}
+
+@Dao
+interface TabDao {
+    @Query("SELECT * FROM pinned_tab ORDER BY position")
+    fun observeAll(): Flow<List<PinnedTabEntity>>
+
+    @Query("SELECT * FROM pinned_tab ORDER BY position")
+    suspend fun all(): List<PinnedTabEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(tabs: List<PinnedTabEntity>)
+
+    @Query("DELETE FROM pinned_tab WHERE type = :type AND ref = :ref")
+    suspend fun delete(type: String, ref: String)
+
+    @Query("UPDATE pinned_tab SET position = :position WHERE id = :id")
+    suspend fun setPosition(id: Long, position: Int)
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM pinned_tab")
+    suspend fun maxPosition(): Int
+}
+
+data class PlaylistWithCount(
+    @Embedded val playlist: PlaylistEntity,
+    @ColumnInfo(name = "item_count") val itemCount: Int,
+)
+
+/** 播放列表条目；track 为空表示文件暂时不可用（需求 PL-3）。 */
+data class PlaylistEntry(
+    @Embedded(prefix = "item_") val item: PlaylistItemEntity,
+    @Embedded val track: TrackEntity?,
+)
+
+@Dao
+interface PlaylistDao {
+    @Query(
+        """
+        SELECT p.*, (SELECT COUNT(*) FROM playlist_item i WHERE i.playlist_id = p.id) AS item_count
+        FROM playlist p ORDER BY p.name COLLATE NOCASE
+        """,
+    )
+    fun observeAll(): Flow<List<PlaylistWithCount>>
+
+    @Query("SELECT * FROM playlist ORDER BY name COLLATE NOCASE")
+    suspend fun all(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlist WHERE id = :id")
+    fun observe(id: Long): Flow<PlaylistEntity?>
+
+    @Insert
+    suspend fun insert(playlist: PlaylistEntity): Long
+
+    @Query("UPDATE playlist SET name = :name, updated_at = :now WHERE id = :id")
+    suspend fun rename(id: Long, name: String, now: Long)
+
+    @Query("UPDATE playlist SET updated_at = :now WHERE id = :id")
+    suspend fun touch(id: Long, now: Long)
+
+    @Query("DELETE FROM playlist WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query(
+        """
+        SELECT i.id AS item_id, i.playlist_id AS item_playlist_id, i.position AS item_position, i.track_key AS item_track_key, t.*
+        FROM playlist_item i LEFT JOIN track t ON t.track_key = i.track_key
+        WHERE i.playlist_id = :playlistId ORDER BY i.position
+        """,
+    )
+    fun observeEntries(playlistId: Long): Flow<List<PlaylistEntry>>
+
+    @Query("SELECT * FROM playlist_item WHERE playlist_id = :playlistId ORDER BY position")
+    suspend fun items(playlistId: Long): List<PlaylistItemEntity>
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM playlist_item WHERE playlist_id = :playlistId")
+    suspend fun maxPosition(playlistId: Long): Int
+
+    @Insert
+    suspend fun insertItems(items: List<PlaylistItemEntity>)
+
+    @Query("DELETE FROM playlist_item WHERE id = :itemId")
+    suspend fun deleteItem(itemId: Long)
+
+    @Query("DELETE FROM playlist_item WHERE playlist_id = :playlistId")
+    suspend fun clearItems(playlistId: Long)
+}
+
+@Dao
+interface QueueDao {
+    @Query("SELECT track_key FROM queue_item ORDER BY position")
+    suspend fun trackKeys(): List<String>
+
+    @Query("DELETE FROM queue_item")
+    suspend fun clear()
+
+    @Insert
+    suspend fun insert(items: List<QueueItemEntity>)
+}
+
+@Dao
+interface SearchDao {
+    @Query(
+        """
+        SELECT * FROM track WHERE title LIKE :pattern ESCAPE '\' OR artist_display LIKE :pattern ESCAPE '\'
+        OR album LIKE :pattern ESCAPE '\' OR file_name LIKE :pattern ESCAPE '\'
+        ORDER BY title COLLATE NOCASE LIMIT :limit
+        """,
+    )
+    suspend fun tracks(pattern: String, limit: Int): List<TrackEntity>
+
+    @Query("""SELECT * FROM artist WHERE name LIKE :pattern ESCAPE '\' ORDER BY sort_key LIMIT :limit""")
+    suspend fun artists(pattern: String, limit: Int): List<ArtistEntity>
+
+    @Query(
+        """
+        SELECT a.* FROM artist a JOIN track_artist ta ON ta.artist_id = a.id
+        WHERE ta.track_id = :trackId ORDER BY a.sort_key
+        """,
+    )
+    suspend fun artistsOfTrack(trackId: Long): List<ArtistEntity>
 }

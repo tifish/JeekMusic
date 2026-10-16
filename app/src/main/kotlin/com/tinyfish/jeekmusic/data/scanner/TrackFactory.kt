@@ -49,6 +49,58 @@ class TrackFactory(private val config: ScanConfig) {
         return BuiltTrack(entity, derived.artists)
     }
 
+    /**
+     * CUE 整轨：一个文件展开成多条虚拟歌曲（docs/design.md §4.6）。
+     * 歌名、艺术家、音轨号来自 CUE；CUE 顶层 TITLE / PERFORMER 作为专辑名 / 专辑艺术家；缺少的字段取自文件本身的标签。
+     */
+    fun buildCue(audio: MediaStoreAudio, folderId: Long, tags: TrackTags?, cue: ResolvedCue, existingIds: Map<String, Long>): List<BuiltTrack> {
+        val fileDuration = audio.durationMs.takeIf { it > 0 } ?: tags?.durationMs ?: 0
+        val album = cue.sheet.title ?: tags?.album
+        val albumArtist = cue.sheet.performer ?: tags?.albumArtist
+        val tracks = cue.file.tracks.sortedBy { it.startMs }
+        return tracks.mapIndexed { i, track ->
+            val end = tracks.getOrNull(i + 1)?.startMs
+            val trackKey = audio.fileKey + "#" + track.number.toString().padStart(2, '0')
+            val rawArtists = listOfNotNull(track.performer).ifEmpty { tags?.artists.orEmpty() }
+            val artists = ArtistSplitter.split(rawArtists, config.split)
+            BuiltTrack(
+                TrackEntity(
+                    id = existingIds[trackKey] ?: 0,
+                    trackKey = trackKey,
+                    fileKey = audio.fileKey,
+                    mediaStoreId = audio.mediaStoreId,
+                    volumeName = audio.volumeName,
+                    folderId = folderId,
+                    relativePath = audio.relativePath,
+                    fileName = audio.fileName,
+                    titleTag = track.title,
+                    title = track.title ?: (track.number.toString().padStart(2, '0') + ". " + (album ?: audio.fileName.substringBeforeLast('.'))),
+                    album = album,
+                    albumArtist = albumArtist,
+                    albumKey = AlbumKeys.of(album, albumArtist, audio.volumeName, audio.relativePath),
+                    artistRaw = rawArtists.takeIf { it.isNotEmpty() }?.joinToString(MULTI_VALUE_SEPARATOR),
+                    artistDisplay = rawArtists.joinToString(" / "),
+                    artistInferred = false,
+                    trackNo = track.number,
+                    discNo = tags?.discNo,
+                    year = cue.sheet.year ?: tags?.year,
+                    genre = cue.sheet.genre ?: tags?.genre,
+                    durationMs = ((end ?: fileDuration) - track.startMs).coerceAtLeast(0),
+                    mimeType = audio.mimeType,
+                    bitrate = tags?.bitrate ?: audio.bitrate?.div(1000),
+                    sampleRate = tags?.sampleRate,
+                    dateModified = audio.dateModified,
+                    size = audio.size,
+                    hasEmbeddedLyrics = false,
+                    cueTrackNo = track.number,
+                    startMs = track.startMs,
+                    endMs = end,
+                ),
+                artists,
+            )
+        }
+    }
+
     /** 用库里已存的原始字段重新计算派生字段（修改分隔符、例外名单或文件名推断设置后）。 */
     fun rebuild(track: TrackEntity): BuiltTrack {
         val rawArtists = track.artistRaw?.split(MULTI_VALUE_SEPARATOR).orEmpty()

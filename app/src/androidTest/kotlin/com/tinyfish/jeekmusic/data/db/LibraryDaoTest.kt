@@ -93,6 +93,36 @@ class LibraryDaoTest {
     }
 
     @Test
+    fun underAndSearchEscapeLikeWildcards() = runTest {
+        val id = addFolder("Music/")
+        tracks.insert(listOf(track(id, "Music/100%_Hits/", "a.mp3"), track(id, "Music/1000 Hits/", "b.mp3")))
+        assertEquals(listOf("a.mp3"), tracks.under(id, "Music/100\\%\\_Hits/").map { it.fileName })
+
+        val search = db.searchDao()
+        tracks.insert(listOf(track(id, "Music/", "100%_Pure.mp3"), track(id, "Music/", "1000 Pure.mp3")))
+        // "%" 和 "_" 转义后只匹配字面值，不会把 "1000 Pure" 也搜出来
+        assertEquals(listOf("100%_Pure.mp3"), search.tracks("%100\\%\\_%", 10).map { it.fileName })
+        artists.insert(listOf(ArtistEntity(name = "50% Off", nameKey = "50% off", sortKey = "50% off", indexLetter = "#")))
+        assertEquals(listOf("50% Off"), search.artists("%50\\%%", 10).map { it.name })
+    }
+
+    @Test
+    fun playlistEntriesKeepUnavailableTracks() = runTest {
+        val id = addFolder("Music/")
+        tracks.insert(listOf(track(id, "Music/", "a.mp3")))
+        val playlists = db.playlistDao()
+        val pid = playlists.insert(PlaylistEntity(name = "p", createdAt = 0, updatedAt = 0))
+        playlists.insertItems(
+            listOf(
+                PlaylistItemEntity(playlistId = pid, position = 0, trackKey = "external_primary:Music/a.mp3"),
+                PlaylistItemEntity(playlistId = pid, position = 1, trackKey = "external_primary:Music/gone.mp3"),
+            ),
+        )
+        val entries = playlists.observeEntries(pid).first()
+        assertEquals(listOf("a.mp3", null), entries.map { it.track?.fileName })
+    }
+
+    @Test
     fun folderCountsAndCascadeDelete() = runTest {
         val a = addFolder("Music/")
         val b = addFolder("Download/")

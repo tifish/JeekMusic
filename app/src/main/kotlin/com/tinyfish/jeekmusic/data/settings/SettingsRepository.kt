@@ -21,6 +21,9 @@ import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** 低功耗播放（音频 offload）的三档设置（docs/design.md §7.2）。 */
+enum class LowPowerMode { BACKGROUND, ALWAYS, OFF }
+
 /** 扫描相关设置。修改后需要重建艺术家索引（docs/design.md §4.4）。 */
 data class ScanConfig(
     val split: ArtistSplitConfig = ArtistSplitConfig(),
@@ -34,6 +37,7 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val scan: ScanConfig = ScanConfig(),
     val unsupportedFileCount: Int = 0,
+    val lowPowerMode: LowPowerMode = LowPowerMode.BACKGROUND,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -50,6 +54,7 @@ class SettingsRepository @Inject constructor(
         val FILE_NAME_FORMAT = stringPreferencesKey("file_name_format")
         val LEGACY_CHARSET = stringPreferencesKey("legacy_charset")
         val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
+        val LOW_POWER = stringPreferencesKey("low_power_mode")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -57,6 +62,8 @@ class SettingsRepository @Inject constructor(
     suspend fun current(): Settings = settings.first()
 
     suspend fun setThemeMode(mode: ThemeMode) = context.dataStore.edit { it[Keys.THEME] = mode.name }
+
+    suspend fun setLowPowerMode(mode: LowPowerMode) = context.dataStore.edit { it[Keys.LOW_POWER] = mode.name }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -81,5 +88,6 @@ class SettingsRepository @Inject constructor(
             legacyCharset = this[Keys.LEGACY_CHARSET]?.let { runCatching { Charset.forName(it) }.getOrNull() },
         ),
         unsupportedFileCount = this[Keys.UNSUPPORTED] ?: 0,
+        lowPowerMode = this[Keys.LOW_POWER]?.let { runCatching { LowPowerMode.valueOf(it) }.getOrNull() } ?: LowPowerMode.BACKGROUND,
     )
 }

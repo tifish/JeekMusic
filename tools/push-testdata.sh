@@ -41,6 +41,39 @@ for i in 1 2 3; do
     -bits_per_raw_sample 24 -metadata title="Hi-Res $i" -metadata artist="Test Artist"
 done
 
+# CUE 整轨：6 分钟，三段不同频率的音调，每段 2 分钟
+mkdir -p "$out/cue"
+cue_tone() { # cue_tone <output> [ffmpeg 参数...]
+  local file=$1
+  shift
+  ffmpeg -loglevel error -y -f lavfi \
+    -i "aevalsrc='0.3*sin(2*PI*(if(lt(t,120),440,if(lt(t,240),660,880)))*t)':d=360:s=44100" "$@" "$file"
+}
+cue_text() { # cue_text <FILE 行中的文件名> <专辑名>
+  cat <<CUE
+REM DATE 2003
+PERFORMER "测试歌手"
+TITLE "$2"
+FILE "$1" WAVE
+  TRACK 01 AUDIO
+    TITLE "第一首"
+    INDEX 01 00:00:00
+  TRACK 02 AUDIO
+    TITLE "第二首"
+    PERFORMER "测试歌手 feat. 嘉宾"
+    INDEX 00 01:59:00
+    INDEX 01 02:00:00
+  TRACK 03 AUDIO
+    TITLE "第三首"
+    INDEX 01 04:00:00
+CUE
+}
+# 外部 CUE，GBK 编码；CUE 里写的是 .wav，实际文件是 .flac（需求 CUE-4、CUE-5）
+cue_tone "$out/cue/整轨专辑.flac"
+cue_text "整轨专辑.wav" "整轨专辑" | iconv -f UTF-8 -t GBK > "$out/cue/整轨专辑.cue"
+# 内嵌 cuesheet（需求 CUE-1）
+cue_tone "$out/cue/Embedded.flac" -metadata CUESHEET="$(cue_text "Embedded.flac" "内嵌CUE专辑")"
+
 adb shell rm -rf "$remote"
 adb shell mkdir -p "$remote"
 adb push "$out/." "$remote/" >/dev/null

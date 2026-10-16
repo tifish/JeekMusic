@@ -67,4 +67,101 @@
 
     <string name="queue_title">播放队列</string>
     <string name="queue_count">%1$d / %2$d</string>
+
+    <string name="tab_sport">运动</string>
+    <string name="tab_quiet">安静</string>
+
+    <string name="menu_play_next">下一首播放</string>
+    <string name="menu_add_to_queue">添加到队列</string>
+    <string name="menu_add_to_playlist">添加到播放列表</string>
+    <string name="menu_go_to_artist">查看艺术家</string>
+    <string name="menu_go_to_album">查看专辑</string>
+    <string name="menu_open_folder">打开所在文件夹</string>
+    <string name="menu_song_info">歌曲信息</string>
+    <string name="menu_sleep_timer">睡眠定时</string>
+    <string name="menu_pin_tab">固定到标签栏</string>
+    <string name="menu_unpin_tab">从标签栏取消固定</string>
+    <string name="menu_move_left">左移</string>
+    <string name="menu_move_right">右移</string>
+    <string name="choose_artist">选择艺术家</string>
+    <string name="added_to_queue">已添加到队列</string>
+    <string name="added_to_playlist">已添加到"%s"</string>
+    <string name="playback_error">无法播放"%s"，已跳过</string>
+
+    <string name="playlists_empty">还没有播放列表</string>
+    <string name="playlist_new">新建播放列表</string>
+    <string name="playlist_name">名称</string>
+    <string name="playlist_rename">重命名</string>
+    <string name="playlist_delete">删除播放列表</string>
+    <string name="playlist_delete_message">删除"%s"？歌曲本身不会被删除。</string>
+    <string name="playlist_unavailable">不可用</string>
+    <string name="create">创建</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+
+    <string name="search_hint">搜索歌曲和艺术家</string>
+    <string name="search_songs">歌曲</string>
+    <string name="search_artists">艺术家</string>
+    <string name="search_no_results">没有结果</string>
+
+    <string name="sleep_timer_title">睡眠定时</string>
+    <plurals name="sleep_minutes">
+        <item quantity="other">%d 分钟</item>
+    </plurals>
+    <string name="sleep_end_of_track">播完当前这首</string>
+    <string name="sleep_cancel">关闭定时</string>
+    <string name="sleep_remaining">%s 后停止</string>
+    <string name="sleep_remaining_end_of_track">播完这首后停止</string>
+
+    <string name="info_path">路径</string>
+    <string name="info_format">格式</string>
+    <string name="info_duration">时长</string>
+    <string name="info_bitrate">码率</string>
+    <string name="info_sample_rate">采样率</string>
+    <string name="info_artist_inferred">艺术家推断自文件名</string>
+    <string name="info_album">专辑</string>
+    <string name="info_year">年份</string>
+    <string name="info_genre">流派</string>
+    <string name="info_track">音轨</string>
+
+    <string name="mood_not_ready">完成音频分析后，歌曲会出现在这里。</string>
+
+    <string name="settings_tabs">标签栏</string>
+    <string name="settings_tabs_summary">调整顺序或取消固定</string>
+    <string name="settings_artists">艺术家标签</string>
+    <string name="settings_artists_summary">分隔符、例外名单、从文件名推断</string>
+    <string name="settings_playback">播放</string>
+    <string name="settings_low_power">低功耗播放</string>
+    <string name="low_power_background">后台或熄屏时（推荐）</string>
+    <string name="low_power_always">始终使用</string>
+    <string name="low_power_always_summary">额外省电很少；进度和歌词同步可能变粗</string>
+    <string name="low_power_off">关闭</string>
+
+    <string name="artist_separators">分隔符</string>
+    <string name="artist_separators_summary">按这些分隔符拆分艺术家标签</string>
+    <string name="artist_exceptions">不拆分的名字</string>
+    <string name="artist_exceptions_hint">每行一个</string>
+    <string name="infer_from_file_name">从文件名推断艺术家</string>
+    <string name="infer_from_file_name_summary">歌曲没有艺术家标签时</string>
+    <string name="file_name_format">文件名格式</string>
+    <string name="format_artist_title">艺术家 - 标题</string>
+    <string name="format_title_artist">标题 - 艺术家</string>
+    <string name="legacy_charset">旧标签编码</string>
+    <string name="legacy_charset_auto">自动（GBK）</string>
+    <string name="apply_and_rebuild">应用并重建艺术家索引</string>
+
+    <string name="settings_backup">备份</string>
+    <string name="backup_now">立即备份</string>
+    <string name="backup_summary">播放列表、固定的标签和设置会保存到每个音乐文件夹下的 .jeekmusic/backup.json</string>
+    <string name="backup_last">上次备份：%s</string>
+    <string name="backup_done">已备份</string>
+    <string name="backup_failed">备份失败：没有可写入的音乐文件夹</string>
+    <string name="restore_from_file">从备份文件恢复</string>
+    <string name="restore">恢复</string>
+    <string name="restore_found_title">发现备份</string>
+    <plurals name="restore_found_message">
+        <item quantity="other">这个文件夹里有一份 %1$s 的备份，包含 %2$d 个播放列表。是否恢复？</item>
+    </plurals>
+    <string name="restore_done">已恢复（播放列表 / 歌曲 / 未找到）：%s</string>
+    <string name="restore_invalid">这不是 JeekMusic 的备份文件</string>
 </resources>

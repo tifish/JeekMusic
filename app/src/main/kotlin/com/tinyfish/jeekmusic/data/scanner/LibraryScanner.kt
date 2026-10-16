@@ -11,6 +11,7 @@ import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
 import com.tinyfish.jeekmusic.data.db.TrackArtistEntity
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.UNKNOWN_ARTIST_KEY
+import com.tinyfish.jeekmusic.data.library.DocumentTree
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -47,11 +50,16 @@ class LibraryScanner @Inject constructor(
     private val artistDao: ArtistDao,
     private val mediaStore: MediaStoreSource,
     private val tagReader: TagReader,
+    private val cueResolver: CueResolver,
     private val settings: SettingsRepository,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val _state = MutableStateFlow<ScanState>(ScanState.Idle)
     val state: StateFlow<ScanState> = _state.asStateFlow()
+
+    /** 有扫描正在进行或排队（恢复备份要等扫描完成）。 */
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     private val _lastResult = MutableStateFlow<ScanResult?>(null)
     val lastResult: StateFlow<ScanResult?> = _lastResult.asStateFlow()
@@ -60,6 +68,7 @@ class LibraryScanner @Inject constructor(
     private val requestLock = Any()
     private var running = false
     private var pending: Boolean? = null // null = 无；true/false = 有待执行的全量/增量请求
+    private var pendingRecheckCue = false
 
     /** 后台优先级的 4 线程池，不和 UI、播放抢 CPU。 */
     private val dispatcher = Executors.newFixedThreadPool(PARALLELISM) { runnable ->
@@ -71,26 +80,40 @@ class LibraryScanner @Inject constructor(
 
     private val sortKeys by lazy { SortKeys.android() }
 
-    fun requestScan(full: Boolean = false) {
+    /**
+     * @param full 重新读取所有文件的标签（"重建曲库"）
+     * @param recheckCue 对没有变化的整轨候选文件也重新检测 CUE（"重新扫描"）：新增或修改 .cue 不会触发 MediaStore 音频变化
+     */
+    fun requestScan(full: Boolean = false, recheckCue: Boolean = false) {
         synchronized(requestLock) {
             if (running) {
                 pending = (pending ?: false) || full
+                pendingRecheckCue = pendingRecheckCue || recheckCue
                 return
             }
             running = true
+            _busy.value = true
         }
         scope.launch(dispatcher) {
             var next: Boolean? = full
+            var cue = recheckCue
             while (next != null) {
-                runCatching { scan(next) }.onFailure { Log.e(TAG, "scan failed", it) }
+                runCatching { scan(next, cue) }.onFailure { Log.e(TAG, "scan failed", it) }
+                cue = synchronized(requestLock) { pendingRecheckCue.also { pendingRecheckCue = false } }
                 next = synchronized(requestLock) {
-                    pending.also { pending = null; if (it == null) running = false }
+                    pending.also {
+                        pending = null
+                        if (it == null) {
+                            running = false
+                            _busy.value = false
+                        }
+                    }
                 }
             }
         }
     }
 
-    suspend fun scan(full: Boolean): ScanResult = mutex.withLock {
+    suspend fun scan(full: Boolean, recheckCue: Boolean = false): ScanResult = mutex.withLock {
         val start = System.currentTimeMillis()
         val config = settings.current().scan
         val factory = TrackFactory(config)
@@ -109,26 +132,42 @@ class LibraryScanner @Inject constructor(
         val removedIds = existing.filterKeys { it !in found }.values.flatten().map { it.id }
         val toParse = found.values.filter { (audio, _) ->
             val old = existing[audio.fileKey]?.firstOrNull()
-            full || old == null || old.dateModified != audio.dateModified || old.size != audio.size
+            full || old == null || old.dateModified != audio.dateModified || old.size != audio.size ||
+                (recheckCue && cueResolver.isCandidate(audio))
         }
+        val directoryCache = ConcurrentHashMap<String, List<DocumentTree.Child>>()
+        val staleIds = Collections.synchronizedList(mutableListOf<Long>())
 
         _state.value = ScanState.Running(0, toParse.size)
         val done = AtomicInteger()
         var added = 0
         var updated = 0
 
-        // 5-7. 分批解析和写入
+        // 5-7. 分批解析和写入；整轨文件可能展开成多条 CUE 虚拟歌曲
         for (chunk in toParse.chunked(BATCH_SIZE)) {
             val built = coroutineScope {
                 chunk.map { (audio, folder) ->
                     async {
                         val tags = tagReader.read(MediaStoreSource.contentUri(audio.volumeName, audio.mediaStoreId), config.legacyCharset)
-                        val existingId = existing[audio.fileKey]?.firstOrNull()?.id ?: 0
-                        factory.build(audio, folder.id, tags, existingId).also {
-                            _state.value = ScanState.Running(done.incrementAndGet(), toParse.size)
+                        val old = existing[audio.fileKey].orEmpty()
+                        val idsByKey = old.associate { it.trackKey to it.id }
+                        val cue = if (tags?.cueSheet != null || cueResolver.isCandidate(audio)) {
+                            runCatching { cueResolver.resolve(folder, audio, tags?.cueSheet, directoryCache) }.getOrNull()
+                        } else {
+                            null
                         }
+                        val tracks = if (cue != null) {
+                            factory.buildCue(audio, folder.id, tags, cue, idsByKey)
+                        } else {
+                            listOf(factory.build(audio, folder.id, tags, idsByKey[audio.fileKey] ?: 0))
+                        }
+                        // 原来的虚拟歌曲在新结果中不存在了（比如删掉了 .cue），要删除
+                        val keys = tracks.map { it.entity.trackKey }.toSet()
+                        old.filter { it.trackKey !in keys }.forEach { staleIds += it.id }
+                        _state.value = ScanState.Running(done.incrementAndGet(), toParse.size)
+                        tracks
                     }
-                }.awaitAll()
+                }.awaitAll().flatten()
             }
             db.withTransaction {
                 val (updates, inserts) = built.partition { it.entity.id != 0L }
@@ -143,7 +182,7 @@ class LibraryScanner @Inject constructor(
         }
 
         db.withTransaction {
-            removedIds.chunked(BATCH_SIZE).forEach { trackDao.delete(it) }
+            (removedIds + staleIds).chunked(BATCH_SIZE).forEach { trackDao.delete(it) }
             artistDao.deleteOrphans()
             artistDao.updateTrackCounts()
         }

@@ -23,7 +23,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.library.AddFolderResult
+import com.tinyfish.jeekmusic.data.backup.Backup
+import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
+import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
+import com.tinyfish.jeekmusic.ui.navigation.MessageBus
+import com.tinyfish.jeekmusic.ui.navigation.UiMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +42,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AddFolderViewModel @Inject constructor(
     private val library: LibraryRepository,
+    private val backups: BackupManager,
 ) : ViewModel() {
 
     data class Pending(val uri: Uri, val result: AddFolderResult)
@@ -43,7 +53,13 @@ class AddFolderViewModel @Inject constructor(
     fun add(uri: Uri, replaceChildren: Boolean = false) {
         viewModelScope.launch {
             val result = library.addFolder(uri, replaceChildren)
-            _pending.value = if (result == AddFolderResult.Added) null else Pending(uri, result)
+            if (result is AddFolderResult.Added) {
+                _pending.value = null
+                // 新文件夹里有备份时，由主界面提示是否恢复（需求 B-3）
+                backups.offerIfFound(result.folder)
+            } else {
+                _pending.value = Pending(uri, result)
+            }
         }
     }
 

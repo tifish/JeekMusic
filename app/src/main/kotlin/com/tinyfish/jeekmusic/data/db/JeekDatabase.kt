@@ -17,14 +17,22 @@ import javax.inject.Singleton
         TrackEntity::class,
         ArtistEntity::class,
         TrackArtistEntity::class,
+        PinnedTabEntity::class,
+        PlaylistEntity::class,
+        PlaylistItemEntity::class,
+        QueueItemEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class JeekDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDao
     abstract fun trackDao(): TrackDao
     abstract fun artistDao(): ArtistDao
+    abstract fun tabDao(): TabDao
+    abstract fun playlistDao(): PlaylistDao
+    abstract fun queueDao(): QueueDao
+    abstract fun searchDao(): SearchDao
 }
 
 @Module
@@ -47,4 +55,16 @@ object DatabaseModule {
 
     @Provides
     fun artistDao(db: JeekDatabase) = db.artistDao()
+
+    @Provides
+    fun tabDao(db: JeekDatabase) = db.tabDao()
+
+    @Provides
+    fun playlistDao(db: JeekDatabase) = db.playlistDao()
+
+    @Provides
+    fun queueDao(db: JeekDatabase) = db.queueDao()
+
+    @Provides
+    fun searchDao(db: JeekDatabase) = db.searchDao()
 }

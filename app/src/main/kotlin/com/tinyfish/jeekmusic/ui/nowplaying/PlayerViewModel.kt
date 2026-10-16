@@ -1,6 +1,8 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
 import androidx.lifecycle.ViewModel
+import com.tinyfish.jeekmusic.data.db.ArtistEntity
+import com.tinyfish.jeekmusic.data.db.SearchDao
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.playback.PlayerUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,7 +13,14 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val player: PlayerConnection,
+    private val searchDao: SearchDao,
 ) : ViewModel() {
+
+    suspend fun artistsOf(trackId: Long): List<ArtistEntity> = searchDao.artistsOfTrack(trackId)
+
+    fun sleepAfterMinutes(minutes: Int) = player.sleepAfterMinutes(minutes)
+    fun sleepAtEndOfTrack() = player.sleepAtEndOfTrack()
+    fun cancelSleepTimer() = player.cancelSleepTimer()
 
     val state: StateFlow<PlayerUiState> = player.state
 

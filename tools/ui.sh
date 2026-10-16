@@ -58,3 +58,20 @@ ui_wait_text() {
 ui_has_text() { [ -n "$(ui_find text "$1")" ]; }
 
 ui_shot() { adb exec-out screencap -p > "$1"; }
+
+# 通过系统文件夹选择器添加 /sdcard/<$1> 作为音乐文件夹（默认 Music）。需要已在 App 的空曲库页面或设置页。
+ui_add_folder() {
+  local folder=${1:-Music}
+  ui_tap_id add_folder 2>/dev/null || ui_tap_id settings_add_folder || return 1
+  sleep 2
+  # 首次会有权限弹窗
+  while ui_has_text "Allow"; do ui_tap_text "Allow"; sleep 1; done
+  # 选择器可能停在上次的位置，先回到存储根目录
+  ui_tap_desc "Show roots" >/dev/null 2>&1 && sleep 1 && ui_tap_text "sdk_gphone64_x86_64" >/dev/null 2>&1
+  sleep 1
+  ui_tap_text "$folder" || return 1
+  sleep 1
+  ui_tap_text "USE THIS FOLDER" || return 1
+  sleep 1
+  ui_tap_text "ALLOW"
+}

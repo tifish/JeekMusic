@@ -2,6 +2,14 @@ package com.tinyfish.jeekmusic.ui.nowplaying
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import com.tinyfish.jeekmusic.data.db.ArtistEntity
+import com.tinyfish.jeekmusic.ui.components.LocalTrackMenuById
+import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +56,22 @@ import com.tinyfish.jeekmusic.ui.components.formatDuration
 fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
+    var showSleepTimer by remember { mutableStateOf(false) }
+    var artistChoices by remember { mutableStateOf<List<ArtistEntity>>(emptyList()) }
+    val navigator = LocalNavigator.current
+    val openMenu = LocalTrackMenuById.current
+    val scope = rememberCoroutineScope()
     BackHandler(onBack = onCollapse)
+
+    // 点击艺术家：只有一个时直接跳转，多个时让用户选（需求 NP-1）
+    val openArtist: () -> Unit = {
+        state.nowPlaying?.let { np ->
+            scope.launch {
+                val artists = viewModel.artistsOf(np.trackId)
+                if (artists.size == 1) navigator.openArtist(artists.first().nameKey) else artistChoices = artists
+            }
+        }
+    }
 
     val nowPlaying = state.nowPlaying
     Column(
@@ -74,9 +97,19 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(onClick = openArtist).testTag("now_playing_artist"),
                 )
                 nowPlaying?.album?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(enabled = nowPlaying.albumKey != null) {
+                            nowPlaying.albumKey?.let(navigator::openAlbum)
+                        },
+                    )
                 }
             }
         }
@@ -89,15 +122,45 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
         Controls(viewModel, state)
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = { showSleepTimer = true }, modifier = Modifier.testTag("sleep_timer")) {
+                Icon(
+                    painterResource(R.drawable.ic_bedtime),
+                    contentDescription = stringResource(R.string.menu_sleep_timer),
+                    tint = if (state.sleepTimer.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            SleepTimerLabel(state.sleepTimer, Modifier.weight(1f))
             IconButton(onClick = { showQueue = true }, modifier = Modifier.testTag("open_queue")) {
                 Icon(painterResource(R.drawable.ic_queue), contentDescription = stringResource(R.string.action_queue))
+            }
+            IconButton(onClick = { nowPlaying?.let { openMenu(it.trackId) } }, modifier = Modifier.testTag("now_playing_more")) {
+                Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
             }
         }
     }
 
     if (showQueue) QueueSheet(viewModel, state, onDismiss = { showQueue = false })
+    if (showSleepTimer) SleepTimerDialog(viewModel, state.sleepTimer, onDismiss = { showSleepTimer = false })
+    if (artistChoices.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { artistChoices = emptyList() },
+            title = { Text(stringResource(R.string.choose_artist)) },
+            text = {
+                Column {
+                    artistChoices.forEach { artist ->
+                        Text(
+                            artist.name.ifEmpty { stringResource(R.string.unknown_artist) },
+                            Modifier.fillMaxWidth().clickable { artistChoices = emptyList(); navigator.openArtist(artist.nameKey) }.padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { artistChoices = emptyList() }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @Composable

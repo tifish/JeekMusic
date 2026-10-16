@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Box
+import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -200,7 +203,10 @@ fun FolderScreen(
             CenteredMessage(stringResource(R.string.folder_empty))
             return@Column
         }
-        LazyColumn(Modifier.fillMaxSize().testTag("folder_content")) {
+        val listState = rememberLazyListState()
+        val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + data.folders.size else -1 }
+        Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().testTag("folder_content"), state = listState) {
             items(data.folders, key = { "dir:" + it.relativePath }, contentType = { "folder" }) { node ->
                 FolderRow(
                     name = node.name,
@@ -211,6 +217,8 @@ fun FolderScreen(
             itemsIndexed(data.tracks, key = { _, t -> t.id }, contentType = { _, _ -> "track" }) { index, track ->
                 TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(index) })
             }
+        }
+        LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
         }
     }
 }

@@ -2,7 +2,16 @@ package com.tinyfish.jeekmusic.ui.components
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,8 +75,9 @@ fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp
 }
 
 /**
- * 歌曲列表项（docs/design.md §5.7）。只接收不可变数据，"正在播放"通过 [isCurrent] 单独传入。
+ * 歌曲列表项（docs/design.md §5.7）。长按打开"更多"菜单。只接收不可变数据，"正在播放"通过 [isCurrent] 单独传入。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackRow(
     track: TrackEntity,
@@ -79,10 +89,11 @@ fun TrackRow(
     leading: (@Composable () -> Unit)? = null,
 ) {
     val highlight = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val openMenu = LocalTrackMenu.current
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = { openMenu(track) })
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -194,4 +205,24 @@ fun formatDuration(ms: Long): String {
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
+}
+
+/**
+ * "定位到正在播放"按钮（需求 P-10）：当前列表里有正在播放的歌曲、且它不在屏幕上时显示。
+ * [index] 是正在播放的歌曲在 LazyColumn 中的位置（包括标题等其他条目），-1 表示不在列表中。
+ */
+@Composable
+fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier = Modifier) {
+    if (index < 0) return
+    val visible by remember(index) {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == index } }
+    }
+    if (visible) return
+    val scope = rememberCoroutineScope()
+    SmallFloatingActionButton(
+        onClick = { scope.launch { listState.animateScrollToItem((index - 2).coerceAtLeast(0)) } },
+        modifier = modifier.padding(16.dp),
+    ) {
+        Icon(painterResource(R.drawable.ic_my_location), contentDescription = stringResource(R.string.action_locate_current))
+    }
 }

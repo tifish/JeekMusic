@@ -112,3 +112,42 @@ data class TrackArtistEntity(
 
 /** "未知艺术家"在 artist 表中的 name_key。 */
 const val UNKNOWN_ARTIST_KEY = ""
+
+/** 标签栏（需求 T-1 ~ T-5，docs/design.md §5.1）。 */
+@Entity(tableName = "pinned_tab", indices = [Index(value = ["type", "ref"], unique = true)])
+data class PinnedTabEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** FOLDERS | ARTISTS | PLAYLISTS | ARTIST | MOOD */
+    val type: String,
+    /** ARTIST：artist.name_key；MOOD："SPORT" / "QUIET"；内置标签为空串。 */
+    val ref: String = "",
+    val position: Int,
+)
+
+@Entity(tableName = "playlist")
+data class PlaylistEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "playlist_item",
+    foreignKeys = [ForeignKey(entity = PlaylistEntity::class, parentColumns = ["id"], childColumns = ["playlist_id"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["playlist_id", "position"])],
+)
+data class PlaylistItemEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "playlist_id") val playlistId: Long,
+    val position: Int,
+    /** 引用稳定键，不引用 track.id，文件暂时不可用时条目保留（需求 PL-3）。 */
+    @ColumnInfo(name = "track_key") val trackKey: String,
+)
+
+/** 续播队列（docs/design.md §7.5）。 */
+@Entity(tableName = "queue_item")
+data class QueueItemEntity(
+    @PrimaryKey val position: Int,
+    @ColumnInfo(name = "track_key") val trackKey: String,
+)

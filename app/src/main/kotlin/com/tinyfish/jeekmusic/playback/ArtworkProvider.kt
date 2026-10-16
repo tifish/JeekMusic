@@ -7,12 +7,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import android.provider.DocumentsContract
 import com.kyant.taglib.TagLib
 import com.tinyfish.jeekmusic.data.db.FolderDao
-import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
+import com.tinyfish.jeekmusic.data.library.DocumentTree
 import com.tinyfish.jeekmusic.data.scanner.MediaStoreSource
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -39,6 +38,7 @@ class ArtworkProvider : ContentProvider() {
     interface Dependencies {
         fun trackDao(): TrackDao
         fun folderDao(): FolderDao
+        fun documentTree(): DocumentTree
     }
 
     private val deps by lazy {
@@ -78,22 +78,13 @@ class ArtworkProvider : ContentProvider() {
         }
     }.getOrNull()
 
-    private fun folderImage(track: TrackEntity): ByteArray? = runCatching {
+    private fun folderImage(track: TrackEntity): ByteArray? {
         val folder = runBlocking { deps.folderDao().byId(track.folderId) } ?: return null
-        val treeUri = Uri.parse(folder.treeUri)
-        val dirId = directoryDocumentId(folder, track.relativePath)
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, dirId)
-        val resolver = requireContext().contentResolver
-        val candidates = resolver.query(
-            children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-            null, null, null,
-        )?.use { c ->
-            buildList { while (c.moveToNext()) add(c.getString(0) to c.getString(1).lowercase()) }
-        }.orEmpty()
-        val best = COVER_NAMES.firstNotNullOfOrNull { name -> candidates.firstOrNull { it.second == name } } ?: return null
-        resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(treeUri, best.first))?.use { it.readBytes() }
-    }.getOrNull()
+        val tree = deps.documentTree()
+        val children = tree.list(folder, track.relativePath).filter { !it.isDirectory }
+        val best = COVER_NAMES.firstNotNullOfOrNull { name -> children.firstOrNull { it.name.equals(name, ignoreCase = true) } } ?: return null
+        return tree.read(folder, best.documentId)
+    }
 
     private fun writeScaled(bytes: ByteArray, size: Int, target: File): Boolean {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -126,16 +117,6 @@ class ArtworkProvider : ContentProvider() {
 
         private val COVER_NAMES = listOf("cover", "folder", "front", "albumart", "album")
             .flatMap { base -> listOf("jpg", "jpeg", "png", "webp").map { "$base.$it" } }
-
-        /** 歌曲所在目录在 SAF 树中的 documentId（ExternalStorageProvider 的 id 是基于路径的）。 */
-        fun directoryDocumentId(folder: LibraryFolderEntity, trackRelativePath: String): String {
-            val rest = trackRelativePath.removePrefix(folder.relativePath).trimEnd('/')
-            return when {
-                rest.isEmpty() -> folder.treeDocumentId
-                folder.treeDocumentId.endsWith(":") -> folder.treeDocumentId + rest
-                else -> "${folder.treeDocumentId.trimEnd('/')}/$rest"
-            }
-        }
 
         private fun sha1(text: String): String =
             MessageDigest.getInstance("SHA-1").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }

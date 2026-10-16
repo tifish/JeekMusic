@@ -27,7 +27,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface AddFolderResult {
-    data object Added : AddFolderResult
+    data class Added(val folder: LibraryFolderEntity) : AddFolderResult
     /** 已经被某个音乐文件夹包含。 */
     data class AlreadyCovered(val by: LibraryFolderEntity) : AddFolderResult
     /** 新文件夹包含了已有的这些文件夹，需要用户确认是否替换（需求 L-3）。 */
@@ -68,22 +68,21 @@ class LibraryRepository @Inject constructor(
             treeUri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
         )
-        db.withTransaction {
+        val folder = LibraryFolderEntity(
+            treeUri = treeUri.toString(),
+            treeDocumentId = documentId,
+            volumeName = path.volumeName,
+            relativePath = path.relativePath,
+            displayName = displayName(path),
+            addedAt = System.currentTimeMillis(),
+        )
+        val id = db.withTransaction {
             if (children.isNotEmpty()) folderDao.delete(children.map { it.id })
-            folderDao.insert(
-                LibraryFolderEntity(
-                    treeUri = treeUri.toString(),
-                    treeDocumentId = documentId,
-                    volumeName = path.volumeName,
-                    relativePath = path.relativePath,
-                    displayName = displayName(path),
-                    addedAt = System.currentTimeMillis(),
-                ),
-            )
+            folderDao.insert(folder)
         }
         children.forEach { releasePermission(it) }
         scanner.requestScan()
-        return AddFolderResult.Added
+        return AddFolderResult.Added(folder.copy(id = id))
     }
 
     suspend fun removeFolder(folder: LibraryFolderEntity) {
@@ -103,7 +102,12 @@ class LibraryRepository @Inject constructor(
         ) { counts, tracks ->
             DirectoryContent(
                 folders = FolderTree.children(path, counts),
-                tracks = tracks.sortedWith(compareBy(NaturalOrderComparator) { it.fileName }),
+                // CUE 虚拟歌曲排在同目录普通歌曲的后面，按音轨号排序
+                tracks = tracks.sortedWith(
+                    compareBy<TrackEntity> { it.cueTrackNo != null }
+                        .thenBy(NaturalOrderComparator) { it.fileName }
+                        .thenBy { it.cueTrackNo ?: 0 },
+                ),
             )
         }
     }
@@ -111,7 +115,11 @@ class LibraryRepository @Inject constructor(
     /** 文件夹及其子文件夹中的全部歌曲，按路径和文件名自然排序（"播放全部（含子文件夹）"）。 */
     suspend fun tracksUnder(folderId: Long, path: String): List<TrackEntity> =
         trackDao.under(folderId, MediaStoreSource.escapeLike(path))
-            .sortedWith(compareBy<TrackEntity, String>(NaturalOrderComparator) { it.relativePath }.thenBy(NaturalOrderComparator) { it.fileName })
+            .sortedWith(
+                compareBy<TrackEntity, String>(NaturalOrderComparator) { it.relativePath }
+                    .thenBy(NaturalOrderComparator) { it.fileName }
+                    .thenBy { it.cueTrackNo ?: 0 },
+            )
 
     fun artist(nameKey: String): Flow<ArtistEntity?> = artistDao.observeByNameKey(nameKey)
 

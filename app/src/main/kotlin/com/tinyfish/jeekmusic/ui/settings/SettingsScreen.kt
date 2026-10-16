@@ -44,7 +44,20 @@ import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
 import com.tinyfish.jeekmusic.data.scanner.ScanState
 import com.tinyfish.jeekmusic.data.settings.Settings
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.tinyfish.jeekmusic.data.backup.BackupManager
+import com.tinyfish.jeekmusic.ui.navigation.MessageBus
+import com.tinyfish.jeekmusic.ui.navigation.UiMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
+import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
+import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
+import com.tinyfish.jeekmusic.ui.navigation.TopRoute
 import com.tinyfish.jeekmusic.ui.components.SectionHeader
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.songCount
@@ -61,7 +74,28 @@ class SettingsViewModel @Inject constructor(
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
     private val settingsRepository: SettingsRepository,
+    private val backups: BackupManager,
+    private val messages: MessageBus,
 ) : ViewModel() {
+    val lastBackup: StateFlow<Long?> = backups.lastBackupTime
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun backupNow() = viewModelScope.launch {
+        val written = backups.backupNow(force = true)
+        messages.post(UiMessage(if (written > 0) R.string.backup_done else R.string.backup_failed))
+    }
+
+    /** "从备份恢复"：用户选择任意备份文件（需求 B-4）。 */
+    fun restoreFrom(uri: Uri) = viewModelScope.launch {
+        val backup = withContext(Dispatchers.IO) { backups.read(uri) }
+        if (backup == null) {
+            messages.post(UiMessage(R.string.restore_invalid))
+            return@launch
+        }
+        val report = backups.restore(backup)
+        messages.post(UiMessage(R.string.restore_done, "${report.playlists} / ${report.items} / ${report.missing}"))
+    }
+
     val folders: StateFlow<List<FolderWithCount>> = library.folders
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val settings: StateFlow<Settings> = settingsRepository.settings
@@ -69,9 +103,10 @@ class SettingsViewModel @Inject constructor(
     val scanState: StateFlow<ScanState> = scanner.state
 
     fun removeFolder(folder: LibraryFolderEntity) = viewModelScope.launch { library.removeFolder(folder) }
-    fun rescan() = scanner.requestScan(full = false)
+    fun rescan() = scanner.requestScan(full = false, recheckCue = true)
     fun rebuild() = scanner.requestScan(full = true)
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+    fun setLowPower(mode: LowPowerMode) = viewModelScope.launch { settingsRepository.setLowPowerMode(mode) }
 }
 
 @Composable
@@ -80,6 +115,11 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val addFolder = rememberAddFolder()
+    val navigator = LocalNavigator.current
+    val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
+    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.restoreFrom(uri)
+    }
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
@@ -144,7 +184,70 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 }
             }
 
+            item {
+                SettingItem(
+                    title = stringResource(R.string.settings_artists),
+                    summary = stringResource(R.string.settings_artists_summary),
+                    icon = R.drawable.ic_person,
+                    onClick = { navigator.open(TopRoute.ArtistSettings) },
+                    modifier = Modifier.testTag("open_artist_settings"),
+                )
+            }
+
+            item { SectionHeader(stringResource(R.string.settings_backup)) }
+            item {
+                SettingItem(
+                    title = stringResource(R.string.backup_now),
+                    summary = lastBackup?.let {
+                        stringResource(R.string.backup_last, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)))
+                    } ?: stringResource(R.string.backup_summary),
+                    onClick = viewModel::backupNow,
+                    modifier = Modifier.testTag("backup_now"),
+                )
+            }
+            item {
+                SettingItem(
+                    title = stringResource(R.string.restore_from_file),
+                    onClick = { pickBackup.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
+                    modifier = Modifier.testTag("restore_from_file"),
+                )
+            }
+
+            item { SectionHeader(stringResource(R.string.settings_playback)) }
+            item { Text(stringResource(R.string.settings_low_power), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            items(LowPowerMode.entries) { mode ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { viewModel.setLowPower(mode) }.padding(horizontal = 16.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = settings.lowPowerMode == mode, onClick = { viewModel.setLowPower(mode) })
+                    Column {
+                        Text(
+                            stringResource(
+                                when (mode) {
+                                    LowPowerMode.BACKGROUND -> R.string.low_power_background
+                                    LowPowerMode.ALWAYS -> R.string.low_power_always
+                                    LowPowerMode.OFF -> R.string.low_power_off
+                                },
+                            ),
+                        )
+                        if (mode == LowPowerMode.ALWAYS) {
+                            Text(stringResource(R.string.low_power_always_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
             item { SectionHeader(stringResource(R.string.settings_appearance)) }
+            item {
+                SettingItem(
+                    title = stringResource(R.string.settings_tabs),
+                    summary = stringResource(R.string.settings_tabs_summary),
+                    icon = R.drawable.ic_push_pin,
+                    onClick = { navigator.open(TopRoute.TabManager) },
+                    modifier = Modifier.testTag("open_tab_manager"),
+                )
+            }
             items(ThemeMode.entries) { mode ->
                 Row(
                     Modifier.fillMaxWidth().clickable { viewModel.setTheme(mode) }.padding(horizontal = 16.dp, vertical = 4.dp),

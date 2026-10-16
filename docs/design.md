@@ -344,8 +344,10 @@ interface TagReader {
 去重（按 name_key）→ 结果为空则归入"未知艺术家"
 ```
 
-- 默认分隔符：`;`、`、`、` feat. `、` ft. `、` featuring `
-- 可选分隔符（默认关闭）：`/`、`&`、`,`、` x `
+- 默认分隔符：`;`、`/`、`、`、` feat. `、` ft. `、` featuring `
+- 可选分隔符（默认关闭）：`&`、`,`、` x `
+- 例外名单预置：`AC/DC`、`Earth, Wind & Fire`、`Simon & Garfunkel` 等（用户可增删）
+- 依据：作者曲库（1578 首 MP3）的艺术家标签中，`/` 出现 187 次，几乎全是多艺术家（如"张惠妹/艾怡良/徐佳莹"）；`&` 13 次，其中既有合唱（"杨宗纬&李泉"）也有组合名（"小娟&山谷里的居民"），所以默认不拆
 - 修改分隔符、例外名单或文件名推断设置后，提示"需要重建艺术家索引"。重建只需基于 DB 里的 `artist_raw`、`title_tag`、`file_name` 重算 `title`、`artist_display` 和 `track_artist`，**不需要重新解析文件**。所以多值标签在入库时要以 `\u0000` 连接存进 `artist_raw`，保留原始拆分信息。
 
 只使用 `artist` 标签，不使用 `album_artist`（按需求，多艺术家要拆开，每个艺术家下都能找到这首歌）。
@@ -778,6 +780,13 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - debug 构建开启 StrictMode，主线程出现磁盘或网络 IO 时直接报错
 - **生成 Profile**：在模拟器上执行 `ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateReleaseBaselineProfile`，结果写入 `app/src/release/generated/baselineProfiles/`，提交到仓库。Profile 与 CPU 架构无关，模拟器生成的可以直接用于真机
 - **测量**：在真机上运行 `tools/measure-startup.sh`，对比"不编译"和"Baseline Profile"两种编译状态下的冷启动 TTID / TTFD 中位数。每个里程碑记录一次结果
+- **测量记录**：
+
+  | 里程碑 | 设备 | 页面 | 不编译 TTID / TTFD | Baseline Profile TTID / TTFD |
+  |---|---|---|---|---|
+  | M0（2026-10-16） | X200 Ultra | M0 验证页，启动时查询全部 1687 首 MediaStore 音频 | 134 / 153 ms | **116 / 133 ms** |
+
+  M0 的页面很简单，这组数据只是起点。之后每个里程碑都要对比：正式主界面加入数据库、标签栏和封面以后，仍然要满足 X200 Ultra 上的内部标准（TTID < 250ms，TTFD < 450ms）
 - 没有用 Macrobenchmark 测启动：OriginOS 会拦截它发给 App 的 profileinstaller 广播（`DROP_SHADER_CACHE`、安装 profile），测试直接失败。`baselineprofile` 模块中的 `StartupBenchmarks` 保留着，可以在类原生系统的设备上使用
 
 ## 10. UI 结构

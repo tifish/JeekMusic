@@ -114,8 +114,25 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
             }
         }
 
-        Box(Modifier.weight(1f).fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-            Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.aspectRatio(1f), cornerRadius = 16.dp)
+        // 中间是歌词；没有歌词时显示大封面（需求 NP-2）
+        val lyricsState by viewModel.lyrics.collectAsStateWithLifecycle()
+        val loaded = lyricsState as? LyricsState.Loaded
+        val lyricsPosition = remember { viewModel.position(200) }
+        if (loaded != null) {
+            LyricsView(
+                lyrics = loaded.lyrics,
+                offsetMs = loaded.offsetMs,
+                position = lyricsPosition,
+                onSeek = viewModel::seekTo,
+                modifier = Modifier.weight(1f),
+            )
+            if (loaded.lyrics.synced) {
+                LyricsOffsetBar(loaded.offsetMs, onChange = { viewModel.setLyricsOffset(loaded.trackKey, it) }, modifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.aspectRatio(1f), cornerRadius = 16.dp)
+            }
         }
 
         SeekBar(viewModel, state)

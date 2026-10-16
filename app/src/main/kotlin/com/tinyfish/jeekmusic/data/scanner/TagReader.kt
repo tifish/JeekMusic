@@ -48,7 +48,7 @@ class TagReader @Inject constructor(
                 discNo = parseNumber(first("DISCNUMBER")),
                 year = first("DATE")?.let { YEAR.find(it)?.value?.toIntOrNull() },
                 genre = first("GENRE"),
-                hasLyrics = !map["LYRICS"].isNullOrEmpty(),
+                hasLyrics = LYRICS_KEYS.any { !map[it].isNullOrEmpty() },
                 cueSheet = map["CUESHEET"]?.firstOrNull(),
                 durationMs = properties?.length?.toLong()?.takeIf { it > 0 },
                 bitrate = properties?.bitrate?.takeIf { it > 0 },
@@ -59,7 +59,10 @@ class TagReader @Inject constructor(
 
     private fun parseNumber(value: String?): Int? = value?.substringBefore('/')?.trim()?.toIntOrNull()
 
-    private companion object {
-        val YEAR = Regex("""\d{4}""")
+    companion object {
+        private val YEAR = Regex("""\d{4}""")
+
+        /** 标准的是 LYRICS（ID3 USLT、Vorbis LYRICS、MP4 ©lyr）；有些工具写成自定义字段。 */
+        val LYRICS_KEYS = listOf("LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS", "USLT")
     }
 }

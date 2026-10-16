@@ -151,3 +151,21 @@ data class QueueItemEntity(
     @PrimaryKey val position: Int,
     @ColumnInfo(name = "track_key") val trackKey: String,
 )
+
+/** 每首歌的歌词时间偏移（需求 LY-6）。 */
+@Entity(tableName = "lyrics_offset")
+data class LyricsOffsetEntity(
+    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
+    @ColumnInfo(name = "offset_ms") val offsetMs: Long,
+)
+
+/** 在线歌词无法写回音乐目录时的兜底，以及"未找到"的负缓存（docs/design.md §8.4、§8.5）。 */
+@Entity(tableName = "lyrics_cache")
+data class LyricsCacheEntity(
+    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
+    val source: String,
+    /** null 表示在线也没有找到。 */
+    val content: String?,
+    val synced: Boolean,
+    @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
+)

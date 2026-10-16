@@ -692,6 +692,8 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 4. 在线获取（仅当开关打开时）：自动模式（仅 Wi-Fi）直接取最佳匹配，否则显示"搜索歌词"按钮
 ```
 
+内嵌歌词读取 `LYRICS`（ID3 USLT、Vorbis LYRICS、MP4 ©lyr），也兼容一些工具写入的自定义字段 `UNSYNCEDLYRICS`、`USLT`（例如 ffmpeg 会把歌词写成 `TXXX:USLT`）。CUE 虚拟歌曲不读整轨文件的内嵌歌词。
+
 `.lrc` 查找优化：扫描时不处理 `.lrc`。打开播放页时，用 `DocumentsContract` 列出歌曲所在目录（结果按目录缓存在内存 LRU 中）并匹配文件名。切到下一首时预先加载下一首的歌词。
 
 ### 8.2 LrcParser

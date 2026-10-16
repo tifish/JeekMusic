@@ -74,6 +74,17 @@ cue_text "整轨专辑.wav" "整轨专辑" | iconv -f UTF-8 -t GBK > "$out/cue/�
 # 内嵌 cuesheet（需求 CUE-1）
 cue_tone "$out/cue/Embedded.flac" -metadata CUESHEET="$(cue_text "Embedded.flac" "内嵌CUE专辑")"
 
+# 歌词：同名 .lrc（GBK、双语、offset、一行多个时间戳）、内嵌歌词、纯文本歌词、CUE 虚拟歌曲的 .lrc
+mkdir -p "$out/lrc"
+lrc_lines() { for i in $(seq 0 13); do printf '[00:%02d.00]第 %d 行歌词\n[00:%02d.00]Line %d translation\n' $((i * 3)) $((i + 1)) $((i * 3)) $((i + 1)); done; }
+tone 523 45 "$out/lrc/测试歌手 - 双语歌词.mp3" -ac 2 -b:a 128k -metadata title="双语歌词" -metadata artist="测试歌手"
+{ echo "[ti:双语歌词]"; echo "[offset:0]"; lrc_lines; echo "[00:42.00][00:44.00]结尾（重复两次）"; } | iconv -f UTF-8 -t GBK > "$out/lrc/测试歌手 - 双语歌词.lrc"
+tone 587 45 "$out/lrc/测试歌手 - 内嵌歌词.mp3" -ac 2 -b:a 128k -metadata title="内嵌歌词" -metadata artist="测试歌手" \
+  -metadata lyrics="$(for i in $(seq 0 14); do printf '[00:%02d.00]内嵌第 %d 行\n' $((i * 3)) $((i + 1)); done)"
+tone 659 45 "$out/lrc/测试歌手 - 纯文本歌词.mp3" -ac 2 -b:a 128k -metadata title="纯文本歌词" -metadata artist="测试歌手"
+printf '没有时间轴的歌词\n\n第二段\n第三段\n' > "$out/lrc/测试歌手 - 纯文本歌词.lrc"
+printf '[00:00.00]CUE 第二首的歌词\n[00:05.00]第二行\n' > "$out/cue/02. 第二首.lrc"
+
 adb shell rm -rf "$remote"
 adb shell mkdir -p "$remote"
 adb push "$out/." "$remote/" >/dev/null

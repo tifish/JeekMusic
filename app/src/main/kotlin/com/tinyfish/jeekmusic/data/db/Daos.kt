@@ -257,3 +257,27 @@ interface SearchDao {
     )
     suspend fun artistsOfTrack(trackId: Long): List<ArtistEntity>
 }
+
+@Dao
+interface LyricsDao {
+    @Query("SELECT offset_ms FROM lyrics_offset WHERE track_key = :trackKey")
+    suspend fun offset(trackKey: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setOffset(offset: LyricsOffsetEntity)
+
+    @Query("DELETE FROM lyrics_offset WHERE track_key = :trackKey")
+    suspend fun clearOffset(trackKey: String)
+
+    @Query("SELECT * FROM lyrics_offset")
+    suspend fun allOffsets(): List<LyricsOffsetEntity>
+
+    @Query("SELECT * FROM lyrics_cache WHERE track_key = :trackKey")
+    suspend fun cached(trackKey: String): LyricsCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun cache(entry: LyricsCacheEntity)
+
+    @Query("DELETE FROM lyrics_cache")
+    suspend fun clearCache()
+}

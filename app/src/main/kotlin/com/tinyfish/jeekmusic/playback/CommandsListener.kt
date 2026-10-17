@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.playback
 
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.MediaItem
@@ -14,6 +15,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import androidx.media3.common.util.UnstableApi
 
 /**
  * 转发全部回调的 Player.Listener，只改写"可用命令变化"的参数（[NextAlwaysPlayer] 用它补上"下一首"）。
@@ -22,6 +24,7 @@ import androidx.media3.common.text.CueGroup
  * 播放状态等事件会丢掉（NextAlwaysPlayerTest 验证过）。方法列表按 Media3 1.11 的 Player.Listener 逐个写出；
  * 升级 Media3 后如果新增了回调，NextAlwaysPlayerTest 会提醒补上。
  */
+@OptIn(UnstableApi::class)
 @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 internal class CommandsListener(
     private val delegate: Player.Listener,

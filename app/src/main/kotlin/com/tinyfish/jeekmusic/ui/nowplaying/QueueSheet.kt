@@ -19,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.tinyfish.jeekmusic.ui.components.scrollToCenter
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +54,9 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
         items.add(to.index, items.removeAt(from.index))
     }
     LaunchedEffect(Unit) {
-        if (state.currentIndex > 0) listState.scrollToItem((state.currentIndex - 2).coerceAtLeast(0))
+        // 等列表完成第一次布局（拿到可视区域高度）后，把当前歌曲放到正中间
+        snapshotFlow { listState.layoutInfo.viewportEndOffset }.first { it > 0 }
+        if (state.currentIndex > 0) listState.scrollToCenter(state.currentIndex, animate = false)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {

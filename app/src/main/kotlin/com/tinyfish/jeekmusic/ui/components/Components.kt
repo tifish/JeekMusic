@@ -6,6 +6,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyListState
+import kotlin.math.abs
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -199,6 +202,24 @@ fun CenteredMessage(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun VerticalSpace(height: Dp) = Spacer(Modifier.height(height))
 
+/**
+ * 把第 [index] 项滚动到列表可视区域的正中间（列表开头和结尾处做不到时尽量靠近）。
+ * 先按可见条目的平均高度估算偏移量滚过去，到位后再按实际高度微调。
+ */
+suspend fun LazyListState.scrollToCenter(index: Int, animate: Boolean = true) {
+    val info = layoutInfo
+    val viewport = info.viewportEndOffset - info.viewportStartOffset
+    val itemSize = info.visibleItemsInfo.map { it.size }.average().takeIf { !it.isNaN() }?.toInt() ?: 0
+    val estimate = ((viewport - itemSize) / 2).coerceAtLeast(0)
+    if (animate) animateScrollToItem(index, -estimate) else scrollToItem(index, -estimate)
+
+    val after = layoutInfo
+    val item = after.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val delta = (item.offset + item.size / 2f) - (after.viewportStartOffset + after.viewportEndOffset) / 2f
+    if (abs(delta) < 1f) return
+    if (animate) animateScrollBy(delta) else scrollBy(delta)
+}
+
 fun formatDuration(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val hours = totalSeconds / 3600
@@ -210,17 +231,20 @@ fun formatDuration(ms: Long): String {
 /**
  * "定位到正在播放"按钮（需求 P-10）：当前列表里有正在播放的歌曲、且它不在屏幕上时显示。
  * [index] 是正在播放的歌曲在 LazyColumn 中的位置（包括标题等其他条目），-1 表示不在列表中。
+ * 点击后把这首歌滚动到列表正中间。
  */
 @Composable
 fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier = Modifier) {
+    // 必须在下面的提前 return 之前创建：滚动途中歌曲一进入屏幕按钮就会隐藏，
+    // 如果作用域跟着按钮离开组合，滚动动画会被取消，歌曲停在屏幕最下方
+    val scope = rememberCoroutineScope()
     if (index < 0) return
     val visible by remember(index) {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == index } }
     }
     if (visible) return
-    val scope = rememberCoroutineScope()
     SmallFloatingActionButton(
-        onClick = { scope.launch { listState.animateScrollToItem((index - 2).coerceAtLeast(0)) } },
+        onClick = { scope.launch { listState.scrollToCenter(index) } },
         modifier = modifier.padding(16.dp),
     ) {
         Icon(painterResource(R.drawable.ic_my_location), contentDescription = stringResource(R.string.action_locate_current))

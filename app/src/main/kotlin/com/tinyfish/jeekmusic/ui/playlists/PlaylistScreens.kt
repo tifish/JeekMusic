@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.data.filter.SongSorter
+import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.filter.filterByTags
 import com.tinyfish.jeekmusic.data.settings.TagFilter
@@ -157,10 +159,14 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     @param:ApplicationContext private val context: Context,
     private val messages: MessageBus,
     tagFilters: TagFilterRepository,
+    private val sorter: SongSorter,
 ) : ViewModel() {
 
-    /** 筛选中不能拖动排序：只看到部分条目时排序会打乱看不到的条目（需求 M-6）。 */
-    val filtering: StateFlow<Boolean> = tagFilters.filter.map { it.isActive }
+    /**
+     * 筛选中或按其他方式排序时不能拖动排序：只看到部分条目时会打乱看不到的条目，
+     * 按歌名等排序时拖动也没有意义（需求 M-6、U-8）。
+     */
+    val reorderLocked: StateFlow<Boolean> = combine(tagFilters.filter, sorter.sort) { filter, sort -> filter.isActive || sort != SongSort.DEFAULT }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @AssistedFactory
@@ -179,8 +185,9 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     val playlist: StateFlow<PlaylistEntity?> = repository.playlist(playlistId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), tagFilters.allowedKeys) { entries, allowed ->
-        entries.filterByTags(allowed) { it.track?.trackKey }
+    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), tagFilters.allowedKeys, sorter.sort) { entries, allowed, sort ->
+        val filtered = entries.filterByTags(allowed) { it.track?.trackKey }
+        sorter.sorted(filtered, sort) { it.track } ?: filtered
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -238,7 +245,7 @@ fun PlaylistDetailScreen(
             },
         )
         val list = entries ?: return@Column
-        val filtering by viewModel.filtering.collectAsStateWithLifecycle()
+        val reorderLocked by viewModel.reorderLocked.collectAsStateWithLifecycle()
 
         val items = remember(list) { list.toMutableStateList() }
         val listState = rememberLazyListState()
@@ -251,7 +258,7 @@ fun PlaylistDetailScreen(
                     ReorderableItem(reorderState, key = entry.item.id) {
                         val track = entry.track
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!filtering) {
+                            if (!reorderLocked) {
                                 Icon(
                                     painterResource(R.drawable.ic_drag_handle),
                                     contentDescription = stringResource(R.string.action_reorder),

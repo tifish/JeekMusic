@@ -65,6 +65,9 @@ data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: T
     }
 }
 
+/** 歌曲列表的排序（需求 U-8）。DEFAULT 时各列表用自己的默认顺序。 */
+enum class SongSort { DEFAULT, MODIFIED, FILE_NAME, TITLE, ARTIST }
+
 /** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
 data class SleepPrefs(
     val finishSong: Boolean = false,
@@ -85,6 +88,7 @@ data class Settings(
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
+    val songSort: SongSort = SongSort.DEFAULT,
     /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheck: Long = 0,
@@ -122,6 +126,7 @@ class SettingsRepository @Inject constructor(
         val FILTER_MOOD = stringPreferencesKey("filter_mood")
         val FILTER_VOICE = stringPreferencesKey("filter_voice")
         val FILTER_GENRE = stringPreferencesKey("filter_genre")
+        val SONG_SORT = stringPreferencesKey("song_sort")
         val AUTO_UPDATE = booleanPreferencesKey("auto_update_check")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
         val SKIPPED_UPDATE = intPreferencesKey("skipped_update_version")
@@ -159,6 +164,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setSkippedUpdateVersion(versionCode: Int) = context.dataStore.edit { it[Keys.SKIPPED_UPDATE] = versionCode }
 
     suspend fun setTabLayoutVersion(version: Int) = context.dataStore.edit { it[Keys.TAB_LAYOUT_VERSION] = version }
+
+    suspend fun setSongSort(sort: SongSort) = context.dataStore.edit { it[Keys.SONG_SORT] = sort.name }
 
     suspend fun setTagFilter(filter: TagFilter) = context.dataStore.edit { prefs ->
         prefs.remove(Keys.MOOD_FILTER)
@@ -207,6 +214,7 @@ class SettingsRepository @Inject constructor(
             voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
         ),
+        songSort = this[Keys.SONG_SORT]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.DEFAULT,
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,

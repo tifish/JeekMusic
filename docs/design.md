@@ -514,6 +514,14 @@ M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在
 - 缩略图：Coil 按 48dp 实际像素尺寸解码，磁盘缓存缩略图；快速滚动时先显示占位图
 - "定位到正在播放"（需求 P-10）：在当前列表中查找 `track_key` 的索引，然后调用 `scrollToItem`
 
+### 5.8 歌曲排序（SongSorter）
+
+- 全局设置 `SongSort { DEFAULT, MODIFIED, FILE_NAME, TITLE, ARTIST }`（DataStore `song_sort`），在标题栏的"筛选和排序"菜单里选（需求 U-8）
+- 在内存里排序（`flowOn(Dispatchers.Default)`），不改 SQL：各列表先按筛选过滤，再交给 `SongSorter.sorted()`；`DEFAULT` 时返回 null，调用方用自己的默认顺序
+- 比较器：修改时间 = `date_modified` 降序；文件名 = 自然排序 + CUE 音轨号；歌名 / 歌手 = 拼音排序键（`SortKeys`，ICU Han-Latin）+ 自然排序，同名再按文件名；"未知艺术家"排在最后；播放列表中不可用的条目排在最后
+- 拼音转写较慢，排序键按字符串缓存（`ConcurrentHashMap`），长列表反复排序也不卡
+- 播放列表在非默认排序或筛选时隐藏拖动手柄
+
 ## 6. 智能标签：氛围、人声、曲风
 
 ### 6.1 总体思路

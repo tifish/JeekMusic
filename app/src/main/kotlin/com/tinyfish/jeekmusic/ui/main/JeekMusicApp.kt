@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import com.tinyfish.jeekmusic.data.settings.SongSort
+import com.tinyfish.jeekmusic.ui.components.sortLabel
+import com.tinyfish.jeekmusic.ui.components.sortName
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -324,8 +327,10 @@ private fun MainScreen(viewModel: MainViewModel) {
 @Composable
 private fun TagFilterButton(viewModel: MainViewModel) {
     val filter by viewModel.tagFilter.collectAsStateWithLifecycle()
+    val sort by viewModel.songSort.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
-    val color = if (filter.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val active = filter.isActive || sort != SongSort.DEFAULT
+    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         Row(
             Modifier
@@ -336,8 +341,10 @@ private fun TagFilterButton(viewModel: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
-            if (filter.isActive) {
-                Text(filterLabel(filter), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+            if (active) {
+                // 比如"安静·纯音乐·按歌名"
+                val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.DEFAULT })
+                Text(label.joinToString("·"), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -358,6 +365,23 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                                 modifier = Modifier.testTag("filter_" + tag.name.lowercase()),
                             )
                         }
+                    }
+                }
+                // 排序（需求 U-8）：单选
+                Text(
+                    stringResource(R.string.sort_group),
+                    Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SongSort.entries.forEach { option ->
+                        FilterChip(
+                            selected = sort == option,
+                            onClick = { viewModel.setSort(option) },
+                            label = { Text(sortName(option)) },
+                            modifier = Modifier.testTag("sort_" + option.name.lowercase()),
+                        )
                     }
                 }
             }

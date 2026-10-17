@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.analysis.Tag
 import com.tinyfish.jeekmusic.analysis.TagDimension
@@ -224,6 +225,22 @@ fun dimensionLabel(dimension: TagDimension): String = stringResource(
 @Composable
 fun filterLabel(filter: TagFilter): String =
     if (!filter.isActive) stringResource(R.string.filter_all) else filter.active.map { tagLabel(it) }.joinToString("·")
+
+/** 排序方式的名称：默认 / 修改时间 / 文件名 / 歌名 / 歌手（需求 U-8）。 */
+@Composable
+fun sortName(sort: SongSort): String = stringResource(
+    when (sort) {
+        SongSort.DEFAULT -> R.string.sort_default
+        SongSort.MODIFIED -> R.string.sort_modified
+        SongSort.FILE_NAME -> R.string.sort_file_name
+        SongSort.TITLE -> R.string.sort_title
+        SongSort.ARTIST -> R.string.sort_artist
+    },
+)
+
+/** 标题栏上的排序提示，比如"按歌名"。 */
+@Composable
+fun sortLabel(sort: SongSort): String = stringResource(R.string.sort_label, sortName(sort))
 
 /** 筛选后列表为空时的提示。 */
 @Composable

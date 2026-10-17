@@ -90,13 +90,20 @@
     <string name="dim_voice">人声</string>
     <string name="dim_genre">曲风</string>
     <string name="filter_clear">清除筛选</string>
+    <string name="sort_group">排序</string>
+    <string name="sort_default">默认</string>
+    <string name="sort_modified">修改时间</string>
+    <string name="sort_file_name">文件名</string>
+    <string name="sort_title">歌名</string>
+    <string name="sort_artist">歌手</string>
+    <string name="sort_label">按%s</string>
     <string name="menu_edit_tags">修正智能标签</string>
     <string name="tag_auto">自动（%s）</string>
     <string name="tag_none">都不是</string>
     <string name="tag_manual">手动</string>
     <string name="info_tags">智能标签</string>
     <string name="filter_all">全部</string>
-    <string name="action_filter">按智能标签筛选</string>
+    <string name="action_filter">筛选和排序</string>
     <string name="filter_empty">没有符合“%s”筛选的歌曲</string>
 
     <string name="menu_play_next">下一首播放</string>

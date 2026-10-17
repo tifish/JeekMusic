@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import com.tinyfish.jeekmusic.data.filter.SongSorter
+import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.update.AppUpdater
 import com.tinyfish.jeekmusic.analysis.Tag
 import com.tinyfish.jeekmusic.analysis.TagRepository
@@ -54,6 +56,7 @@ class MainViewModel @Inject constructor(
     private val analysis: AnalysisScheduler,
     private val tagFilters: TagFilterRepository,
     private val tags: TagRepository,
+    private val sorter: SongSorter,
     private val updater: AppUpdater,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
@@ -67,6 +70,11 @@ class MainViewModel @Inject constructor(
     fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
 
     fun clearFilter() = viewModelScope.launch { tagFilters.set(TagFilter()) }
+
+    /** 全局的歌曲排序（需求 U-8）。 */
+    val songSort: StateFlow<SongSort> = sorter.sort.stateIn(viewModelScope, SharingStarted.Eagerly, SongSort.DEFAULT)
+
+    fun setSort(sort: SongSort) = viewModelScope.launch { settingsRepository.setSongSort(sort) }
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 

@@ -92,13 +92,20 @@
     <string name="dim_voice">Vocals</string>
     <string name="dim_genre">Style</string>
     <string name="filter_clear">Clear filter</string>
+    <string name="sort_group">Sort</string>
+    <string name="sort_default">Default</string>
+    <string name="sort_modified">Date modified</string>
+    <string name="sort_file_name">File name</string>
+    <string name="sort_title">Title</string>
+    <string name="sort_artist">Artist</string>
+    <string name="sort_label">by %s</string>
     <string name="menu_edit_tags">Edit smart tags</string>
     <string name="tag_auto">Auto (%s)</string>
     <string name="tag_none">None</string>
     <string name="tag_manual">manual</string>
     <string name="info_tags">Smart tags</string>
     <string name="filter_all">All</string>
-    <string name="action_filter">Filter by smart tags</string>
+    <string name="action_filter">Filter and sort</string>
     <string name="filter_empty">No songs match “%s”</string>
 
     <string name="menu_play_next">Play next</string>

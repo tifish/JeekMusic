@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.search
 
+import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.filter.filterByTags
 import kotlinx.coroutines.flow.first
@@ -67,6 +68,7 @@ class SearchViewModel @Inject constructor(
     private val dao: SearchDao,
     private val player: PlayerConnection,
     private val tagFilters: TagFilterRepository,
+    private val sorter: SongSorter,
 ) : ViewModel() {
 
     val query = MutableStateFlow("")
@@ -83,7 +85,9 @@ class SearchViewModel @Inject constructor(
                 val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
                 // 歌曲结果也按"运动 / 安静"筛选（需求 M-6）
                 val allowed = tagFilters.allowedKeys.first()
-                SearchResults(q, dao.artists(pattern, 20), dao.tracks(pattern, 200).filterByTags(allowed) { it.trackKey })
+                val tracks = dao.tracks(pattern, 200).filterByTags(allowed) { it.trackKey }
+                // 排序（需求 U-8）；默认按歌名
+                SearchResults(q, dao.artists(pattern, 20), sorter.sorted(tracks, sorter.sort.first()) { it } ?: tracks)
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

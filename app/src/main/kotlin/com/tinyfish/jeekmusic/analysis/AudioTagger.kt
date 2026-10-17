@@ -68,14 +68,14 @@ class AudioTagger @Inject constructor(
          */
         private val INSTRUMENT = intArrayOf(133, 184, 186, 188, 148, 147, 179, 185, 180, 182, 190, 191, 189, 149, 187, 134, 135)
 
-        /** Classical music, Opera, Orchestra, Bowed string, Violin, Cello, String section, Piano, Brass, Woodwind, Flute, French horn */
-        private val CLASSICAL = intArrayOf(232, 233, 179, 184, 186, 188, 185, 148, 180, 190, 191, 181)
+        /** Classical music, Opera：只用曲风类。钢琴、弦乐等乐器类在流行抒情歌、翻奏和配乐里同样很高，不能当作古典的证据 */
+        private val CLASSICAL = intArrayOf(232, 233)
 
         /**
-         * Pop, R&B, Hip hop, Rapping, Electronic, Dubstep, Dance, Rock, Grunge, Independent, Music of Asia, Christian, Christmas,
-         * Singing, Soul, Music of Africa, Afrobeat, Reggae, Drum machine, Synthesizer, Music for children
+         * 其他所有曲风类：Pop、Rock、R&B、Jazz、Folk、Electronic、New-age、Music of Asia、Background / Theme / Soundtrack music、
+         * Video game、Wedding music 等（211–231、234–248、250–260、262–265、267–270，不含 Vocal music、Song、Lullaby）
          */
-        private val POP = intArrayOf(211, 221, 212, 31, 234, 237, 269, 214, 217, 260, 255, 253, 268, 24, 222, 251, 252, 223, 158, 153, 247)
+        private val POP = ((211..231) + (234..248) + (250..260) + (262..265) + (267..270)).toIntArray()
 
         /** Tender, Sad, Lullaby, New-age, Ambient, Background music */
         private val CALM = intArrayOf(273, 272, 266, 248, 241, 262)

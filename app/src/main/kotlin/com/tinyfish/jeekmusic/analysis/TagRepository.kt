@@ -81,8 +81,9 @@ class TagRepository @Inject constructor(
          * 分析算法的版本；提高后所有歌曲重新分析。
          * 2：下混改为功率守恒（÷√声道数），响度比 v1 高约 3dB。
          * 3：加入 YAMNet 模型，识别人声 / 纯音乐、古典 / 流行，运动 / 安静改用模型得分。
+         * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
-        const val ANALYZER_VERSION = 3
+        const val ANALYZER_VERSION = 4
         const val SOURCE_AUTO = "AUTO"
         const val SOURCE_MANUAL = "MANUAL"
     }

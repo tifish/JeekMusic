@@ -6,9 +6,10 @@
 #   python tools/calibration/evaluate.py build/calibration16/scores.npz --report
 #
 # 用法：tools/calibration-pcm.sh <音乐目录>...
+# 环境变量 CALIBRATION_OUT 可以换输出目录（比如整个曲库导出到 build/library16，不覆盖校准集）。
 set -euo pipefail
 
-out="$(dirname "$0")/../build/calibration16"
+out="${CALIBRATION_OUT:-$(dirname "$0")/../build/calibration16}"
 mkdir -p "$out"
 rm -f "$out"/*.f32
 

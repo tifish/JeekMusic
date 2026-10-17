@@ -3,6 +3,7 @@
 用法：
     python tools/calibration/evaluate.py build/calibration16/scores.npz [--report]
 --report 时逐首打印得分和预测结果，方便调阈值。
+曲名在 genre_labels.tsv（整个曲库的古典 / 非古典粗标注）中的歌另外统计"古典 / 非古典"。
 """
 import os
 import sys
@@ -12,15 +13,15 @@ import numpy as np
 # 与 AudioTagger.kt 中的类别分组一致（编号来自 YAMNet 的 yamnet_class_map.csv）
 VOICE = [24, 25, 29, 31, 32, 27, 249, 250, 233, 0, 266, 30]
 INSTRUMENT = [133, 184, 186, 188, 148, 147, 179, 185, 180, 182, 190, 191, 189, 149, 187, 134, 135]
-CLASSICAL = [232, 233, 179, 184, 186, 188, 185, 148, 180, 190, 191, 181]
-POP = [211, 221, 212, 31, 234, 237, 269, 214, 217, 260, 255, 253, 268, 24, 222, 251, 252, 223, 158, 153, 247]
+CLASSICAL = [232, 233]
+POP = [*range(211, 232), *range(234, 249), *range(250, 261), *range(262, 266), *range(267, 271)]
 CALM = [273, 272, 266, 248, 241, 262]
 ENERGY = [274, 271, 269, 234, 212, 214, 157, 159, 31, 231, 211, 240]
 ORCHESTRA = 179
 
 # 与 TagClassifier.kt 一致（灵敏度"标准"）
 VOCAL_THRESHOLD = -2.3
-CLASSICAL_THRESHOLD, POP_THRESHOLD = 0.5, -0.5
+CLASSICAL_THRESHOLD, POP_THRESHOLD = -0.4, -1.5
 SPORT_THRESHOLD, QUIET_THRESHOLD, ORCHESTRA_MAX = 3.25, 0.2, 0.1
 
 
@@ -48,12 +49,29 @@ def main():
         parts = line.rstrip("\n").split("\t")
         if len(parts) == 4:
             labels[parts[0]] = dict(voice=parts[1], genre=parts[2], mood=parts[3])
+    classical = {}
+    for line in open(os.path.join(os.path.dirname(__file__), "genre_labels.tsv"), encoding="utf-8"):
+        if line.startswith("#") or line.startswith("name\t"):
+            continue
+        name, genre = line.rstrip("\n").split("\t")
+        classical[name] = genre == "C"
 
     results = {"voice": [0, 0], "genre": [0, 0], "mood": [0, 0]}
+    library = [0, 0, 0, 0]  # 古典判对、古典总数、非古典误判为古典、非古典总数
     for name, frames in zip(data["names"], data["scores"]):
         p = predict(frames)
         truth = labels.get(name, {})
         marks = []
+        if name in classical:
+            predicted = p["genre"] == "C"
+            if classical[name]:
+                library[0] += predicted
+                library[1] += 1
+            else:
+                library[2] += predicted
+                library[3] += 1
+            if predicted != classical[name] and "--report" in sys.argv:
+                marks.append("古典漏判" if classical[name] else "误判为古典")
         for dim in results:
             t = truth.get(dim)
             # 古典 / 流行只评估两类都有标注的歌；"?" 不参与评估
@@ -68,6 +86,10 @@ def main():
             print(f"{name[:50]:50s} {p['voice']}{p['genre']}{p['mood']}  {p['scores']}  {'  '.join(marks)}")
     for dim, (ok, total) in results.items():
         print(f"{dim}: {ok}/{total} = {ok / max(total, 1):.1%}")
+    if library[1] + library[3]:
+        ok = library[0] + library[3] - library[2]
+        print(f"古典 / 非古典（genre_labels.tsv）：古典 {library[0]}/{library[1]}，非古典误判为古典 {library[2]}/{library[3]}，"
+              f"准确 {ok / (library[1] + library[3]):.1%}")
 
 
 main()

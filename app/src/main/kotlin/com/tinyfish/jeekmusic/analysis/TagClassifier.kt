@@ -37,7 +37,7 @@ enum class Sensitivity(val sport: Double, val quiet: Double, val legacy: Double)
 data class ModelScores(
     /** ln(人声类 / 乐器类)，越大越像有人声。 */
     val vocal: Double,
-    /** ln(古典类 / 流行类)，越大越像古典。 */
+    /** ln(古典曲风类 / 其他曲风类)，越大越像古典（v3 的分析结果是 ln(古典类和乐器类 / 流行类)，见 [TagClassifier.genre]）。 */
     val classical: Double,
     /** 舒缓类（Tender、Sad、Lullaby……）的得分之和。 */
     val calm: Double,
@@ -49,22 +49,26 @@ data class ModelScores(
 
 /**
  * 根据模型得分分类（docs/design.md §6.4）。阈值用 109 首真实歌曲的人工标注校准
- * （tools/calibration/，人声 106/106、古典 / 流行 95/98、运动 / 安静 64/73）。
+ * （tools/calibration/，人声 106/106、古典 / 流行 92/98、运动 / 安静 64/73），
+ * 古典再用作者整个曲库（1551 首）按曲名粗标注检验：古典 / 非古典 95%。
  * 规则只依赖单首歌自己的得分，新增歌曲不会改变已有歌曲的标签。
  */
 object TagClassifier {
     /** 人声和乐器之比的阈值：校准集里纯音乐最高 −2.83、人声最低 −1.72，取中间。 */
     const val VOCAL_THRESHOLD = -2.3
-    const val CLASSICAL_THRESHOLD = 0.5
-    const val POP_THRESHOLD = -0.5
+    const val CLASSICAL_THRESHOLD = -0.4
+    const val POP_THRESHOLD = -1.5
     const val ORCHESTRA_MAX = 0.1
+
+    /** 从这个分析版本起 classical_score 只用曲风类（[AudioTagger]）；更早的结果在重新分析前沿用旧阈值。 */
+    private const val GENRE_ONLY_VERSION = 4
 
     fun classify(f: TrackFeaturesEntity, sensitivity: Sensitivity): Map<TagDimension, Tag?> {
         val m = f.modelScores() ?: return mapOf(TagDimension.MOOD to LegacyMoodClassifier.classify(f.toFeatures(), sensitivity))
         return mapOf(
             TagDimension.MOOD to mood(m, sensitivity),
             TagDimension.VOICE to voice(m),
-            TagDimension.GENRE to genre(m),
+            TagDimension.GENRE to if (f.analyzerVersion >= GENRE_ONLY_VERSION) genre(m) else legacyGenre(m),
         )
     }
 
@@ -76,10 +80,20 @@ object TagClassifier {
 
     fun voice(m: ModelScores): Tag = if (m.vocal >= VOCAL_THRESHOLD) Tag.VOCAL else Tag.INSTRUMENTAL
 
-    /** 介于两个阈值之间（爵士、电影配乐等）不属于古典也不属于流行。 */
+    /**
+     * 介于两个阈值之间（爵士、电影配乐等）不属于古典也不属于流行。流行的阈值留得较低：
+     * 把古典判成流行比判成"都不是"更难接受。
+     */
     fun genre(m: ModelScores): Tag? = when {
         m.classical >= CLASSICAL_THRESHOLD -> Tag.CLASSICAL
         m.classical <= POP_THRESHOLD -> Tag.POP
+        else -> null
+    }
+
+    /** v3 的 classical_score 把钢琴、弦乐等乐器也算作古典，阈值不同；只在重新分析完成前使用。 */
+    private fun legacyGenre(m: ModelScores): Tag? = when {
+        m.classical >= 0.5 -> Tag.CLASSICAL
+        m.classical <= -0.5 -> Tag.POP
         else -> null
     }
 

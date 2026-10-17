@@ -563,7 +563,7 @@ AnalysisWorker（WorkManager，默认要求充电）
 | 列 | 计算 | 用途 |
 |---|---|---|
 | `vocal_score` | ln(人声类之和 / 乐器类之和)。人声类：Singing、Choir、Rapping、Humming、Chant、Vocal music、A capella、Opera、Speech、Lullaby 等；乐器类：Musical instrument、Bowed string、Violin、Cello、Piano、Orchestra、Brass、Woodwind、Guitar 等 | 人声 / 纯音乐 |
-| `classical_score` | ln(古典类之和 / 流行类之和)。古典类：Classical music、Opera、Orchestra、弦乐、钢琴、铜管、木管；流行类：Pop、R&B、Hip hop、Electronic、Dance、Rock、Music of Asia、Singing、Drum machine、Synthesizer 等 | 古典 / 流行 |
+| `classical_score` | ln(古典曲风类之和 / 其他曲风类之和)。古典曲风类：Classical music、Opera；其他曲风类：AudioSet 里其余所有曲风（Pop、Rock、R&B、Jazz、Folk、Electronic、New-age、Music of Asia、Background / Theme / Soundtrack music、Video game、Wedding music 等，不含 Vocal music、Song、Lullaby）。只用曲风类，不用乐器类（见 §6.4） | 古典 / 流行 |
 | `calm_level` | Tender、Sad、Lullaby、New-age、Ambient、Background music 之和 | 安静 |
 | `energy_level` | Exciting、Happy、Dance、Electronic、Hip hop、Rock、Drum kit、Drum、Rapping、Disco、Pop、EDM 之和 | 运动 |
 | `orchestra_level` | Orchestra | 排除大编制管弦乐段落 |
@@ -575,7 +575,7 @@ AnalysisWorker（WorkManager，默认要求充电）
 
 ```
 人声：vocal_score ≥ -2.3 → 人声，否则纯音乐（总有一个）
-曲风：classical_score ≥ 0.5 → 古典；≤ -0.5 → 流行；之间 → 都不是
+曲风：classical_score ≥ -0.4 → 古典；≤ -1.5 → 流行；之间 → 都不是
 氛围：sport = ln(energy + 0.003) - ln(calm + 0.003)
       quiet = ln(calm + 0.01) - ln(energy + 0.01)
       sport ≥ 3.25 → 运动
@@ -585,10 +585,13 @@ AnalysisWorker（WorkManager，默认要求充电）
 ```
 
 - 人声阈值有很大余量：校准集里纯音乐的 `vocal_score` 最高 −2.83，人声最低 −1.72，−2.3 取在中间。只用"真正的人声类"，不把流行曲风当作人声证据，否则纯音乐的电子 / 流行会被误判成人声
-- 曲风的"都不是"区间判断得不准：爵士钢琴三重奏、电影配乐在模型看来也很"古典"（乐器类得分高）。所以"古典"实际含义是"听起来像古典"；这点写进了需求 M-1
+- 曲风只比较曲风类，不把钢琴、弦乐、管弦乐等乐器当作古典的证据（v3 曾经这样做）：流行抒情歌的钢琴 / 弦乐编曲、流行歌的弦乐四重奏翻奏、电影配乐、新世纪钢琴曲的乐器得分和古典一样高，而 AudioSet 的流行类（Pop music 等）对这些歌几乎是 0，结果作者曲库 1596 首里有 750 首被判为古典，其中约 200 首判错。改为曲风类之比后，这些歌的 Background music、Soundtrack、New-age、Wedding music 等得分会把比值压下去
+- 流行的阈值（−1.5）比古典的（−0.4）低得多：把古典判成流行比判成"都不是"更难接受；中间是配乐、新世纪、爵士和少数古典
+- 仍然判不准的：管弦乐的电影配乐（《星球大战》）、弦乐四重奏翻奏的流行歌、周深的歌剧风格演唱会判为古典；Glenn Gould 等的巴赫键盘作品、跨界演奏（André Rieu 的《波莱罗》）判为"都不是"或流行。可以在菜单里手动修正
 - 安静：激昂的古典（序曲、快板）和慢板在"舒缓 / 动感"上很接近（都没有鼓），区别在于前者 Orchestra 得分高、几乎没有 Tender / Sad；加上 `orchestra ≤ 0.1` 后排除了大部分
 - 规则只依赖单首歌自己的得分，不依赖整个曲库的分布，新增歌曲不会改变已有歌曲的标签
 - 还没用模型重新分析的歌（`analyzer_version` < 3，模型得分为 null）：氛围用旧的手工特征规则（`LegacyMoodClassifier`），人声和曲风为空。升级后在重新分析完成之前，"运动 / 安静"筛选不会突然变空
+- `analyzer_version` = 3 的歌（`classical_score` 还是把乐器类算作古典的旧算法）：在重新分析前曲风沿用旧阈值（≥ 0.5 古典、≤ −0.5 流行），否则新阈值会把几乎所有纯音乐判成古典
 
 ### 6.5 数据（track_tag、tag_override）
 
@@ -609,13 +612,22 @@ python tools/calibration/evaluate.py build/calibration16/scores.npz --report
 
 `evaluate.py` 用与 App 相同的类别分组和阈值，逐首打印得分、预测和错误，以及三个维度的准确度。调阈值时先在这里试，再同步到 `TagClassifier`。
 
+109 首对古典来说太少，误判的类型（弦乐编曲的流行歌、翻奏、配乐、新世纪）覆盖不全，所以古典另用作者整个曲库检验：`tools/calibration/genre_labels.tsv` 是 1551 首的古典 / 非古典粗标注（按曲名中的作品号、曲式、作曲家和演奏家自动标注，再人工修正得分较高的歌；跨界和拿不准的 45 首不列出）。`evaluate.py` 对曲名在其中的歌另外统计"古典 / 非古典"：
+
+```
+CALIBRATION_OUT=build/library16 tools/calibration-pcm.sh <整个曲库>
+python tools/calibration/yamnet_scores.py app/src/main/assets/yamnet.tflite build/library16 build/library16/scores.npz
+python tools/calibration/evaluate.py build/library16/scores.npz
+```
+
 | 维度 | 准确度 | 错误的歌 |
 |---|---|---|
 | 人声 / 纯音乐 | 106 / 106 | — |
-| 古典 / 流行 | 95 / 98 | 小提琴翻奏的流行歌、弦乐编曲的流行抒情歌、周深的歌剧风格现场（都被判为古典） |
+| 古典 / 流行 | 92 / 98（v3：95 / 98） | 周深的歌剧风格现场判为古典；André Rieu 的《波莱罗》、肖斯塔科维奇《第二圆舞曲》的跨界演奏判为流行；郎朗的巴赫平均律、两首流行判为"都不是" |
+| 古典 / 非古典（整个曲库 1551 首） | 古典 480 / 509，非古典误判 45 / 1042，准确 95.2%（v3：古典 508 / 509，误判 207 / 1042，准确 86.6%） | 见 §6.4 |
 | 运动 / 安静 | 64 / 73（v2 手工特征：42 / 73） | 几首木吉他抒情歌没判为安静；几首慢速的古典（艺术歌曲、长笛奏鸣曲）被判为安静 |
 
-对比过在 521 类分数上训练逻辑回归（留一法交叉验证）：人声 99%、古典 / 流行 97%，并不比上面的规则好，而规则更容易理解和调整，所以用规则。
+对比过在 521 类分数上训练逻辑回归（留一法交叉验证）：人声 99%、古典 / 流行 97%，并不比上面的规则好，而规则更容易理解和调整，所以用规则。在整个曲库上（10 折交叉验证）逻辑回归的古典 / 非古典是 96.3%，曲风类之比的规则 95.2% 已经接近 YAMNet 平均分数能做到的上限；再把乐器类得分加权混进来、按帧取中位数等都没有明显提高。
 
 **模拟器与 PC 的一致性**：模拟器上用系统解码器的分析结果，和 PC 上用 ffmpeg 导出的结果对比：纯音乐 33 / 33、古典 41 / 41 首完全一致；人声和流行各少 1 首（那首 Ogg 系统解码器打不开）；运动 6 / 5、安静 36 / 40 首（几首歌的得分正好在阈值附近，两种解码器的细微差异会改变结果）。
 

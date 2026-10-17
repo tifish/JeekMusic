@@ -7,14 +7,14 @@ import org.junit.Test
 /** 得分取自校准曲库中真实歌曲的 YAMNet 输出（tools/calibration/）。 */
 class TagClassifierTest {
 
-    private val pokerFace = ModelScores(vocal = 2.164, classical = -5.444, calm = 0.0005, energy = 0.1898, orchestra = 0.0)
-    private val baby = ModelScores(vocal = 3.530, classical = -5.548, calm = 0.0013, energy = 0.1592, orchestra = 0.0)
-    private val starFish = ModelScores(vocal = 0.563, classical = -1.517, calm = 0.0940, energy = 0.0208, orchestra = 0.0023) // 周深 - 星鱼
-    private val nocturne = ModelScores(vocal = -3.824, classical = 5.296, calm = 0.0444, energy = 0.0008, orchestra = 0.0) // 肖邦夜曲
-    private val gymnopedie = ModelScores(vocal = -4.975, classical = 4.706, calm = 0.0224, energy = 0.0001, orchestra = 0.0626)
-    private val hungarianDance = ModelScores(vocal = -3.195, classical = 5.956, calm = 0.0031, energy = 0.0016, orchestra = 0.2530)
-    private val jupiter = ModelScores(vocal = -4.195, classical = 5.358, calm = 0.0085, energy = 0.0039, orchestra = 0.1634)
-    private val violinCover = ModelScores(vocal = -5.780, classical = 3.643, calm = 0.0042, energy = 0.0065, orchestra = 0.0026) // 小提琴翻奏流行歌
+    private val pokerFace = ModelScores(vocal = 2.164, classical = -5.564, calm = 0.0005, energy = 0.1898, orchestra = 0.0)
+    private val baby = ModelScores(vocal = 3.530, classical = -5.373, calm = 0.0013, energy = 0.1592, orchestra = 0.0)
+    private val starFish = ModelScores(vocal = 0.563, classical = -3.074, calm = 0.0940, energy = 0.0208, orchestra = 0.0023) // 周深 - 星鱼
+    private val nocturne = ModelScores(vocal = -3.824, classical = 0.969, calm = 0.0444, energy = 0.0008, orchestra = 0.0) // 肖邦夜曲
+    private val gymnopedie = ModelScores(vocal = -4.975, classical = 0.742, calm = 0.0224, energy = 0.0001, orchestra = 0.0626)
+    private val hungarianDance = ModelScores(vocal = -3.195, classical = 2.290, calm = 0.0031, energy = 0.0016, orchestra = 0.2530)
+    private val jupiter = ModelScores(vocal = -4.195, classical = 0.468, calm = 0.0085, energy = 0.0039, orchestra = 0.1634)
+    private val violinCover = ModelScores(vocal = -5.780, classical = -2.630, calm = 0.0042, energy = 0.0065, orchestra = 0.0026) // 小提琴翻奏流行歌
 
     @Test
     fun `舞曲 → 运动，慢歌和慢板 → 安静`() {
@@ -55,7 +55,26 @@ class TagClassifierTest {
         assertEquals(Tag.CLASSICAL, TagClassifier.genre(nocturne))
         assertEquals(Tag.CLASSICAL, TagClassifier.genre(jupiter))
         // 介于两者之间的（爵士、配乐等）都不算
-        assertNull(TagClassifier.genre(ModelScores(vocal = -3.0, classical = 0.2, calm = 0.01, energy = 0.01, orchestra = 0.0)))
+        assertNull(TagClassifier.genre(ModelScores(vocal = -3.0, classical = -1.0, calm = 0.01, energy = 0.01, orchestra = 0.0)))
+    }
+
+    @Test
+    fun `弦乐编曲的流行歌和小提琴翻奏不算古典`() {
+        assertEquals(Tag.POP, TagClassifier.genre(violinCover))
+        // 区瑞强 - 偏偏喜欢你：旧算法（钢琴、弦乐也算古典）得分 0.82，被判为古典
+        assertEquals(Tag.POP, TagClassifier.genre(ModelScores(vocal = -1.30, classical = -2.918, calm = 0.05, energy = 0.0, orchestra = 0.0)))
+    }
+
+    @Test
+    fun `重新分析之前沿用旧的古典阈值`() {
+        fun features(version: Int, classical: Double) = com.tinyfish.jeekmusic.data.db.TrackFeaturesEntity(
+            trackKey = "k", signature = "s", analyzerVersion = version, bpm = null, bpmConfidence = 0.0, loudness = -20.0,
+            loudnessRange = 5.0, onsetRate = 1.0, centroidHz = 1000.0, lowRatio = 0.3, analyzedAt = 0,
+            vocalScore = -4.0, classicalScore = classical, calmLevel = 0.01, energyLevel = 0.01, orchestraLevel = 0.0,
+        )
+        // v3 的得分 0.0 在旧阈值下"都不是"，在新阈值下是古典
+        assertNull(TagClassifier.classify(features(3, 0.0), Sensitivity.NORMAL)[TagDimension.GENRE])
+        assertEquals(Tag.CLASSICAL, TagClassifier.classify(features(4, 0.0), Sensitivity.NORMAL)[TagDimension.GENRE])
     }
 
     @Test

@@ -1,5 +1,22 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
+import kotlin.math.abs
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,8 +32,6 @@ import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -140,6 +155,16 @@ private fun MainScreen(viewModel: MainViewModel) {
 
     RestorePrompt()
     if (tabs.isEmpty()) return
+    var dragOrder by remember { mutableStateOf<List<Tab>?>(null) }
+    var draggingKey by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val tabWidths = remember { mutableStateMapOf<String, Int>() }
+    // 新顺序写入数据库并回到界面后，不再需要拖动时的临时顺序；万一写入失败，1 秒后也恢复
+    LaunchedEffect(tabs, dragOrder, draggingKey) {
+        val pending = dragOrder ?: return@LaunchedEffect
+        if (draggingKey != null) return@LaunchedEffect
+        if (pending.map { it.key } == tabs.map { it.key }) dragOrder = null else { delay(1_000); dragOrder = null }
+    }
     val initialPage = tabs.indexOfFirst { it.key == viewModel.currentTabKey }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialPage) { tabs.size }
 
@@ -188,18 +213,60 @@ private fun MainScreen(viewModel: MainViewModel) {
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
-                PrimaryScrollableTabRow(selectedTabIndex = pagerState.currentPage.coerceAtMost(tabs.lastIndex), edgePadding = 8.dp) {
-                    tabs.forEachIndexed { index, tab ->
-                        TabWithMenu(
-                            tab = tab,
-                            selected = pagerState.currentPage == index,
-                            canMoveLeft = index > 0,
-                            canMoveRight = index < tabs.lastIndex,
-                            onSelect = { scope.launch { pagerState.animateScrollToPage(index) } },
-                            onUnpin = { viewModel.unpin(tab) },
-                            onMove = { delta -> viewModel.moveTab(index, index + delta) },
-                            modifier = Modifier.testTag("tab_$index"),
-                        )
+                // 拖动排序（需求 T-5）：拖动时先在界面上调整顺序，松手后一次写入数据库；
+                // 数据库的新顺序到达之前继续显示拖动后的顺序，避免闪回
+                val shown = dragOrder ?: tabs
+                val currentKey = tabs.getOrNull(pagerState.currentPage)?.key
+                PrimaryScrollableTabRow(
+                    selectedTabIndex = shown.indexOfFirst { it.key == currentKey }.coerceAtLeast(0),
+                    edgePadding = 8.dp,
+                ) {
+                    shown.forEachIndexed { index, tab ->
+                        key(tab.key) {
+                            TabWithMenu(
+                                tab = tab,
+                                selected = tab.key == currentKey,
+                                canMoveLeft = index > 0,
+                                canMoveRight = index < shown.lastIndex,
+                                dragOffset = if (draggingKey == tab.key) dragOffset else 0f,
+                                onSelect = { tabs.indexOfFirst { it.key == tab.key }.takeIf { it >= 0 }?.let { scope.launch { pagerState.animateScrollToPage(it) } } },
+                                onUnpin = { viewModel.unpin(tab) },
+                                onMove = { delta ->
+                                    val from = tabs.indexOfFirst { it.key == tab.key }
+                                    if (from >= 0) viewModel.moveTab(from, from + delta)
+                                },
+                                onDragStart = {
+                                    dragOrder = shown
+                                    draggingKey = tab.key
+                                    dragOffset = 0f
+                                },
+                                onDrag = { dx ->
+                                    val order = dragOrder ?: return@TabWithMenu
+                                    dragOffset += dx
+                                    val i = order.indexOfFirst { it.key == tab.key }
+                                    // 越过相邻标签宽度的一半就交换，偏移量减去它的宽度，标签保持在手指下面
+                                    val right = order.getOrNull(i + 1)?.let { tabWidths[it.key] }
+                                    val left = order.getOrNull(i - 1)?.let { tabWidths[it.key] }
+                                    if (right != null && dragOffset > right / 2f) {
+                                        dragOrder = order.toMutableList().apply { add(i + 1, removeAt(i)) }
+                                        dragOffset -= right
+                                    } else if (left != null && dragOffset < -left / 2f) {
+                                        dragOrder = order.toMutableList().apply { add(i - 1, removeAt(i)) }
+                                        dragOffset += left
+                                    }
+                                },
+                                onDragEnd = {
+                                    val from = tabs.indexOfFirst { it.key == tab.key }
+                                    val to = dragOrder?.indexOfFirst { it.key == tab.key } ?: from
+                                    draggingKey = null
+                                    dragOffset = 0f
+                                    if (from >= 0 && to >= 0 && from != to) viewModel.moveTab(from, to) else dragOrder = null
+                                },
+                                modifier = Modifier
+                                    .onSizeChanged { tabWidths[tab.key] = it.width }
+                                    .testTag("tab_$index"),
+                            )
+                        }
                     }
                 }
                 (scanState as? ScanState.Running)?.let { running ->
@@ -270,27 +337,74 @@ private fun MoodFilterButton(viewModel: MainViewModel) {
     }
 }
 
-/** 标签：点击切换；长按弹出"取消固定 / 左移 / 右移"（需求 T-5）。 */
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * 标签：点击切换；长按后左右拖动可以调整顺序；长按不拖动弹出"取消固定 / 左移 / 右移"（需求 T-5）。
+ */
 @Composable
 private fun TabWithMenu(
     tab: Tab,
     selected: Boolean,
     canMoveLeft: Boolean,
     canMoveRight: Boolean,
+    dragOffset: Float,
     onSelect: () -> Unit,
     onUnpin: () -> Unit,
     onMove: (Int) -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    val dragging = dragOffset != 0f
+    // 回调在拖动过程中会变（顺序变了），手势里总是调用最新的
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
     Tab(
         selected = selected,
         onClick = onSelect,
-        modifier = modifier,
+        modifier = modifier
+            // 手势放在 graphicsLayer 之前：坐标不受拖动时的平移影响
+            .pointerInput(tab.key) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // 长按之前移动（横向滚动标签栏）或抬起（普通点击）都不进入拖动
+                    awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    currentOnDragStart()
+                    var moved = 0f
+                    while (true) {
+                        // Initial 阶段先处理，抬起事件也在这里消费掉，标签自己的点击就不会再触发
+                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            change.consume()
+                            break
+                        }
+                        val dx = change.positionChange().x
+                        if (dx != 0f) {
+                            change.consume()
+                            moved += abs(dx)
+                            currentOnDrag(dx)
+                        }
+                    }
+                    currentOnDragEnd()
+                    // 长按后没有拖动：弹出菜单
+                    if (moved < viewConfiguration.touchSlop) menuOpen = true
+                }
+            }
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer {
+                translationX = dragOffset
+                if (dragging) {
+                    scaleX = 1.08f
+                    scaleY = 1.08f
+                }
+            },
         text = {
             Box {
-                Text(tabTitle(tab), Modifier.combinedClickable(onClick = onSelect, onLongClick = { menuOpen = true }))
+                Text(tabTitle(tab))
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (tab is Tab.PinnedArtist) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.menu_unpin_tab)) }, onClick = { menuOpen = false; onUnpin() })

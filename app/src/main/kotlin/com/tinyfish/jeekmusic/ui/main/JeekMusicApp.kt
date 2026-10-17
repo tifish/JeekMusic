@@ -94,6 +94,7 @@ fun JeekMusicApp(viewModel: MainViewModel) {
     JeekTheme(themeMode = themeMode) {
         CompositionLocalProvider(LocalNavigator provides viewModel) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+                UpdatePrompt()
                 TrackMenuHost {
                     val back: () -> Unit = { viewModel.topStack.removeLastOrNull() }
                     NavDisplay(

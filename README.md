@@ -1,6 +1,6 @@
 # JeekMusic
 
-简洁的 Android 本地音乐播放器。围绕你选择的音乐文件夹组织曲库，默认完全离线，不做任何统计或追踪。
+简洁的 Android 本地音乐播放器。围绕你选择的音乐文件夹组织曲库，不做任何统计或追踪；默认只有"检查更新"会联网（每天最多一次，可以关闭）。
 
 <p>
 <img src="fastlane/metadata/android/zh-CN/images/phoneScreenshots/1.png" width="200">
@@ -38,7 +38,7 @@ keyAlias=...
 keyPassword=...
 ```
 
-推送 `v*` 标签时 GitHub Actions 会构建签名的 APK 并发布到 Releases，需要在仓库 Secrets 中配置 `KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`。
+版本号是 Git 提交数（`1.0.<提交数>`）。每次推送到 main，GitHub Actions 会跑测试、构建签名的 APK 并发布到 [Releases](https://github.com/tifish/JeekMusic/releases)，App 会自动检查并提示更新。签名文件放在仓库 Secrets 中：`KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；本地构建必须使用同一个签名文件，否则装上去的包无法通过 App 内更新覆盖。
 
 ## 开发工具
 

@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.update.AppUpdater
+import com.tinyfish.jeekmusic.update.CheckResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -86,7 +88,19 @@ class SettingsViewModel @Inject constructor(
     private val moods: MoodRepository,
     private val analysis: AnalysisScheduler,
     private val lyrics: LyricsRepository,
+    private val updater: AppUpdater,
 ) : ViewModel() {
+    fun setAutoUpdateCheck(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoUpdateCheck(enabled) }
+
+    /** 手动检查更新；有新版本时由最外层的更新提示接管（需求 U-6）。 */
+    fun checkUpdate() = viewModelScope.launch {
+        when (updater.checkNow()) {
+            CheckResult.UP_TO_DATE -> messages.post(UiMessage(R.string.update_up_to_date))
+            CheckResult.FAILED -> messages.post(UiMessage(R.string.update_check_failed))
+            CheckResult.UPDATE_AVAILABLE -> Unit
+        }
+    }
+
     val lastBackup: StateFlow<Long?> = backups.lastBackupTime
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -368,7 +382,21 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
             item { SectionHeader(stringResource(R.string.settings_about)) }
             item {
-                SettingItem(title = stringResource(R.string.app_name), summary = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME))
+                SettingItem(
+                    title = stringResource(R.string.update_check_now),
+                    summary = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                    onClick = viewModel::checkUpdate,
+                    modifier = Modifier.testTag("check_update"),
+                )
+            }
+            item {
+                SwitchRow(
+                    title = stringResource(R.string.update_auto_check),
+                    summary = stringResource(R.string.update_auto_check_summary),
+                    checked = settings.autoUpdateCheck,
+                    onChange = viewModel::setAutoUpdateCheck,
+                    modifier = Modifier.testTag("auto_update"),
+                )
             }
             item { SettingItem(title = stringResource(R.string.settings_licenses), onClick = { showLicenses = true }) }
             item { SettingItem(title = stringResource(R.string.settings_source), summary = "github.com/tifish/JeekMusic") }

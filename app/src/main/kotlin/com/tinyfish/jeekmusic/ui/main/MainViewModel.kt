@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import com.tinyfish.jeekmusic.update.AppUpdater
 import com.tinyfish.jeekmusic.analysis.MoodRepository
 import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
 import com.tinyfish.jeekmusic.data.settings.MoodFilter
@@ -52,6 +53,7 @@ class MainViewModel @Inject constructor(
     private val analysis: AnalysisScheduler,
     private val moodFilters: MoodFilterRepository,
     private val moods: MoodRepository,
+    private val updater: AppUpdater,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
 
@@ -178,6 +180,9 @@ class MainViewModel @Inject constructor(
             scanner.requestScan()
             backups.startAutoBackup()
             analysis.schedule()
+            // 检查更新放在最后，不和启动抢资源；每天最多一次（需求 U-6）
+            delay(5_000)
+            updater.checkIfDue()
         }
     }
 }

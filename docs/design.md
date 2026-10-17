@@ -880,13 +880,23 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 ## 13. 构建与发布
 
 - Version Catalog 统一管理依赖版本；开启 R8 full mode 和资源压缩
-- 签名：本地从 `keystore.properties` 读取，CI 从环境变量（GitHub Secrets）读取，都没有时退回 debug 签名
-- 发布：推送 `v*` 标签时 `.github/workflows/release.yml` 构建签名 APK 并发布到 GitHub Releases
+- 版本号：`versionCode` = Git 提交数（`git rev-list --count HEAD`），`versionName` = `1.0.<提交数>`；没有 Git 时为 1
+- 签名：本地从 `keystore.properties` 读取，CI 从环境变量（GitHub Secrets）读取，都没有时退回 debug 签名（PR 构建）。**本地和 CI 必须使用同一个签名文件**，App 内更新才能覆盖安装；签名文件和密码丢失后，已安装的 App 无法再升级，必须备份
+- 发布：每次推送到 main（只改文档的除外），`.github/workflows/ci.yml` 跑 lint 和单元测试，构建签名的 release APK，以标签 `v1.0.<提交数>` 发布到 GitHub Releases，更新说明是上个版本之后的提交标题
 - F-Droid：`fastlane/metadata/android/{en-US,zh-CN}/` 中有标题、简介、更新说明和截图（`tools/store-screenshots.sh` 截取）
 - 多语言：`androidResources.generateLocaleConfig = true`，Android 13+ 可以在系统设置里单独设置 App 语言
-- GitHub Actions：PR 时跑 `lint` + `testDebugUnitTest` + `assembleDebug`；打 tag 时构建签名的 release APK 并上传到 Releases（签名密钥放在 Secrets 中）。Baseline Profile 在本地真机上生成后提交到仓库
+- GitHub Actions：PR 时只跑 `lint` + `testDebugUnitTest` + `assembleRelease`（debug 签名），不发布。Baseline Profile 在本地生成后提交到仓库
 - 许可证：MIT。依赖库的许可证要与之兼容：TagLib 是 LGPL/MPL，以动态链接库（.so）形式分发即可满足 LGPL 要求；在"关于 → 开源许可"中列出所有第三方许可证
 - F-Droid：不引入任何闭源依赖（不使用 Firebase / GMS），保证可复现构建
+
+### 13.2 App 内自动更新（AppUpdater）
+
+- 检查：`GET https://api.github.com/repos/tifish/JeekMusic/releases/latest`，从 `tag_name` 末尾的数字得到 versionCode，大于 `BuildConfig.VERSION_CODE` 即为新版本；取第一个 `.apk` 资源的下载地址、大小和 `digest`（SHA-256）
+- 时机：首帧之后的推迟任务最后再等 5 秒执行；开关打开、且距上次检查超过 24 小时才联网；网络错误静默忽略。设置里的"检查更新"忽略间隔和"跳过此版本"
+- 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）："更新 / 跳过此版本 / 以后再说"，下载时显示进度
+- 下载：`HttpURLConnection`（GitHub 的下载地址会重定向到另一个 https 域名，默认跟随），写到 `cacheDir/updates/`，边下载边算 SHA-256，和 GitHub 给出的不一致时放弃
+- 安装：`PackageInstaller` 会话（`REQUEST_INSTALL_PACKAGES`），结果由 `InstallResultReceiver` 接收：`STATUS_PENDING_USER_ACTION` 时启动系统的确认界面（首次还会要求允许"安装未知应用"）；用户取消时回到"发现新版本"提示，失败时显示原因。签名不一致时系统会拒绝安装
+- F-Droid 不允许应用自更新；以后上架 F-Droid 时需要单独的构建变体关闭这个功能
 
 ## 14. 风险
 

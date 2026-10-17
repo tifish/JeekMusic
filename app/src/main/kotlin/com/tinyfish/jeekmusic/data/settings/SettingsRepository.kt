@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -63,6 +64,11 @@ data class Settings(
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
     val sleep: SleepPrefs = SleepPrefs(),
     val moodFilter: MoodFilter = MoodFilter.ALL,
+    /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
+    val autoUpdateCheck: Boolean = true,
+    val lastUpdateCheck: Long = 0,
+    /** 用户选择"跳过此版本"的 versionCode；0 表示没有。 */
+    val skippedUpdateVersion: Int = 0,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -89,6 +95,9 @@ class SettingsRepository @Inject constructor(
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
         val MOOD_FILTER = stringPreferencesKey("mood_filter")
+        val AUTO_UPDATE = booleanPreferencesKey("auto_update_check")
+        val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
+        val SKIPPED_UPDATE = intPreferencesKey("skipped_update_version")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -114,6 +123,12 @@ class SettingsRepository @Inject constructor(
         it[Keys.SLEEP_CUSTOM_MINUTES] = prefs.customMinutes
         it[Keys.SLEEP_SONG_COUNT] = prefs.songCount
     }
+
+    suspend fun setAutoUpdateCheck(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_UPDATE] = enabled }
+
+    suspend fun setLastUpdateCheck(time: Long) = context.dataStore.edit { it[Keys.LAST_UPDATE_CHECK] = time }
+
+    suspend fun setSkippedUpdateVersion(versionCode: Int) = context.dataStore.edit { it[Keys.SKIPPED_UPDATE] = versionCode }
 
     suspend fun setMoodFilter(filter: MoodFilter) = context.dataStore.edit { it[Keys.MOOD_FILTER] = filter.name }
 
@@ -152,5 +167,8 @@ class SettingsRepository @Inject constructor(
             songCount = this[Keys.SLEEP_SONG_COUNT] ?: 3,
         ),
         moodFilter = this[Keys.MOOD_FILTER]?.let { runCatching { MoodFilter.valueOf(it) }.getOrNull() } ?: MoodFilter.ALL,
+        autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
+        lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
+        skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,
     )
 }

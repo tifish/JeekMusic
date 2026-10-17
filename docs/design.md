@@ -934,6 +934,8 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 ## 10. UI 结构
 
+**跟随正在播放的歌**（需求 U-10，`FollowCurrentTrack`）：放在各列表的"定位当前歌曲"按钮里（队列另外调用），所以有定位按钮的列表都会跟随。记住上一次的当前行号，换成列表里的另一行、并且新行不完整在可视区域内时调用 `scrollToCenter`。上一次不在列表里（-1）时不跟随：说明不是在连续播放这个列表。用 `collectIsDraggedAsState` 记下用户最近一次拖动（按下和松手都记），3 秒内不跟随。
+
 **滚动条**（需求 U-9，`ui/components/Scrollbar.kt`）：Compose 的 LazyColumn 没有滚动条，自己画。`Modifier.verticalScrollbar(state)` 支持 `LazyListState`、`LazyGridState`、`ScrollState`（`verticalScrollWithScrollbar` 把它和 `verticalScroll` 连在一起，滚动条要在 `verticalScroll` 之前，按视口坐标绘制）。
 
 - 只在 `canScrollForward || canScrollBackward` 时绘制，用 `drawWithContent` 画在内容上面：读滚动状态只触发重绘，不重组

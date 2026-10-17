@@ -1,5 +1,11 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import android.os.SystemClock
 import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import androidx.compose.runtime.collectAsState
 import com.tinyfish.jeekmusic.playback.ArtworkVersions
@@ -270,6 +276,7 @@ fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier
     // 必须在下面的提前 return 之前创建：滚动途中歌曲一进入屏幕按钮就会隐藏，
     // 如果作用域跟着按钮离开组合，滚动动画会被取消，歌曲停在屏幕最下方
     val scope = rememberCoroutineScope()
+    FollowCurrentTrack(listState, index)
     if (index < 0) return
     val visible by remember(index) {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == index } }
@@ -282,6 +289,35 @@ fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier
         Icon(painterResource(R.drawable.ic_my_location), contentDescription = stringResource(R.string.action_locate_current))
     }
 }
+
+/**
+ * 连续播放列表里的歌时，让正在播放的歌一直在屏幕上（需求 U-10）：当前歌曲从列表里的一首换成列表里的另一首、
+ * 而新的这首不完整在屏幕上时，把它滚到中间。用户最近 3 秒内自己滚动过列表时不跟随，免得和用户抢；
+ * 从别处开始播放、正好播到这个列表里的歌时也不跟随（之前那首不在这个列表里）。
+ */
+@Composable
+fun FollowCurrentTrack(listState: LazyListState, index: Int) {
+    val dragged by listState.interactionSource.collectIsDraggedAsState()
+    var lastUserScroll by remember { mutableLongStateOf(0L) }
+    // 按下和松手都记一下：松手后列表可能还在惯性滚动
+    LaunchedEffect(dragged) { lastUserScroll = SystemClock.elapsedRealtime() }
+    var previous by remember { mutableIntStateOf(index) }
+    LaunchedEffect(index) {
+        val before = previous
+        previous = index
+        if (before < 0 || index < 0 || index == before) return@LaunchedEffect
+        if (dragged || SystemClock.elapsedRealtime() - lastUserScroll < FOLLOW_PAUSE_MS) return@LaunchedEffect
+        if (!listState.isFullyVisible(index)) listState.scrollToCenter(index)
+    }
+}
+
+private fun LazyListState.isFullyVisible(index: Int): Boolean {
+    val info = layoutInfo
+    val item = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return false
+    return item.offset >= 0 && item.offset + item.size <= info.viewportEndOffset - info.afterContentPadding
+}
+
+private const val FOLLOW_PAUSE_MS = 3_000L
 
 /** 在线歌词、封面来源的名称（docs/design.md §8.4）。 */
 @Composable

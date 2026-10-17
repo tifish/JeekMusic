@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import com.tinyfish.jeekmusic.ui.components.FollowCurrentTrack
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,8 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
         snapshotFlow { listState.layoutInfo.viewportEndOffset }.first { it > 0 }
         if (state.currentIndex > 0) listState.scrollToCenter(state.currentIndex, animate = false)
     }
+    // 打开队列时播到下一首，也让当前歌曲留在屏幕上（拖动排序时不跟随）
+    FollowCurrentTrack(listState, if (draggingUid == null) state.currentIndex else -1)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxHeight(0.85f)) {

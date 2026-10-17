@@ -274,14 +274,17 @@ interface QueueDao {
 
 @Dao
 interface SearchDao {
+    /**
+     * 匹配的全部歌曲，不排序也不限制条数：SQL 排不了拼音（COLLATE NOCASE 对中文是按 Unicode 码位），
+     * 由调用方在内存里按拼音排好再截取（docs/design.md §5.6）。
+     */
     @Query(
         """
         SELECT * FROM track WHERE title LIKE :pattern ESCAPE '\' OR artist_display LIKE :pattern ESCAPE '\'
         OR album LIKE :pattern ESCAPE '\' OR file_name LIKE :pattern ESCAPE '\'
-        ORDER BY title COLLATE NOCASE LIMIT :limit
         """,
     )
-    suspend fun tracks(pattern: String, limit: Int): List<TrackEntity>
+    suspend fun tracks(pattern: String): List<TrackEntity>
 
     @Query("""SELECT * FROM artist WHERE name LIKE :pattern ESCAPE '\' ORDER BY sort_key LIMIT :limit""")
     suspend fun artists(pattern: String, limit: Int): List<ArtistEntity>

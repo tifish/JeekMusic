@@ -504,7 +504,9 @@ albumDir = relative_path；如果最后一级目录名匹配 ^(cd|disc|disk)\s*\
 
 ### 5.6 搜索
 
-M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在 1 万首规模下足够快。如果性能不够或需要拼音搜索（S-2），再加 FTS4 表，并预存拼音全拼和首字母列。
+M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在 1 万首规模下足够快。
+
+排序：SQL 只负责匹配，不排序也不限制条数——`COLLATE NOCASE` 对中文是按 Unicode 码位排的（东 → 传 → 你 → 修），不是拼音。查出全部匹配的歌、按标签筛选后，在内存里用 `SongSorter` 排序（默认 `byTitle`，和艺术家页一样按拼音排序键；非默认时按全局排序），再取前 200 首。先排序再截取，否则截到的是 SQL 顺序里的前 200 首。艺术家结果用 `artist.sort_key`（入库时算好的拼音键）在 SQL 里排序。如果性能不够或需要拼音搜索（S-2），再加 FTS4 表，并预存拼音全拼和首字母列。
 
 ### 5.7 歌曲列表（TrackRow）
 

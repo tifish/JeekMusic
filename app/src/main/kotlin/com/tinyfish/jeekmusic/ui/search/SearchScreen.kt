@@ -87,9 +87,10 @@ class SearchViewModel @Inject constructor(
                 val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
                 // 歌曲结果也按"运动 / 安静"筛选（需求 M-6）
                 val allowed = tagFilters.allowedKeys.first()
-                val tracks = dao.tracks(pattern, 200).filterByTags(allowed) { it.trackKey }
-                // 排序（需求 U-8）；默认按歌名
-                SearchResults(q, dao.artists(pattern, 20), sorter.sorted(tracks, sorter.sort.first()) { it } ?: tracks)
+                val tracks = dao.tracks(pattern).filterByTags(allowed) { it.trackKey }
+                // 排序（需求 U-8）：默认按歌名，中文按拼音（和艺术家页一样）。先排序再截取，否则截到的不是排在最前面的那些
+                val sorted = sorter.sorted(tracks, sorter.sort.first()) { it } ?: tracks.sortedWith(sorter.byTitle)
+                SearchResults(q, dao.artists(pattern, MAX_ARTISTS), sorted.take(MAX_TRACKS))
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -98,6 +99,11 @@ class SearchViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun play(tracks: List<TrackEntity>, index: Int) = player.play(tracks, index)
+
+    private companion object {
+        const val MAX_TRACKS = 200
+        const val MAX_ARTISTS = 20
+    }
 }
 
 @Composable

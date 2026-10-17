@@ -101,7 +101,7 @@ class LibraryDaoTest {
         val search = db.searchDao()
         tracks.insert(listOf(track(id, "Music/", "100%_Pure.mp3"), track(id, "Music/", "1000 Pure.mp3")))
         // "%" 和 "_" 转义后只匹配字面值，不会把 "1000 Pure" 也搜出来
-        assertEquals(listOf("100%_Pure.mp3"), search.tracks("%100\\%\\_%", 10).map { it.fileName })
+        assertEquals(listOf("100%_Pure.mp3"), search.tracks("%100\\%\\_%").map { it.fileName })
         artists.insert(listOf(ArtistEntity(name = "50% Off", nameKey = "50% off", sortKey = "50% off", indexLetter = "#")))
         assertEquals(listOf("50% Off"), search.artists("%50\\%%", 10).map { it.name })
     }

@@ -354,6 +354,13 @@ interface TagDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveFeatures(features: TrackFeaturesEntity)
 
+    /** 智能标签用的歌名和专辑名（曲名补救古典，需求 M-10）。 */
+    @Query("SELECT track_key AS trackKey, title, album FROM track")
+    suspend fun titles(): List<TrackTitle>
+
+    @Query("SELECT track_key AS trackKey, title, album FROM track WHERE track_key = :trackKey LIMIT 1")
+    suspend fun title(trackKey: String): TrackTitle?
+
     @Query("SELECT * FROM track_features WHERE failed = 0")
     suspend fun allFeatures(): List<TrackFeaturesEntity>
 
@@ -387,3 +394,6 @@ interface TagDao {
     @Query("SELECT track_key FROM track_tag WHERE dimension = :dimension AND value = :value")
     fun observeKeys(dimension: String, value: String): Flow<List<String>>
 }
+
+/** 歌曲的歌名和专辑名，见 [TagDao.titles]。 */
+data class TrackTitle(val trackKey: String, val title: String, val album: String?)

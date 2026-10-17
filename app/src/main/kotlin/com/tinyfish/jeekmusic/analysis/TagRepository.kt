@@ -42,9 +42,10 @@ class TagRepository @Inject constructor(
     suspend fun recomputeAll() = mutex.withLock {
         val sensitivity = settings.current().sensitivity
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
+        val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
         val auto = dao.allFeatures().flatMap { f ->
             val manual = overrides[f.trackKey].orEmpty()
-            TagClassifier.classify(f, sensitivity).mapNotNull { (dimension, tag) ->
+            TagClassifier.classify(f, sensitivity, f.trackKey in classicalTitles).mapNotNull { (dimension, tag) ->
                 if (dimension.name in manual || tag == null) null else TrackTagEntity(f.trackKey, dimension.name, tag.name, SOURCE_AUTO)
             }
         }
@@ -89,7 +90,8 @@ class TagRepository @Inject constructor(
 
     suspend fun info(trackKey: String): TagInfo {
         val features = dao.features(trackKey)
-        val auto = features?.takeIf { !it.failed }?.let { TagClassifier.classify(it, settings.current().sensitivity) }.orEmpty()
+        val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
+        val auto = features?.takeIf { !it.failed }?.let { TagClassifier.classify(it, settings.current().sensitivity, classicalTitle) }.orEmpty()
         val overrides = dao.overrides(trackKey).associateBy { TagDimension.valueOf(it.dimension) }
         val tags = TagDimension.entries.associateWith { d ->
             if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]
@@ -105,8 +107,8 @@ class TagRepository @Inject constructor(
          * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
         const val ANALYZER_VERSION = 4
-        /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典。 */
-        const val RULES_VERSION = 1
+        /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典。 */
+        const val RULES_VERSION = 2
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

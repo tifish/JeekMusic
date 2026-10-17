@@ -68,12 +68,20 @@ object TagClassifier {
     /** 从这个分析版本起 classical_score 只用曲风类（[AudioTagger]）；更早的结果在重新分析前沿用旧阈值。 */
     private const val GENRE_ONLY_VERSION = 4
 
-    fun classify(f: TrackFeaturesEntity, sensitivity: Sensitivity): Map<TagDimension, Tag?> {
-        val m = f.modelScores() ?: return mapOf(TagDimension.MOOD to LegacyMoodClassifier.classify(f.toFeatures(), sensitivity))
+    /**
+     * [classicalTitle]：歌名或专辑名里有古典作品的标志（[ClassicalTitles]），模型判为非古典时用它补救（需求 M-10）。
+     */
+    fun classify(f: TrackFeaturesEntity, sensitivity: Sensitivity, classicalTitle: Boolean = false): Map<TagDimension, Tag?> {
+        val m = f.modelScores() ?: return buildMap {
+            put(TagDimension.MOOD, LegacyMoodClassifier.classify(f.toFeatures(), sensitivity))
+            // 还没用模型分析的歌：只凭曲名判断得出古典，判断不出非古典
+            if (classicalTitle) put(TagDimension.GENRE, Tag.CLASSICAL)
+        }
+        val genre = if (f.analyzerVersion >= GENRE_ONLY_VERSION) genre(m) else legacyGenre(m)
         return mapOf(
             TagDimension.MOOD to mood(m, sensitivity),
             TagDimension.VOICE to voice(m),
-            TagDimension.GENRE to if (f.analyzerVersion >= GENRE_ONLY_VERSION) genre(m) else legacyGenre(m),
+            TagDimension.GENRE to if (classicalTitle) Tag.CLASSICAL else genre,
         )
     }
 

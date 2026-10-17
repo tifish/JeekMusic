@@ -6,6 +6,7 @@
 曲名在 genre_labels.tsv（整个曲库的古典 / 非古典粗标注）中的歌另外统计"古典 / 非古典"。
 """
 import os
+import re
 import sys
 
 import numpy as np
@@ -19,13 +20,26 @@ CALM = [273, 272, 266, 248, 241, 262]
 ENERGY = [274, 271, 269, 234, 212, 214, 157, 159, 31, 231, 211, 240]
 ORCHESTRA = 179
 
+# 与 ClassicalTitles.kt 一致：曲名里有作品编号、带编号或调性的曲式、乐章速度标记等时算古典（补救模型漏判）
+CLASSICAL_TITLE = re.compile("|".join(f"(?:{p})" for p in [
+    r"\bBWV\s*\.?\s*\d", r"\bOp\.?\s*\d", r"\bOpus\s*\d", r"\bK\.?\s*V?\s*\d{2,3}\b", r"\bKV\s*\d", r"\bRV\s*\d",
+    r"\bHob\.?\s*[IVX]", r"\bHWV\s*\d", r"\bWoO\s*\d", r"\bD\.?\s*\d{2,3}\b", r"\bS\.\s*\d{2,3}\b", r"\bL\.\s*\d{2,3}\b",
+    r"\bMWV\b", r"\bTWV\b", r"\bBuxWV\b", r"\bSz\.?\s*\d",
+    r"\b(Symphony|Symphonie|Sinfonie|Concerto|Konzert|Sonata|Sonate|Quartet|Quintet|Trio|Suite|Partita|Mass|Requiem|Cantata|Etude|Étude|"
+    r"Nocturne|Prelude|Prélude|Fugue|Mazurka|Polonaise|Ballade|Scherzo|Impromptu|Rhapsody|Overture|Ouvertüre|Serenade|Divertimento|"
+    r"Variations?|Waltz|Valse)\s+(No\.?\s*\d|Nr\.?\s*\d|in\s+[A-G]\b|op\.?\s*\d)",
+    r"\b(in|en)\s+[A-G](\s*(flat|sharp|♭|♯|-flat|-sharp))?\s+(major|minor|Dur|moll|majeur|mineur)\b",
+    r"(?:\b[IVX]+\.|\b\d+\.|[:：–-])\s*(Allegro|Adagio|Andante|Largo|Presto|Moderato|Allegretto|Larghetto|Vivace|Lento|Grave|Menuetto|Minuet|Rondo)\b",
+    r"(交响曲|协奏曲|奏鸣曲|前奏曲|赋格|练习曲|弦乐四重奏|安魂曲|作品\s*\d)",
+]), re.IGNORECASE)
+
 # 与 TagClassifier.kt 一致（灵敏度"标准"）
 VOCAL_THRESHOLD = -2.3
 CLASSICAL_THRESHOLD = -0.4
 SPORT_THRESHOLD, QUIET_THRESHOLD, ORCHESTRA_MAX = 3.25, 0.2, 0.1
 
 
-def predict(frames):
+def predict(frames, name=""):
     m = np.asarray(frames, dtype=np.float64).mean(axis=0)
     vocal = np.log((m[VOICE].sum() + 1e-3) / (m[INSTRUMENT].sum() + 1e-3))
     classical = np.log((m[CLASSICAL].sum() + 1e-3) / (m[POP].sum() + 1e-3))
@@ -34,7 +48,8 @@ def predict(frames):
     quiet = np.log(calm + 0.01) - np.log(energy + 0.01)
     return {
         "voice": "V" if vocal >= VOCAL_THRESHOLD else "I",
-        "genre": "C" if classical >= CLASSICAL_THRESHOLD else "N",
+        # 文件名是"艺术家 - 歌名"，App 里匹配的是歌名
+        "genre": "C" if classical >= CLASSICAL_THRESHOLD or CLASSICAL_TITLE.search(name.split(" - ", 1)[-1]) else "N",
         "classical": classical,
         "mood": "S" if sport >= SPORT_THRESHOLD else "Q" if quiet >= QUIET_THRESHOLD and orchestra <= ORCHESTRA_MAX else "-",
         "scores": f"vocal={vocal:.2f} classical={classical:.2f} sport={sport:.2f} quiet={quiet:.2f} orchestra={orchestra:.3f}",
@@ -63,7 +78,7 @@ def main():
     results = {"voice": [0, 0], "genre": [0, 0], "mood": [0, 0]}
     library = [0, 0, 0, 0]  # 古典判对、古典总数、非古典误判为古典、非古典总数
     for name, frames in zip(data["names"], data["scores"]):
-        p = predict(frames)
+        p = predict(frames, str(name))
         truth = labels.get(name, {})
         marks = []
         if name in classical:

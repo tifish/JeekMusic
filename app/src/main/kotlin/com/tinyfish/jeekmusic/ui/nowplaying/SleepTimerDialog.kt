@@ -58,6 +58,31 @@ fun SleepTimerDialog(viewModel: PlayerViewModel, timer: SleepTimerState, onDismi
     )
 }
 
+/** 标题栏上的紧凑倒计时：只显示剩余时间，"播完这首"时显示"本首"。 */
+@Composable
+fun SleepTimerCountdown(timer: SleepTimerState, modifier: Modifier = Modifier) {
+    if (!timer.active) return
+    Text(
+        if (timer.endOfTrack) stringResource(R.string.sleep_short_end_of_track) else formatDuration(rememberSleepRemaining(timer)),
+        modifier.testTag("top_sleep_remaining"),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/** 睡眠定时的剩余毫秒数，每秒刷新一次。 */
+@Composable
+private fun rememberSleepRemaining(timer: SleepTimerState): Long {
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(timer.endElapsedMs) {
+        while (true) {
+            now = SystemClock.elapsedRealtime()
+            delay(1_000)
+        }
+    }
+    return (timer.endElapsedMs - now).coerceAtLeast(0)
+}
+
 @Composable
 private fun Option(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Text(text, modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp), style = MaterialTheme.typography.bodyLarge)
@@ -71,15 +96,8 @@ fun SleepTimerLabel(timer: SleepTimerState, modifier: Modifier = Modifier) {
         Text(stringResource(R.string.sleep_remaining_end_of_track), modifier, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         return
     }
-    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
-    LaunchedEffect(timer.endElapsedMs) {
-        while (true) {
-            now = SystemClock.elapsedRealtime()
-            delay(1_000)
-        }
-    }
     Text(
-        stringResource(R.string.sleep_remaining, formatDuration(timer.endElapsedMs - now)),
+        stringResource(R.string.sleep_remaining, formatDuration(rememberSleepRemaining(timer))),
         modifier.testTag("sleep_remaining"),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.primary,

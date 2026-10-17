@@ -26,6 +26,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -66,6 +67,8 @@ import com.tinyfish.jeekmusic.ui.navigation.TopRoute
 import com.tinyfish.jeekmusic.ui.nowplaying.MiniPlayer
 import com.tinyfish.jeekmusic.ui.nowplaying.NowPlayingScreen
 import com.tinyfish.jeekmusic.ui.nowplaying.PlayerViewModel
+import com.tinyfish.jeekmusic.ui.nowplaying.SleepTimerCountdown
+import com.tinyfish.jeekmusic.ui.nowplaying.SleepTimerDialog
 import com.tinyfish.jeekmusic.ui.playlists.PlaylistDetailScreen
 import com.tinyfish.jeekmusic.ui.playlists.PlaylistListScreen
 import com.tinyfish.jeekmusic.ui.search.SearchScreen
@@ -107,6 +110,8 @@ fun JeekMusicApp(viewModel: MainViewModel) {
 @Composable
 private fun MainScreen(viewModel: MainViewModel) {
     val playerViewModel: PlayerViewModel = hiltViewModel()
+    val playerState by playerViewModel.state.collectAsStateWithLifecycle()
+    var showSleepTimer by remember { mutableStateOf(false) }
     val tabs by viewModel.tabs.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -142,6 +147,22 @@ private fun MainScreen(viewModel: MainViewModel) {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
                     actions = {
+                        // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
+                        IconButton(onClick = playerViewModel::toggleShuffleAndAnnounce, modifier = Modifier.testTag("top_shuffle")) {
+                            Icon(
+                                painterResource(R.drawable.ic_shuffle),
+                                contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
+                                tint = if (playerState.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        SleepTimerCountdown(playerState.sleepTimer)
+                        IconButton(onClick = { showSleepTimer = true }, modifier = Modifier.testTag("top_sleep_timer")) {
+                            Icon(
+                                painterResource(R.drawable.ic_bedtime),
+                                contentDescription = stringResource(R.string.menu_sleep_timer),
+                                tint = if (playerState.sleepTimer.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         IconButton(onClick = { viewModel.open(TopRoute.Search) }, modifier = Modifier.testTag("open_search")) {
                             Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
                         }
@@ -191,6 +212,7 @@ private fun MainScreen(viewModel: MainViewModel) {
             NowPlayingScreen(playerViewModel, onCollapse = { viewModel.nowPlayingOpen = false })
         }
     }
+    if (showSleepTimer) SleepTimerDialog(playerViewModel, playerState.sleepTimer, onDismiss = { showSleepTimer = false })
 }
 
 /** 标签：点击切换；长按弹出"取消固定 / 左移 / 右移"（需求 T-5）。 */

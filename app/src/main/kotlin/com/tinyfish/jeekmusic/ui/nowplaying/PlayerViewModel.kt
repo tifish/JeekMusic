@@ -109,6 +109,13 @@ class PlayerViewModel @Inject constructor(
     fun previous() = player.previous()
     fun seekTo(positionMs: Long) = player.seekTo(positionMs)
     fun toggleShuffle() = player.toggleShuffle()
+
+    /** 标题栏上的随机 / 顺序切换（需求 P-5）：切换后提示现在是哪种模式。 */
+    fun toggleShuffleAndAnnounce() {
+        val shuffle = !state.value.shuffle
+        player.toggleShuffle()
+        messages.post(UiMessage(if (shuffle) R.string.mode_shuffle_on else R.string.mode_sequential_on))
+    }
     fun cycleRepeat() = player.cycleRepeat()
     fun skipTo(index: Int) = player.skipToQueueItem(index)
     fun remove(index: Int) = player.removeQueueItem(index)

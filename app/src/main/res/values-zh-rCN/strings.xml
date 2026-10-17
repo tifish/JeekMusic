@@ -110,6 +110,11 @@
     <string name="sleep_end_of_track">播完当前这首</string>
     <string name="sleep_cancel">关闭定时</string>
     <string name="sleep_remaining">%s 后停止</string>
+    <string name="sleep_short_end_of_track">本首</string>
+    <string name="mode_shuffle">随机播放</string>
+    <string name="mode_sequential">顺序播放</string>
+    <string name="mode_shuffle_on">已切换为随机播放</string>
+    <string name="mode_sequential_on">已切换为顺序播放</string>
     <string name="sleep_remaining_end_of_track">播完这首后停止</string>
 
     <string name="info_path">路径</string>

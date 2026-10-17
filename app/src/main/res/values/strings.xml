@@ -113,6 +113,11 @@
     <string name="sleep_end_of_track">At the end of this song</string>
     <string name="sleep_cancel">Turn off timer</string>
     <string name="sleep_remaining">Stops in %s</string>
+    <string name="sleep_short_end_of_track">This song</string>
+    <string name="mode_shuffle">Shuffle</string>
+    <string name="mode_sequential">In order</string>
+    <string name="mode_shuffle_on">Shuffle on</string>
+    <string name="mode_sequential_on">Playing in order</string>
     <string name="sleep_remaining_end_of_track">Stops after this song</string>
 
     <string name="info_path">Path</string>

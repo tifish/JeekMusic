@@ -737,6 +737,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 把播放器状态转换为 `StateFlow<PlayerUiState>`（当前歌曲、是否播放、队列、模式）。连接建立前，用启动快照里的数据填充迷你播放条
 - 跳转（`seekTo`）：重启后恢复的队列还没准备，此时 `COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM` 不可用，`MediaController` 会直接忽略 `seekTo(position)`；这种情况下改用 `seekTo(currentMediaItemIndex, position)`（`COMMAND_SEEK_TO_MEDIA_ITEM` 在未准备时也可用），第一次播放就从拖到的位置开始
 - 进度条松手后（`SeekState`）：继续显示目标位置，直到轮询到的播放位置与目标相差不到 1.5 秒（最多 3 秒）。否则会先显示轮询到的旧位置、下一次轮询才跳到新位置，看起来像"跳过去、跳回来、再跳过去"
+- 迷你播放条的进度条加了 `Modifier.systemGestureExclusion()`：手势导航下从屏幕边缘开始拖动不会触发系统的返回手势。只排除这 28dp 高的一条（系统上限每边 200dp），屏幕其他位置的边缘返回不受影响
 - 进度是单独的 Flow，只有在有订阅者时才轮询（`stateIn(WhileSubscribed)`）：播放页可见时每 200ms 一次；迷你播放条的细进度条每 1s 一次；App 在后台时完全不轮询
 
 ## 8. 歌词

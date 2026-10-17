@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
@@ -121,7 +122,8 @@ private val SeekTouchHeight = 8.dp
 /**
  * 迷你播放条顶部的进度条：圆点标出当前位置；整条 [StripHeight] 高的区域都是热区，
  * 按下立即跳到手指所在的位置（拖动时圆点跟着手指走），松手后由 [onRelease] 真正跳转。
- * 按下和移动事件都在这里消费掉，外层"整条相对拖动"的手势不会同时触发。
+ * 按下和移动事件都在这里消费掉，外层"整条相对拖动"的手势不会同时触发；
+ * 这一条排除了系统的边缘返回手势，贴着屏幕边缘也能拖。
  */
 @Composable
 private fun SeekStrip(
@@ -141,6 +143,8 @@ private fun SeekStrip(
         Modifier
             .fillMaxWidth()
             .height(StripHeight)
+            // 从屏幕左右边缘开始拖动时，不触发系统的"返回"手势（只排除这 28dp 高的一条，系统上限是每边 200dp）
+            .systemGestureExclusion()
             .testTag("mini_seek")
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput

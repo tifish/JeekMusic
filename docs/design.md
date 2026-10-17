@@ -35,7 +35,7 @@
                 │                                               │
 ┌───────────────▼──────────────── 数据层 ──────────────────┐   ┌───▼──── 播放层 ──────────────┐
 │ LibraryRepository  PlaylistRepository  TabRepository     │   │ PlayerConnection (UI 侧)     │
-│ MoodRepository     LyricsRepository    SettingsRepository│   │   └ MediaController          │
+│ TagRepository      LyricsRepository    SettingsRepository│   │   └ MediaController          │
 │ ┌──────────┐ ┌─────────────┐ ┌─────────┐ ┌────────────┐  │   │ PlaybackService (独立组件)  │
 │ │ Scanner  │ │ Analysis    │ │ Room DB │ │ LrcLibApi  │  │   │   ├ ExoPlayer                │
 │ │MediaStore│ │ Decoder     │ │         │ │ (可选联网) │  │   │   ├ MediaLibrarySession      │
@@ -65,11 +65,12 @@ com.tinyfish.jeekmusic
 │   ├── playlist/
 │   └── settings/              // SettingsRepository (DataStore)
 ├── analysis                   // 智能标签
-│   ├── PcmDecoder.kt          // MediaExtractor + MediaCodec → 单声道 PCM
+│   ├── PcmDecoder.kt          // MediaExtractor + MediaCodec → 单声道 16kHz PCM
+│   ├── AudioTagger.kt         // YAMNet（LiteRT）→ 模型得分
 │   ├── Fft.kt
-│   ├── FeatureExtractor.kt
-│   ├── MoodClassifier.kt      // 接口 + RuleBasedMoodClassifier
-│   ├── MoodRepository.kt
+│   ├── FeatureExtractor.kt    // BPM、响度等手工特征
+│   ├── TagClassifier.kt       // 三个维度的分类规则 + 旧版本的后备规则
+│   ├── TagRepository.kt
 │   └── AnalysisWorker.kt
 ├── playback
 │   ├── PlaybackService.kt     // MediaLibraryService
@@ -164,16 +165,22 @@ track_features    -- 音频分析结果（§6）
   low_ratio       REAL           -- 150Hz 以下能量占比
   analyzed_at     INTEGER
   failed          BOOLEAN        -- 解码失败；不再重试，除非文件签名变了
+  vocal_score, classical_score, calm_level, energy_level, orchestra_level
+                  REAL?          -- YAMNet 模型得分（§6.3）；旧版本分析的为 NULL
 
-mood_override     -- 手动修正（需求 M-4）
-  track_key       TEXT PK
-  mood            TEXT?          -- "SPORT" / "QUIET"；NULL 表示"明确不属于任何标签"
+tag_override      -- 手动修正（需求 M-4）
+  track_key       TEXT
+  dimension       TEXT           -- MOOD | VOICE | GENRE
+  value           TEXT?          -- SPORT / QUIET / VOCAL / INSTRUMENTAL / CLASSICAL / POP；NULL 表示"这个维度都不是"
+  PRIMARY KEY(track_key, dimension)
 
-track_mood        -- 物化结果 = 手动修正优先，否则取自动分类结果
-  track_key       TEXT PK
-  mood            TEXT
+track_tag         -- 物化结果 = 每个维度手动修正优先，否则取自动分类结果
+  track_key       TEXT
+  dimension       TEXT
+  value           TEXT
   source          TEXT           -- AUTO | MANUAL
-  INDEX(mood)
+  PRIMARY KEY(track_key, dimension)
+  INDEX(dimension, value)
 
 playlist
   id, name, created_at, updated_at
@@ -205,7 +212,7 @@ lyrics_offset
 
 **数据库版本**：1.0 发布前使用 `fallbackToDestructiveMigration`，结构变化时直接重建。**从 1.0（数据库版本 4）起**只在降级时重建（`fallbackToDestructiveMigrationOnDowngrade`），结构变化必须提供 `Migration`，以免丢失播放列表等用户数据；`app/schemas/` 中导出了每个版本的结构，可以用 `MigrationTestHelper` 测试迁移。
 
-**孤儿清理**：每次扫描事务结束时删除没有歌曲的 artist。`track_features`、`mood_override`、`lyrics_*` 这些表中的孤儿行**不立即删除**，因为文件可能只是暂时不可用（比如 SD 卡拔出）；在"重建曲库"时，或孤儿行超过 30 天时再清理。
+**孤儿清理**：每次扫描事务结束时删除没有歌曲的 artist。`track_features`、`tag_override`、`lyrics_*` 这些表中的孤儿行**不立即删除**，因为文件可能只是暂时不可用（比如 SD 卡拔出）；在"重建曲库"时，或孤儿行超过 30 天时再清理。
 
 ### 3.1 备份与恢复（BackupManager）
 
@@ -219,9 +226,9 @@ lyrics_offset
   "app_version": "1.0.0",
   "exported_at": "2026-10-16T21:00:00+08:00",
   "settings": { "artist_separators": [";", "、"], "artist_exceptions": [], "...": "..." },
-  "pinned_tabs": [ { "type": "FOLDERS" }, { "type": "ARTIST", "ref": "周杰伦" }, { "type": "MOOD", "ref": "SPORT" } ],
+  "pinned_tabs": [ { "type": "FOLDERS" }, { "type": "ARTIST", "ref": "周杰伦" } ],
   "playlists": [ { "name": "跑步", "items": ["周杰伦/叶惠美/03. 晴天.flac", "Live/2004.flac#05"] } ],
-  "mood_overrides": { "周杰伦/叶惠美/03. 晴天.flac": "SPORT", "Classical/x.flac": null },
+  "tag_overrides": { "周杰伦/叶惠美/03. 晴天.flac": { "MOOD": "SPORT" }, "Classical/x.flac": { "GENRE": null } },   // 计划中（需求 B-5），尚未实现
   "lyrics_offsets": { "周杰伦/叶惠美/03. 晴天.flac": -500 },
   "features": { }
 }
@@ -482,14 +489,14 @@ albumDir = relative_path；如果最后一级目录名匹配 ^(cd|disc|disk)\s*\
 
 入口（需求 AL-1）：`TrackRow` 的"更多"菜单、播放页上的专辑名（`MediaItem` 的 extras 里带上 `album_key`）。路由：`Album(albumKey: String)`。
 
-### 5.5 运动 / 安静筛选
+### 5.5 智能标签筛选
 
-最初"运动"和"安静"是两个标签页；后来改为全局筛选（需求 M-6），在任何歌曲列表里都能用。
+最初"运动"和"安静"是两个标签页；后来改为全局筛选（需求 M-6），在任何歌曲列表里都能用；加入人声和曲风后，三个维度可以组合筛选。
 
-- 状态：`MoodFilter { ALL, SPORT, QUIET }`，保存在设置 DataStore 里（`mood_filter`），由 `MoodFilterRepository` 提供 `filter` 和 `allowedKeys`（`SELECT track_key FROM track_mood WHERE mood = ?` 的集合，`ALL` 时为 null）。分析完成或手动修正后 `track_mood` 变化，所有列表自动刷新
+- 状态：`TagFilter(mood, voice, genre)`，每个维度不选或选一个，保存在设置 DataStore 里（`filter_mood` / `filter_voice` / `filter_genre`；兼容旧版本的 `mood_filter`），由 `TagFilterRepository` 提供 `filter` 和 `allowedKeys`（各个选中标签的 `SELECT track_key FROM track_tag WHERE dimension = ? AND value = ?` 取交集，没有筛选时为 null）。分析完成或手动修正后 `track_tag` 变化，所有列表自动刷新
 - 只有歌曲列表在内存里按 `allowedKeys` 过滤（艺术家页、专辑页、文件夹内的歌曲、播放列表、搜索结果）；需要计数的地方在 SQL 里加条件：
-  - 文件夹：`observeWithCounts(mood)`、`observeDirectoryCounts(..., mood)` 加 `(:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))`。子文件夹由计数折叠得到，没有这类歌的子文件夹自然不出现；根级的音乐文件夹总是显示
-  - 艺术家列表：`ArtistDao.observeCounts(mood)` 按艺术家统计这类歌的数量，没有的艺术家去掉，`track_count` 换成筛选后的数量
+  - 文件夹：`observeWithCounts(mood, voice, genre)`、`observeDirectoryCounts(..., mood, voice, genre)` 对每个维度加 `(:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))`（三个维度同样）。子文件夹由计数折叠得到，没有这类歌的子文件夹自然不出现；根级的音乐文件夹总是显示
+  - 艺术家列表：`ArtistDao.observeCounts(mood, voice, genre)` 按艺术家统计符合的歌曲数，没有的艺术家去掉，`track_count` 换成筛选后的数量
 - 播放列表在筛选时隐藏拖动手柄：只看到部分条目时，按可见条目重排会打乱看不到的条目
 - 标题栏的筛选菜单里显示未分析数（`未分析数 = 曲库总数 - 已分析数`，排除 `failed`），并提供"立即分析"（触发一次不要求充电的任务）。未分析数只在菜单打开时查询，不影响启动
 
@@ -507,96 +514,110 @@ M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在
 - 缩略图：Coil 按 48dp 实际像素尺寸解码，磁盘缓存缩略图；快速滚动时先显示占位图
 - "定位到正在播放"（需求 P-10）：在当前列表中查找 `track_key` 的索引，然后调用 `scrollToItem`
 
-## 6. 智能标签：运动 / 安静
+## 6. 智能标签：氛围、人声、曲风
 
 ### 6.1 总体思路
 
 ```
 AnalysisWorker（WorkManager，默认要求充电）
   对每首待分析的歌曲：
-    PcmDecoder        解码三个片段 → 单声道 11025Hz PCM（只用于分析，与播放无关）
-    FeatureExtractor  → AudioFeatures（BPM、响度、动态范围、起音密度、频谱质心、低频占比）
+    PcmDecoder        解码三个片段 → 单声道 16kHz PCM（只用于分析，与播放无关）
+    AudioTagger       YAMNet 逐帧打分 → 521 类的平均分 → 几组得分（ModelScores）
+    FeatureExtractor  抽取到 11025Hz → BPM、响度等手工特征（歌曲信息页显示；旧版本数据的后备）
     写入 track_features
-  批次结束后：
-    MoodRepository.recompute(受影响的 track_key)
-      → 有 mood_override 时用手动结果，否则用 MoodClassifier.classify(features, sensitivity)
-      → 写入 track_mood
+  每 25 首和批次结束时：
+    TagRepository.recomputeAll()
+      → 每个维度：有 tag_override 时用手动结果，否则用 TagClassifier.classify(features, sensitivity)
+      → 写入 track_tag
 ```
 
-**特征和分类是分开的**：特征保存在 `track_features` 里。调整灵敏度或升级规则时，只需要用已有特征重新分类（毫秒级），不需要重新解码音频（需求 M-8）。
+**得分和分类是分开的**：模型得分保存在 `track_features` 里，阈值在分类时才用。调整灵敏度或改阈值只需要重新分类（毫秒级），不需要重新解码音频（需求 M-8）；改了类别分组才需要提高 `ANALYZER_VERSION` 重新分析。
+
+最初（v2）只用节奏、响度、低频占比等手工特征判断运动 / 安静，在人工标注的校准集上只有 58% 准确：它分不清"录音音量小的激昂古典"和"真正安静的歌"，也漏掉了大多数抒情流行。人声和曲风更是手工特征很难做的。v3 改用预训练的音频分类模型。
 
 ### 6.2 解码（PcmDecoder）
 
 - 用 `MediaExtractor` + `MediaCodec`（系统解码器，大多是硬件加速）解码
 - 取 3 个各 10 秒的片段，分别位于时长的 30%、50%、70% 处，以避开前奏和尾奏；短于 40 秒的歌曲整首分析。CUE 虚拟歌曲的时长和位置按 `start_ms` / `end_ms` 换算
-- 下混为单声道，抽取到 11025Hz（加简单的抗混叠低通）。分析用不到更高的频率，这样计算量可以降低约 4 倍
+- 下混为单声道（÷√声道数，功率守恒，与 BS.1770 和 ffmpeg 一致），盒式平均抽取到 16kHz（YAMNet 的输入）；手工特征再从 16kHz 抽取到 11025Hz
+- 有些文件在 `MediaExtractor` 中跳转不可靠，按窗口解码得不到数据时退回到从头解码 30 秒
 - 解码失败时把 `failed` 设为 true，不阻塞队列
 
-### 6.3 特征提取（FeatureExtractor）
+### 6.3 YAMNet 模型（AudioTagger）
 
-帧长 1024 点（约 93ms），帧移 256 点，加汉宁窗做 FFT（自写 radix-2 实现，约百行代码）。
+- 模型：Google 的 [YAMNet](https://www.kaggle.com/models/google/yamnet)（MobileNet v1，在 AudioSet 上训练，521 个声音类别，Apache 2.0），TFLite 分类版约 4MB，放在 `assets/yamnet.tflite`（不压缩，直接内存映射）
+- 运行时：LiteRT（原 TensorFlow Lite，`com.google.ai.edge.litert:litert`），用经典的 `org.tensorflow.lite.Interpreter` 接口，CPU + XNNPACK，2 个线程；第一次分析时加载，任务结束时释放（约 20MB 内存）
+- 输入 15600 个采样（0.975 秒），不重叠地切帧，三个 10 秒片段共约 30 帧；输出每帧 521 类的分数，取平均
+- 只保存分类要用的几组得分（`track_features` 的 5 个 REAL 列）：
 
-| 特征 | 计算方法 | 用途 |
+| 列 | 计算 | 用途 |
 |---|---|---|
-| `bpm`、`bpm_confidence` | 频谱通量得到起音强度包络，对 60–200 BPM 范围做自相关，峰值即节奏；乘以以 120 BPM 为中心的对数高斯权重，减少倍频和半频误判；置信度 = 峰值与均值之比 | 运动 |
-| `onset_rate` | 起音包络的峰值检测，统计每秒的起音数 | 运动 / 安静 |
-| `loudness` | K 计权滤波（高通 + 高架）后的均方，按 400ms 窗口做门限积分，近似 LUFS | 运动 / 安静 |
-| `loudness_range` | 3s 短时响度的第 10 到第 95 百分位之差 | 区分古典 / 原声与流行 |
-| `centroid_hz` | 各帧频谱质心的均值 | 安静（偏暗） |
-| `low_ratio` | 150Hz 以下能量 / 总能量 | 运动（鼓和贝斯的推动感） |
+| `vocal_score` | ln(人声类之和 / 乐器类之和)。人声类：Singing、Choir、Rapping、Humming、Chant、Vocal music、A capella、Opera、Speech、Lullaby 等；乐器类：Musical instrument、Bowed string、Violin、Cello、Piano、Orchestra、Brass、Woodwind、Guitar 等 | 人声 / 纯音乐 |
+| `classical_score` | ln(古典类之和 / 流行类之和)。古典类：Classical music、Opera、Orchestra、弦乐、钢琴、铜管、木管；流行类：Pop、R&B、Hip hop、Electronic、Dance、Rock、Music of Asia、Singing、Drum machine、Synthesizer 等 | 古典 / 流行 |
+| `calm_level` | Tender、Sad、Lullaby、New-age、Ambient、Background music 之和 | 安静 |
+| `energy_level` | Exciting、Happy、Dance、Electronic、Hip hop、Rock、Drum kit、Drum、Rapping、Disco、Pop、EDM 之和 | 运动 |
+| `orchestra_level` | Orchestra | 排除大编制管弦乐段落 |
 
-### 6.4 分类规则（RuleBasedMoodClassifier）
+- 性能：模拟器（x86_64）上每首约 2.6 秒（含解码，后台低优先级），手机上应更快；1 万首在充电时分几次完成
+- 体积：APK 从 10MB 增加到约 17MB（模型 4MB + LiteRT 原生库；原生库压缩打包，只打包 arm64-v8a 和 x86_64）
 
-```kotlin
-interface MoodClassifier {
-    val version: Int
-    fun classify(f: AudioFeatures, sensitivity: Sensitivity): Mood?   // SPORT / QUIET / null
-}
-```
-
-**v2 规则**（M4 用作者曲库中的 109 首真实歌曲校准，流行 / 古典 / 民谣混合）：
+### 6.4 分类规则（TagClassifier）
 
 ```
-运动：
-  硬条件  bpm ∈ [105, 185] 且 bpm_confidence ≥ 1.3，loudness ≥ -12 LUFS
-  得分    = 0.35·norm(loudness, -12..-7)
-          + 0.30·norm(low_ratio, 0.2..0.6)
-          + 0.20·bpmFit(bpm, 中心 130)
-          + 0.15·norm(onset_rate, 2.5..4.5)
-安静：
-  硬条件  loudness ≤ -14 LUFS
-  得分    = 0.50·norm(-loudness, 14..26)
-          + 0.25·norm(-low_ratio, -0.35..-0.05)
-          + 0.25·norm(-centroid_hz, -1600..-700)
-判定：满足硬条件且得分 ≥ 阈值（宽松 0.50 / 标准 0.60 / 严格 0.70）；两个都满足时取得分高的
+人声：vocal_score ≥ -2.3 → 人声，否则纯音乐（总有一个）
+曲风：classical_score ≥ 0.5 → 古典；≤ -0.5 → 流行；之间 → 都不是
+氛围：sport = ln(energy + 0.003) - ln(calm + 0.003)
+      quiet = ln(calm + 0.01) - ln(energy + 0.01)
+      sport ≥ 3.25 → 运动
+      否则 quiet ≥ 0.2 且 orchestra ≤ 0.1 → 安静
+      否则都不是
+灵敏度（只影响氛围）：运动阈值 宽松 2.75 / 标准 3.25 / 严格 3.75；安静阈值 0.0 / 0.2 / 0.5
 ```
 
-校准中的发现（与 v1 的差异）：
+- 人声阈值有很大余量：校准集里纯音乐的 `vocal_score` 最高 −2.83，人声最低 −1.72，−2.3 取在中间。只用"真正的人声类"，不把流行曲风当作人声证据，否则纯音乐的电子 / 流行会被误判成人声
+- 曲风的"都不是"区间判断得不准：爵士钢琴三重奏、电影配乐在模型看来也很"古典"（乐器类得分高）。所以"古典"实际含义是"听起来像古典"；这点写进了需求 M-1
+- 安静：激昂的古典（序曲、快板）和慢板在"舒缓 / 动感"上很接近（都没有鼓），区别在于前者 Orchestra 得分高、几乎没有 Tender / Sad；加上 `orchestra ≤ 0.1` 后排除了大部分
+- 规则只依赖单首歌自己的得分，不依赖整个曲库的分布，新增歌曲不会改变已有歌曲的标签
+- 还没用模型重新分析的歌（`analyzer_version` < 3，模型得分为 null）：氛围用旧的手工特征规则（`LegacyMoodClassifier`），人声和曲风为空。升级后在重新分析完成之前，"运动 / 安静"筛选不会突然变空
 
-- **起音密度区分度很差**：流行和古典都在 3–4.8 次/秒（弦乐的揉弦、钢琴的连奏也会产生大量频谱通量峰），所以只给很小的权重
-- **低频占比区分度最好**：古典 0–0.2，流行 0.2–0.7（鼓和贝斯）
-- 响度：现代流行 −7 ~ −12 LUFS，古典 −17 ~ −33 LUFS
-- 嘻哈、R&B 的节奏常被检测成两倍（87 → 174 BPM）；对运动标签影响不大，这类歌本身也偏有动感
-- 结果：运动 16 首（舞曲、快节奏流行），安静 20 首（安静的古典），其余 73 首两个都不是
+### 6.5 数据（track_tag、tag_override）
 
-**校准方法**：`tools/calibration-pcm.sh <音乐目录>` 用 ffmpeg 按与 App 相同的方式（30% / 50% / 70% 处各 10 秒、单声道 11025Hz）导出 PCM，然后运行 `./gradlew :app:testDebugUnitTest --tests "*MoodCalibration*"`，在 JVM 上直接用 App 的 `FeatureExtractor` 和分类器生成 `build/calibration/report.tsv`，几秒钟就能看到调整阈值的效果。模拟器上的实际分析结果与 PC 校准一致（109 首中 106 首相同，响度平均相差 0.6dB）。
+- `track_tag(track_key, dimension, value, source)`，主键 (track_key, dimension)，索引 (dimension, value)。dimension 为 MOOD / VOICE / GENRE，value 为 SPORT、QUIET、VOCAL、INSTRUMENTAL、CLASSICAL、POP，source 为 AUTO / MANUAL。筛选和计数都直接查这张表（§5.5）
+- `tag_override(track_key, dimension, value)`：手动修正，value 为 null 表示"这个维度都不是"
+- 数据库 4 → 5（`MIGRATION_4_5`）：`track_features` 增加 5 个得分列；`track_mood` / `mood_override` 的数据迁移到新表（dimension = MOOD）后删除。`MigrationTest` 用 `app/schemas/` 中的 v4 结构建库、写入数据、迁移并由 Room 校验结构
+- 全部重算（`recomputeAll`）：1 万首规模下只要几十毫秒，所以分析结果、手动修正或灵敏度变化后直接全部重算
 
-**下混**：解码时多声道下混除以 √声道数（功率守恒），与 BS.1770 "各声道功率之和"的响度一致（ffmpeg 也这样下混）。最初按 (L+R)/2 平均，响度偏低约 3dB，已在分析器 v2 中修正。
+### 6.6 校准方法和结果
 
-**已知问题**：极少数文件系统的 `MediaExtractor` 无法识别（实测 1604 个文件中有 1 个 Ogg Vorbis），分析失败后标记为 `failed`，不再重试；ExoPlayer 有自己的解析器，播放不受影响；这类歌可以在菜单里手动标记。
+校准集：作者曲库中挑出的 109 首（`tools/pick_library_sample.py`，流行、古典、民谣、配乐混合，周深的歌较多）。人工标注在 `tools/calibration/labels.tsv`：人声 / 纯音乐和古典 / 流行比较客观；运动 / 安静带主观性，只把明显的标为运动或安静，介于中间的标为"都不是"，拿不准的标为"?"不参与评估。
 
-- 规则都基于绝对量，不依赖整个曲库的分布，所以新增歌曲不会改变已有歌曲的标签
-- 调试构建（debug build）提供一个"分析调试"页面，列出每首歌的特征和两个得分，方便校准阈值
-- 以后要换 AI 模型时，实现同一个 `MoodClassifier` 接口即可（模型如果需要原始音频，可以复用 `PcmDecoder`）
+```
+tools/calibration-pcm.sh <音乐目录>          # ffmpeg 按与 App 相同的方式导出 16kHz PCM
+python tools/calibration/yamnet_scores.py app/src/main/assets/yamnet.tflite build/calibration16 build/calibration16/scores.npz
+python tools/calibration/evaluate.py build/calibration16/scores.npz --report
+```
 
-### 6.5 调度与耗电（AnalysisScheduler）
+`evaluate.py` 用与 App 相同的类别分组和阈值，逐首打印得分、预测和错误，以及三个维度的准确度。调阈值时先在这里试，再同步到 `TagClassifier`。
+
+| 维度 | 准确度 | 错误的歌 |
+|---|---|---|
+| 人声 / 纯音乐 | 106 / 106 | — |
+| 古典 / 流行 | 95 / 98 | 小提琴翻奏的流行歌、弦乐编曲的流行抒情歌、周深的歌剧风格现场（都被判为古典） |
+| 运动 / 安静 | 64 / 73（v2 手工特征：42 / 73） | 几首木吉他抒情歌没判为安静；几首慢速的古典（艺术歌曲、长笛奏鸣曲）被判为安静 |
+
+对比过在 521 类分数上训练逻辑回归（留一法交叉验证）：人声 99%、古典 / 流行 97%，并不比上面的规则好，而规则更容易理解和调整，所以用规则。
+
+**模拟器与 PC 的一致性**：模拟器上用系统解码器的分析结果，和 PC 上用 ffmpeg 导出的结果对比：纯音乐 33 / 33、古典 41 / 41 首完全一致；人声和流行各少 1 首（那首 Ogg 系统解码器打不开）；运动 6 / 5、安静 36 / 40 首（几首歌的得分正好在阈值附近，两种解码器的细微差异会改变结果）。
+
+**已知问题**：极少数文件系统的 `MediaExtractor` 无法识别（实测 1604 个文件中有 1 个 Ogg Vorbis），分析失败后标记为 `failed`，不再重试；ExoPlayer 有自己的解析器，播放不受影响；这类歌可以在菜单里手动修正标签。
+
+### 6.7 调度与耗电（AnalysisScheduler）
 
 - 唯一任务名 `mood-analysis`，使用 `ExistingWorkPolicy.KEEP`
 - 约束条件：默认 `requiresCharging + batteryNotLow`；设置为"随时"时只保留 `batteryNotLow`
 - 每次运行最多处理 300 首或 8 分钟，到达上限后提交一个新任务接着做，避免超出 WorkManager 的单次执行时限；被系统停止时（`isStopped`）立即保存进度并退出
 - 触发时机：扫描发现新歌或歌曲有变化时；`analyzer_version` 升级后；用户点击"立即分析"
-- 解码和计算在 `THREAD_PRIORITY_BACKGROUND` 线程中进行；正在播放时并发度降为 1
-- 粗略估算：每首解码 30 秒音频加计算约 0.3–0.5s，1 万首约 1–1.5 小时，在充电时完成
+- 解码和计算在 `THREAD_PRIORITY_BACKGROUND` 线程中进行
 
 ## 7. 播放层
 
@@ -871,8 +892,8 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 | 层次 | 内容 |
 |---|---|
 | 单元测试（JVM） | `ArtistSplitter`、`FileNameInferrer`、album_key 计算、`CueParser`（GBK 编码、INDEX 00/01、分轨 CUE）、CUE 与音频文件配对规则、备份导出与恢复映射（相对路径、后缀匹配）、`LrcParser`、`CharsetDetector`、SAF documentId → volume/relative_path 转换、文件夹树折叠、自然排序比较器 |
-| 音频分析测试（JVM） | 用合成信号验证 `FeatureExtractor`：128 BPM 的节拍器音轨 → bpm ≈ 128；-23 LUFS 的粉红噪声 → loudness ≈ -23；纯低频正弦 → low_ratio ≈ 1。`RuleBasedMoodClassifier` 用特征样本做表驱动测试 |
-| Room 测试 | DAO 查询（艺术家列表、文件夹统计、track_mood 物化、孤儿清理）、迁移测试 |
+| 音频分析测试（JVM） | 用合成信号验证 `FeatureExtractor`：128 BPM 的节拍器音轨 → bpm ≈ 128；-23 LUFS 的粉红噪声 → loudness ≈ -23；纯低频正弦 → low_ratio ≈ 1。`TagClassifier` 用校准集中真实歌曲的模型得分做表驱动测试；`MigrationTest` 验证数据库迁移 |
+| Room 测试 | DAO 查询（艺术家列表、文件夹统计、track_tag 筛选计数、孤儿清理）、迁移测试（4 → 5） |
 | 仪器测试 | 扫描器在真实 MediaStore 上的冒烟测试；播放服务的启动、通知、恢复；`PcmDecoder` 对各种格式的解码 |
 | 性能测试 | Macrobenchmark：冷启动 / 温启动耗时、歌曲列表滚动掉帧率（`FrameTimingMetric`） |
 | 测试素材 | `testdata/` 下放一套小型合成音频（静音或合成片段，加各种标签：GBK 乱码、多值、feat.、无标签、内嵌歌词、24-bit FLAC），用于回归测试 |

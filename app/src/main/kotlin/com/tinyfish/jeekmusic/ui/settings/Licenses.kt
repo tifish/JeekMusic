@@ -25,6 +25,8 @@ private val LICENSES = listOf(
     "Reorderable (Calvin Liang)" to "Apache-2.0",
     "Kyant0/taglib" to "Apache-2.0",
     "TagLib" to "LGPL-2.1 / MPL-1.1",
+    "LiteRT (TensorFlow Lite)" to "Apache-2.0",
+    "YAMNet audio event classifier (Google, AudioSet)" to "Apache-2.0",
     "LRCLIB (lrclib.net)" to "Online lyrics database, used only when online lyrics are turned on",
 )
 

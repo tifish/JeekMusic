@@ -27,6 +27,9 @@ android {
         versionCode = gitCommitCount
         versionName = "1.0.$gitCommitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 只打包 64 位 ARM（手机）和 x86_64（模拟器）：LiteRT 和 TagLib 的原生库每种架构几 MB，
+        // Android 12+ 的手机几乎都是 64 位
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     // 正式签名：本地从 keystore.properties 读取（不提交到仓库），CI 从环境变量读取（GitHub Secrets）。
@@ -70,8 +73,15 @@ android {
     }
 
     // 生成 localeConfig：Android 13+ 可以在系统设置里单独设置 JeekMusic 的语言
+    // 原生库（LiteRT、TagLib）压缩打包：安装包小很多（GitHub 下载和自动更新更快），代价是安装时解压一次
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     androidResources {
         generateLocaleConfig = true
+        // 模型文件不压缩，才能直接内存映射给 LiteRT（docs/design.md §6.3）
+        noCompress += "tflite"
     }
 }
 
@@ -99,6 +109,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.taglib)
+    implementation(libs.litert)
+    // room-testing（迁移测试）需要较新的 kotlinx-serialization；设备测试和 App 共用同一份依赖，所以在这里统一版本
+    implementation(platform(libs.kotlinx.serialization.bom))
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.datastore.preferences)

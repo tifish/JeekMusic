@@ -11,6 +11,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.tinyfish.jeekmusic.analysis.Sensitivity
+import com.tinyfish.jeekmusic.analysis.Tag
+import com.tinyfish.jeekmusic.analysis.TagDimension
 import com.tinyfish.jeekmusic.data.scanner.ArtistSplitConfig
 import com.tinyfish.jeekmusic.data.scanner.FileNameFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,8 +43,27 @@ data class ScanConfig(
     val legacyCharset: Charset? = null,
 )
 
-/** 全局的"运动 / 安静"筛选（需求 M-6）；[mood] 对应 track_mood.mood，ALL 为 null。 */
-enum class MoodFilter(val mood: String?) { ALL(null), SPORT("SPORT"), QUIET("QUIET") }
+/** 全局的智能标签筛选（需求 M-6）：每个维度不选或选一个，多个维度同时满足。 */
+data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null) {
+    val active: List<Tag> get() = listOfNotNull(mood, voice, genre)
+    val isActive: Boolean get() = active.isNotEmpty()
+
+    operator fun get(dimension: TagDimension): Tag? = when (dimension) {
+        TagDimension.MOOD -> mood
+        TagDimension.VOICE -> voice
+        TagDimension.GENRE -> genre
+    }
+
+    /** 点一下选中，再点一下取消。 */
+    fun toggle(tag: Tag): TagFilter {
+        val value = if (this[tag.dimension] == tag) null else tag
+        return when (tag.dimension) {
+            TagDimension.MOOD -> copy(mood = value)
+            TagDimension.VOICE -> copy(voice = value)
+            TagDimension.GENRE -> copy(genre = value)
+        }
+    }
+}
 
 /** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
 data class SleepPrefs(
@@ -63,7 +84,7 @@ data class Settings(
     val autoFetchLyricsOnWifi: Boolean = false,
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
     val sleep: SleepPrefs = SleepPrefs(),
-    val moodFilter: MoodFilter = MoodFilter.ALL,
+    val tagFilter: TagFilter = TagFilter(),
     /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheck: Long = 0,
@@ -96,7 +117,11 @@ class SettingsRepository @Inject constructor(
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
+        /** 旧版本只有"运动 / 安静"筛选时的键，读取时兼容。 */
         val MOOD_FILTER = stringPreferencesKey("mood_filter")
+        val FILTER_MOOD = stringPreferencesKey("filter_mood")
+        val FILTER_VOICE = stringPreferencesKey("filter_voice")
+        val FILTER_GENRE = stringPreferencesKey("filter_genre")
         val AUTO_UPDATE = booleanPreferencesKey("auto_update_check")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
         val SKIPPED_UPDATE = intPreferencesKey("skipped_update_version")
@@ -135,7 +160,13 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setTabLayoutVersion(version: Int) = context.dataStore.edit { it[Keys.TAB_LAYOUT_VERSION] = version }
 
-    suspend fun setMoodFilter(filter: MoodFilter) = context.dataStore.edit { it[Keys.MOOD_FILTER] = filter.name }
+    suspend fun setTagFilter(filter: TagFilter) = context.dataStore.edit { prefs ->
+        prefs.remove(Keys.MOOD_FILTER)
+        fun put(key: Preferences.Key<String>, tag: Tag?) = if (tag == null) prefs[key] = "" else prefs[key] = tag.name
+        put(Keys.FILTER_MOOD, filter.mood)
+        put(Keys.FILTER_VOICE, filter.voice)
+        put(Keys.FILTER_GENRE, filter.genre)
+    }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -171,7 +202,11 @@ class SettingsRepository @Inject constructor(
             customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,
             songCount = this[Keys.SLEEP_SONG_COUNT] ?: 3,
         ),
-        moodFilter = this[Keys.MOOD_FILTER]?.let { runCatching { MoodFilter.valueOf(it) }.getOrNull() } ?: MoodFilter.ALL,
+        tagFilter = TagFilter(
+            mood = Tag.of(TagDimension.MOOD, this[Keys.FILTER_MOOD] ?: this[Keys.MOOD_FILTER]),
+            voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
+            genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
+        ),
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,

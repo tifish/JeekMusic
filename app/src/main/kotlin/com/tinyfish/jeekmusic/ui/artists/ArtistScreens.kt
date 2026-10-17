@@ -1,7 +1,7 @@
 package com.tinyfish.jeekmusic.ui.artists
 
-import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
+import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.AnimatedVisibility
@@ -94,8 +94,8 @@ fun artistName(artist: ArtistEntity): String =
 data class ArtistSection(val letter: String, val artists: List<ArtistEntity>)
 
 @HiltViewModel
-class ArtistListViewModel @Inject constructor(library: LibraryRepository, moodFilters: MoodFilterRepository) : ViewModel() {
-    val filter: StateFlow<MoodFilter> = moodFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MoodFilter.ALL)
+class ArtistListViewModel @Inject constructor(library: LibraryRepository, tagFilters: TagFilterRepository) : ViewModel() {
+    val filter: StateFlow<TagFilter> = tagFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, TagFilter())
 
     /** 按字母分组，A–Z 在前、"#" 在最后（需求 A-1）。 */
     val sections: StateFlow<List<ArtistSection>?> = library.artists.map { artists ->
@@ -115,7 +115,7 @@ fun ArtistListScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val data = sections ?: return
     if (data.isEmpty()) {
-        if (filter != MoodFilter.ALL) FilterEmptyMessage(filter) else CenteredMessage(stringResource(R.string.empty_library_title))
+        if (filter.isActive) FilterEmptyMessage(filter) else CenteredMessage(stringResource(R.string.empty_library_title))
         return
     }
     val listState = rememberLazyListState()

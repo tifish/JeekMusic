@@ -11,8 +11,8 @@ import java.nio.ByteOrder
 import javax.inject.Inject
 
 /**
- * 解码用于分析的 PCM（docs/design.md §6.2）：用系统解码器解码几个片段，下混为单声道、抽取到 11025Hz。
- * 只用于分析，与播放无关。
+ * 解码用于分析的 PCM（docs/design.md §6.2）：用系统解码器解码几个片段，下混为单声道、抽取到 [rate]
+ * （YAMNet 需要 16kHz）。只用于分析，与播放无关。
  */
 class PcmDecoder @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -33,10 +33,10 @@ class PcmDecoder @Inject constructor(
      * 有些文件在 MediaExtractor 中跳转不可靠（实测某个 Ogg Vorbis 跳转后直接越过了窗口），
      * 按窗口解码得不到数据时，退回到不跳转、从头解码 30 秒。
      */
-    fun decode(uri: Uri, windowsMs: List<LongRange>): FloatArray? =
-        decodeWindows(uri, windowsMs) ?: decodeWindows(uri, listOf(0L until 30_000L), seek = false)
+    fun decode(uri: Uri, windowsMs: List<LongRange>, rate: Int = AudioTagger.SAMPLE_RATE): FloatArray? =
+        decodeWindows(uri, windowsMs, rate) ?: decodeWindows(uri, listOf(0L until 30_000L), rate, seek = false)
 
-    private fun decodeWindows(uri: Uri, windowsMs: List<LongRange>, seek: Boolean = true): FloatArray? = runCatching {
+    private fun decodeWindows(uri: Uri, windowsMs: List<LongRange>, rate: Int, seek: Boolean = true): FloatArray? = runCatching {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, uri, null)
@@ -50,7 +50,7 @@ class PcmDecoder @Inject constructor(
                 codec.configure(format, null, null, 0)
                 codec.start()
                 val out = FloatList()
-                for (window in windowsMs) decodeWindow(extractor, codec, window, out, seek)
+                for (window in windowsMs) decodeWindow(extractor, codec, window, rate, out, seek)
                 out.toArray().takeIf { it.isNotEmpty() }
             } finally {
                 codec.release()
@@ -60,7 +60,7 @@ class PcmDecoder @Inject constructor(
         }
     }.getOrNull()
 
-    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, out: FloatList, seek: Boolean) {
+    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, rate: Int, out: FloatList, seek: Boolean) {
         val startUs = window.first * 1000
         val endUs = (window.last + 1) * 1000
         if (seek) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
@@ -103,7 +103,7 @@ class PcmDecoder @Inject constructor(
             }
         }
         val sourceRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        resample(mono.toArray(), sourceRate, out)
+        downsample(mono.toArray(), sourceRate, rate).forEach(out::add)
     }
 
     private fun appendMono(buffer: java.nio.ByteBuffer, format: MediaFormat, out: FloatList) {
@@ -128,23 +128,6 @@ class PcmDecoder @Inject constructor(
         }
     }
 
-    /** 抽取到 11025Hz：每个输出样本取对应区间的平均值（简单的盒式低通，足够用于统计特征）。 */
-    private fun resample(input: FloatArray, sourceRate: Int, out: FloatList) {
-        val target = FeatureExtractor.SAMPLE_RATE
-        if (sourceRate == target) {
-            input.forEach(out::add)
-            return
-        }
-        val ratio = sourceRate.toDouble() / target
-        val count = (input.size / ratio).toInt()
-        for (i in 0 until count) {
-            val from = (i * ratio).toInt()
-            val to = minOf(input.size, ((i + 1) * ratio).toInt().coerceAtLeast(from + 1))
-            var sum = 0f
-            for (j in from until to) sum += input[j]
-            out.add(sum / (to - from))
-        }
-    }
 
     /** 不装箱的可增长 float 数组。 */
     private class FloatList {
@@ -159,7 +142,24 @@ class PcmDecoder @Inject constructor(
         fun toArray(): FloatArray = data.copyOf(size)
     }
 
-    private companion object {
-        const val TIMEOUT_US = 10_000L
+    companion object {
+        private const val TIMEOUT_US = 10_000L
+
+        /**
+         * 抽取到 [target]：每个输出样本取对应区间的平均值（简单的盒式低通）。
+         * 对统计特征和 YAMNet 的分类都够用；目标采样率不低于源时原样返回。
+         */
+        fun downsample(input: FloatArray, sourceRate: Int, target: Int): FloatArray {
+            if (sourceRate <= target) return input
+            val ratio = sourceRate.toDouble() / target
+            val count = (input.size / ratio).toInt()
+            return FloatArray(count) { i ->
+                val from = (i * ratio).toInt()
+                val to = minOf(input.size, ((i + 1) * ratio).toInt().coerceAtLeast(from + 1))
+                var sum = 0f
+                for (j in from until to) sum += input[j]
+                sum / (to - from)
+            }
+        }
     }
 }

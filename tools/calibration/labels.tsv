@@ -1,0 +1,113 @@
+# 智能标签校准集的人工标注（docs/design.md §6.6）。文件名与 build/library-sample 中的歌曲一致（不含扩展名）。
+# voice: V 人声 / I 纯音乐；genre: C 古典 / P 流行 / - 都不是；mood: S 运动 / Q 安静 / - 都不是；? 表示拿不准，不参与评估。
+# 运动 / 安静带有主观性：只把明显的标为 S / Q，介于中间的标为 -。
+name	voice	genre	mood
+André Kostelantez and His Orchestra,Jacques Offenbach - Can Can	I	C	-
+André Rieu,Ravel,Maurice - Boléro	I	C	-
+Anne Akiko Meyers English Chamber Orchestra & Steven Mercurio - “Largo” from Concerto for Harpsichord in F minor, BWV 1056	I	C	Q
+Anne Akiko Meyers,English Chamber Orchestra & Steven Mercurio - Orchestral Suite No. 3 in D major, BWV 1068	I	C	Q
+Anne-Sophie Mutter - Antonio Vivaldi： The Four Seasons, Concerto No. 1 in E (＂Spring＂) RV 269 (Op. 8 No. 1)： 1. Allegro	I	C	-
+Any Other World	V	P	Q
+Ariana Grande,Iggy Azalea - Problem (feat. Iggy Azalea)	V	P	S
+B.o.B Bruno Mars - Nothing On You	V	P	-
+Barbara Bonney,Geoffrey Parsons - Ellens Gesang III D839 'Ave Maria'	V	C	Q
+Barbara Bonney,Geoffrey Parsons - Lieder：Heidenröslein D257	V	C	-
+Bell玲惠,董唧唧 - 曲奇罐	V	P	-
+Blame It On The Girls	V	P	S
+Boyce Avenue,Bea Miller - See You Again	V	P	Q
+Bruno Mars - The Lazy Song	V	P	-
+Chopin Nelson Freire - Nocturne op. 9 no 2 Eb min	I	C	Q
+Chris Brown,Jordin Sparks - No Air	V	P	-
+Emmanuel Pahud Yefim Bronfman - Reinecke Sonata Op. 167 'Undine' 1. Allegro	I	C	-
+English Chamber Orchestra,Jeffrey Tate - Symphony No. 101 in D 'Clock'： II.      Andante	I	C	Q
+F.I.R - 月牙湾	V	P	-
+Franck Chessa,DR,Dmitri Shostakovich - Waltz No. 2	I	C	-
+Gidon Kremer,Martha Argerich,Orpheus Chamber Orchestra - Concerto in D Minor for Violin Piano and Strings. MWV D4：1. Allegro	I	C	-
+Gotye,Kimbra - Somebody That I Used To Know	V	P	-
+Herbert von Karajan,Wiener Philharmoniker - Dvorák： Symphony No.9 in E minor, Op.95  ＂From the New World＂ - 4. Allegro con fuoco	I	C	-
+Herbert von Karajan,Wiener Philharmoniker - Johann Strauss II ： Die Fledermaus - Ouvertüre	I	C	-
+Iver Kleive,Aage Kvalbein - Himlen I Min Favn	I	-	Q
+Jason Mraz&Colbie Caillat - Lucky	V	P	Q
+Jean-Bernard Pommier／Hallé Orchestra／Lawrence Foster - Piano Concerto No. 2 in C minor, Op. 18： I. Moderato	I	C	-
+Johannes Brahms,Jonas Kaufmann - Guten Abend, gut' Nacht, Op. 49, No. 4	V	C	Q
+Johannes Brahms,Wiener Philharmoniker,Claudio Abbado - Hungarian Dance No.1 In G Minor	I	C	-
+Jon Schmidt,Steven Sharp Nelson - Michael Meets Mozart - 1 Piano, 2 Guys, 100 Cello Tracks	I	?	-
+Justin Bieber,卢达克里斯 - Baby	V	P	S
+Justin Timberlake T.I - Dead and Gone	V	P	-
+Justin Timberlake,T.I - Dead and Gone	V	P	-
+Karl Richter,Münchener Bach-Orchester - Concerto No.3 in G major BWV.1048：1. (ohne Satzbezeichnung)	I	C	-
+KiWhale沈川绮,SHARK卫彬月 - 梦境01-绿野默剧	?	?	?
+Lady Gaga - Poker Face	V	P	S
+London Chamber Orchestra,Christopher Warren-Green - Violin Concerto in F Minor, RV 297 ＂L'inverno＂ (No. 4 from ＂Il cimento dell'armonia e dell'inventione＂, Op. 8)： II. Largo	I	C	Q
+Lorien Testard,Alice Duport-Percier - Loin d'Elle	V	-	Q
+Lorien Testard,Alice Duport-Percier - Lumière	V	-	Q
+Lucia Micarelli,Chris Botti - Emmanuel	I	-	Q
+MT1990,小猪迷糊糊 - Once A Girl Likes U	?	?	?
+Madilyn Bailey Flula - Rude	V	P	-
+Natalie Dessay,Berliner Symphoniker,Michael Schønwandt - Vocalise, Op.43／No.4	V	C	Q
+Ophélie Gaillard,Royal Philharmonic Orchestra,Tim Redmond - Gyménopédie N°1	I	C	Q
+Ophélie Gaillard,Tim Redmond,Royal Philharmonic Orchestra - La fille aux cheveux de lin	I	C	Q
+Panta.Q,周深 - 对不起	V	P	-
+Poker Face	V	P	S
+Rachmaninov,许斐平 - 帕格尼尼主题狂想曲·作品43号	I	C	-
+Raphaël Beau - Larrons En Foire	?	?	?
+Renaud Capuçon Jerome Ducros - 6 Lieder Op. 34： Auf Flügeln des Gesanges (Heine)	I	C	Q
+Rihanna,Eminem - Love The Way You Lie (Part II)	V	P	-
+Sarah Connor - Just One Last Dance	V	P	-
+Sergiù Celibidache Münchner Philharmoniker - Die Fledermaus - Overture (2004 Digital Remaster)	I	C	-
+Sir Georg Solti,Chamber Orchestra of Europe - Symphony No.41 in C, K.551 - ＂Jupiter＂：4. Molto allegro	I	C	-
+Strictlyviolin荀博,王朝 - 无感	I	P	-
+The State Academic Symphony Orchestra,Evgeny Svetlanov - The Seasons, 12 characteristic pieces, Op. 37a： 6. June, Barcarolle	I	C	Q
+Tord Gustavsen,Harald Johnsen,Jarle Vespestad - Where Breathing Starts	I	-	Q
+Vladimir Ashkenazy,The London Symphony Orchestra,David Zinman - Bach - Concerto No.1, I. Allegro	I	C	-
+Vladimir Horowitz Orchestra del Teatro alla Scala di Milano Carlo Maria Giulini - Mozart： Piano Concerto No.23 in A, K.488 - 2. Adagio	I	C	Q
+Yo-Yo Ma,Seiji Ozawa,Itzhak Perlman - Humoresque No. 7 in G flat major, Op. 101	I	C	Q
+You Fckn Did It (Live)	V	P	?
+ZHANGYE,周深 - Heart Of Peace	V	?	?
+信乐团 - 离歌	V	P	-
+卓文萱,曹格 - 梁山伯与茱丽叶	V	P	-
+叶子	V	P	Q
+周杰伦 - 东风破	V	P	-
+周杰伦 - 青花瓷	V	P	-
+周深 - Monsters (Live)	V	P	?
+周深 - Rubia	V	P	Q
+周深 - 传家	V	P	?
+周深 - 你的样子	V	P	?
+周深 - 修星星的人	V	P	?
+周深 - 借过一下	V	P	?
+周深 - 化身孤岛的鲸	V	P	?
+周深 - 听无声处	V	P	?
+周深 - 四大名著 (Live)	V	P	?
+周深 - 天堂岛之歌	V	P	?
+周深 - 心世界	V	P	?
+周深 - 悬崖之上	V	P	?
+周深 - 我的对	V	P	?
+周深 - 星鱼	V	P	?
+周深 - 没关系 (Live)	V	P	?
+周深 - 浮生若梦	V	P	?
+周深 - 漫漫	V	P	?
+周深 - 灯火里的中国（国家大剧院合唱）	V	?	?
+周深 - 热烈盛开	V	P	?
+周深 - 璀璨冒险人 (Live)	V	P	?
+周深 - 等晴天	V	P	?
+周深 - 耀眼的我们	V	P	?
+周深 - 自己按门铃自己听 (Live)	V	P	?
+周深 - 选择	V	P	?
+周深 - 风吹过的晨曦	V	P	?
+周深 - 风起流年	V	P	?
+周深,TerryZhong钟天利 - 春雪	V	P	?
+孙燕姿 - 难得一见	V	P	-
+宇多田ヒカル - Apple_And_Cinnamon	V	P	-
+小娟&山谷里的居民 - 往事随风	V	P	Q
+尚雯婕 - 最终信仰	V	P	?
+张惠妹,艾怡良,徐佳莹 - 傲娇	V	P	-
+张震岳,蔡健雅 - 思念是一种病	V	P	-
+我歌且谣,漠老师 - 痴梦李贺	V	P	?
+最终信仰	V	P	?
+李宗盛,林忆莲 - 当爱已成往事	V	P	Q
+杨宗纬&李泉 - 我要我们在一起(Live)	V	P	?
+杨宗纬,叶蓓 - 我们好像在哪见过	V	P	Q
+梁静茹 - 爱情之所以为爱情	V	P	-
+薛明媛 - 飘雪	V	P	Q
+郎朗,Johann Sebastian Bach - The Well-Tempered Clavier I, Prelude & Fugue No. 1 in C Major, BWV 846：I. Prelude	I	C	Q
+黄龄 - 小雨	V	P	?

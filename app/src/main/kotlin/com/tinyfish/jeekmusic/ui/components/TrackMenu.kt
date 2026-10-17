@@ -1,5 +1,10 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,9 +48,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.R
-import com.tinyfish.jeekmusic.analysis.Mood
-import com.tinyfish.jeekmusic.analysis.MoodInfo
-import com.tinyfish.jeekmusic.analysis.MoodRepository
+import com.tinyfish.jeekmusic.analysis.Tag
+import com.tinyfish.jeekmusic.analysis.TagDimension
+import com.tinyfish.jeekmusic.analysis.TagClassifier
+import com.tinyfish.jeekmusic.analysis.modelScores
+import com.tinyfish.jeekmusic.analysis.TagInfo
+import com.tinyfish.jeekmusic.analysis.TagRepository
 import com.tinyfish.jeekmusic.data.db.ArtistEntity
 import com.tinyfish.jeekmusic.data.db.FolderDao
 import com.tinyfish.jeekmusic.data.db.PlaylistEntity
@@ -78,17 +86,16 @@ class TrackMenuViewModel @Inject constructor(
     private val folderDao: FolderDao,
     private val trackDao: TrackDao,
     private val messages: MessageBus,
-    private val moods: MoodRepository,
+    private val tags: TagRepository,
 ) : ViewModel() {
 
-    suspend fun moodInfo(track: TrackEntity): MoodInfo = moods.info(track.trackKey)
+    suspend fun tagInfo(track: TrackEntity): TagInfo = tags.info(track.trackKey)
 
-    fun scores(info: MoodInfo): Map<Mood, Double?>? = info.features?.takeIf { !it.failed }?.let(moods::scores)
+    /** 手动修正（需求 M-4）：[tag] 为 null 表示"都不是"。 */
+    suspend fun setTag(track: TrackEntity, dimension: TagDimension, tag: Tag?) = tags.setManual(track.trackKey, dimension, tag)
 
-    /** 手动修正（需求 M-4）。 */
-    fun setMood(track: TrackEntity, mood: Mood?) = viewModelScope.launch { moods.setManual(track.trackKey, mood) }
-
-    fun resetMood(track: TrackEntity) = viewModelScope.launch { moods.clearManual(track.trackKey) }
+    /** 恢复自动识别。 */
+    suspend fun resetTag(track: TrackEntity, dimension: TagDimension) = tags.clearManual(track.trackKey, dimension)
 
     private val _track = MutableStateFlow<TrackEntity?>(null)
     val track = _track.asStateFlow()
@@ -135,6 +142,7 @@ private sealed interface MenuDialog {
     data object Playlist : MenuDialog
     data class Artists(val artists: List<ArtistEntity>) : MenuDialog
     data object Info : MenuDialog
+    data object Tags : MenuDialog
 }
 
 /**
@@ -199,7 +207,7 @@ fun TrackMenuHost(
                         }
                     }
                 }
-                MoodItems(viewModel, current)
+                MenuItem(R.drawable.ic_bolt, R.string.menu_edit_tags) { dialogTrack = current; dialog = MenuDialog.Tags; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
             }
         }
@@ -225,6 +233,7 @@ fun TrackMenuHost(
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.cancel)) } },
         )
         MenuDialog.Info -> if (target != null) SongInfoDialog(target, viewModel) { dialog = null }
+        MenuDialog.Tags -> if (target != null) TagEditDialog(target, viewModel) { dialog = null }
         null -> Unit
     }
 }
@@ -245,7 +254,7 @@ private fun MenuItem(icon: Int, label: Int, onClick: () -> Unit) {
 private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntity, onDismiss: () -> Unit) {
     var lists by remember { mutableStateOf<List<PlaylistEntity>?>(null) }
     var newName by remember { mutableStateOf("") }
-    androidx.compose.runtime.LaunchedEffect(Unit) { lists = viewModel.playlists() }
+    LaunchedEffect(Unit) { lists = viewModel.playlists() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.menu_add_to_playlist)) },
@@ -277,23 +286,62 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
     )
 }
 
-/** "标为运动 / 标为安静 / 不属于智能标签 / 恢复自动识别"（需求 M-4）。 */
+/**
+ * 修正智能标签（需求 M-4）：三个维度各一行，"自动"表示用识别结果（括号里是识别出的标签），
+ * 其余选项是手动指定；手动结果优先，重新扫描或重新分析后依然保留。
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MoodItems(viewModel: TrackMenuViewModel, track: TrackEntity) {
-    var info by remember(track.id) { mutableStateOf<MoodInfo?>(null) }
-    androidx.compose.runtime.LaunchedEffect(track.id) { info = viewModel.moodInfo(track) }
-    val current = info ?: return
-    if (current.mood != Mood.SPORT) MenuItem(R.drawable.ic_bolt, R.string.menu_mark_sport) { viewModel.setMood(track, Mood.SPORT); viewModel.dismiss() }
-    if (current.mood != Mood.QUIET) MenuItem(R.drawable.ic_bedtime, R.string.menu_mark_quiet) { viewModel.setMood(track, Mood.QUIET); viewModel.dismiss() }
-    if (current.mood != null) MenuItem(R.drawable.ic_close, R.string.menu_mark_none) { viewModel.setMood(track, null); viewModel.dismiss() }
-    if (current.manual) MenuItem(R.drawable.ic_refresh, R.string.menu_mark_auto) { viewModel.resetMood(track); viewModel.dismiss() }
+private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var info by remember(track.id) { mutableStateOf<TagInfo?>(null) }
+    LaunchedEffect(track.id) { info = viewModel.tagInfo(track) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.menu_edit_tags)) },
+        text = {
+            val current = info ?: return@AlertDialog
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                TagDimension.entries.forEach { dimension ->
+                    val manual = dimension in current.manual
+                    val auto = current.auto[dimension]
+                    Text(dimensionLabel(dimension), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        fun apply(block: suspend () -> Unit) = scope.launch { block(); info = viewModel.tagInfo(track) }
+                        FilterChip(
+                            selected = !manual,
+                            onClick = { apply { viewModel.resetTag(track, dimension) } },
+                            label = { Text(stringResource(R.string.tag_auto, auto?.let { tagLabel(it) } ?: stringResource(R.string.tag_none))) },
+                        )
+                        Tag.of(dimension).forEach { tag ->
+                            FilterChip(
+                                selected = manual && current.tags[dimension] == tag,
+                                onClick = { apply { viewModel.setTag(track, dimension, tag) } },
+                                label = { Text(tagLabel(tag)) },
+                            )
+                        }
+                        // 人声 / 纯音乐总有一个，不提供"都不是"
+                        if (dimension != TagDimension.VOICE) {
+                            FilterChip(
+                                selected = manual && current.tags[dimension] == null,
+                                onClick = { apply { viewModel.setTag(track, dimension, null) } },
+                                label = { Text(stringResource(R.string.tag_none)) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.confirm)) } },
+    )
 }
 
 /** 歌曲信息（需求 U-3、M-7）。 */
 @Composable
 private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) {
-    var mood by remember(track.id) { mutableStateOf<MoodInfo?>(null) }
-    androidx.compose.runtime.LaunchedEffect(track.id) { mood = viewModel.moodInfo(track) }
+    val manualLabel = stringResource(R.string.tag_manual)
+    var tags by remember(track.id) { mutableStateOf<TagInfo?>(null) }
+    LaunchedEffect(track.id) { tags = viewModel.tagInfo(track) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(track.title) },
@@ -311,8 +359,15 @@ private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, on
                 if (track.artistInferred) {
                     Text(stringResource(R.string.info_artist_inferred), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
-                mood?.features?.takeIf { !it.failed }?.let { f ->
-                    val scores = mood?.let { viewModel.scores(it) }.orEmpty()
+                tags?.let { t ->
+                    // 智能标签：最终结果，手动修正的标注出来（需求 M-7）
+                    val labels = TagDimension.entries.map { d ->
+                        (t.tags[d]?.let { tagLabel(it) } ?: "–") + if (d in t.manual) "（$manualLabel）" else ""
+                    }
+                    InfoRow(R.string.info_tags, labels.joinToString(" · "))
+                }
+                tags?.features?.takeIf { !it.failed }?.let { f ->
+                    val m = f.modelScores()
                     InfoRow(
                         R.string.info_analysis,
                         listOfNotNull(
@@ -322,7 +377,13 @@ private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, on
                             "%.1f onsets/s".format(f.onsetRate),
                             "%.0f Hz".format(f.centroidHz),
                             "low %.0f%%".format(f.lowRatio * 100),
-                        ).joinToString(" · ") + "\n" + scores.entries.joinToString(" · ") { (m, s) -> "$m ${s?.let { "%.2f".format(it) } ?: "–"}" },
+                        ).joinToString(" · ") + (
+                            m?.let {
+                                "\nvocal %.2f · classical %.2f · sport %.2f · quiet %.2f · orchestra %.2f".format(
+                                    it.vocal, it.classical, TagClassifier.sportScore(it), TagClassifier.quietScore(it), it.orchestra,
+                                )
+                            } ?: ""
+                        ),
                     )
                 }
             }

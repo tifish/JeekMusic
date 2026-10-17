@@ -1,9 +1,10 @@
 package com.tinyfish.jeekmusic.ui.main
 
 import com.tinyfish.jeekmusic.update.AppUpdater
-import com.tinyfish.jeekmusic.analysis.MoodRepository
-import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.analysis.Tag
+import com.tinyfish.jeekmusic.analysis.TagRepository
+import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
+import com.tinyfish.jeekmusic.data.settings.TagFilter
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.getValue
@@ -51,19 +52,21 @@ class MainViewModel @Inject constructor(
     private val player: PlayerConnection,
     private val backups: BackupManager,
     private val analysis: AnalysisScheduler,
-    private val moodFilters: MoodFilterRepository,
-    private val moods: MoodRepository,
+    private val tagFilters: TagFilterRepository,
+    private val tags: TagRepository,
     private val updater: AppUpdater,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
 
-    /** 全局的"运动 / 安静"筛选（需求 M-6）。 */
-    val moodFilter: StateFlow<MoodFilter> = moodFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MoodFilter.ALL)
+    /** 全局的智能标签筛选（需求 M-6）。 */
+    val tagFilter: StateFlow<TagFilter> = tagFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, TagFilter())
 
     /** 还没分析的歌曲数；只在筛选菜单打开时订阅，避免启动时查询。 */
-    val pendingAnalysis: StateFlow<Int> = moods.pendingCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val pendingAnalysis: StateFlow<Int> = tags.pendingCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    fun setMoodFilter(filter: MoodFilter) = viewModelScope.launch { moodFilters.set(filter) }
+    fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
+
+    fun clearFilter() = viewModelScope.launch { tagFilters.set(TagFilter()) }
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 

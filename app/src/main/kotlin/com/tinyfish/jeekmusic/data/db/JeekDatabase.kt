@@ -24,10 +24,10 @@ import javax.inject.Singleton
         LyricsOffsetEntity::class,
         LyricsCacheEntity::class,
         TrackFeaturesEntity::class,
-        MoodOverrideEntity::class,
-        TrackMoodEntity::class,
+        TagOverrideEntity::class,
+        TrackTagEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class JeekDatabase : RoomDatabase() {
@@ -39,7 +39,7 @@ abstract class JeekDatabase : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun searchDao(): SearchDao
     abstract fun lyricsDao(): LyricsDao
-    abstract fun moodDao(): MoodDao
+    abstract fun tagDao(): TagDao
 }
 
 @Module
@@ -52,6 +52,7 @@ object DatabaseModule {
         Room.databaseBuilder(context, JeekDatabase::class.java, "jeek.db")
             // 1.0 起数据库结构变化必须提供 Migration（app/schemas/ 中导出了每个版本的结构），
             // 不再直接重建，以免丢失播放列表等用户数据；只有降级时才重建（docs/design.md §3）
+            .addMigrations(MIGRATION_4_5)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 
@@ -80,5 +81,5 @@ object DatabaseModule {
     fun lyricsDao(db: JeekDatabase) = db.lyricsDao()
 
     @Provides
-    fun moodDao(db: JeekDatabase) = db.moodDao()
+    fun tagDao(db: JeekDatabase) = db.tagDao()
 }

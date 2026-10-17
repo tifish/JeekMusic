@@ -12,7 +12,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.tinyfish.jeekmusic.data.db.MoodDao
+import com.tinyfish.jeekmusic.data.db.TagDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.db.TrackFeaturesEntity
 import com.tinyfish.jeekmusic.data.scanner.MediaStoreSource
@@ -38,9 +38,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface Dependencies {
-        fun moodDao(): MoodDao
+        fun tagDao(): TagDao
         fun decoder(): PcmDecoder
-        fun moods(): MoodRepository
+        fun tagger(): AudioTagger
+        fun tags(): TagRepository
         fun scheduler(): AnalysisScheduler
     }
 
@@ -48,15 +49,19 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
         val deps = EntryPointAccessors.fromApplication(applicationContext, Dependencies::class.java)
         val deadline = SystemClock.elapsedRealtime() + MAX_RUN_MS
-        val batch = deps.moodDao().pending(MoodRepository.ANALYZER_VERSION, MAX_TRACKS)
+        val batch = deps.tagDao().pending(TagRepository.ANALYZER_VERSION, MAX_TRACKS)
         var done = 0
-        for (track in batch) {
-            if (isStopped || SystemClock.elapsedRealtime() > deadline) break
-            deps.moodDao().saveFeatures(analyze(deps.decoder(), track))
-            done++
-            if (done % 25 == 0) deps.moods().recomputeAll()
+        try {
+            for (track in batch) {
+                if (isStopped || SystemClock.elapsedRealtime() > deadline) break
+                deps.tagDao().saveFeatures(analyze(deps.decoder(), deps.tagger(), track))
+                done++
+                if (done % 25 == 0) deps.tags().recomputeAll()
+            }
+        } finally {
+            deps.tagger().close()
         }
-        deps.moods().recomputeAll()
+        deps.tags().recomputeAll()
         Log.i(TAG, "analyzed $done tracks")
         // 被系统停止（比如拔掉了充电器）：交给 WorkManager 在条件满足时重试
         if (isStopped) return@withContext Result.retry()
@@ -67,15 +72,19 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         Result.success()
     }
 
-    private fun analyze(decoder: PcmDecoder, track: TrackEntity): TrackFeaturesEntity {
+    private fun analyze(decoder: PcmDecoder, tagger: AudioTagger, track: TrackEntity): TrackFeaturesEntity {
         val signature = "${track.dateModified}:${track.size}"
         val uri = MediaStoreSource.contentUri(track.volumeName, track.mediaStoreId)
-        val pcm = decoder.decode(uri, decoder.windows(track.startMs ?: 0, track.durationMs))
-        val f = pcm?.let { runCatching { FeatureExtractor.extract(it) }.getOrNull() }
+        // 解码一次 16kHz：原样给 YAMNet，再抽取到 11025Hz 给节奏、响度等手工特征
+        val pcm = decoder.decode(uri, decoder.windows(track.startMs ?: 0, track.durationMs), AudioTagger.SAMPLE_RATE)
+        val f = pcm?.let {
+            runCatching { FeatureExtractor.extract(PcmDecoder.downsample(it, AudioTagger.SAMPLE_RATE, FeatureExtractor.SAMPLE_RATE)) }.getOrNull()
+        }
+        val m = pcm?.let { runCatching { tagger.meanScores(it)?.let(AudioTagger::scores) }.onFailure { e -> Log.w(TAG, "model failed", e) }.getOrNull() }
         return TrackFeaturesEntity(
             trackKey = track.trackKey,
             signature = signature,
-            analyzerVersion = MoodRepository.ANALYZER_VERSION,
+            analyzerVersion = TagRepository.ANALYZER_VERSION,
             bpm = f?.bpm,
             bpmConfidence = f?.bpmConfidence ?: 0.0,
             loudness = f?.loudness ?: -70.0,
@@ -84,7 +93,12 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
             centroidHz = f?.centroidHz ?: 0.0,
             lowRatio = f?.lowRatio ?: 0.0,
             analyzedAt = System.currentTimeMillis(),
-            failed = f == null,
+            failed = f == null && m == null,
+            vocalScore = m?.vocal,
+            classicalScore = m?.classical,
+            calmLevel = m?.calm,
+            energyLevel = m?.energy,
+            orchestraLevel = m?.orchestra,
         )
     }
 

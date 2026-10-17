@@ -14,7 +14,7 @@
 - **曲库**：多个音乐文件夹（含 SD 卡）在根一级并列浏览；艺术家按拼音 A–Z 排列，"A/B"、"A feat. B" 自动拆开；没有标签时从文件名推断艺术家；修复 GBK 乱码标签；CUE 整轨自动拆成单曲；常听的艺术家可以固定到标签栏
 - **播放**：不损音质（不重采样、不加音效、24 位不截断）；熄屏低功耗播放（音频 offload）；断点续播；睡眠定时渐弱；播放列表与 m3u 导入导出
 - **歌词**：同目录 .lrc 和内嵌歌词，同步滚动、双语、按首偏移；可选的在线歌词（LRCLIB，默认关闭），保存为 .lrc
-- **智能标签**："运动"和"安静"在手机本地根据节奏、响度、频谱识别，默认只在充电时分析，可以手动修正；标题栏上一键筛选，所有列表都只显示这一类歌
+- **智能标签**：在手机本地用 YAMNet 音频模型识别"运动 / 安静""人声 / 纯音乐""古典 / 流行"，默认只在充电时分析，可以手动修正；标题栏上组合筛选（比如"安静·纯音乐"），所有列表都只显示这类歌
 - **备份**：播放列表、固定标签和设置自动备份到音乐文件夹的 `.jeekmusic/backup.json`，换手机时跟着音乐走
 
 需求与设计见 [docs/requirements.md](docs/requirements.md) 和 [docs/design.md](docs/design.md)。
@@ -49,7 +49,7 @@ keyPassword=...
 | `tools/scan_id3.py` | 统计曲库的 ID3 标签情况 |
 | `tools/ui.sh` | 模拟器 UI 自动化（按文字 / testTag 点击、截图、添加音乐文件夹） |
 | `tools/measure-startup.sh` | 冷启动耗时测量（不依赖 Macrobenchmark，国产 ROM 也能用） |
-| `tools/calibration-pcm.sh` | 智能标签校准：导出 PCM，配合 `MoodCalibrationReport` 在 JVM 上快速调阈值 |
+| `tools/calibration-pcm.sh`、`tools/calibration/` | 智能标签校准：导出 16kHz PCM，在 PC 上跑 YAMNet，用人工标注（`labels.tsv`）评估准确度、调阈值 |
 | `tools/store-screenshots.sh` | 截取应用商店截图 |
 
 ## 许可证

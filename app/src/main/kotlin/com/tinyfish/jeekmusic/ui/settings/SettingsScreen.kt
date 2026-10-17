@@ -57,7 +57,7 @@ import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
-import com.tinyfish.jeekmusic.analysis.MoodRepository
+import com.tinyfish.jeekmusic.analysis.TagRepository
 import com.tinyfish.jeekmusic.analysis.Sensitivity
 import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
@@ -85,7 +85,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val backups: BackupManager,
     private val messages: MessageBus,
-    private val moods: MoodRepository,
+    private val tags: TagRepository,
     private val analysis: AnalysisScheduler,
     private val lyrics: LyricsRepository,
     private val updater: AppUpdater,
@@ -132,7 +132,7 @@ class SettingsViewModel @Inject constructor(
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     fun setLowPower(mode: LowPowerMode) = viewModelScope.launch { settingsRepository.setLowPowerMode(mode) }
 
-    val pendingAnalysis: StateFlow<Int> = moods.pendingCount()
+    val pendingAnalysis: StateFlow<Int> = tags.pendingCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun setAnalysisMode(mode: AnalysisMode) = viewModelScope.launch {
@@ -143,7 +143,7 @@ class SettingsViewModel @Inject constructor(
     /** 调整灵敏度后立即生效，不需要重新分析音频（需求 M-8）。 */
     fun setSensitivity(sensitivity: Sensitivity) = viewModelScope.launch {
         settingsRepository.setSensitivity(sensitivity)
-        moods.recomputeAll()
+        tags.recomputeAll()
     }
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }

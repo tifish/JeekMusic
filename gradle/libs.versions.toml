@@ -12,6 +12,8 @@ lifecycle = "2.11.0"
 composeBom = "2026.09.00"
 media3 = "1.11.1"
 taglib = "1.0.6"
+litert = "2.3.0"
+serialization = "1.11.0"
 room = "2.8.5"
 datastore = "1.2.1"
 navigation3 = "1.2.0"
@@ -63,6 +65,8 @@ hilt-lifecycle-viewmodel-compose = { module = "androidx.hilt:hilt-lifecycle-view
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-guava = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-guava", version.ref = "coroutines" }
 taglib = { module = "io.github.kyant0:taglib", version.ref = "taglib" }
+litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
+kotlinx-serialization-bom = { module = "org.jetbrains.kotlinx:kotlinx-serialization-bom", version.ref = "serialization" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]

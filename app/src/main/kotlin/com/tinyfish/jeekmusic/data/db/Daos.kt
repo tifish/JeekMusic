@@ -50,11 +50,16 @@ interface FolderDao {
 
     @Query(
         """
-        SELECT f.*, (SELECT COUNT(*) FROM track t WHERE t.folder_id = f.id AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))) AS track_count
+        SELECT f.*, (
+            SELECT COUNT(*) FROM track t WHERE t.folder_id = f.id
+            AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
+            AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
+            AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
+        ) AS track_count
         FROM library_folder f ORDER BY f.display_name
         """,
     )
-    fun observeWithCounts(mood: String?): Flow<List<FolderWithCount>>
+    fun observeWithCounts(mood: String?, voice: String?, genre: String?): Flow<List<FolderWithCount>>
 }
 
 @Dao
@@ -90,11 +95,14 @@ interface TrackDao {
     @Query(
         """
         SELECT relative_path, COUNT(*) AS count FROM track t
-        WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\' AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))
+        WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\'
+        AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
+        AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
+        AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
         GROUP BY relative_path
         """,
     )
-    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?): Flow<List<DirectoryCount>>
+    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?, voice: String?, genre: String?): Flow<List<DirectoryCount>>
 
     @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path = :relativePath")
     fun observeInDirectory(folderId: Long, relativePath: String): Flow<List<TrackEntity>>
@@ -143,16 +151,18 @@ interface ArtistDao {
     @Query("SELECT * FROM artist WHERE name_key = :nameKey")
     fun observeByNameKey(nameKey: String): Flow<ArtistEntity?>
 
-    /** 每个艺术家属于某个智能标签的歌曲数；没有这类歌的艺术家不在结果里。 */
+    /** 每个艺术家符合筛选的歌曲数；没有这类歌的艺术家不在结果里。 */
     @Query(
         """
         SELECT ta.artist_id, COUNT(*) AS count FROM track_artist ta
         JOIN track t ON t.id = ta.track_id
-        JOIN track_mood m ON m.track_key = t.track_key
-        WHERE m.mood = :mood GROUP BY ta.artist_id
+        WHERE (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
+        AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
+        AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
+        GROUP BY ta.artist_id
         """,
     )
-    fun observeCounts(mood: String): Flow<List<ArtistCount>>
+    fun observeCounts(mood: String?, voice: String?, genre: String?): Flow<List<ArtistCount>>
 }
 
 @Dao
@@ -300,7 +310,7 @@ interface LyricsDao {
 }
 
 @Dao
-interface MoodDao {
+interface TagDao {
     /** 还没分析、文件变了、或者分析算法升级了的歌曲。 */
     @Query(
         """
@@ -328,27 +338,27 @@ interface MoodDao {
     @Query("SELECT * FROM track_features WHERE track_key = :trackKey")
     suspend fun features(trackKey: String): TrackFeaturesEntity?
 
-    @Query("SELECT * FROM mood_override")
-    suspend fun overrides(): List<MoodOverrideEntity>
+    @Query("SELECT * FROM tag_override")
+    suspend fun overrides(): List<TagOverrideEntity>
 
-    @Query("SELECT * FROM mood_override WHERE track_key = :trackKey")
-    suspend fun override(trackKey: String): MoodOverrideEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun setOverride(entity: MoodOverrideEntity)
-
-    @Query("DELETE FROM mood_override WHERE track_key = :trackKey")
-    suspend fun clearOverride(trackKey: String)
-
-    @Query("DELETE FROM track_mood")
-    suspend fun clearMoods()
+    @Query("SELECT * FROM tag_override WHERE track_key = :trackKey")
+    suspend fun overrides(trackKey: String): List<TagOverrideEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertMoods(moods: List<TrackMoodEntity>)
+    suspend fun setOverride(entity: TagOverrideEntity)
 
-    @Query("SELECT * FROM track_mood WHERE track_key = :trackKey")
-    suspend fun mood(trackKey: String): TrackMoodEntity?
+    @Query("DELETE FROM tag_override WHERE track_key = :trackKey AND dimension = :dimension")
+    suspend fun clearOverride(trackKey: String, dimension: String)
 
-    @Query("SELECT track_key FROM track_mood WHERE mood = :mood")
-    fun observeKeys(mood: String): Flow<List<String>>
+    @Query("DELETE FROM track_tag")
+    suspend fun clearTags()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTags(tags: List<TrackTagEntity>)
+
+    @Query("SELECT * FROM track_tag WHERE track_key = :trackKey")
+    suspend fun tags(trackKey: String): List<TrackTagEntity>
+
+    @Query("SELECT track_key FROM track_tag WHERE dimension = :dimension AND value = :value")
+    fun observeKeys(dimension: String, value: String): Flow<List<String>>
 }

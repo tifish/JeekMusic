@@ -1,8 +1,8 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
-import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
-import com.tinyfish.jeekmusic.data.filter.filterByMood
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
+import com.tinyfish.jeekmusic.data.filter.filterByTags
+import com.tinyfish.jeekmusic.data.settings.TagFilter
 import kotlinx.coroutines.flow.combine
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -156,11 +156,11 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     private val player: PlayerConnection,
     @param:ApplicationContext private val context: Context,
     private val messages: MessageBus,
-    moodFilters: MoodFilterRepository,
+    tagFilters: TagFilterRepository,
 ) : ViewModel() {
 
     /** 筛选中不能拖动排序：只看到部分条目时排序会打乱看不到的条目（需求 M-6）。 */
-    val filtering: StateFlow<Boolean> = moodFilters.filter.map { it != MoodFilter.ALL }
+    val filtering: StateFlow<Boolean> = tagFilters.filter.map { it.isActive }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @AssistedFactory
@@ -179,8 +179,8 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     val playlist: StateFlow<PlaylistEntity?> = repository.playlist(playlistId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), moodFilters.allowedKeys) { entries, allowed ->
-        entries.filterByMood(allowed) { it.track?.trackKey }
+    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), tagFilters.allowedKeys) { entries, allowed ->
+        entries.filterByTags(allowed) { it.track?.trackKey }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

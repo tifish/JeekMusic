@@ -1,7 +1,7 @@
 package com.tinyfish.jeekmusic.ui.folders
 
-import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
+import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -145,10 +145,10 @@ class FolderViewModel @AssistedInject constructor(
     private val library: LibraryRepository,
     private val player: PlayerConnection,
     private val snapshot: StartupSnapshot,
-    moodFilters: MoodFilterRepository,
+    tagFilters: TagFilterRepository,
 ) : ViewModel() {
 
-    val filter: StateFlow<MoodFilter> = moodFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MoodFilter.ALL)
+    val filter: StateFlow<TagFilter> = tagFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, TagFilter())
 
     /** 上次的滚动位置，重启 App 后也能恢复（需求 F-8）。 */
     val initialScroll: Pair<Int, Int> = snapshot.folderScroll(route)
@@ -219,7 +219,7 @@ fun FolderScreen(
         val data = content ?: return@Column
         if (data.folders.isEmpty() && data.tracks.isEmpty()) {
             val filter by viewModel.filter.collectAsStateWithLifecycle()
-            if (filter != MoodFilter.ALL) FilterEmptyMessage(filter) else CenteredMessage(stringResource(R.string.folder_empty))
+            if (filter.isActive) FilterEmptyMessage(filter) else CenteredMessage(stringResource(R.string.folder_empty))
             return@Column
         }
         val listState = rememberLazyListState(viewModel.initialScroll.first, viewModel.initialScroll.second)

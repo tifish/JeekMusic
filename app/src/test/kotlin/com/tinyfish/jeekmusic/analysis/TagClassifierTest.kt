@@ -1,0 +1,82 @@
+package com.tinyfish.jeekmusic.analysis
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+/** 得分取自校准曲库中真实歌曲的 YAMNet 输出（tools/calibration/）。 */
+class TagClassifierTest {
+
+    private val pokerFace = ModelScores(vocal = 2.164, classical = -5.444, calm = 0.0005, energy = 0.1898, orchestra = 0.0)
+    private val baby = ModelScores(vocal = 3.530, classical = -5.548, calm = 0.0013, energy = 0.1592, orchestra = 0.0)
+    private val starFish = ModelScores(vocal = 0.563, classical = -1.517, calm = 0.0940, energy = 0.0208, orchestra = 0.0023) // 周深 - 星鱼
+    private val nocturne = ModelScores(vocal = -3.824, classical = 5.296, calm = 0.0444, energy = 0.0008, orchestra = 0.0) // 肖邦夜曲
+    private val gymnopedie = ModelScores(vocal = -4.975, classical = 4.706, calm = 0.0224, energy = 0.0001, orchestra = 0.0626)
+    private val hungarianDance = ModelScores(vocal = -3.195, classical = 5.956, calm = 0.0031, energy = 0.0016, orchestra = 0.2530)
+    private val jupiter = ModelScores(vocal = -4.195, classical = 5.358, calm = 0.0085, energy = 0.0039, orchestra = 0.1634)
+    private val violinCover = ModelScores(vocal = -5.780, classical = 3.643, calm = 0.0042, energy = 0.0065, orchestra = 0.0026) // 小提琴翻奏流行歌
+
+    @Test
+    fun `舞曲 → 运动，慢歌和慢板 → 安静`() {
+        assertEquals(Tag.SPORT, TagClassifier.mood(pokerFace, Sensitivity.NORMAL))
+        assertEquals(Tag.SPORT, TagClassifier.mood(baby, Sensitivity.NORMAL))
+        assertEquals(Tag.QUIET, TagClassifier.mood(starFish, Sensitivity.NORMAL))
+        assertEquals(Tag.QUIET, TagClassifier.mood(nocturne, Sensitivity.NORMAL))
+        assertEquals(Tag.QUIET, TagClassifier.mood(gymnopedie, Sensitivity.NORMAL))
+    }
+
+    @Test
+    fun `大编制管弦乐的快板不算安静`() {
+        assertNull(TagClassifier.mood(hungarianDance, Sensitivity.NORMAL))
+        assertNull(TagClassifier.mood(jupiter, Sensitivity.NORMAL))
+    }
+
+    @Test
+    fun `灵敏度越严格，归入标签的歌越少`() {
+        // 星鱼的"安静"得分约 1.4：严格档也算；轻柔但不明显的歌只有宽松档才算
+        val mild = ModelScores(vocal = 1.0, classical = -1.0, calm = 0.03, energy = 0.025, orchestra = 0.0)
+        assertEquals(Tag.QUIET, TagClassifier.mood(mild, Sensitivity.LOOSE))
+        assertNull(TagClassifier.mood(mild, Sensitivity.STRICT))
+        assertEquals(Tag.QUIET, TagClassifier.mood(starFish, Sensitivity.STRICT))
+    }
+
+    @Test
+    fun 人声和纯音乐() {
+        assertEquals(Tag.VOCAL, TagClassifier.voice(pokerFace))
+        assertEquals(Tag.VOCAL, TagClassifier.voice(starFish))
+        assertEquals(Tag.INSTRUMENTAL, TagClassifier.voice(nocturne))
+        assertEquals(Tag.INSTRUMENTAL, TagClassifier.voice(violinCover))
+    }
+
+    @Test
+    fun 古典和流行() {
+        assertEquals(Tag.POP, TagClassifier.genre(pokerFace))
+        assertEquals(Tag.POP, TagClassifier.genre(starFish))
+        assertEquals(Tag.CLASSICAL, TagClassifier.genre(nocturne))
+        assertEquals(Tag.CLASSICAL, TagClassifier.genre(jupiter))
+        // 介于两者之间的（爵士、配乐等）都不算
+        assertNull(TagClassifier.genre(ModelScores(vocal = -3.0, classical = 0.2, calm = 0.01, energy = 0.01, orchestra = 0.0)))
+    }
+
+    @Test
+    fun `没有模型得分时只用旧规则判断运动和安静`() {
+        val old = com.tinyfish.jeekmusic.data.db.TrackFeaturesEntity(
+            trackKey = "k", signature = "s", analyzerVersion = 2, bpm = 118.0, bpmConfidence = 7.0, loudness = -7.9,
+            loudnessRange = 5.0, onsetRate = 3.41, centroidHz = 1439.0, lowRatio = 0.51, analyzedAt = 0,
+        )
+        val tags = TagClassifier.classify(old, Sensitivity.NORMAL)
+        assertEquals(Tag.SPORT, tags[TagDimension.MOOD])
+        assertNull(tags[TagDimension.VOICE])
+        assertNull(tags[TagDimension.GENRE])
+    }
+
+    @Test
+    fun 抽取采样率() {
+        val input = FloatArray(16_000) { if (it % 2 == 0) 1f else -1f }
+        val out = PcmDecoder.downsample(input, 16_000, 11_025)
+        assertEquals(11_025, out.size)
+        // 盒式平均会把奈奎斯特附近的高频平均掉
+        assert(out.all { kotlin.math.abs(it) <= 1f })
+        assertEquals(input.size, PcmDecoder.downsample(input, 16_000, 16_000).size)
+    }
+}

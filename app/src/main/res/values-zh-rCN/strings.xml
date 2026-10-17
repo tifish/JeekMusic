@@ -82,8 +82,21 @@
 
     <string name="tab_sport">运动</string>
     <string name="tab_quiet">安静</string>
+    <string name="tag_vocal">人声</string>
+    <string name="tag_instrumental">纯音乐</string>
+    <string name="tag_classical">古典</string>
+    <string name="tag_pop">流行</string>
+    <string name="dim_mood">氛围</string>
+    <string name="dim_voice">人声</string>
+    <string name="dim_genre">曲风</string>
+    <string name="filter_clear">清除筛选</string>
+    <string name="menu_edit_tags">修正智能标签</string>
+    <string name="tag_auto">自动（%s）</string>
+    <string name="tag_none">都不是</string>
+    <string name="tag_manual">手动</string>
+    <string name="info_tags">智能标签</string>
     <string name="filter_all">全部</string>
-    <string name="action_filter">按运动 / 安静筛选</string>
+    <string name="action_filter">按智能标签筛选</string>
     <string name="filter_empty">没有符合“%s”筛选的歌曲</string>
 
     <string name="menu_play_next">下一首播放</string>
@@ -199,10 +212,6 @@
     <string name="restore_done">已恢复（播放列表 / 歌曲 / 未找到）：%s</string>
     <string name="restore_invalid">这不是 JeekMusic 的备份文件</string>
 
-    <string name="menu_mark_sport">标为运动</string>
-    <string name="menu_mark_quiet">标为安静</string>
-    <string name="menu_mark_none">移出智能标签</string>
-    <string name="menu_mark_auto">恢复自动识别</string>
     <string name="info_analysis">音频分析</string>
     <plurals name="mood_pending">
         <item quantity="other">还有 %d 首未分析</item>
@@ -212,7 +221,7 @@
     <string name="settings_analysis_mode">分析时机</string>
     <string name="analysis_charging">仅充电时（推荐）</string>
     <string name="analysis_anytime">随时</string>
-    <string name="settings_sensitivity">识别灵敏度</string>
+    <string name="settings_sensitivity">运动 / 安静的识别灵敏度</string>
     <string name="sensitivity_loose">宽松（歌更多）</string>
     <string name="sensitivity_normal">标准</string>
     <string name="sensitivity_strict">严格（歌更少）</string>

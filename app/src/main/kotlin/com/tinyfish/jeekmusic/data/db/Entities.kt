@@ -187,20 +187,32 @@ data class TrackFeaturesEntity(
     @ColumnInfo(name = "analyzed_at") val analyzedAt: Long,
     /** 解码失败；不再重试，除非文件签名变了。 */
     val failed: Boolean = false,
+    /**
+     * YAMNet 模型给出的几组得分（docs/design.md §6.3），模型失败或旧版本分析时为 null。
+     * 分类阈值在分类时才用，调灵敏度不用重新分析。
+     */
+    @ColumnInfo(name = "vocal_score") val vocalScore: Double? = null,
+    @ColumnInfo(name = "classical_score") val classicalScore: Double? = null,
+    @ColumnInfo(name = "calm_level") val calmLevel: Double? = null,
+    @ColumnInfo(name = "energy_level") val energyLevel: Double? = null,
+    @ColumnInfo(name = "orchestra_level") val orchestraLevel: Double? = null,
 )
 
-/** 手动修正（需求 M-4）。mood 为 null 表示"明确不属于任何标签"。 */
-@Entity(tableName = "mood_override")
-data class MoodOverrideEntity(
-    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
-    val mood: String?,
+/** 手动修正（需求 M-4）：每首歌每个维度一条；value 为 null 表示"明确不属于这个维度的任何标签"。 */
+@Entity(tableName = "tag_override", primaryKeys = ["track_key", "dimension"])
+data class TagOverrideEntity(
+    @ColumnInfo(name = "track_key") val trackKey: String,
+    /** MOOD | VOICE | GENRE */
+    val dimension: String,
+    val value: String?,
 )
 
-/** 物化的分类结果 = 手动修正优先，否则取自动分类。 */
-@Entity(tableName = "track_mood", indices = [Index(value = ["mood"])])
-data class TrackMoodEntity(
-    @PrimaryKey @ColumnInfo(name = "track_key") val trackKey: String,
-    val mood: String,
+/** 物化的分类结果 = 手动修正优先，否则取自动分类（需求 M-6 的筛选直接查这张表）。 */
+@Entity(tableName = "track_tag", primaryKeys = ["track_key", "dimension"], indices = [Index(value = ["dimension", "value"])])
+data class TrackTagEntity(
+    @ColumnInfo(name = "track_key") val trackKey: String,
+    val dimension: String,
+    val value: String,
     /** AUTO | MANUAL */
     val source: String,
 )

@@ -1,5 +1,14 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import com.tinyfish.jeekmusic.analysis.Tag
+import com.tinyfish.jeekmusic.analysis.TagDimension
+import com.tinyfish.jeekmusic.ui.components.dimensionLabel
+import com.tinyfish.jeekmusic.ui.components.filterLabel
+import com.tinyfish.jeekmusic.ui.components.tagLabel
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -28,8 +37,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
-import com.tinyfish.jeekmusic.ui.components.moodFilterLabel
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -197,7 +204,7 @@ private fun MainScreen(viewModel: MainViewModel) {
                         )
                     },
                     actions = {
-                        MoodFilterButton(viewModel)
+                        TagFilterButton(viewModel)
                         // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
                         IconButton(onClick = playerViewModel::toggleShuffleAndAnnounce, modifier = Modifier.testTag("top_shuffle")) {
                             Icon(
@@ -309,15 +316,16 @@ private fun MainScreen(viewModel: MainViewModel) {
 }
 
 /**
- * 标题栏上的"运动 / 安静"筛选（需求 M-6）：筛选中图标高亮并显示名称；
+ * 标题栏上的智能标签筛选（需求 M-6）：筛选中图标高亮并显示选中的标签（比如"安静·纯音乐"）。
+ * 菜单分三组（氛围 / 人声 / 曲风），每组点一下选中、再点一下取消，可以组合；
  * 菜单里还显示未分析的歌曲数，可以立即分析。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MoodFilterButton(viewModel: MainViewModel) {
-    val filter by viewModel.moodFilter.collectAsStateWithLifecycle()
+private fun TagFilterButton(viewModel: MainViewModel) {
+    val filter by viewModel.tagFilter.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
-    val active = filter != MoodFilter.ALL
-    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val color = if (filter.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         Row(
             Modifier
@@ -328,18 +336,34 @@ private fun MoodFilterButton(viewModel: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
-            if (active) Text(moodFilterLabel(filter), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color)
+            if (filter.isActive) {
+                Text(filterLabel(filter), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+            }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            MoodFilter.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(moodFilterLabel(option)) },
-                    onClick = { viewModel.setMoodFilter(option); open = false },
-                    leadingIcon = {
-                        if (option == filter) Icon(painterResource(R.drawable.ic_check), contentDescription = null) else Spacer(Modifier.size(24.dp))
-                    },
-                    modifier = Modifier.testTag("filter_" + option.name.lowercase()),
-                )
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                TagDimension.entries.forEach { dimension ->
+                    Text(
+                        dimensionLabel(dimension),
+                        Modifier.padding(top = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Tag.of(dimension).forEach { tag ->
+                            FilterChip(
+                                selected = filter[dimension] == tag,
+                                onClick = { viewModel.toggleFilter(tag) },
+                                label = { Text(tagLabel(tag)) },
+                                modifier = Modifier.testTag("filter_" + tag.name.lowercase()),
+                            )
+                        }
+                    }
+                }
+            }
+            if (filter.isActive) {
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text(stringResource(R.string.filter_clear)) }, onClick = { viewModel.clearFilter(); open = false })
             }
             val pending by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
             if (pending > 0) {

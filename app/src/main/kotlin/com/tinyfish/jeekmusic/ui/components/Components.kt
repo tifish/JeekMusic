@@ -1,6 +1,8 @@
 package com.tinyfish.jeekmusic.ui.components
 
-import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.data.settings.TagFilter
+import com.tinyfish.jeekmusic.analysis.Tag
+import com.tinyfish.jeekmusic.analysis.TagDimension
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -196,19 +198,36 @@ suspend fun LazyListState.scrollToCenter(index: Int, animate: Boolean = true) {
     if (animate) animateScrollBy(delta) else scrollBy(delta)
 }
 
-/** 筛选的显示名称：全部 / 运动 / 安静（需求 M-6）。 */
+/** 智能标签的名称：运动 / 安静 / 人声 / 纯音乐 / 古典 / 流行（需求 M-1）。 */
 @Composable
-fun moodFilterLabel(filter: MoodFilter): String = stringResource(
-    when (filter) {
-        MoodFilter.ALL -> R.string.filter_all
-        MoodFilter.SPORT -> R.string.tab_sport
-        MoodFilter.QUIET -> R.string.tab_quiet
+fun tagLabel(tag: Tag): String = stringResource(
+    when (tag) {
+        Tag.SPORT -> R.string.tab_sport
+        Tag.QUIET -> R.string.tab_quiet
+        Tag.VOCAL -> R.string.tag_vocal
+        Tag.INSTRUMENTAL -> R.string.tag_instrumental
+        Tag.CLASSICAL -> R.string.tag_classical
+        Tag.POP -> R.string.tag_pop
     },
 )
 
+@Composable
+fun dimensionLabel(dimension: TagDimension): String = stringResource(
+    when (dimension) {
+        TagDimension.MOOD -> R.string.dim_mood
+        TagDimension.VOICE -> R.string.dim_voice
+        TagDimension.GENRE -> R.string.dim_genre
+    },
+)
+
+/** 筛选的显示名称：选中的标签用"·"连接，比如"安静·纯音乐"；没有筛选时为"全部"。 */
+@Composable
+fun filterLabel(filter: TagFilter): String =
+    if (!filter.isActive) stringResource(R.string.filter_all) else filter.active.map { tagLabel(it) }.joinToString("·")
+
 /** 筛选后列表为空时的提示。 */
 @Composable
-fun FilterEmptyMessage(filter: MoodFilter) = CenteredMessage(stringResource(R.string.filter_empty, moodFilterLabel(filter)))
+fun FilterEmptyMessage(filter: TagFilter) = CenteredMessage(stringResource(R.string.filter_empty, filterLabel(filter)))
 
 fun formatDuration(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)

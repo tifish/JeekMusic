@@ -84,8 +84,21 @@
 
     <string name="tab_sport">Workout</string>
     <string name="tab_quiet">Calm</string>
+    <string name="tag_vocal">Vocal</string>
+    <string name="tag_instrumental">Instrumental</string>
+    <string name="tag_classical">Classical</string>
+    <string name="tag_pop">Pop</string>
+    <string name="dim_mood">Mood</string>
+    <string name="dim_voice">Vocals</string>
+    <string name="dim_genre">Style</string>
+    <string name="filter_clear">Clear filter</string>
+    <string name="menu_edit_tags">Edit smart tags</string>
+    <string name="tag_auto">Auto (%s)</string>
+    <string name="tag_none">None</string>
+    <string name="tag_manual">manual</string>
+    <string name="info_tags">Smart tags</string>
     <string name="filter_all">All</string>
-    <string name="action_filter">Filter by Workout / Calm</string>
+    <string name="action_filter">Filter by smart tags</string>
     <string name="filter_empty">No songs match “%s”</string>
 
     <string name="menu_play_next">Play next</string>
@@ -205,10 +218,6 @@
     <string name="restore_done">Restored (playlists / songs / not found): %s</string>
     <string name="restore_invalid">Not a JeekMusic backup file</string>
 
-    <string name="menu_mark_sport">Mark as Workout</string>
-    <string name="menu_mark_quiet">Mark as Calm</string>
-    <string name="menu_mark_none">Remove from smart tags</string>
-    <string name="menu_mark_auto">Use automatic detection</string>
     <string name="info_analysis">Audio analysis</string>
     <plurals name="mood_pending">
         <item quantity="one">%d song not analyzed yet</item>
@@ -219,7 +228,7 @@
     <string name="settings_analysis_mode">When to analyze</string>
     <string name="analysis_charging">Only while charging (recommended)</string>
     <string name="analysis_anytime">Any time</string>
-    <string name="settings_sensitivity">Detection sensitivity</string>
+    <string name="settings_sensitivity">Workout / Calm sensitivity</string>
     <string name="sensitivity_loose">Loose (more songs)</string>
     <string name="sensitivity_normal">Normal</string>
     <string name="sensitivity_strict">Strict (fewer songs)</string>

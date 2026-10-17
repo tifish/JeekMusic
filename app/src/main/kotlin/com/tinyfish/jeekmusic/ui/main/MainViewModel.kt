@@ -24,6 +24,7 @@ import com.tinyfish.jeekmusic.ui.navigation.TabRoute
 import com.tinyfish.jeekmusic.ui.navigation.TopRoute
 import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -81,6 +82,7 @@ class MainViewModel @Inject constructor(
             currentTabKey = saved.lastTabKey
             player.applySnapshot(saved)
             _ready.value = true
+            restoreFolderStack(saved.folderStack)
         }
         viewModelScope.launch {
             tabRepository.tabs.collect { tabs ->
@@ -95,6 +97,18 @@ class MainViewModel @Inject constructor(
                 snapshot.saveTheme(it)
             }
         }
+    }
+
+    /**
+     * 恢复"文件夹"标签里上次打开的子文件夹（需求 F-8），之后每次进出文件夹都保存。
+     * 滚动位置由各个文件夹页面自己保存和恢复（[StartupSnapshot.folderScroll]）。
+     */
+    private suspend fun restoreFolderStack(saved: List<TabRoute.Folder>) {
+        val stack = stackOf(Tab.Folders)
+        if (stack.size == 1 && saved.isNotEmpty()) stack.addAll(saved)
+        snapshotFlow { stack.filterIsInstance<TabRoute.Folder>() }
+            .distinctUntilChanged()
+            .collect { snapshot.saveFolderStack(it) }
     }
 
     fun stackOf(tab: Tab): SnapshotStateList<TabRoute> = tabStacks.getOrPut(tab.key) { mutableStateListOf(tab.root) }

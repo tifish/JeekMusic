@@ -61,6 +61,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.snapshotFlow
+import com.tinyfish.jeekmusic.startup.StartupSnapshot
 import javax.inject.Inject
 
 @HiltViewModel
@@ -137,7 +141,13 @@ class FolderViewModel @AssistedInject constructor(
     @Assisted private val route: TabRoute.Folder,
     private val library: LibraryRepository,
     private val player: PlayerConnection,
+    private val snapshot: StartupSnapshot,
 ) : ViewModel() {
+
+    /** 上次的滚动位置，重启 App 后也能恢复（需求 F-8）。 */
+    val initialScroll: Pair<Int, Int> = snapshot.folderScroll(route)
+
+    fun saveScroll(index: Int, offset: Int) = viewModelScope.launch { snapshot.saveFolderScroll(route, index, offset) }
 
     @AssistedFactory
     interface Factory {
@@ -203,7 +213,15 @@ fun FolderScreen(
             CenteredMessage(stringResource(R.string.folder_empty))
             return@Column
         }
-        val listState = rememberLazyListState()
+        val listState = rememberLazyListState(viewModel.initialScroll.first, viewModel.initialScroll.second)
+        LaunchedEffect(listState) {
+            snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+                .distinctUntilChanged()
+                .collectLatest { (index, offset) ->
+                    delay(500) // 停止滚动后再保存
+                    viewModel.saveScroll(index, offset)
+                }
+        }
         val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + data.folders.size else -1 }
         Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().testTag("folder_content"), state = listState) {

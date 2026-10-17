@@ -682,8 +682,9 @@ ExoPlayer.Builder(context, renderersFactory)
 
 - 开启方式：`TrackSelectionParameters.audioOffloadPreferences` 设为 `AUDIO_OFFLOAD_MODE_ENABLED`，并要求支持无缝播放（`setIsGaplessSupportRequired(true)`），保证歌曲之间不会因为 offload 而出现间隙
 - OffloadController 监听 `ProcessLifecycleOwner`（前台 / 后台）和屏幕开关（`ACTION_SCREEN_ON/OFF`），按档位切换 offload 偏好
+- **不在歌曲中间切换**（需求 P-12）：改 offload 偏好会让 ExoPlayer 重新选择轨道、重建 AudioTrack（普通 ↔ offload），正在出声时能听到一下中断（模拟器不支持 offload，不会重建，只有真机能听到）。所以正在播放时只记下要切换，等到 `onIsPlayingChanged(false)`（暂停、停止）、`onPositionDiscontinuity(SEEK)`（拖动进度、切歌）或 `onMediaItemTransition`（自动播放到下一首）时再应用。自动换歌时切换，下一首开头可能多一点点停顿；连续的现场专辑等对此敏感的，可以把低功耗播放设为"始终使用"或"关闭"，就完全不切换
+- 歌曲信息页显示的是已经生效的偏好，切换在等待时显示的仍是原来的状态
 - 设备或格式不支持 offload 时，ExoPlayer 会自动走普通播放路径
-- 歌曲信息页显示当前是否处于 offload 模式，方便对比和排查
 - 音质：无损格式在 DSP 上的解码同样是比特精确的；有损格式由标准解码器解码，结果与软件解码等价
 
 ### 7.3 PlaybackService

@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
@@ -20,13 +22,16 @@ import com.tinyfish.jeekmusic.data.settings.LowPowerMode
  * - ALWAYS：始终开启
  * - OFF：始终关闭
  * 要求支持无缝播放，设备或格式不支持时 ExoPlayer 自动走普通路径。
+ *
+ * **不在一首歌播放到一半时切换**：切换 offload 要重建音频输出，正在出声时会听到短暂的中断（需求 P-12）。
+ * 需要切换时先记下来，等到本来就会断开或换歌的时候再切：暂停 / 停止、用户拖动进度或切歌、自动播放到下一首。
  */
 class OffloadController(private val context: Context, private val player: Player) {
 
     var mode: LowPowerMode = LowPowerMode.BACKGROUND
         set(value) {
             field = value
-            apply()
+            apply("mode")
         }
 
     private var screenOn = context.getSystemService(PowerManager::class.java).isInteractive
@@ -35,19 +40,35 @@ class OffloadController(private val context: Context, private val player: Player
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             screenOn = intent.action == Intent.ACTION_SCREEN_ON
-            apply()
+            apply("screen")
         }
     }
 
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             appForeground = true
-            apply()
+            apply("foreground")
         }
 
         override fun onStop(owner: LifecycleOwner) {
             appForeground = false
-            apply()
+            apply("background")
+        }
+    }
+
+    /** 等到不出声或换歌的时候，把还没生效的设置应用上去。 */
+    private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) apply("paused")
+        }
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            apply("next item", atBoundary = true)
+        }
+
+        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+            // 用户拖动进度条时本来就会断一下
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) apply("seek", atBoundary = true)
         }
     }
 
@@ -57,31 +78,50 @@ class OffloadController(private val context: Context, private val player: Player
             addAction(Intent.ACTION_SCREEN_OFF)
         })
         ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
-        apply()
+        player.addListener(playerListener)
+        apply("start")
     }
 
     fun stop() {
         runCatching { context.unregisterReceiver(screenReceiver) }
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        player.removeListener(playerListener)
     }
 
-    /** 当前是否请求了 offload，供歌曲信息页显示。 */
-    val enabled: Boolean
+    /** 按当前档位、屏幕和前后台状态，应该开启 offload 吗。 */
+    private val wanted: Boolean
         get() = when (mode) {
             LowPowerMode.ALWAYS -> true
             LowPowerMode.OFF -> false
             LowPowerMode.BACKGROUND -> !screenOn || !appForeground
         }
 
+    /** 当前是否请求了 offload（可能还在等待合适的时机切换），供歌曲信息页显示。 */
+    val enabled: Boolean
+        @OptIn(UnstableApi::class)
+        get() = player.trackSelectionParameters.audioOffloadPreferences.audioOffloadMode == AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
+
+    /**
+     * 正在出声时不切换，等下一个时机（见类注释）；[atBoundary] 表示现在正好是换歌或拖动进度的时候，可以切。
+     */
     @OptIn(UnstableApi::class)
-    private fun apply() {
+    private fun apply(reason: String, atBoundary: Boolean = false) {
         val preferences = AudioOffloadPreferences.Builder()
-            .setAudioOffloadMode(if (enabled) AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED else AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
+            .setAudioOffloadMode(if (wanted) AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED else AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
             .setIsGaplessSupportRequired(true)
             .build()
         if (player.trackSelectionParameters.audioOffloadPreferences == preferences) return
+        if (player.isPlaying && !atBoundary) {
+            Log.i(TAG, "offload ${if (wanted) "on" else "off"} deferred ($reason)")
+            return
+        }
+        Log.i(TAG, "offload ${if (wanted) "on" else "off"} ($reason)")
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setAudioOffloadPreferences(preferences)
             .build()
+    }
+
+    private companion object {
+        const val TAG = "OffloadController"
     }
 }

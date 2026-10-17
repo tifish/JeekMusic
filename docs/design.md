@@ -896,6 +896,7 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 - 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）："更新 / 跳过此版本 / 以后再说"，下载时显示进度
 - 下载：`HttpURLConnection`（GitHub 的下载地址会重定向到另一个 https 域名，默认跟随），写到 `cacheDir/updates/`，边下载边算 SHA-256，和 GitHub 给出的不一致时放弃
 - 安装：`PackageInstaller` 会话（`REQUEST_INSTALL_PACKAGES`），结果由 `InstallResultReceiver` 接收：`STATUS_PENDING_USER_ACTION` 时启动系统的确认界面（首次还会要求允许"安装未知应用"）；用户取消时回到"发现新版本"提示，失败时显示原因。签名不一致时系统会拒绝安装
+- 免确认：会话设置 `USER_ACTION_NOT_REQUIRED`，并声明 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`（普通权限）。第一次通过 App 内更新安装后，本 App 成为"安装来源"，之后的更新不再弹出系统确认；用 adb 或文件管理器安装的版本第一次更新仍需确认
 - F-Droid 不允许应用自更新；以后上架 F-Droid 时需要单独的构建变体关闭这个功能
 
 ## 14. 风险

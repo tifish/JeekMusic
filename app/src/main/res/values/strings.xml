@@ -276,7 +276,7 @@
     <string name="online_covers">Online covers (iTunes / MusicBrainz)</string>
     <string name="online_covers_summary">Off by default. Search covers for songs from the song menu, or fetch all missing covers at once</string>
     <string name="online_covers_privacy_title">Turn on online covers?</string>
-    <string name="online_covers_privacy">When searching, the song’s title, artist and album are sent to Apple iTunes (itunes.apple.com) and MusicBrainz (musicbrainz.org), and images are downloaded from Apple and the Cover Art Archive. Nothing else is sent, and nothing is sent until you search.</string>
+    <string name="online_covers_privacy">When searching, the song’s title, artist and album are sent to Apple iTunes (itunes.apple.com) and MusicBrainz (musicbrainz.org), and images are downloaded from Apple and the Cover Art Archive. Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
     <string name="cover_save_mode">Save online covers to</string>
     <string name="cover_save_hidden">Hidden folder (recommended)</string>
     <string name="cover_save_hidden_summary">.jeekmusic/covers/ in the music folder, one image per album. Music files are not changed</string>
@@ -297,4 +297,9 @@
     <string name="cover_saved_embed">Cover saved into the music file</string>
     <string name="cover_saved_sidecar">Cover saved next to the song</string>
     <string name="cover_save_failed">Couldn’t save the cover</string>
+    <string name="cover_fetch_mode">Fetch missing covers</string>
+    <string name="cover_fetch_manual">Manually</string>
+    <string name="cover_fetch_auto">Automatically, on any network</string>
+    <string name="cover_fetch_wifi">Automatically, on Wi-Fi only</string>
+    <string name="cover_fetch_waiting">Waiting for the network… tap to fetch now</string>
 </resources>

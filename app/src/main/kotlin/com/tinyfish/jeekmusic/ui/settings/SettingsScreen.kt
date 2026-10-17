@@ -63,6 +63,7 @@ import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
+import com.tinyfish.jeekmusic.data.settings.CoverFetchMode
 import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
 import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
@@ -157,14 +158,18 @@ class SettingsViewModel @Inject constructor(
     fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch { settingsRepository.setLyricsSaveLocation(location) }
     fun setOnlineCovers(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setOnlineCovers(enabled)
-        if (!enabled) coverFetch.cancel()
+        if (enabled) coverFetch.scheduleAuto() else coverFetch.cancel()
+    }
+    fun setCoverFetchMode(mode: CoverFetchMode) = viewModelScope.launch {
+        settingsRepository.setCoverFetchMode(mode)
+        coverFetch.onModeChanged()
     }
     fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch { settingsRepository.setCoverSaveMode(mode) }
 
     val coverProgress: StateFlow<CoverFetchProgress?> = coverFetch.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** 正在获取时再点一下是停止。 */
+    /** 正在获取时再点一下是停止；在等网络时点一下是立即用当前网络获取。 */
     fun toggleCoverFetch() = if (coverProgress.value?.running == true) coverFetch.cancel() else coverFetch.start()
 
     fun clearLyricsCache() = viewModelScope.launch {
@@ -331,12 +336,28 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         title = stringResource(R.string.cover_fetch_missing),
                         summary = when {
                             progress == null -> stringResource(R.string.cover_fetch_summary)
+                            progress.waiting -> stringResource(R.string.cover_fetch_waiting)
                             progress.checking -> stringResource(R.string.cover_fetch_checking)
                             progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
                             else -> stringResource(R.string.cover_fetch_done, progress.found, progress.total)
                         },
                         onClick = viewModel::toggleCoverFetch,
                         modifier = Modifier.testTag("fetch_covers"),
+                    )
+                }
+                item { Text(stringResource(R.string.cover_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(CoverFetchMode.entries) { mode ->
+                    RadioRow(
+                        selected = settings.coverFetchMode == mode,
+                        text = stringResource(
+                            when (mode) {
+                                CoverFetchMode.MANUAL -> R.string.cover_fetch_manual
+                                CoverFetchMode.AUTO -> R.string.cover_fetch_auto
+                                CoverFetchMode.WIFI -> R.string.cover_fetch_wifi
+                            },
+                        ),
+                        onClick = { viewModel.setCoverFetchMode(mode) },
+                        modifier = Modifier.testTag("cover_fetch_${mode.name}"),
                     )
                 }
                 item { Text(stringResource(R.string.cover_save_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }

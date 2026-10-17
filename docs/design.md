@@ -729,7 +729,8 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
   - 搜索艺术家只用第一位：多位艺术家拼在一起时两个来源往往都搜不到
 - **匹配**（`CoverMatcher`）：NFKC、小写、繁转简（ICU `Traditional-Simplified`），去掉标点空白和括号里的附注、` - Remastered` 之类的后缀后比较。歌名必须完全相同（"Baby" 和 "Baby Shark" 不算）；艺术家拆分后任意一位与结果互相包含即可。手动搜索时对得上的排前面，括号附注也相同的（不是 Remix / Live）再往前；批量获取只采用对得上的，专辑名也对得上的优先
 - **手动搜索**：两个来源分别请求、各张缩略图分别下载，谁先返回先显示谁，不用等最慢的 Cover Art Archive
-- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`，要求联网）：按专辑键分组，用 `CoverStore.hasCover` 找出没有封面的组，逐组查询保存，通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
+- **获取方式**（`CoverFetchScheduler`）：手动时只在用户点"获取所有缺失的封面"时以 `CONNECTED` 约束、`REPLACE` 提交（顶掉在等 Wi-Fi 的自动任务）；自动 / 仅 Wi-Fi 时，App 启动的推迟任务里和扫描到新增或变化的歌曲后调用 `scheduleAuto()`，分别以 `CONNECTED` / `UNMETERED` 约束、`KEEP` 提交。重复提交很便宜：有封面的（读缓存）和 30 天内找不到的都直接跳过。改获取方式时先取消还在排队的任务再按新方式提交。注意 `UNMETERED` 要等系统验证过 Wi-Fi 能上网才会运行
+- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`）：按专辑键分组，用 `CoverStore.hasCover` 找出没有封面的组，逐组查询保存，通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
 - **保存**（`CoverStore.save`）：图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
   - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
   - 写入文件：通过 SAF 文档 URI 以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片。文件的修改时间和大小会变，所以会被重新扫描，智能标签的签名也变了、需要重新分析

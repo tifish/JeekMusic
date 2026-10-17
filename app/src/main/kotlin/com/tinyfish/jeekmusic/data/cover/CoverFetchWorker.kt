@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.tinyfish.jeekmusic.data.db.TrackDao
+import com.tinyfish.jeekmusic.data.settings.CoverFetchMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -110,39 +111,68 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 }
 
-/** 批量获取的进度：正在运行，或最近一次运行的结果。 */
-data class CoverFetchProgress(val running: Boolean, val checking: Boolean, val done: Int, val total: Int, val found: Int)
+/**
+ * 批量获取的进度：正在运行，或最近一次运行的结果。
+ * [waiting] 表示自动获取在排队等网络（仅 Wi-Fi 时等不计流量的网络）。
+ */
+data class CoverFetchProgress(val running: Boolean, val waiting: Boolean, val checking: Boolean, val done: Int, val total: Int, val found: Int)
 
 @Singleton
 class CoverFetchScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val settings: SettingsRepository,
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
-    /** 需要联网；已经在运行时保持不变。 */
-    fun start() {
-        val request = OneTimeWorkRequestBuilder<CoverFetchWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
+    /** 手动获取：任何网络都行，替换掉在等 Wi-Fi 的自动任务。 */
+    fun start() = enqueue(NetworkType.CONNECTED, ExistingWorkPolicy.REPLACE)
+
+    /**
+     * 自动获取（需求 C-3）：App 启动、扫描到新歌、改设置时调用。手动模式或没开在线封面时什么也不做；
+     * 已有任务（正在运行或排队）时保持不变。有封面的和 30 天内找不到的都会跳过，所以重复调用不会重复联网。
+     */
+    suspend fun scheduleAuto() {
+        val s = settings.current()
+        if (!s.onlineCovers) return
+        when (s.coverFetchMode) {
+            CoverFetchMode.MANUAL -> Unit
+            CoverFetchMode.AUTO -> enqueue(NetworkType.CONNECTED, ExistingWorkPolicy.KEEP)
+            CoverFetchMode.WIFI -> enqueue(NetworkType.UNMETERED, ExistingWorkPolicy.KEEP)
+        }
+    }
+
+    /** 改了获取方式：去掉按旧方式排队、还没开始的任务，再按新方式安排。 */
+    suspend fun onModeChanged() {
+        val infos = withContext(Dispatchers.IO) { workManager.getWorkInfosForUniqueWork(WORK_NAME).get() }
+        if (infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }) cancel()
+        scheduleAuto()
     }
 
     fun cancel() {
         workManager.cancelUniqueWork(WORK_NAME)
     }
 
+    private fun enqueue(network: NetworkType, policy: ExistingWorkPolicy) {
+        val request = OneTimeWorkRequestBuilder<CoverFetchWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(network).build())
+            .build()
+        workManager.enqueueUniqueWork(WORK_NAME, policy, request)
+    }
+
     /** 当前或最近一次的进度；从没运行过时为 null。 */
     val progress: Flow<CoverFetchProgress?> = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).map { infos ->
         val info = infos.lastOrNull() ?: return@map null
-        val running = !info.state.isFinished
+        val running = info.state == WorkInfo.State.RUNNING
+        val waiting = info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED
         val data = if (info.state == WorkInfo.State.SUCCEEDED) info.outputData else info.progress
         CoverFetchProgress(
             running = running,
+            waiting = waiting,
             checking = running && data.getBoolean(CoverFetchWorker.KEY_CHECKING, false),
             done = data.getInt(CoverFetchWorker.KEY_DONE, 0),
             total = data.getInt(CoverFetchWorker.KEY_TOTAL, 0),
             found = data.getInt(CoverFetchWorker.KEY_FOUND, 0),
-        ).takeIf { running || info.state == WorkInfo.State.SUCCEEDED }
+        ).takeIf { running || waiting || info.state == WorkInfo.State.SUCCEEDED }
     }
 
     companion object {

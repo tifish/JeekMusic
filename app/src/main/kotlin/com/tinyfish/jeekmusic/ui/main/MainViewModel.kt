@@ -17,6 +17,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
+import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
 import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.scanner.LibraryObserver
 import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
@@ -54,6 +55,7 @@ class MainViewModel @Inject constructor(
     private val player: PlayerConnection,
     private val backups: BackupManager,
     private val analysis: AnalysisScheduler,
+    private val coverFetch: CoverFetchScheduler,
     private val tagFilters: TagFilterRepository,
     private val tags: TagRepository,
     private val sorter: SongSorter,
@@ -191,6 +193,8 @@ class MainViewModel @Inject constructor(
             scanner.requestScan()
             backups.startAutoBackup()
             analysis.schedule()
+            // 自动获取封面（需求 C-3）：补上上次没联网或网络出错时漏掉的
+            coverFetch.scheduleAuto()
             // 检查更新放在最后，不和启动抢资源；每天最多一次（需求 U-6）
             delay(5_000)
             updater.checkIfDue()

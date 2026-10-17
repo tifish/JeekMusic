@@ -269,7 +269,7 @@
     <string name="online_covers">在线封面（iTunes / MusicBrainz）</string>
     <string name="online_covers_summary">默认关闭。可以在歌曲菜单里搜索封面，或一次获取所有缺失的封面</string>
     <string name="online_covers_privacy_title">开启在线封面？</string>
-    <string name="online_covers_privacy">搜索时会把歌曲的标题、艺术家和专辑发送给 Apple iTunes（itunes.apple.com）和 MusicBrainz（musicbrainz.org），并从 Apple 和 Cover Art Archive 下载图片，不会发送其他任何信息；在你搜索之前不会发送任何内容。</string>
+    <string name="online_covers_privacy">搜索时会把歌曲的标题、艺术家和专辑发送给 Apple iTunes（itunes.apple.com）和 MusicBrainz（musicbrainz.org），并从 Apple 和 Cover Art Archive 下载图片，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
     <string name="cover_save_mode">在线封面保存位置</string>
     <string name="cover_save_hidden">隐藏目录（推荐）</string>
     <string name="cover_save_hidden_summary">音乐目录下的 .jeekmusic/covers/，同一专辑共用一张，不改动音乐文件</string>
@@ -290,4 +290,9 @@
     <string name="cover_saved_embed">封面已写入音乐文件</string>
     <string name="cover_saved_sidecar">封面已保存到歌曲旁边</string>
     <string name="cover_save_failed">封面保存失败</string>
+    <string name="cover_fetch_mode">缺失封面的获取方式</string>
+    <string name="cover_fetch_manual">手动</string>
+    <string name="cover_fetch_auto">自动（任何网络）</string>
+    <string name="cover_fetch_wifi">仅 Wi-Fi 下自动</string>
+    <string name="cover_fetch_waiting">等待网络…点按立即获取</string>
 </resources>

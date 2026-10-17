@@ -36,6 +36,9 @@ enum class LyricsSaveLocation { MUSIC_FOLDER, APP_CACHE }
  */
 enum class CoverSaveMode { HIDDEN_FOLDER, EMBED, SIDECAR }
 
+/** 缺失封面的获取方式（需求 C-3）：手动 / 自动（任何网络）/ 仅 Wi-Fi（不计流量的网络）下自动。 */
+enum class CoverFetchMode { MANUAL, AUTO, WIFI }
+
 /** 智能标签的分析时机（需求 M-5）。 */
 enum class AnalysisMode { CHARGING, ANYTIME }
 
@@ -97,6 +100,7 @@ data class Settings(
     /** 在线封面，默认关闭（需求 C-3）。 */
     val onlineCovers: Boolean = false,
     val coverSaveMode: CoverSaveMode = CoverSaveMode.HIDDEN_FOLDER,
+    val coverFetchMode: CoverFetchMode = CoverFetchMode.MANUAL,
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
     val songSort: SongSort = SongSort.DEFAULT,
@@ -131,6 +135,7 @@ class SettingsRepository @Inject constructor(
         val LYRICS_SAVE = stringPreferencesKey("lyrics_save_location")
         val ONLINE_COVERS = booleanPreferencesKey("online_covers")
         val COVER_SAVE_MODE = stringPreferencesKey("cover_save_mode")
+        val COVER_FETCH_MODE = stringPreferencesKey("cover_fetch_mode")
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
@@ -167,6 +172,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setOnlineCovers(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_COVERS] = enabled }
 
     suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit { it[Keys.COVER_SAVE_MODE] = mode.name }
+
+    suspend fun setCoverFetchMode(mode: CoverFetchMode) = context.dataStore.edit { it[Keys.COVER_FETCH_MODE] = mode.name }
 
     suspend fun setSleepPrefs(prefs: SleepPrefs) = context.dataStore.edit {
         it[Keys.SLEEP_FINISH_SONG] = prefs.finishSong
@@ -223,6 +230,7 @@ class SettingsRepository @Inject constructor(
         lyricsSaveLocation = this[Keys.LYRICS_SAVE]?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.MUSIC_FOLDER,
         onlineCovers = this[Keys.ONLINE_COVERS] ?: false,
         coverSaveMode = this[Keys.COVER_SAVE_MODE]?.let { runCatching { CoverSaveMode.valueOf(it) }.getOrNull() } ?: CoverSaveMode.HIDDEN_FOLDER,
+        coverFetchMode = this[Keys.COVER_FETCH_MODE]?.let { runCatching { CoverFetchMode.valueOf(it) }.getOrNull() } ?: CoverFetchMode.MANUAL,
         sleep = SleepPrefs(
             finishSong = this[Keys.SLEEP_FINISH_SONG] ?: false,
             customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,

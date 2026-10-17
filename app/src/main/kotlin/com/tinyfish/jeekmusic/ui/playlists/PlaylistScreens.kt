@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.settings.SongSort
@@ -236,6 +237,7 @@ fun PlaylistDetailScreen(
             subtitle = entries?.let { songCount(it.size) },
             onBack = onBack,
             actions = {
+                ListDownloadButton(tracks = { viewModel.entries.value.orEmpty().mapNotNull { it.track } })
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
                 }

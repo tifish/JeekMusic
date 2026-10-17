@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.artists
 
+import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
@@ -354,7 +355,15 @@ fun ArtistDetailScreen(
                 pinAction()
             }
         } else {
-            SubScreenHeader(title = name, subtitle = subtitle, onBack = onBack, actions = { pinAction() })
+            SubScreenHeader(
+                title = name,
+                subtitle = subtitle,
+                onBack = onBack,
+                actions = {
+                    ListDownloadButton(tracks = { viewModel.tracks.value.orEmpty() })
+                    pinAction()
+                },
+            )
         }
         val data = tracks ?: return@Column
         val currentRow = data.indexOfFirst { it.id == currentTrackId }

@@ -329,4 +329,16 @@
     <string name="source_check_hint">连不上的来源可以取消勾选，免得每次都等它超时。</string>
     <string name="lyrics_seek_here">从这里播放</string>
     <string name="lyrics_none">暂无歌词</string>
+    <string name="list_download">下载封面或歌词</string>
+    <string name="list_download_covers">下载这些歌的封面</string>
+    <string name="list_download_lyrics">下载这些歌的歌词</string>
+    <string name="list_download_enable">开启并下载</string>
+    <string name="list_download_waiting">等待网络…</string>
+    <string name="list_download_checking">正在检查哪些歌没有封面…</string>
+    <string name="list_download_progress">%1$d / %2$d，已找到 %3$d</string>
+    <string name="list_download_covers_done">完成：缺少的 %1$d 个封面中找到 %2$d 个</string>
+    <string name="list_download_lyrics_done">完成：检查了 %1$d 首，下载了 %2$d 首的歌词（已有歌词的跳过）</string>
+    <string name="list_download_background_hint">关掉这个对话框后会在后台继续下载。</string>
+    <string name="list_download_background">后台运行</string>
+    <string name="list_download_stop">停止</string>
 </resources>

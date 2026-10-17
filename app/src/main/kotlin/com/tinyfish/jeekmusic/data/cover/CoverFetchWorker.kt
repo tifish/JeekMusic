@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.tinyfish.jeekmusic.data.db.TrackDao
+import com.tinyfish.jeekmusic.data.online.ListDownloadScheduler
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
@@ -52,13 +53,16 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val settings = deps.settings().current()
         if (!settings.onlineCovers) return@withContext Result.success()
         val misses = MissLog(File(applicationContext.filesDir, MISSES_FILE))
+        // 只处理某个列表里的歌（需求 C-6）：用户明确要求的，不跳过 30 天内没找到的
+        val targets = inputData.getString(KEY_TARGETS)?.let(ListDownloadScheduler::readTargets)
 
         setProgress(workDataOf(KEY_CHECKING to true))
         val store = deps.coverStore()
         // 选了写入文件但没有权限时，保存总会改存到隐藏目录：按隐藏目录的方式判断，否则每次都会重复保存
         val mode = settings.coverSaveMode.takeUnless { it == CoverSaveMode.EMBED && !store.canEmbed() } ?: CoverSaveMode.HIDDEN_FOLDER
         // 每张专辑里还需要封面的文件
-        val missing = deps.trackDao().all().groupBy { it.albumKey ?: it.trackKey }.mapNotNull { (key, tracks) ->
+        val tracks = targets?.chunked(SQL_CHUNK)?.flatMap { deps.trackDao().byIds(it) } ?: deps.trackDao().all()
+        val missing = tracks.groupBy { it.albumKey ?: it.trackKey }.mapNotNull { (key, tracks) ->
             if (isStopped) return@mapNotNull null
             val album = store.albumOf(tracks.first())
             val targets = when (mode) {
@@ -82,7 +86,7 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 }
                 continue
             }
-            if (misses.recent(key)) continue
+            if (targets == null && misses.recent(key)) continue
             // 没有艺术家的歌只凭歌名很容易配错，不自动获取
             val track = targets.firstOrNull { it.artistDisplay.isNotBlank() }
             if (track == null) {
@@ -130,6 +134,9 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
         const val KEY_FOUND = "found"
+        /** 只处理这些歌：保存歌曲 id 的文件路径（id 可能上千个，超出 WorkManager 输入数据的大小限制）。 */
+        const val KEY_TARGETS = "targets"
+        private const val SQL_CHUNK = 900
         private const val MISSES_FILE = "cover_misses.tsv"
         private const val RETRY_AFTER_MS = 30L * 24 * 3600 * 1000
     }

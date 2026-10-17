@@ -826,6 +826,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **手动搜索**（`LyricsSearchDialog`）：每个来源一个协程，结果到了就合并进列表；网易云、QQ 取前 6 首的歌词一起返回，没有歌词的不列出。排序：歌名和艺术家对得上的在前，再按时长差、来源顺序。每行标明来源
 - **检测连接**（`SourceCheck`，需求 OL-3）：每个来源并行发一个最轻的请求（MusicBrainz 另外检测 `archive.org`），显示耗时或"无法连接"
 - 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内不再重复请求
+- **列表批量下载**（需求 LY-13、C-6，`ListDownloadScheduler`、`ListDownloadButton`）：列表标题栏的下载按钮把列表里歌曲的 id 写进 `filesDir/download_targets_<kind>.txt`（id 可能上千个，超出 WorkManager 输入数据 10KB 的限制），以唯一任务 `list-download-covers` / `list-download-lyrics`（`REPLACE`，要求联网，expedited）启动。封面复用 `CoverFetchWorker`，有目标文件时只处理这些歌、不跳过 30 天内没找到的；歌词用 `LyricsFetchWorker` 逐首调用 `LyricsRepository.fetchMissing`（已有歌词的跳过，不看 7 天的负缓存）。进度格式相同，对话框里显示，可以停止或转到后台
 - 网络客户端（`OnlineLyricsClient`）通过 `dagger.Lazy` 注入，只在开关打开后第一次使用时才创建，不影响启动
 
 ### 8.5 歌词写回音乐目录（LyricsWriter）

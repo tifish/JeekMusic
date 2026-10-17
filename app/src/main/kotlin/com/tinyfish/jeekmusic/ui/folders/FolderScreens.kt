@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.folders
 
+import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
@@ -173,6 +174,9 @@ class FolderViewModel @AssistedInject constructor(
         content.value?.tracks?.let { player.play(it, index) }
     }
 
+    /** 这个文件夹及子文件夹里的歌（按当前筛选），批量下载封面、歌词用。 */
+    suspend fun tracksRecursive() = library.tracksUnder(route.folderId, route.relativePath)
+
     fun playAllRecursive(shuffle: Boolean) {
         viewModelScope.launch {
             player.play(library.tracksUnder(route.folderId, route.relativePath), shuffle = shuffle)
@@ -207,6 +211,7 @@ fun FolderScreen(
             subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
             actions = {
+                ListDownloadButton(tracks = viewModel::tracksRecursive)
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
                 }

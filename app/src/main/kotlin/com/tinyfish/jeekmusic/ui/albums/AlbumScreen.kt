@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.albums
 
+import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,7 +102,11 @@ fun AlbumScreen(
     val listState = rememberLazyListState()
 
     Column(Modifier.fillMaxSize()) {
-        SubScreenHeader(title = info?.name.orEmpty(), onBack = onBack)
+        SubScreenHeader(
+            title = info?.name.orEmpty(),
+            onBack = onBack,
+            actions = { ListDownloadButton(tracks = { viewModel.tracks.value.orEmpty() }) },
+        )
         val list = tracks ?: return@Column
         val album = info ?: return@Column
         // 列表中的条目：页头、按钮、（碟号标题）、歌曲；记下每首歌所在的位置，供定位按钮使用

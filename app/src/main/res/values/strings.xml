@@ -336,4 +336,16 @@
     <string name="source_check_hint">Turn off sources that can’t be reached to avoid waiting for them.</string>
     <string name="lyrics_seek_here">Play from here</string>
     <string name="lyrics_none">No lyrics</string>
+    <string name="list_download">Download covers or lyrics</string>
+    <string name="list_download_covers">Download covers for these songs</string>
+    <string name="list_download_lyrics">Download lyrics for these songs</string>
+    <string name="list_download_enable">Turn on and download</string>
+    <string name="list_download_waiting">Waiting for the network…</string>
+    <string name="list_download_checking">Checking which songs have no cover…</string>
+    <string name="list_download_progress">%1$d / %2$d (found: %3$d)</string>
+    <string name="list_download_covers_done">Done. Missing covers: %1$d, found: %2$d</string>
+    <string name="list_download_lyrics_done">Done. Songs checked: %1$d, lyrics downloaded: %2$d (songs that already had lyrics were skipped)</string>
+    <string name="list_download_background_hint">Downloading continues in the background after you close this.</string>
+    <string name="list_download_background">Run in background</string>
+    <string name="list_download_stop">Stop</string>
 </resources>

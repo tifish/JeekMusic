@@ -132,6 +132,27 @@ class LyricsRepository @Inject constructor(
         LrcParser.parse(result.text!!)
     }
 
+    /** 批量下载一首歌的结果。 */
+    enum class FetchOutcome { ALREADY_HAS, FOUND, NOT_FOUND, FAILED }
+
+    /**
+     * 批量下载（需求 LY-13）：已经有歌词的跳过；没有的按设置的来源精确查询，找到就保存。
+     * 是用户对某个列表明确要求的，所以不看"7 天内没找到"的记录；没有艺术家的歌只凭歌名容易配错，不查。
+     */
+    suspend fun fetchMissing(track: TrackEntity): FetchOutcome = withContext(Dispatchers.IO) {
+        if (load(track) != null) return@withContext FetchOutcome.ALREADY_HAS
+        val artist = track.artistDisplay.ifEmpty { return@withContext FetchOutcome.NOT_FOUND }
+        val result = runCatching { online.get().best(track.titleTag ?: track.title, artist, track.album, track.durationMs / 1000) }
+            .getOrElse { return@withContext FetchOutcome.FAILED }
+        val text = result?.text
+        if (text == null) {
+            lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, null, false, System.currentTimeMillis()))
+            return@withContext FetchOutcome.NOT_FOUND
+        }
+        save(track, text)
+        FetchOutcome.FOUND
+    }
+
     suspend fun lyricsSources(): List<OnlineSource> = online.get().enabledSources()
 
     suspend fun search(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics> = online.get().search(source, title, artist)

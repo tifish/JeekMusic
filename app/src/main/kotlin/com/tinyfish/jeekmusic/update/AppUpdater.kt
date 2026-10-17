@@ -62,6 +62,8 @@ class AppUpdater @Inject constructor(
 
     /** 启动后在后台调用：开关打开、且距上次检查超过一天时才联网。网络错误静默忽略。 */
     suspend fun checkIfDue() {
+        // 上次更新留下的安装包（已经装好了，或者没装）启动时清掉
+        withContext(Dispatchers.IO) { updatesDir().deleteRecursively() }
         val current = settings.current()
         if (!current.autoUpdateCheck) return
         if (System.currentTimeMillis() - current.lastUpdateCheck < CHECK_INTERVAL_MS) return
@@ -148,9 +150,14 @@ class AppUpdater @Inject constructor(
         }
     }
 
+    private fun updatesDir() = File(context.cacheDir, "updates")
+
     private fun download(info: UpdateInfo): File {
-        val dir = File(context.cacheDir, "updates").apply { deleteRecursively(); mkdirs() }
+        val dir = updatesDir().apply { mkdirs() }
         val file = File(dir, "JeekMusic-${info.versionName}.apk")
+        dir.listFiles()?.filter { it != file }?.forEach { it.delete() }
+        // 已经下载过（比如第一次安装时去设置里允许了"安装未知应用"，回来再点更新），校验通过就直接用
+        if (file.length() == info.sizeBytes && info.sha256 != null && sha256(file).equals(info.sha256, ignoreCase = true)) return file
         val digest = MessageDigest.getInstance("SHA-256")
         // GitHub 的下载地址会重定向到另一个 https 域名，HttpURLConnection 默认会跟随
         val connection = open(info.apkUrl)
@@ -174,13 +181,28 @@ class AppUpdater @Inject constructor(
         } finally {
             connection.disconnect()
         }
-        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        val actual = digest.digest().toHex()
         if (info.sha256 != null && !info.sha256.equals(actual, ignoreCase = true)) {
             file.delete()
             error("SHA-256 mismatch")
         }
         return file
     }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        return digest.digest().toHex()
+    }
+
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
     private fun install(apk: File) {
         val installer = context.packageManager.packageInstaller

@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -181,7 +183,19 @@ private fun MainScreen(viewModel: MainViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
+                    // 右侧按钮多（筛选中、睡眠定时中、系统字体大）时，标题保持一行，放不下就缩小字号；
+                    // 缩到最小还放不下就不显示，不显示半截的"JeekM…"
+                    title = {
+                        var titleFits by remember { mutableStateOf(true) }
+                        Text(
+                            stringResource(R.string.app_name),
+                            Modifier.graphicsLayer { alpha = if (titleFits) 1f else 0f },
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.titleLarge.fontSize),
+                            onTextLayout = { titleFits = !it.hasVisualOverflow },
+                        )
+                    },
                     actions = {
                         MoodFilterButton(viewModel)
                         // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
@@ -310,11 +324,11 @@ private fun MoodFilterButton(viewModel: MainViewModel) {
                 .clip(CircleShape)
                 .clickable { open = true }
                 .testTag("top_filter")
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
-            if (active) Text(moodFilterLabel(filter), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelLarge, color = color)
+            if (active) Text(moodFilterLabel(filter), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             MoodFilter.entries.forEach { option ->

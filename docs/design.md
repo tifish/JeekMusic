@@ -781,7 +781,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
      └ 列表数据第一次到达 → ReportDrawnWhen → reportFullyDrawn()（TTFD）
 ```
 
-`StartupSnapshot` 的内容：标签列表、上次选中的标签和滚动位置、主题设置、迷你播放条信息。它在对应数据变化时更新（标签栏修改、切歌、退出 App 时）。
+`StartupSnapshot` 的内容：标签列表、上次选中的标签和滚动位置、主题设置、迷你播放条信息，以及"文件夹"标签的返回栈和每个打开的文件夹的滚动位置（需求 F-8；退出文件夹时丢掉它的位置）。它在对应数据变化时更新（标签栏修改、切歌、退出 App 时）。
 
 ### 9.3 推迟执行（DeferredStartupTasks）
 

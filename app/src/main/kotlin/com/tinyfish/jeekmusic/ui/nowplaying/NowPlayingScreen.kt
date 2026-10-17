@@ -193,18 +193,17 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
 private fun SeekBar(viewModel: PlayerViewModel, state: PlayerUiState) {
     // 播放页可见时每 200ms 刷新进度
     val position by remember { viewModel.position(200) }.collectAsStateWithLifecycle(0L)
-    var dragging by remember { mutableStateOf<Float?>(null) }
     val duration = state.durationMs.coerceAtLeast(1)
-    val shown = dragging?.let { (it * duration).toLong() } ?: position
+    // 松手后保持在目标位置，直到播放位置追上（避免先跳回旧位置再跳过去）
+    val seek = rememberSeekState(position, duration)
+    val fraction = seek.shown((position.toFloat() / duration).coerceIn(0f, 1f))
+    val shown = if (seek.dragging != null || seek.pending != null) (fraction * duration).toLong() else position
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
         Slider(
-            value = dragging ?: (position.toFloat() / duration).coerceIn(0f, 1f),
-            onValueChange = { dragging = it },
-            onValueChangeFinished = {
-                dragging?.let { viewModel.seekTo((it * duration).toLong()) }
-                dragging = null
-            },
+            value = fraction,
+            onValueChange = { seek.dragging = it },
+            onValueChangeFinished = { seek.release()?.let { viewModel.seekTo((it * duration).toLong()) } },
             modifier = Modifier.testTag("seek_bar"),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

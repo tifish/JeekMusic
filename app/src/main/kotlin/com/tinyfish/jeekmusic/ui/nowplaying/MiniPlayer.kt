@@ -8,9 +8,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.clickable
 import com.tinyfish.jeekmusic.ui.components.formatDuration
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Column
@@ -51,10 +49,11 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
     val nowPlaying = state.nowPlaying ?: return
     // 细进度条每秒刷新一次；App 在后台时停止收集（docs/design.md §7.7）
     val position by remember { viewModel.position(1_000) }.collectAsStateWithLifecycle(0L)
-    // 拖动中的目标进度（0–1）；没在拖动时为 null
-    var dragFraction by remember { mutableStateOf<Float?>(null) }
     val duration = state.durationMs
-    val progress = dragFraction ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    // 拖动中跟手；松手后保持在目标位置，直到每秒一次的播放位置追上（避免先跳回旧位置）
+    val seek = rememberSeekState(position, duration)
+    val dragFraction = seek.dragging
+    val progress = seek.shown(if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f)
 
     val currentProgress by rememberUpdatedState(progress)
 
@@ -66,15 +65,12 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
                 .pointerInput(duration) {
                     if (duration <= 0) return@pointerInput
                     detectHorizontalDragGestures(
-                        onDragStart = { dragFraction = currentProgress },
-                        onDragEnd = {
-                            dragFraction?.let { viewModel.seekTo((it * duration).toLong()) }
-                            dragFraction = null
-                        },
-                        onDragCancel = { dragFraction = null },
+                        onDragStart = { seek.dragging = currentProgress },
+                        onDragEnd = { seek.release()?.let { viewModel.seekTo((it * duration).toLong()) } },
+                        onDragCancel = { seek.cancel() },
                     ) { change, dragAmount ->
                         change.consume()
-                        dragFraction = ((dragFraction ?: currentProgress) + dragAmount / size.width).coerceIn(0f, 1f)
+                        seek.dragging = ((seek.dragging ?: currentProgress) + dragAmount / size.width).coerceIn(0f, 1f)
                     }
                 },
         ) {
@@ -82,12 +78,9 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
                 progress = progress,
                 dragging = dragFraction != null,
                 enabled = duration > 0,
-                onDrag = { dragFraction = it },
-                onRelease = {
-                    dragFraction?.let { viewModel.seekTo((it * duration).toLong()) }
-                    dragFraction = null
-                },
-                onCancel = { dragFraction = null },
+                onDrag = { seek.dragging = it },
+                onRelease = { seek.release()?.let { viewModel.seekTo((it * duration).toLong()) } },
+                onCancel = { seek.cancel() },
             )
             Row(
                 Modifier.fillMaxWidth().clickable(onClick = onExpand).padding(start = 12.dp, end = 4.dp, bottom = 6.dp),

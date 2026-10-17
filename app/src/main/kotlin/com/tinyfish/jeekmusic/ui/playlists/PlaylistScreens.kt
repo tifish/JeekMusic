@@ -60,7 +60,6 @@ import com.tinyfish.jeekmusic.data.playlist.PlaylistRepository
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.ui.components.CenteredMessage
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
-import com.tinyfish.jeekmusic.ui.components.PlayButtons
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.TrackRow
 import com.tinyfish.jeekmusic.ui.components.songCount
@@ -178,11 +177,10 @@ class PlaylistDetailViewModel @AssistedInject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** 只播放可用的条目；点击的条目在可用列表中的位置作为起点。 */
-    fun play(entry: PlaylistEntry? = null, shuffle: Boolean = false) {
-        val list = entries.value.orEmpty()
-        val available = list.mapNotNull { it.track }
-        val start = entry?.track?.let { t -> available.indexOfFirst { it.id == t.id } }?.coerceAtLeast(0) ?: 0
-        player.play(available, start, shuffle)
+    fun play(entry: PlaylistEntry) {
+        val available = entries.value.orEmpty().mapNotNull { it.track }
+        val start = entry.track?.let { t -> available.indexOfFirst { it.id == t.id } }?.coerceAtLeast(0) ?: 0
+        player.play(available, start)
     }
 
     fun remove(entry: PlaylistEntry) = viewModelScope.launch { repository.removeItem(playlistId, entry.item.id) }
@@ -229,7 +227,6 @@ fun PlaylistDetailScreen(
             },
         )
         val list = entries ?: return@Column
-        PlayButtons(onPlayAll = { viewModel.play() }, onShuffle = { viewModel.play(shuffle = true) })
 
         val items = remember(list) { list.toMutableStateList() }
         val listState = rememberLazyListState()

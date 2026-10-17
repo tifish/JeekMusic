@@ -10,7 +10,6 @@
     <string name="action_search">搜索</string>
     <string name="action_back">返回</string>
     <string name="action_add_folder">添加音乐文件夹</string>
-    <string name="action_play_all">播放全部</string>
     <string name="action_play_all_recursive">播放全部（含子文件夹）</string>
     <string name="action_shuffle">随机播放</string>
     <string name="action_play">播放</string>

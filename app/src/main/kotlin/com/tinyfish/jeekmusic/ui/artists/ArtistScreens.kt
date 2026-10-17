@@ -61,7 +61,6 @@ import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.ui.components.CenteredMessage
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
-import com.tinyfish.jeekmusic.ui.components.PlayButtons
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.TrackRow
 import com.tinyfish.jeekmusic.ui.components.songCount
@@ -308,10 +307,6 @@ class ArtistDetailViewModel @AssistedInject constructor(
     fun play(index: Int) {
         tracks.value?.let { player.play(it, index) }
     }
-
-    fun playAll(shuffle: Boolean) {
-        tracks.value?.let { player.play(it, shuffle = shuffle) }
-    }
 }
 
 @Composable
@@ -354,7 +349,6 @@ fun ArtistDetailScreen(
             SubScreenHeader(title = name, subtitle = subtitle, onBack = onBack, actions = { pinAction() })
         }
         val data = tracks ?: return@Column
-        PlayButtons(onPlayAll = { viewModel.playAll(false) }, onShuffle = { viewModel.playAll(true) })
         val currentRow = data.indexOfFirst { it.id == currentTrackId }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks"), state = listState) {

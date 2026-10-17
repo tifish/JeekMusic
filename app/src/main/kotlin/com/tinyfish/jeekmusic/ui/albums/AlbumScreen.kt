@@ -31,7 +31,6 @@ import com.tinyfish.jeekmusic.playback.MediaItemMapper
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.ui.components.Artwork
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
-import com.tinyfish.jeekmusic.ui.components.PlayButtons
 import com.tinyfish.jeekmusic.ui.components.SectionHeader
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.TrackRow
@@ -82,10 +81,6 @@ class AlbumViewModel @AssistedInject constructor(
 
     fun play(index: Int) {
         tracks.value?.let { player.play(it, index) }
-    }
-
-    fun playAll(shuffle: Boolean) {
-        tracks.value?.let { player.play(it, shuffle = shuffle) }
     }
 }
 
@@ -145,7 +140,6 @@ fun AlbumScreen(
                         }
                     }
                 }
-                item(key = "buttons") { PlayButtons(onPlayAll = { viewModel.playAll(false) }, onShuffle = { viewModel.playAll(true) }) }
                 items(rows, key = { if (it is IndexedValue<*>) (it.value as TrackEntity).id else it }) { row ->
                     if (row is String) {
                         SectionHeader(stringResource(R.string.disc_number, row.removePrefix("disc:").toInt()))

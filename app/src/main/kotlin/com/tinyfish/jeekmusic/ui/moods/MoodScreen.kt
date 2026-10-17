@@ -32,7 +32,6 @@ import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.playback.PlayerConnection
 import com.tinyfish.jeekmusic.ui.components.CenteredMessage
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
-import com.tinyfish.jeekmusic.ui.components.PlayButtons
 import com.tinyfish.jeekmusic.ui.components.TrackRow
 import com.tinyfish.jeekmusic.ui.components.songCount
 import com.tinyfish.jeekmusic.ui.navigation.TabRoute
@@ -76,10 +75,6 @@ class MoodViewModel @AssistedInject constructor(
         player.play(listOf(first) + (list - first).shuffled(), 0)
     }
 
-    fun playAll(shuffle: Boolean) {
-        tracks.value?.let { player.play(if (shuffle) it.shuffled() else it) }
-    }
-
     fun analyzeNow() = viewModelScope.launch { scheduler.runNow() }
 }
 
@@ -120,7 +115,6 @@ fun MoodScreen(
             return@Column
         }
         Text(songCount(list.size), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        PlayButtons(onPlayAll = { viewModel.playAll(false) }, onShuffle = { viewModel.playAll(true) })
         Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().testTag("mood_tracks"), state = listState) {
                 itemsIndexed(list, key = { _, t -> t.id }) { index, track ->

@@ -10,7 +10,6 @@
     <string name="action_search">Search</string>
     <string name="action_back">Back</string>
     <string name="action_add_folder">Add music folder</string>
-    <string name="action_play_all">Play all</string>
     <string name="action_play_all_recursive">Play all (including subfolders)</string>
     <string name="action_shuffle">Shuffle</string>
     <string name="action_play">Play</string>

@@ -5,7 +5,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.LruCache
 import com.tinyfish.jeekmusic.data.db.LyricsCacheEntity
+import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
+import com.tinyfish.jeekmusic.data.library.appDirectory
+import com.tinyfish.jeekmusic.data.library.childDocumentId
 import com.tinyfish.jeekmusic.data.library.create
+import com.tinyfish.jeekmusic.data.library.writeFile
+import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.library.delete
 import com.tinyfish.jeekmusic.data.library.listById
 import com.tinyfish.jeekmusic.data.library.write
@@ -29,13 +34,11 @@ import javax.inject.Singleton
 
 /**
  * 歌词来源与优先级（docs/design.md §8.1）：
- * 1. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感）
- * 2. 内嵌歌词
- * 3. lyrics_cache（在线获取了但没能写回音乐目录的）
+ * 1. .jeekmusic/lyrics/ 里保存的在线歌词
+ * 2. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感）
+ * 3. 内嵌歌词
+ * 4. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
  */
-/** 在线歌词保存的结果。 */
-enum class SaveResult { MUSIC_FOLDER, APP_CACHE }
-
 @Singleton
 class LyricsRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -49,6 +52,7 @@ class LyricsRepository @Inject constructor(
     private val directoryCache = LruCache<String, List<DocumentTree.Child>>(32)
 
     suspend fun load(track: TrackEntity): Lyrics? = withContext(Dispatchers.IO) {
+        hiddenLrc(track)?.let { return@withContext it }
         lrcFile(track)?.let { return@withContext it }
         if (track.cueTrackNo == null) embedded(track)?.let { return@withContext it }
         lyricsDao.cached(track.trackKey)?.content?.let { LrcParser.parse(it) }
@@ -68,8 +72,18 @@ class LyricsRepository @Inject constructor(
 
     private suspend fun lrcFile(track: TrackEntity): Lyrics? {
         val folder = folderDao.byId(track.folderId) ?: return null
-        val cacheKey = "${folder.id}:${track.relativePath}"
-        val children = directoryCache.get(cacheKey) ?: tree.list(folder, track.relativePath).also { directoryCache.put(cacheKey, it) }
+        return readLrc(folder, track.relativePath, track)
+    }
+
+    /** 隐藏目录里与歌曲同名的 .lrc（需求 LY-11）。 */
+    private suspend fun hiddenLrc(track: TrackEntity): Lyrics? {
+        val folder = folderDao.byId(track.folderId) ?: return null
+        return readLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), track)
+    }
+
+    private fun readLrc(folder: LibraryFolderEntity, relativePath: String, track: TrackEntity): Lyrics? {
+        val cacheKey = "${folder.id}:$relativePath"
+        val children = directoryCache.get(cacheKey) ?: tree.list(folder, relativePath).also { directoryCache.put(cacheKey, it) }
         val file = lrcNames(track).firstNotNullOfOrNull { name -> children.firstOrNull { !it.isDirectory && it.name.equals(name, ignoreCase = true) } }
             ?: return null
         val bytes = tree.read(folder, file.documentId) ?: return null
@@ -81,7 +95,7 @@ class LyricsRepository @Inject constructor(
         context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
             // TagLib 的 FileStream 会关闭传入的 fd，所以传 dup 出来的副本
             val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap ?: return null
-            TagReader.LYRICS_KEYS.firstNotNullOfOrNull { key -> map[key]?.firstOrNull { it.isNotBlank() } }
+            TagReader.lyricsKeys(map.keys).firstNotNullOfOrNull { key -> map[key]?.firstOrNull { it.isNotBlank() } }
         }
     }.getOrNull()
         ?.let { CharsetFixer.fix(it) }
@@ -90,12 +104,17 @@ class LyricsRepository @Inject constructor(
         ?.takeIf { it.lines.isNotEmpty() }
 
     /**
-     * 自动获取（需求 LY-8）：打开了在线歌词和"仅 Wi-Fi 自动获取"、当前是不计流量的网络、7 天内没有查过"未找到"时，
-     * 精确查询 LRCLIB，找到就保存。
+     * 自动获取（需求 LY-8）：播放到没有歌词的歌时，如果打开了在线歌词和自动获取（仅 Wi-Fi 时要求当前是不计流量的网络）、
+     * 7 天内没有查过"未找到"，就精确查询 LRCLIB，找到就保存。
      */
     suspend fun autoFetch(track: TrackEntity): Lyrics? = withContext(Dispatchers.IO) {
         val s = settings.current()
-        if (!s.onlineLyrics || !s.autoFetchLyricsOnWifi || !isUnmetered()) return@withContext null
+        val allowed = when (s.lyricsFetchMode) {
+            FetchMode.MANUAL -> false
+            FetchMode.AUTO -> true
+            FetchMode.WIFI -> isUnmetered()
+        }
+        if (!s.onlineLyrics || !allowed) return@withContext null
         val cached = lyricsDao.cached(track.trackKey)
         if (cached != null && cached.content == null && System.currentTimeMillis() - cached.fetchedAt < NEGATIVE_CACHE_MS) {
             return@withContext null
@@ -114,20 +133,46 @@ class LyricsRepository @Inject constructor(
     suspend fun search(title: String, artist: String?): List<OnlineLyrics> = lrcLib.get().search(title, artist)
 
     /**
-     * 保存在线歌词（需求 LY-10、LY-11）：默认以 UTF-8 写成与歌曲同目录、同名的 .lrc（docs/design.md §8.5）；
-     * 不覆盖已有文件；写入失败或设置为"仅 App 内缓存"时存入 lyrics_cache。
+     * 保存在线歌词（需求 LY-10、LY-11），返回实际保存的位置（docs/design.md §8.5）：
+     * - 同名 .lrc：UTF-8，与歌曲同目录；不覆盖已有文件
+     * - 隐藏目录：.jeekmusic/lyrics/ 下与歌曲同名的 .lrc
+     * - 写入文件：歌词标签（MP3 的 USLT 等）；CUE 整轨的一首歌不能写进整个文件，改存到隐藏目录
+     * 写同名 .lrc 或写入文件失败时改存到隐藏目录，再失败或选择了"仅 App 内"时存入 lyrics_cache。
      */
-    suspend fun save(track: TrackEntity, text: String): SaveResult = withContext(Dispatchers.IO) {
+    suspend fun save(track: TrackEntity, text: String): LyricsSaveLocation = withContext(Dispatchers.IO) {
         val normalized = text.replace("\r\n", "\n")
-        if (settings.current().lyricsSaveLocation == LyricsSaveLocation.MUSIC_FOLDER && writeLrc(track, normalized)) {
-            return@withContext SaveResult.MUSIC_FOLDER
+        val mode = settings.current().lyricsSaveLocation
+        val folder = folderDao.byId(track.folderId)
+        val saved = folder?.let {
+            when (mode) {
+                LyricsSaveLocation.SIDECAR -> LyricsSaveLocation.SIDECAR.takeIf { writeLrc(folder, track, normalized) }
+                LyricsSaveLocation.EMBED -> LyricsSaveLocation.EMBED.takeIf { track.cueTrackNo == null && embed(folder, track, normalized) }
+                LyricsSaveLocation.HIDDEN_FOLDER, LyricsSaveLocation.APP_CACHE -> null
+            } ?: LyricsSaveLocation.HIDDEN_FOLDER.takeIf { mode != LyricsSaveLocation.APP_CACHE && writeHidden(folder, track, normalized) }
         }
+        if (saved != null) return@withContext saved
         lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, normalized, LrcParser.parse(normalized).synced, System.currentTimeMillis()))
-        SaveResult.APP_CACHE
+        LyricsSaveLocation.APP_CACHE
     }
 
-    private suspend fun writeLrc(track: TrackEntity, text: String): Boolean {
-        val folder = folderDao.byId(track.folderId) ?: return false
+    private fun writeHidden(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {
+        val dirId = tree.appDirectory(folder, LYRICS_DIR) ?: return false
+        return tree.writeFile(folder, dirId, lrcNames(track).first(), text.toByteArray(Charsets.UTF_8))
+            .also { invalidateDirectory(folder.id, DocumentTree.appPath(folder, LYRICS_DIR)) }
+    }
+
+    /** 写进歌词标签：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。 */
+    private fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean = runCatching {
+        val fileId = childDocumentId(DocumentTree.directoryDocumentId(folder, track.relativePath), track.fileName)
+        tree.resolver.openFileDescriptor(tree.documentUri(folder, fileId), "rw")?.use { pfd ->
+            val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap ?: return false
+            TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
+            map["LYRICS"] = arrayOf(text)
+            TagLib.savePropertyMap(pfd.dup().detachFd(), map)
+        } ?: false
+    }.getOrDefault(false)
+
+    private fun writeLrc(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)
         val name = lrcNames(track).first()
         // 再次确认目录里没有同名 .lrc，有的话不覆盖
@@ -167,6 +212,7 @@ class LyricsRepository @Inject constructor(
     private companion object {
         const val SOURCE = "lrclib"
         const val NEGATIVE_CACHE_MS = 7 * 24 * 3600_000L
+        const val LYRICS_DIR = "lyrics"
     }
 
     private fun sanitize(name: String) = name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()

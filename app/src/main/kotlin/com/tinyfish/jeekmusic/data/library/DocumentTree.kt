@@ -48,6 +48,12 @@ class DocumentTree @Inject constructor(
         DocumentsContract.buildDocumentUriUsingTree(Uri.parse(folder.treeUri), documentId)
 
     companion object {
+        /** App 在每个音乐文件夹根下的目录：备份、在线封面、在线歌词。 */
+        const val APP_DIR = ".jeekmusic"
+
+        /** 音乐文件夹根下 `.jeekmusic/<name>/` 的相对路径，用于 [list]。 */
+        fun appPath(folder: LibraryFolderEntity, name: String) = "${folder.relativePath}$APP_DIR/$name/"
+
         /** 歌曲所在目录在 SAF 树中的 documentId。 */
         fun directoryDocumentId(folder: LibraryFolderEntity, relativePath: String): String {
             val rest = relativePath.removePrefix(folder.relativePath).trimEnd('/')
@@ -60,7 +66,7 @@ class DocumentTree @Inject constructor(
     }
 }
 
-/** 写入相关的操作单独放在扩展里：只有歌词保存和备份会写音乐目录（需求 §4.2 文件安全）。 */
+/** 写入相关的操作单独放在扩展里：只有歌词、封面和备份会写音乐目录（需求 §4.2 文件安全）。 */
 fun DocumentTree.findChild(folder: LibraryFolderEntity, parentDocumentId: String, name: String): DocumentTree.Child? =
     listById(folder, parentDocumentId).firstOrNull { it.name == name }
 
@@ -95,6 +101,34 @@ fun DocumentTree.write(folder: LibraryFolderEntity, documentId: String, bytes: B
 
 fun DocumentTree.delete(folder: LibraryFolderEntity, documentId: String): Boolean =
     runCatching { DocumentsContract.deleteDocument(resolver, documentUri(folder, documentId)) }.getOrDefault(false)
+
+/** 音乐文件夹根下 `.jeekmusic/<name>/` 的 documentId，没有时创建；失败返回 null。 */
+fun DocumentTree.appDirectory(folder: LibraryFolderEntity, name: String): String? {
+    val app = findChild(folder, folder.treeDocumentId, DocumentTree.APP_DIR)
+        ?: create(folder, folder.treeDocumentId, DocumentsContract.Document.MIME_TYPE_DIR, DocumentTree.APP_DIR)
+        ?: return null
+    val dir = findChild(folder, app.documentId, name)
+        ?: create(folder, app.documentId, DocumentsContract.Document.MIME_TYPE_DIR, name)
+        ?: return null
+    return dir.documentId
+}
+
+/**
+ * 写入文件，已存在时覆盖。新建时 mime 用 application/octet-stream：
+ * 部分 DocumentsProvider 会按 mime 自作主张地改扩展名（比如给 .lrc 追加 .txt）。
+ */
+fun DocumentTree.writeFile(folder: LibraryFolderEntity, dirId: String, name: String, bytes: ByteArray): Boolean {
+    findChild(folder, dirId, name)?.let { return write(folder, it.documentId, bytes) }
+    val created = create(folder, dirId, "application/octet-stream", name) ?: return false
+    if (created.name != name || !write(folder, created.documentId, bytes)) {
+        delete(folder, created.documentId)
+        return false
+    }
+    return true
+}
+
+/** 同一目录下文件的 documentId（ExternalStorageProvider 的 id 基于路径）。 */
+fun childDocumentId(dirId: String, name: String) = if (dirId.endsWith(":")) dirId + name else "$dirId/$name"
 
 fun DocumentTree.rename(folder: LibraryFolderEntity, documentId: String, newName: String): Boolean =
     runCatching { DocumentsContract.renameDocument(resolver, documentUri(folder, documentId), newName) != null }.getOrDefault(false)

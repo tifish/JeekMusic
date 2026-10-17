@@ -63,7 +63,7 @@ import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
-import com.tinyfish.jeekmusic.data.settings.CoverFetchMode
+import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
 import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
@@ -154,14 +154,14 @@ class SettingsViewModel @Inject constructor(
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 
     fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setOnlineLyrics(enabled) }
-    fun setAutoFetchLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoFetchLyrics(enabled) }
+    fun setLyricsFetchMode(mode: FetchMode) = viewModelScope.launch { settingsRepository.setLyricsFetchMode(mode) }
     fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch { settingsRepository.setLyricsSaveLocation(location) }
     fun setOnlineCovers(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setOnlineCovers(enabled)
         if (enabled) coverFetch.scheduleAuto() else coverFetch.cancel()
     }
-    fun setCoverFetchMode(mode: CoverFetchMode) = viewModelScope.launch {
-        settingsRepository.setCoverFetchMode(mode)
+    fun setFetchMode(mode: FetchMode) = viewModelScope.launch {
+        settingsRepository.setFetchMode(mode)
         coverFetch.onModeChanged()
     }
     fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch { settingsRepository.setCoverSaveMode(mode) }
@@ -299,20 +299,36 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             if (settings.onlineLyrics) {
-                item {
-                    SwitchRow(
-                        title = stringResource(R.string.auto_fetch_lyrics),
-                        summary = stringResource(R.string.auto_fetch_lyrics_summary),
-                        checked = settings.autoFetchLyricsOnWifi,
-                        onChange = viewModel::setAutoFetchLyrics,
+                item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(FetchMode.entries) { mode ->
+                    RadioRow(
+                        selected = settings.lyricsFetchMode == mode,
+                        text = stringResource(
+                            when (mode) {
+                                FetchMode.MANUAL -> R.string.lyrics_fetch_manual
+                                FetchMode.AUTO -> R.string.lyrics_fetch_auto
+                                FetchMode.WIFI -> R.string.lyrics_fetch_wifi
+                            },
+                        ),
+                        summary = if (mode == FetchMode.MANUAL) null else stringResource(R.string.auto_fetch_lyrics_summary),
+                        onClick = { viewModel.setLyricsFetchMode(mode) },
+                        modifier = Modifier.testTag("lyrics_fetch_${mode.name}"),
                     )
                 }
                 item { Text(stringResource(R.string.lyrics_save_location), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
                 items(LyricsSaveLocation.entries) { location ->
+                    val (title, summary) = when (location) {
+                        LyricsSaveLocation.SIDECAR -> R.string.lyrics_save_folder to R.string.lyrics_save_folder_summary
+                        LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_save_hidden to R.string.lyrics_save_hidden_summary
+                        LyricsSaveLocation.EMBED -> R.string.lyrics_save_embed to R.string.lyrics_save_embed_summary
+                        LyricsSaveLocation.APP_CACHE -> R.string.lyrics_save_app to null
+                    }
                     RadioRow(
                         selected = settings.lyricsSaveLocation == location,
-                        text = stringResource(if (location == LyricsSaveLocation.MUSIC_FOLDER) R.string.lyrics_save_folder else R.string.lyrics_save_app),
+                        text = stringResource(title),
+                        summary = summary?.let { stringResource(it) },
                         onClick = { viewModel.setLyricsSaveLocation(location) },
+                        modifier = Modifier.testTag("lyrics_save_${location.name}"),
                     )
                 }
                 item { SettingItem(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
@@ -346,17 +362,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     )
                 }
                 item { Text(stringResource(R.string.cover_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
-                items(CoverFetchMode.entries) { mode ->
+                items(FetchMode.entries) { mode ->
                     RadioRow(
                         selected = settings.coverFetchMode == mode,
                         text = stringResource(
                             when (mode) {
-                                CoverFetchMode.MANUAL -> R.string.cover_fetch_manual
-                                CoverFetchMode.AUTO -> R.string.cover_fetch_auto
-                                CoverFetchMode.WIFI -> R.string.cover_fetch_wifi
+                                FetchMode.MANUAL -> R.string.cover_fetch_manual
+                                FetchMode.AUTO -> R.string.cover_fetch_auto
+                                FetchMode.WIFI -> R.string.cover_fetch_wifi
                             },
                         ),
-                        onClick = { viewModel.setCoverFetchMode(mode) },
+                        onClick = { viewModel.setFetchMode(mode) },
                         modifier = Modifier.testTag("cover_fetch_${mode.name}"),
                     )
                 }

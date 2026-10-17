@@ -293,7 +293,7 @@ class BackupManager @Inject constructor(
     private companion object {
         const val TAG = "BackupManager"
         const val FORMAT = 1
-        const val DIR = ".jeekmusic"
+        const val DIR = DocumentTree.APP_DIR
         const val FILE = "backup.json"
         const val PREV = "backup.prev.json"
         const val TMP = "backup.json.tmp"

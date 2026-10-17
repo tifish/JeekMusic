@@ -48,7 +48,7 @@ class TagReader @Inject constructor(
                 discNo = parseNumber(first("DISCNUMBER")),
                 year = first("DATE")?.let { YEAR.find(it)?.value?.toIntOrNull() },
                 genre = first("GENRE"),
-                hasLyrics = LYRICS_KEYS.any { !map[it].isNullOrEmpty() },
+                hasLyrics = lyricsKeys(map.keys).any { !map[it].isNullOrEmpty() },
                 cueSheet = map["CUESHEET"]?.firstOrNull(),
                 durationMs = properties?.length?.toLong()?.takeIf { it > 0 },
                 bitrate = properties?.bitrate?.takeIf { it > 0 },
@@ -64,5 +64,12 @@ class TagReader @Inject constructor(
 
         /** 标准的是 LYRICS（ID3 USLT、Vorbis LYRICS、MP4 ©lyr）；有些工具写成自定义字段。 */
         val LYRICS_KEYS = listOf("LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS", "USLT")
+
+        /**
+         * 标签里的歌词字段，按 [LYRICS_KEYS] 的顺序。带描述的 ID3 USLT 帧在属性表里是 "LYRICS:<描述>"
+         * （TagLib 自己写入时描述就是 "LYRICS"），排在最后。
+         */
+        fun lyricsKeys(keys: Collection<String>): List<String> =
+            LYRICS_KEYS.filter { it in keys } + keys.filter { it.startsWith("LYRICS:") }.sorted()
     }
 }

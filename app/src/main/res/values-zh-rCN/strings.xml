@@ -242,16 +242,15 @@
     <string name="lyrics_plain">纯文本</string>
     <string name="lyrics_search_failed">搜索失败，请检查网络连接。</string>
     <string name="lyrics_saved_folder">歌词已保存为歌曲旁边的 .lrc 文件</string>
-    <string name="lyrics_saved_cache">歌词已缓存在 App 内，未能保存到音乐目录</string>
+    <string name="lyrics_saved_cache">歌词已保存在 App 内</string>
     <string name="settings_lyrics">歌词</string>
     <string name="online_lyrics">在线歌词（LRCLIB）</string>
     <string name="online_lyrics_summary">默认关闭。歌曲没有本地歌词时，可以在 lrclib.net 上搜索</string>
     <string name="online_lyrics_privacy_title">开启在线歌词？</string>
     <string name="online_lyrics_privacy">搜索时会把歌曲的标题、艺术家、专辑和时长发送给 lrclib.net，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
-    <string name="auto_fetch_lyrics">仅 Wi-Fi 下自动获取</string>
-    <string name="auto_fetch_lyrics_summary">只在不计流量的网络下获取；没有找到的歌曲 7 天内不再重试</string>
+    <string name="auto_fetch_lyrics_summary">没有找到的歌曲 7 天内不再重试</string>
     <string name="lyrics_save_location">在线歌词保存位置</string>
-    <string name="lyrics_save_folder">音乐目录，保存为 .lrc（推荐）</string>
+    <string name="lyrics_save_folder">歌曲旁边的同名 .lrc（推荐）</string>
     <string name="lyrics_save_app">仅 App 内缓存</string>
     <string name="lyrics_clear_cache">清除歌词缓存</string>
     <string name="lyrics_cache_cleared">已清除歌词缓存</string>
@@ -295,4 +294,15 @@
     <string name="cover_fetch_auto">自动（任何网络）</string>
     <string name="cover_fetch_wifi">仅 Wi-Fi 下自动</string>
     <string name="cover_fetch_waiting">等待网络…点按立即获取</string>
+    <string name="lyrics_fetch_mode">没有歌词时的获取方式</string>
+    <string name="lyrics_fetch_manual">手动（在播放页搜索）</string>
+    <string name="lyrics_fetch_auto">播放时自动（任何网络）</string>
+    <string name="lyrics_fetch_wifi">播放时仅 Wi-Fi 下自动</string>
+    <string name="lyrics_save_folder_summary">歌曲名.lrc；其他播放器也能读取</string>
+    <string name="lyrics_save_hidden">隐藏目录</string>
+    <string name="lyrics_save_hidden_summary">音乐目录下的 .jeekmusic/lyrics/，不改动音乐文件</string>
+    <string name="lyrics_save_embed">写入音乐文件</string>
+    <string name="lyrics_save_embed_summary">会修改文件，歌曲会被重新扫描和分析；CUE 整轨改存到隐藏目录</string>
+    <string name="lyrics_saved_hidden">歌词已保存到隐藏目录</string>
+    <string name="lyrics_saved_embed">歌词已写入音乐文件</string>
 </resources>

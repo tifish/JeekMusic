@@ -25,8 +25,14 @@ import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-/** 在线歌词保存位置（需求 LY-11）。 */
-enum class LyricsSaveLocation { MUSIC_FOLDER, APP_CACHE }
+/**
+ * 在线歌词保存位置（需求 LY-11）：
+ * - SIDECAR：歌曲旁边的同名 .lrc，其他播放器也能读
+ * - HIDDEN_FOLDER：音乐目录根下的 .jeekmusic/lyrics/，不改动音乐文件
+ * - EMBED：写进音乐文件的歌词标签
+ * - APP_CACHE：只存在 App 里
+ */
+enum class LyricsSaveLocation { SIDECAR, HIDDEN_FOLDER, EMBED, APP_CACHE }
 
 /**
  * 在线封面的保存方式（需求 C-3）：
@@ -36,8 +42,8 @@ enum class LyricsSaveLocation { MUSIC_FOLDER, APP_CACHE }
  */
 enum class CoverSaveMode { HIDDEN_FOLDER, EMBED, SIDECAR }
 
-/** 缺失封面的获取方式（需求 C-3）：手动 / 自动（任何网络）/ 仅 Wi-Fi（不计流量的网络）下自动。 */
-enum class CoverFetchMode { MANUAL, AUTO, WIFI }
+/** 在线歌词、封面的获取方式（需求 LY-8、C-3）：手动 / 自动（任何网络）/ 仅 Wi-Fi（不计流量的网络）下自动。 */
+enum class FetchMode { MANUAL, AUTO, WIFI }
 
 /** 智能标签的分析时机（需求 M-5）。 */
 enum class AnalysisMode { CHARGING, ANYTIME }
@@ -95,12 +101,13 @@ data class Settings(
     val sensitivity: Sensitivity = Sensitivity.NORMAL,
     /** 在线歌词，默认关闭（需求 LY-8）。 */
     val onlineLyrics: Boolean = false,
-    val autoFetchLyricsOnWifi: Boolean = false,
-    val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
+    /** 播放到没有歌词的歌时是否自动获取。 */
+    val lyricsFetchMode: FetchMode = FetchMode.MANUAL,
+    val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.SIDECAR,
     /** 在线封面，默认关闭（需求 C-3）。 */
     val onlineCovers: Boolean = false,
     val coverSaveMode: CoverSaveMode = CoverSaveMode.HIDDEN_FOLDER,
-    val coverFetchMode: CoverFetchMode = CoverFetchMode.MANUAL,
+    val coverFetchMode: FetchMode = FetchMode.MANUAL,
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
     val songSort: SongSort = SongSort.DEFAULT,
@@ -131,7 +138,9 @@ class SettingsRepository @Inject constructor(
         val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
         val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
+        /** 旧版本"仅 Wi-Fi 下自动获取"开关，读取时兼容。 */
         val AUTO_FETCH = booleanPreferencesKey("auto_fetch_lyrics_wifi")
+        val LYRICS_FETCH_MODE = stringPreferencesKey("lyrics_fetch_mode")
         val LYRICS_SAVE = stringPreferencesKey("lyrics_save_location")
         val ONLINE_COVERS = booleanPreferencesKey("online_covers")
         val COVER_SAVE_MODE = stringPreferencesKey("cover_save_mode")
@@ -165,7 +174,10 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setOnlineLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_LYRICS] = enabled }
 
-    suspend fun setAutoFetchLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_FETCH] = enabled }
+    suspend fun setLyricsFetchMode(mode: FetchMode) = context.dataStore.edit {
+        it.remove(Keys.AUTO_FETCH)
+        it[Keys.LYRICS_FETCH_MODE] = mode.name
+    }
 
     suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit { it[Keys.LYRICS_SAVE] = location.name }
 
@@ -173,7 +185,7 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit { it[Keys.COVER_SAVE_MODE] = mode.name }
 
-    suspend fun setCoverFetchMode(mode: CoverFetchMode) = context.dataStore.edit { it[Keys.COVER_FETCH_MODE] = mode.name }
+    suspend fun setFetchMode(mode: FetchMode) = context.dataStore.edit { it[Keys.COVER_FETCH_MODE] = mode.name }
 
     suspend fun setSleepPrefs(prefs: SleepPrefs) = context.dataStore.edit {
         it[Keys.SLEEP_FINISH_SONG] = prefs.finishSong
@@ -226,11 +238,16 @@ class SettingsRepository @Inject constructor(
         analysisMode = this[Keys.ANALYSIS_MODE]?.let { runCatching { AnalysisMode.valueOf(it) }.getOrNull() } ?: AnalysisMode.CHARGING,
         sensitivity = this[Keys.SENSITIVITY]?.let { runCatching { Sensitivity.valueOf(it) }.getOrNull() } ?: Sensitivity.NORMAL,
         onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
-        autoFetchLyricsOnWifi = this[Keys.AUTO_FETCH] ?: false,
-        lyricsSaveLocation = this[Keys.LYRICS_SAVE]?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.MUSIC_FOLDER,
+        lyricsFetchMode = this[Keys.LYRICS_FETCH_MODE]?.let { runCatching { FetchMode.valueOf(it) }.getOrNull() }
+            ?: if (this[Keys.AUTO_FETCH] == true) FetchMode.WIFI else FetchMode.MANUAL,
+        lyricsSaveLocation = when (val saved = this[Keys.LYRICS_SAVE]) {
+            // 旧版本的"音乐目录"就是同名 .lrc
+            "MUSIC_FOLDER" -> LyricsSaveLocation.SIDECAR
+            else -> saved?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.SIDECAR
+        },
         onlineCovers = this[Keys.ONLINE_COVERS] ?: false,
         coverSaveMode = this[Keys.COVER_SAVE_MODE]?.let { runCatching { CoverSaveMode.valueOf(it) }.getOrNull() } ?: CoverSaveMode.HIDDEN_FOLDER,
-        coverFetchMode = this[Keys.COVER_FETCH_MODE]?.let { runCatching { CoverFetchMode.valueOf(it) }.getOrNull() } ?: CoverFetchMode.MANUAL,
+        coverFetchMode = this[Keys.COVER_FETCH_MODE]?.let { runCatching { FetchMode.valueOf(it) }.getOrNull() } ?: FetchMode.MANUAL,
         sleep = SleepPrefs(
             finishSong = this[Keys.SLEEP_FINISH_SONG] ?: false,
             customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,

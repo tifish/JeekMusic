@@ -14,7 +14,7 @@ import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
-import com.tinyfish.jeekmusic.data.lyrics.SaveResult
+import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.data.settings.SleepPrefs
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
@@ -63,7 +63,16 @@ class PlayerViewModel @Inject constructor(
     fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) = viewModelScope.launch {
         val text = lyrics.text ?: return@launch
         val result = lyricsRepository.save(track, text)
-        messages.post(UiMessage(if (result == SaveResult.MUSIC_FOLDER) R.string.lyrics_saved_folder else R.string.lyrics_saved_cache))
+        messages.post(
+            UiMessage(
+                when (result) {
+                    LyricsSaveLocation.SIDECAR -> R.string.lyrics_saved_folder
+                    LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_saved_hidden
+                    LyricsSaveLocation.EMBED -> R.string.lyrics_saved_embed
+                    LyricsSaveLocation.APP_CACHE -> R.string.lyrics_saved_cache
+                },
+            ),
+        )
         offsetChanged.value++
     }
 

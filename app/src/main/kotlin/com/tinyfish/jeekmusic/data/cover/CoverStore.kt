@@ -3,7 +3,6 @@ package com.tinyfish.jeekmusic.data.cover
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.provider.DocumentsContract
 import android.util.LruCache
 import androidx.core.graphics.scale
 import com.kyant.taglib.Picture
@@ -13,10 +12,10 @@ import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.library.DocumentTree
-import com.tinyfish.jeekmusic.data.library.create
+import com.tinyfish.jeekmusic.data.library.appDirectory
+import com.tinyfish.jeekmusic.data.library.childDocumentId
 import com.tinyfish.jeekmusic.data.library.delete
-import com.tinyfish.jeekmusic.data.library.findChild
-import com.tinyfish.jeekmusic.data.library.write
+import com.tinyfish.jeekmusic.data.library.writeFile
 import com.tinyfish.jeekmusic.data.scanner.MediaStoreSource
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.playback.ArtworkVersions
@@ -145,17 +144,12 @@ class CoverStore @Inject constructor(
     private fun writeSidecar(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)
         val name = track.fileName.substringBeforeLast('.') + ".jpg"
-        return writeFile(folder, dirId, name, jpeg).also { listings.remove("${folder.id}:${track.relativePath}") }
+        return tree.writeFile(folder, dirId, name, jpeg).also { listings.remove("${folder.id}:${track.relativePath}") }
     }
 
     private fun writeHidden(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {
-        val app = tree.findChild(folder, folder.treeDocumentId, APP_DIR)
-            ?: tree.create(folder, folder.treeDocumentId, DocumentsContract.Document.MIME_TYPE_DIR, APP_DIR)
-            ?: return false
-        val covers = tree.findChild(folder, app.documentId, COVERS_DIR)
-            ?: tree.create(folder, app.documentId, DocumentsContract.Document.MIME_TYPE_DIR, COVERS_DIR)
-            ?: return false
-        return writeFile(folder, covers.documentId, hiddenNames(track).first(), jpeg).also { listings.remove("${folder.id}:${coversPath(folder)}") }
+        val dirId = tree.appDirectory(folder, COVERS_DIR) ?: return false
+        return tree.writeFile(folder, dirId, hiddenNames(track).first(), jpeg).also { listings.remove("${folder.id}:${coversPath(folder)}") }
     }
 
     private fun deleteHidden(folder: LibraryFolderEntity, track: TrackEntity) {
@@ -163,17 +157,6 @@ class CoverStore @Inject constructor(
         val names = hiddenNames(track)
         children.filter { c -> names.any { it.equals(c.name, ignoreCase = true) } }.forEach { tree.delete(folder, it.documentId) }
         listings.remove("${folder.id}:${coversPath(folder)}")
-    }
-
-    /** 覆盖同名文件；新建时 mime 不用 image/jpeg，避免 DocumentsProvider 自作主张地改扩展名。 */
-    private fun writeFile(folder: LibraryFolderEntity, dirId: String, name: String, bytes: ByteArray): Boolean {
-        tree.findChild(folder, dirId, name)?.let { return tree.write(folder, it.documentId, bytes) }
-        val created = tree.create(folder, dirId, "application/octet-stream", name) ?: return false
-        if (created.name != name || !tree.write(folder, created.documentId, bytes)) {
-            tree.delete(folder, created.documentId)
-            return false
-        }
-        return true
     }
 
     private suspend fun replaceCache(track: TrackEntity, jpeg: ByteArray) {
@@ -202,14 +185,13 @@ class CoverStore @Inject constructor(
         private const val LARGE_PX = 720
         private const val MAX_SAVED_PX = 1200
         private const val FRONT_COVER = "Front Cover"
-        const val APP_DIR = ".jeekmusic"
         const val COVERS_DIR = "covers"
 
         private val IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp")
         private val COVER_NAMES = listOf("cover", "folder", "front", "albumart", "album").flatMap { base -> IMAGE_EXTENSIONS.map { "$base.$it" } }
         private val ILLEGAL = Regex("""[\\/:*?"<>|\x00-\x1f]""")
 
-        private fun coversPath(folder: LibraryFolderEntity) = "${folder.relativePath}$APP_DIR/$COVERS_DIR/"
+        private fun coversPath(folder: LibraryFolderEntity) = DocumentTree.appPath(folder, COVERS_DIR)
 
         /**
          * 隐藏目录里的文件名：有专辑时是"专辑艺术家（或第一位艺术家） - 专辑.jpg"，同一专辑共用；
@@ -224,8 +206,6 @@ class CoverStore @Inject constructor(
         private fun fileName(vararg parts: String): String =
             parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" - ")
                 .replace(ILLEGAL, "_").trim('.', ' ').take(120).ifEmpty { "_" } + ".jpg"
-
-        private fun childDocumentId(dirId: String, name: String) = if (dirId.endsWith(":")) dirId + name else "$dirId/$name"
 
         private fun cacheKey(track: TrackEntity): String = sha1(track.albumKey ?: track.trackKey)
 

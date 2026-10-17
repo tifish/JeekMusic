@@ -767,13 +767,14 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 ### 8.1 来源与优先级
 
 ```
-1. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感匹配）
-2. 内嵌歌词（TagReader.readLyrics）
-3. lyrics_cache（在线获取了但没能写回音乐目录的）
-4. 在线获取（仅当开关打开时）：自动模式（仅 Wi-Fi）直接取最佳匹配，否则显示"搜索歌词"按钮
+1. .jeekmusic/lyrics/ 里与歌曲同名的 .lrc（隐藏目录里保存的在线歌词）
+2. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感匹配）
+3. 内嵌歌词（TagReader.readLyrics）
+4. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
+5. 在线获取（仅当开关打开时）：自动模式直接取精确匹配（"仅 Wi-Fi"时要求当前网络不计流量），否则显示"搜索歌词"按钮
 ```
 
-内嵌歌词读取 `LYRICS`（ID3 USLT、Vorbis LYRICS、MP4 ©lyr），也兼容一些工具写入的自定义字段 `UNSYNCEDLYRICS`、`USLT`（例如 ffmpeg 会把歌词写成 `TXXX:USLT`）。CUE 虚拟歌曲不读整轨文件的内嵌歌词。
+内嵌歌词读取 `LYRICS`（ID3 USLT、Vorbis LYRICS、MP4 ©lyr），也兼容一些工具写入的自定义字段 `UNSYNCEDLYRICS`、`USLT`（例如 ffmpeg 会把歌词写成 `TXXX:USLT`），以及带描述的 USLT 帧（属性表里是 `LYRICS:<描述>`；TagLib 自己写入的描述就是 `LYRICS`）。CUE 虚拟歌曲不读整轨文件的内嵌歌词。
 
 `.lrc` 查找优化：扫描时不处理 `.lrc`。打开播放页时，用 `DocumentsContract` 列出歌曲所在目录（结果按目录缓存在内存 LRU 中）并匹配文件名。切到下一首时预先加载下一首的歌词。
 
@@ -799,7 +800,15 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 ### 8.5 歌词写回音乐目录（LyricsWriter）
 
-需求 LY-10 / LY-11。设置为"音乐目录"（默认）时：
+需求 LY-10 / LY-11。保存位置和封面（§7.4）一致，SAF 的建目录、写文件工具（`DocumentTree.appDirectory` / `writeFile`）两边共用：
+
+- **同名 .lrc**（默认）：见下面的流程，不覆盖已有文件
+- **隐藏目录**：`<音乐文件夹>/.jeekmusic/lyrics/` 下与同名 .lrc 相同的文件名，已存在时覆盖（是自己的文件）
+- **写入文件**：通过 SAF 文档 URI 以 `rw` 打开，读出 TagLib 属性表、去掉原有的歌词字段、加上 `LYRICS`，整个写回（TagLib 的属性表写入会删掉表里没有的字段，所以必须先读）。MP3 写成 USLT。文件的修改时间和大小会变，会被重新扫描、重新分析智能标签。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
+- **仅 App 内**：直接写入 `lyrics_cache`
+- 同名 .lrc 或写入文件失败时改存隐藏目录，再失败时写入 `lyrics_cache`；`save()` 返回实际保存的位置，播放页据此提示
+
+同名 .lrc 的写入流程：
 
 ```
  1. 通过 track.folder_id 找到 library_folder.tree_uri，再按 relative_path 逐级定位到歌曲所在目录的 document
@@ -814,7 +823,6 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 - 写授权在添加文件夹时一并申请。如果某个文件夹只有读授权（比如用户在系统设置里撤销了写权限），第一次写入失败时提示重新授权
 - 新建的 `.lrc` 不是音频文件，不会触发 MediaStore 音频变化，也就不会引起重扫
-- 设置为"仅 App 内缓存"时，直接写入 `lyrics_cache`
 
 ### 8.6 歌词 UI
 

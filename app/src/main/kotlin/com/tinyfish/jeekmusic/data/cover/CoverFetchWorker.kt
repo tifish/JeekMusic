@@ -12,7 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.tinyfish.jeekmusic.data.db.TrackDao
-import com.tinyfish.jeekmusic.data.settings.CoverFetchMode
+import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -135,9 +135,9 @@ class CoverFetchScheduler @Inject constructor(
         val s = settings.current()
         if (!s.onlineCovers) return
         when (s.coverFetchMode) {
-            CoverFetchMode.MANUAL -> Unit
-            CoverFetchMode.AUTO -> enqueue(NetworkType.CONNECTED, ExistingWorkPolicy.KEEP)
-            CoverFetchMode.WIFI -> enqueue(NetworkType.UNMETERED, ExistingWorkPolicy.KEEP)
+            FetchMode.MANUAL -> Unit
+            FetchMode.AUTO -> enqueue(NetworkType.CONNECTED, ExistingWorkPolicy.KEEP)
+            FetchMode.WIFI -> enqueue(NetworkType.UNMETERED, ExistingWorkPolicy.KEEP)
         }
     }
 

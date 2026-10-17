@@ -117,17 +117,21 @@ class CoverStore @Inject constructor(
     private fun ownImage(folder: LibraryFolderEntity?, track: TrackEntity): ByteArray? =
         folder?.let { hiddenCover(it, track) } ?: folder?.let { sidecar(it, track) } ?: embeddedCover(track)
 
-    private fun hiddenCover(folder: LibraryFolderEntity, track: TrackEntity): ByteArray? {
+    private fun hiddenCover(folder: LibraryFolderEntity, track: TrackEntity): ByteArray? =
+        hiddenFile(folder, track)?.let { tree.read(folder, it.documentId) }
+
+    private fun sidecar(folder: LibraryFolderEntity, track: TrackEntity): ByteArray? =
+        sidecarFile(folder, track)?.let { tree.read(folder, it.documentId) }
+
+    private fun hiddenFile(folder: LibraryFolderEntity, track: TrackEntity): DocumentTree.Child? {
         val children = listing(folder, coversPath(folder)).takeIf { it.isNotEmpty() } ?: return null
         return hiddenNames(track).firstNotNullOfOrNull { name -> children.firstOrNull { it.name.equals(name, ignoreCase = true) } }
-            ?.let { tree.read(folder, it.documentId) }
     }
 
-    private fun sidecar(folder: LibraryFolderEntity, track: TrackEntity): ByteArray? {
+    private fun sidecarFile(folder: LibraryFolderEntity, track: TrackEntity): DocumentTree.Child? {
         val base = track.fileName.substringBeforeLast('.')
         val children = listing(folder, track.relativePath)
         return IMAGE_EXTENSIONS.firstNotNullOfOrNull { ext -> children.firstOrNull { !it.isDirectory && it.name.equals("$base.$ext", ignoreCase = true) } }
-            ?.let { tree.read(folder, it.documentId) }
     }
 
     private fun embeddedCover(track: TrackEntity): ByteArray? = runCatching {
@@ -169,9 +173,15 @@ class CoverStore @Inject constructor(
             for (t in tracks.distinctBy { it.fileKey }) {
                 val folder = folderOf(t)
                 val ok = folder != null && if (mode == CoverSaveMode.EMBED) embed(folder, t, jpeg) else writeSidecar(folder, t, jpeg)
-                // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示
-                if (ok) deleteHidden(folder, t) else failed = true
-                if (ok) files++
+                // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示；
+                // 写入文件时同名图片也排在前面，同样删掉（需求 C-7）
+                if (ok) {
+                    deleteHidden(folder, t)
+                    if (mode == CoverSaveMode.EMBED) deleteSidecar(folder, t)
+                    files++
+                } else {
+                    failed = true
+                }
             }
         }
         val hidden = (mode == CoverSaveMode.HIDDEN_FOLDER || failed) && folderOf(first)?.let { writeHidden(it, first, jpeg) } == true
@@ -200,6 +210,61 @@ class CoverStore @Inject constructor(
     private fun writeHidden(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {
         val dirId = tree.appDirectory(folder, COVERS_DIR) ?: return false
         return tree.writeFile(folder, dirId, hiddenNames(track).first(), jpeg).also { listings.remove("${folder.id}:${coversPath(folder)}") }
+    }
+
+    private fun deleteSidecar(folder: LibraryFolderEntity, track: TrackEntity) {
+        sidecarFile(folder, track)?.let { tree.delete(folder, it.documentId) }
+        listings.remove("${folder.id}:${track.relativePath}")
+    }
+
+    /**
+     * 把已经下载成文件的封面写入音乐文件（需求 C-7）：每个文件用它自己的（隐藏目录 > 同名图片，和显示时的顺序一样），
+     * 写入成功后删掉同名图片；隐藏目录里的一张图片由整张专辑共用，专辑里的文件都写入成功才删。
+     * 目录里的 cover.jpg 等不是下载的，不动。返回写入了几个文件。
+     */
+    suspend fun embedDownloaded(tracks: List<TrackEntity>, isStopped: () -> Boolean = { false }): Int = withContext(Dispatchers.IO) {
+        if (!canEmbed()) return@withContext 0
+        val folders = HashMap<Long, LibraryFolderEntity?>()
+        // 隐藏目录里的图片 → 还有没写进去的文件
+        val hiddenUsers = HashMap<Pair<Long, String>, Boolean>()
+        val hiddenFiles = HashMap<Pair<Long, String>, DocumentTree.Child>()
+        val changed = ArrayList<TrackEntity>()
+        // 按目录排，目录列表的缓存才能命中
+        for (t in tracks.distinctBy { it.fileKey }.sortedWith(compareBy({ it.folderId }, { it.relativePath }))) {
+            if (isStopped()) break
+            val folder = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) } ?: continue
+            val hidden = hiddenFile(folder, t)
+            val side = sidecarFile(folder, t)
+            val source = hidden ?: side ?: continue
+            val jpeg = tree.read(folder, source.documentId)?.let(::toJpeg)
+            val ok = jpeg != null && embed(folder, t, jpeg)
+            hidden?.let {
+                val key = folder.id to it.documentId
+                hiddenFiles[key] = it
+                hiddenUsers[key] = (hiddenUsers[key] ?: true) && ok
+            }
+            if (!ok) continue
+            if (side != null) deleteSidecar(folder, t)
+            changed += t
+        }
+        for ((key, allDone) in hiddenUsers) {
+            if (!allDone) continue
+            val folder = folders[key.first] ?: continue
+            tree.delete(folder, hiddenFiles.getValue(key).documentId)
+            listings.remove("${folder.id}:${coversPath(folder)}")
+        }
+        // 显示的还是同一张图，但来源变了：清掉缓存重新找，免得缓存和文件对不上
+        changed.distinctBy { cacheKey(it) }.forEach { invalidate(it) }
+        changed.size
+    }
+
+    private suspend fun invalidate(track: TrackEntity) {
+        val key = cacheKey(track)
+        locks.getOrPut(key) { Mutex() }.withLock {
+            File(cacheDir, "$key.none").delete()
+            for (size in listOf(SMALL_PX, LARGE_PX)) File(cacheDir, "${key}_$size.jpg").delete()
+        }
+        ArtworkVersions.bump(track.albumKey?.let { trackDao.idsByAlbum(it) }.orEmpty() + track.id)
     }
 
     private fun deleteHidden(folder: LibraryFolderEntity, track: TrackEntity) {

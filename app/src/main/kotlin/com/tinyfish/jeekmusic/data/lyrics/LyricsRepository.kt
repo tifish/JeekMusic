@@ -84,12 +84,52 @@ class LyricsRepository @Inject constructor(
     }
 
     private fun readLrc(folder: LibraryFolderEntity, relativePath: String, track: TrackEntity): Lyrics? {
+        val text = findLrc(folder, relativePath, track)?.let { readText(folder, it) } ?: return null
+        return LrcParser.parse(text).takeIf { it.lines.isNotEmpty() }
+    }
+
+    private fun findLrc(folder: LibraryFolderEntity, relativePath: String, track: TrackEntity): DocumentTree.Child? {
         val cacheKey = "${folder.id}:$relativePath"
         val children = directoryCache.get(cacheKey) ?: tree.list(folder, relativePath).also { directoryCache.put(cacheKey, it) }
-        val file = lrcNames(track).firstNotNullOfOrNull { name -> children.firstOrNull { !it.isDirectory && it.name.equals(name, ignoreCase = true) } }
-            ?: return null
-        val bytes = tree.read(folder, file.documentId) ?: return null
-        return LrcParser.parse(CharsetDetector.decode(bytes)).takeIf { it.lines.isNotEmpty() }
+        return lrcNames(track).firstNotNullOfOrNull { name -> children.firstOrNull { !it.isDirectory && it.name.equals(name, ignoreCase = true) } }
+    }
+
+    private fun readText(folder: LibraryFolderEntity, file: DocumentTree.Child): String? =
+        tree.read(folder, file.documentId)?.let { CharsetDetector.decode(it) }
+
+    /**
+     * 写入文件后删掉这首歌下载成文件的歌词（隐藏目录、同名 .lrc）和 App 内缓存的（需求 LY-14）：
+     * 它们读取时都排在内嵌歌词前面（缓存除外），不删的话写进去的歌词不会显示。
+     */
+    private suspend fun deleteDownloaded(folder: LibraryFolderEntity, track: TrackEntity) {
+        for (path in listOf(DocumentTree.appPath(folder, LYRICS_DIR), track.relativePath)) {
+            findLrc(folder, path, track)?.let { tree.delete(folder, it.documentId) }
+            invalidateDirectory(folder.id, path)
+        }
+        lyricsDao.deleteCached(track.trackKey)
+    }
+
+    /**
+     * 把已经下载的歌词写入音乐文件（需求 LY-14）：每首歌用读取时排在最前的那份（隐藏目录 > 同名 .lrc > App 内缓存），
+     * 写入成功后删掉这些文件和缓存。CUE 整轨的歌不能写进整个文件，不动。返回写入了几首。
+     */
+    suspend fun embedDownloaded(tracks: List<TrackEntity>, isStopped: () -> Boolean = { false }): Int = withContext(Dispatchers.IO) {
+        if (!editor.canEdit()) return@withContext 0
+        val cached = lyricsDao.cachedWithContent().associate { it.trackKey to it.content }
+        val folders = HashMap<Long, LibraryFolderEntity?>()
+        var count = 0
+        // 按目录排，目录列表的缓存才能命中
+        for (t in tracks.filter { it.cueTrackNo == null }.distinctBy { it.fileKey }.sortedWith(compareBy({ it.folderId }, { it.relativePath }))) {
+            if (isStopped()) break
+            val folder = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) } ?: continue
+            val file = findLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), t) ?: findLrc(folder, t.relativePath, t)
+            // 文件读不出来时不用缓存代替：写进去后文件会被删掉
+            val text = (if (file != null) readText(folder, file) else cached[t.trackKey]) ?: continue
+            if (text.isBlank() || !embed(folder, t, text.replace("\r\n", "\n"))) continue
+            deleteDownloaded(folder, t)
+            count++
+        }
+        count
     }
 
     private fun embedded(track: TrackEntity): Lyrics? = runCatching {
@@ -172,6 +212,7 @@ class LyricsRepository @Inject constructor(
             when (mode) {
                 LyricsSaveLocation.SIDECAR -> LyricsSaveLocation.SIDECAR.takeIf { writeLrc(folder, track, normalized) }
                 LyricsSaveLocation.EMBED -> LyricsSaveLocation.EMBED.takeIf { track.cueTrackNo == null && embed(folder, track, normalized) }
+                    ?.also { deleteDownloaded(folder, track) }
                 LyricsSaveLocation.HIDDEN_FOLDER, LyricsSaveLocation.APP_CACHE -> null
             } ?: LyricsSaveLocation.HIDDEN_FOLDER.takeIf { mode != LyricsSaveLocation.APP_CACHE && writeHidden(folder, track, normalized) }
         }

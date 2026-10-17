@@ -845,6 +845,12 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **隐藏目录**：`<音乐文件夹>/.jeekmusic/lyrics/` 下与同名 .lrc 相同的文件名，已存在时覆盖（是自己的文件）
 - **写入文件**：经 `AudioFileEditor`（§7.4，保持修改时间不变，需要"所有文件访问权限"）以 `rw` 打开，读出 TagLib 属性表、去掉原有的歌词字段、加上 `LYRICS`，整个写回（TagLib 的属性表写入会删掉表里没有的字段，所以必须先读）。MP3 写成 USLT。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
 - **仅 App 内**：直接写入 `lyrics_cache`
+- 写入文件成功后删掉这首歌的隐藏目录 `.lrc`、同名 `.lrc` 和 `lyrics_cache`（`deleteDownloaded`）：它们读取时排在内嵌歌词前面，不删的话手动换的歌词不会显示
+- **已下载的改为写入文件**（需求 LY-14、C-7，`EmbedDownloadedWorker`）：保存位置是写入文件、有"所有文件访问权限"、设置里还没记下"已写入"时，在 App 启动、改保存位置、授予权限（设置页恢复时发现权限变成有）后排一个不需要网络的任务（唯一任务 `embed-downloaded`，APPEND_OR_REPLACE）：
+  - 封面（`CoverStore.embedDownloaded`）：逐个文件取它自己的封面（隐藏目录 > 同名图片），写入后删同名图片；隐藏目录的图片按专辑共用，记下用到它的文件是否都写入成功，全部成功才删。目录里的 `cover.jpg` 不动。写入后清掉这张专辑的封面缓存
+  - 歌词（`LyricsRepository.embedDownloaded`）：非 CUE 的歌取隐藏目录 > 同名 `.lrc` > `lyrics_cache`，写入后 `deleteDownloaded`。文件读不出来时不用缓存代替
+  - 按目录排序后处理，目录列表的 LRU 缓存才能命中。全部处理完才记下 `downloaded_covers_embedded` / `downloaded_lyrics_embedded`，被系统停止时返回 retry，下次接着做（已写入的已经删掉，不重复）；改保存位置时清除这两个记录
+- `AudioFileEditor` 按文件加锁（批量获取封面和这个任务可能同时写同一个文件）；改签名时用写入前 `fstat` 得到的实际大小，同一首歌连着写封面和歌词时传进来的 `TrackEntity` 是旧的
 - 同名 .lrc 或写入文件失败时改存隐藏目录，再失败时写入 `lyrics_cache`；`save()` 返回实际保存的位置，播放页据此提示
 
 同名 .lrc 的写入流程：

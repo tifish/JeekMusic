@@ -10,7 +10,10 @@ import com.tinyfish.jeekmusic.data.db.TagDao
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,6 +32,9 @@ class AudioFileEditor @Inject constructor(
     private val trackDao: TrackDao,
     private val tagDao: TagDao,
 ) {
+    /** 正在修改的文件：批量获取封面、写入已下载的封面和歌词等可能同时改同一个文件，必须一个一个来。 */
+    private val locks = ConcurrentHashMap<String, Mutex>()
+
     /** 有没有"所有文件访问权限"，也就是能不能写入音乐文件。 */
     fun canEdit(): Boolean = Environment.isExternalStorageManager()
 
@@ -41,12 +47,19 @@ class AudioFileEditor @Inject constructor(
      */
     suspend fun edit(folder: LibraryFolderEntity, track: TrackEntity, block: (ParcelFileDescriptor) -> Boolean): Boolean {
         if (!canEdit()) return false
+        return locks.getOrPut(track.fileKey) { Mutex() }.withLock { editLocked(folder, track, block) }
+    }
+
+    private suspend fun editLocked(folder: LibraryFolderEntity, track: TrackEntity, block: (ParcelFileDescriptor) -> Boolean): Boolean {
+        var oldSize: Long? = null
         var newSize: Long? = null
         val ok = runCatching {
             val fileId = childDocumentId(DocumentTree.directoryDocumentId(folder, track.relativePath), track.fileName)
             tree.resolver.openFileDescriptor(tree.documentUri(folder, fileId), "rw")?.use { pfd ->
                 val before = Os.fstat(pfd.fileDescriptor)
                 val modifiedMs = before.st_mtim.tv_sec * 1000 + before.st_mtim.tv_nsec / 1_000_000
+                // 用文件的实际大小，不用 [track] 里的：同一首歌连着写封面和歌词时，[track] 还是第一次写之前的
+                oldSize = before.st_size
                 val changed = block(pfd)
                 // 对描述符本身设置（/proc/self/fd/N 指向的就是这个打开的文件）
                 if (!File("/proc/self/fd/${pfd.fd}").setLastModified(modifiedMs)) Log.w(TAG, "couldn't restore mtime of ${track.fileName}")
@@ -54,9 +67,10 @@ class AudioFileEditor @Inject constructor(
                 changed
             } ?: false
         }.onFailure { Log.w(TAG, "edit failed: ${track.fileName}", it) }.getOrDefault(false)
-        newSize?.takeIf { ok && it != track.size }?.let { size ->
+        val from = oldSize
+        newSize?.takeIf { ok && from != null && it != from }?.let { size ->
             trackDao.updateSize(track.fileKey, size)
-            tagDao.renameSignature(track.fileKey, "${track.dateModified}:${track.size}", "${track.dateModified}:$size")
+            for (old in setOf(from, track.size)) tagDao.renameSignature(track.fileKey, "${track.dateModified}:$old", "${track.dateModified}:$size")
         }
         return ok
     }

@@ -279,7 +279,7 @@
     <string name="cover_save_hidden">Hidden folder (recommended)</string>
     <string name="cover_save_hidden_summary">.jeekmusic/covers/ in the music folder, one image per album. Music files are not changed</string>
     <string name="cover_save_embed">Inside the music file</string>
-    <string name="cover_save_embed_summary">Other players can see it too. The file’s modified time is kept. Needs “All files access”</string>
+    <string name="cover_save_embed_summary">Other players can see it too. The file’s modified time is kept. Needs “All files access”. Covers already downloaded are written in too, and the downloaded images deleted</string>
     <string name="cover_save_sidecar">Next to the song, with the same name</string>
     <string name="cover_save_sidecar_summary">Song name.jpg; these images also show up in the gallery</string>
     <string name="cover_fetch_missing">Fetch all missing covers</string>
@@ -308,7 +308,7 @@
     <string name="lyrics_save_hidden">Hidden folder</string>
     <string name="lyrics_save_hidden_summary">.jeekmusic/lyrics/ in the music folder. Music files are not changed</string>
     <string name="lyrics_save_embed">Inside the music file</string>
-    <string name="lyrics_save_embed_summary">The file’s modified time is kept. Needs “All files access”. CUE tracks are saved to the hidden folder instead</string>
+    <string name="lyrics_save_embed_summary">The file’s modified time is kept. Needs “All files access”. CUE tracks are saved to the hidden folder instead. Lyrics already downloaded are written in too, and the downloaded .lrc files deleted</string>
     <string name="lyrics_saved_hidden">Lyrics saved to the hidden folder</string>
     <string name="lyrics_saved_embed">Lyrics saved into the music file</string>
     <string name="all_files_title">Allow access to all files?</string>

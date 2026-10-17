@@ -82,6 +82,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
 import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
+import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
+import androidx.compose.runtime.LaunchedEffect
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
@@ -111,6 +113,7 @@ class SettingsViewModel @Inject constructor(
     private val updater: AppUpdater,
     private val coverFetch: CoverFetchScheduler,
     private val sourceCheck: SourceCheck,
+    private val embedDownloaded: EmbedDownloadedScheduler,
 ) : ViewModel() {
     /** 勾选 / 取消在线来源；至少保留一个（需求 LY-8、C-3）。 */
     fun toggleLyricsSource(source: OnlineSource) = viewModelScope.launch {
@@ -202,7 +205,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setOnlineLyrics(enabled) }
     fun setLyricsFetchMode(mode: FetchMode) = viewModelScope.launch { settingsRepository.setLyricsFetchMode(mode) }
-    fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch { settingsRepository.setLyricsSaveLocation(location) }
+    fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch {
+        settingsRepository.setLyricsSaveLocation(location)
+        embedDownloaded.schedule()
+    }
     fun setOnlineCovers(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setOnlineCovers(enabled)
         if (enabled) coverFetch.scheduleAuto() else coverFetch.cancel()
@@ -211,7 +217,13 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setCoverFetchMode(mode)
         coverFetch.onModeChanged()
     }
-    fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch { settingsRepository.setCoverSaveMode(mode) }
+    fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch {
+        settingsRepository.setCoverSaveMode(mode)
+        embedDownloaded.schedule()
+    }
+
+    /** 选择写入文件后去授予了"所有文件访问权限"：把已下载的写进去（需求 C-7、LY-14）。 */
+    fun onAllFilesAccessGranted() = viewModelScope.launch { embedDownloaded.schedule() }
 
     val coverProgress: StateFlow<CoverFetchProgress?> = coverFetch.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -245,6 +257,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     // 选择"写入音乐文件"但还没有"所有文件访问权限"时：说明后去授权，[askAllFiles] 是确认后要应用的选择
     var askAllFiles by remember { mutableStateOf<(() -> Unit)?>(null) }
     val allFilesAccess = rememberAllFilesAccess()
+    LaunchedEffect(allFilesAccess) { if (allFilesAccess) viewModel.onAllFilesAccessGranted() }
     val context = LocalContext.current
     var showLicenses by remember { mutableStateOf(false) }
 

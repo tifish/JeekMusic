@@ -127,6 +127,9 @@ data class Settings(
     val onlineCovers: Boolean = false,
     val coverSaveMode: CoverSaveMode = CoverSaveMode.HIDDEN_FOLDER,
     val coverFetchMode: FetchMode = FetchMode.MANUAL,
+    /** 选择写入文件后，已下载的封面 / 歌词是否都已写入（需求 C-7、LY-14）；改保存位置时清除。 */
+    val coversEmbedded: Boolean = false,
+    val lyricsEmbedded: Boolean = false,
     /** 启用的封面来源，按 [OnlineSource] 的顺序尝试。 */
     val coverSources: Set<OnlineSource> = OnlineSource.FOR_COVERS.toSet(),
     val lyricsSources: Set<OnlineSource> = OnlineSource.FOR_LYRICS.toSet(),
@@ -169,6 +172,8 @@ class SettingsRepository @Inject constructor(
         val ONLINE_COVERS = booleanPreferencesKey("online_covers")
         val COVER_SAVE_MODE = stringPreferencesKey("cover_save_mode")
         val COVER_FETCH_MODE = stringPreferencesKey("cover_fetch_mode")
+        val COVERS_EMBEDDED = booleanPreferencesKey("downloaded_covers_embedded")
+        val LYRICS_EMBEDDED = booleanPreferencesKey("downloaded_lyrics_embedded")
         val COVER_SOURCES = stringSetPreferencesKey("cover_sources")
         val LYRICS_SOURCES = stringSetPreferencesKey("lyrics_sources")
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
@@ -206,11 +211,21 @@ class SettingsRepository @Inject constructor(
         it[Keys.LYRICS_FETCH_MODE] = mode.name
     }
 
-    suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit { it[Keys.LYRICS_SAVE] = location.name }
+    suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit {
+        it[Keys.LYRICS_SAVE] = location.name
+        it.remove(Keys.LYRICS_EMBEDDED)
+    }
 
     suspend fun setOnlineCovers(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_COVERS] = enabled }
 
-    suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit { it[Keys.COVER_SAVE_MODE] = mode.name }
+    suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit {
+        it[Keys.COVER_SAVE_MODE] = mode.name
+        it.remove(Keys.COVERS_EMBEDDED)
+    }
+
+    suspend fun setCoversEmbedded() = context.dataStore.edit { it[Keys.COVERS_EMBEDDED] = true }
+
+    suspend fun setLyricsEmbedded() = context.dataStore.edit { it[Keys.LYRICS_EMBEDDED] = true }
 
     suspend fun setCoverSources(sources: Set<OnlineSource>) = context.dataStore.edit { it[Keys.COVER_SOURCES] = sources.map { s -> s.name }.toSet() }
 
@@ -299,6 +314,8 @@ class SettingsRepository @Inject constructor(
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,
         tabLayoutVersion = this[Keys.TAB_LAYOUT_VERSION] ?: 0,
         tagRulesVersion = this[Keys.TAG_RULES_VERSION] ?: 0,
+        coversEmbedded = this[Keys.COVERS_EMBEDDED] ?: false,
+        lyricsEmbedded = this[Keys.LYRICS_EMBEDDED] ?: false,
     )
 
     /** 没设置过时全部启用；只认 [allowed] 里的来源。 */

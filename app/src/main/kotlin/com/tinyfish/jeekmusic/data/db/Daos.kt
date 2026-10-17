@@ -320,6 +320,12 @@ interface LyricsDao {
 
     @Query("DELETE FROM lyrics_cache")
     suspend fun clearCache()
+
+    @Query("SELECT * FROM lyrics_cache WHERE content IS NOT NULL")
+    suspend fun cachedWithContent(): List<LyricsCacheEntity>
+
+    @Query("DELETE FROM lyrics_cache WHERE track_key = :trackKey")
+    suspend fun deleteCached(trackKey: String)
 }
 
 @Dao

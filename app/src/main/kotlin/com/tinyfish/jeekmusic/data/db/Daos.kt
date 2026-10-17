@@ -121,6 +121,10 @@ interface TrackDao {
     @Query("SELECT * FROM track WHERE album_key = :albumKey ORDER BY disc_no, track_no, file_name")
     fun observeByAlbum(albumKey: String): Flow<List<TrackEntity>>
 
+    /** 写入封面、歌词后立即更新文件大小（修改时间保持不变），不用等重新扫描。 */
+    @Query("UPDATE track SET size = :size WHERE file_key = :fileKey")
+    suspend fun updateSize(fileKey: String, size: Long)
+
     @Query("SELECT id FROM track WHERE album_key = :albumKey")
     suspend fun idsByAlbum(albumKey: String): List<Long>
 }
@@ -314,6 +318,15 @@ interface LyricsDao {
 
 @Dao
 interface TagDao {
+    /** 写入封面、歌词后文件大小变了，但音频没变：把同一文件（CUE 整轨的各首）的分析签名改成新的，不用重新分析。 */
+    @Query(
+        """
+        UPDATE track_features SET signature = :newSignature
+        WHERE signature = :oldSignature AND track_key IN (SELECT track_key FROM track WHERE file_key = :fileKey)
+        """,
+    )
+    suspend fun renameSignature(fileKey: String, oldSignature: String, newSignature: String)
+
     /** 还没分析、文件变了、或者分析算法升级了的歌曲。 */
     @Query(
         """

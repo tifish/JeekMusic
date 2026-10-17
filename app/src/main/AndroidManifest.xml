@@ -16,6 +16,13 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 上次由本 App 安装时，后续更新可以不再弹出系统确认（普通权限，自动授予） -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!--
+        可选："写入音乐文件"保存封面、歌词时，用来把文件的修改时间改回原来的值（需求 C-4、LY-11）。
+        Android 不允许普通 App 修改别人文件的修改时间；只在用户选择写入文件时才引导授权
+    -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <application
         android:name=".JeekApp"

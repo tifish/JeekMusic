@@ -280,7 +280,7 @@
     <string name="cover_save_hidden">Hidden folder (recommended)</string>
     <string name="cover_save_hidden_summary">.jeekmusic/covers/ in the music folder, one image per album. Music files are not changed</string>
     <string name="cover_save_embed">Inside the music file</string>
-    <string name="cover_save_embed_summary">Other players can see it too. Changes the file, so the song is rescanned and reanalyzed</string>
+    <string name="cover_save_embed_summary">Other players can see it too. The file’s modified time is kept. Needs “All files access”</string>
     <string name="cover_save_sidecar">Next to the song, with the same name</string>
     <string name="cover_save_sidecar_summary">Song name.jpg; these images also show up in the gallery</string>
     <string name="cover_fetch_missing">Fetch all missing covers</string>
@@ -309,7 +309,11 @@
     <string name="lyrics_save_hidden">Hidden folder</string>
     <string name="lyrics_save_hidden_summary">.jeekmusic/lyrics/ in the music folder. Music files are not changed</string>
     <string name="lyrics_save_embed">Inside the music file</string>
-    <string name="lyrics_save_embed_summary">Changes the file, so the song is rescanned and reanalyzed. CUE tracks are saved to the hidden folder instead</string>
+    <string name="lyrics_save_embed_summary">The file’s modified time is kept. Needs “All files access”. CUE tracks are saved to the hidden folder instead</string>
     <string name="lyrics_saved_hidden">Lyrics saved to the hidden folder</string>
     <string name="lyrics_saved_embed">Lyrics saved into the music file</string>
+    <string name="all_files_title">Allow access to all files?</string>
+    <string name="all_files_message">To keep the file’s modified time unchanged when writing into music files, JeekMusic needs “All files access”. Android doesn’t let apps change the modified time of other apps’ files without it. It is only used to restore the modified time after writing covers and lyrics.\n\nWithout it, music files are not changed and covers and lyrics are saved to the hidden folder instead.</string>
+    <string name="all_files_grant">Allow</string>
+    <string name="all_files_missing">“All files access” not allowed: saving to the hidden folder for now. Tap to allow</string>
 </resources>

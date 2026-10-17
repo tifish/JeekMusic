@@ -13,7 +13,7 @@ import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.library.DocumentTree
 import com.tinyfish.jeekmusic.data.library.appDirectory
-import com.tinyfish.jeekmusic.data.library.childDocumentId
+import com.tinyfish.jeekmusic.data.library.AudioFileEditor
 import com.tinyfish.jeekmusic.data.library.delete
 import com.tinyfish.jeekmusic.data.library.writeFile
 import com.tinyfish.jeekmusic.data.scanner.MediaStoreSource
@@ -48,6 +48,7 @@ class CoverStore @Inject constructor(
     private val trackDao: TrackDao,
     private val folderDao: FolderDao,
     private val tree: DocumentTree,
+    private val editor: AudioFileEditor,
 ) {
     private val cacheDir by lazy { File(context.cacheDir, "artwork").apply { mkdirs() } }
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -132,14 +133,12 @@ class CoverStore @Inject constructor(
         saved
     }
 
-    private fun embed(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean = runCatching {
-        val fileId = childDocumentId(DocumentTree.directoryDocumentId(folder, track.relativePath), track.fileName)
-        tree.resolver.openFileDescriptor(tree.documentUri(folder, fileId), "rw")?.use { pfd ->
-            val others = TagLib.getPictures(pfd.dup().detachFd()).filter { it.pictureType != FRONT_COVER }
-            val pictures = listOf(Picture(jpeg, "", FRONT_COVER, "image/jpeg")) + others
-            TagLib.savePictures(pfd.dup().detachFd(), pictures.toTypedArray())
-        } ?: false
-    }.getOrDefault(false)
+    /** 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），由调用方改存到隐藏目录。 */
+    private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean = editor.edit(folder, track) { pfd ->
+        val others = TagLib.getPictures(pfd.dup().detachFd()).filter { it.pictureType != FRONT_COVER }
+        val pictures = listOf(Picture(jpeg, "", FRONT_COVER, "image/jpeg")) + others
+        TagLib.savePictures(pfd.dup().detachFd(), pictures.toTypedArray())
+    }
 
     private fun writeSidecar(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)

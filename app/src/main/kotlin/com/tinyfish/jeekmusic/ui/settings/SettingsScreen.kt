@@ -46,7 +46,14 @@ import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
 import com.tinyfish.jeekmusic.data.scanner.ScanState
 import com.tinyfish.jeekmusic.data.settings.Settings
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
+import android.os.Environment
+import android.provider.Settings as SystemSettings
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tinyfish.jeekmusic.data.backup.BackupManager
@@ -194,6 +201,10 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
     var confirmOnline by remember { mutableStateOf(false) }
     var confirmCovers by remember { mutableStateOf(false) }
+    // 选择"写入音乐文件"但还没有"所有文件访问权限"时：说明后去授权，[askAllFiles] 是确认后要应用的选择
+    var askAllFiles by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val allFilesAccess = rememberAllFilesAccess()
+    val context = LocalContext.current
     var showLicenses by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
@@ -323,11 +334,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         LyricsSaveLocation.EMBED -> R.string.lyrics_save_embed to R.string.lyrics_save_embed_summary
                         LyricsSaveLocation.APP_CACHE -> R.string.lyrics_save_app to null
                     }
+                    val embed = location == LyricsSaveLocation.EMBED
+                    val missing = embed && settings.lyricsSaveLocation == location && !allFilesAccess
                     RadioRow(
                         selected = settings.lyricsSaveLocation == location,
                         text = stringResource(title),
-                        summary = summary?.let { stringResource(it) },
-                        onClick = { viewModel.setLyricsSaveLocation(location) },
+                        summary = if (missing) stringResource(R.string.all_files_missing) else summary?.let { stringResource(it) },
+                        warning = missing,
+                        onClick = {
+                            // 写入文件要"所有文件访问权限"才能保持修改时间不变，先说明再去授权
+                            if (embed && !allFilesAccess) askAllFiles = { viewModel.setLyricsSaveLocation(location) } else viewModel.setLyricsSaveLocation(location)
+                        },
                         modifier = Modifier.testTag("lyrics_save_${location.name}"),
                     )
                 }
@@ -383,11 +400,14 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         CoverSaveMode.EMBED -> R.string.cover_save_embed to R.string.cover_save_embed_summary
                         CoverSaveMode.SIDECAR -> R.string.cover_save_sidecar to R.string.cover_save_sidecar_summary
                     }
+                    val embed = mode == CoverSaveMode.EMBED
+                    val missing = embed && settings.coverSaveMode == mode && !allFilesAccess
                     RadioRow(
                         selected = settings.coverSaveMode == mode,
                         text = stringResource(title),
-                        summary = stringResource(summary),
-                        onClick = { viewModel.setCoverSaveMode(mode) },
+                        summary = stringResource(if (missing) R.string.all_files_missing else summary),
+                        warning = missing,
+                        onClick = { if (embed && !allFilesAccess) askAllFiles = { viewModel.setCoverSaveMode(mode) } else viewModel.setCoverSaveMode(mode) },
                         modifier = Modifier.testTag("cover_mode_${mode.name}"),
                     )
                 }
@@ -503,6 +523,22 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
 
+    askAllFiles?.let { apply ->
+        AlertDialog(
+            onDismissRequest = { askAllFiles = null },
+            title = { Text(stringResource(R.string.all_files_title)) },
+            text = { Text(stringResource(R.string.all_files_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    apply()
+                    askAllFiles = null
+                    openAllFilesSettings(context)
+                }) { Text(stringResource(R.string.all_files_grant)) }
+            },
+            dismissButton = { TextButton(onClick = { askAllFiles = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
     if (confirmCovers) {
         AlertDialog(
             onDismissRequest = { confirmCovers = false },
@@ -551,17 +587,50 @@ private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChang
 }
 
 @Composable
-private fun RadioRow(selected: Boolean, text: String, onClick: () -> Unit, modifier: Modifier = Modifier, summary: String? = null) {
+private fun RadioRow(
+    selected: Boolean,
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    summary: String? = null,
+    warning: Boolean = false,
+) {
+    val context = LocalContext.current
+    // 有警告（缺少权限）时点一下去授权
+    val click = if (warning) ({ openAllFilesSettings(context) }) else onClick
     Row(
-        modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
+        modifier.fillMaxWidth().clickable(onClick = click).padding(horizontal = 16.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = onClick)
+        RadioButton(selected = selected, onClick = click)
         Column {
             Text(text)
-            if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (summary != null) {
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
+}
+
+/** 是否有"所有文件访问权限"；从系统设置返回时重新检查。 */
+@Composable
+private fun rememberAllFilesAccess(): Boolean {
+    var granted by remember { mutableStateOf(Environment.isExternalStorageManager()) }
+    LifecycleResumeEffect(Unit) {
+        granted = Environment.isExternalStorageManager()
+        onPauseOrDispose {}
+    }
+    return granted
+}
+
+private fun openAllFilesSettings(context: Context) {
+    val intent = Intent(SystemSettings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:${context.packageName}".toUri())
+    runCatching { context.startActivity(intent) }
+        .onFailure { runCatching { context.startActivity(Intent(SystemSettings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) } }
 }
 
 @Composable

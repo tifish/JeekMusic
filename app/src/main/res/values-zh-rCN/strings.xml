@@ -273,7 +273,7 @@
     <string name="cover_save_hidden">隐藏目录（推荐）</string>
     <string name="cover_save_hidden_summary">音乐目录下的 .jeekmusic/covers/，同一专辑共用一张，不改动音乐文件</string>
     <string name="cover_save_embed">写入音乐文件</string>
-    <string name="cover_save_embed_summary">其他播放器也能看到；会修改文件，歌曲会被重新扫描和分析</string>
+    <string name="cover_save_embed_summary">其他播放器也能看到；保持文件的修改时间不变，需要“所有文件访问权限”</string>
     <string name="cover_save_sidecar">歌曲旁边的同名图片</string>
     <string name="cover_save_sidecar_summary">歌曲名.jpg；这些图片也会出现在相册里</string>
     <string name="cover_fetch_missing">获取所有缺失的封面</string>
@@ -302,7 +302,11 @@
     <string name="lyrics_save_hidden">隐藏目录</string>
     <string name="lyrics_save_hidden_summary">音乐目录下的 .jeekmusic/lyrics/，不改动音乐文件</string>
     <string name="lyrics_save_embed">写入音乐文件</string>
-    <string name="lyrics_save_embed_summary">会修改文件，歌曲会被重新扫描和分析；CUE 整轨改存到隐藏目录</string>
+    <string name="lyrics_save_embed_summary">保持文件的修改时间不变，需要“所有文件访问权限”；CUE 整轨改存到隐藏目录</string>
     <string name="lyrics_saved_hidden">歌词已保存到隐藏目录</string>
     <string name="lyrics_saved_embed">歌词已写入音乐文件</string>
+    <string name="all_files_title">需要“所有文件访问权限”</string>
+    <string name="all_files_message">写入音乐文件时要保持文件的修改时间不变。Android 不允许普通 App 修改其他文件的修改时间，有了“所有文件访问权限”才可以。这个权限只用于写入封面和歌词后恢复修改时间。\n\n没有授权时不会改动音乐文件，封面和歌词改存到隐藏目录。</string>
+    <string name="all_files_grant">去授权</string>
+    <string name="all_files_missing">未授予“所有文件访问权限”：暂时改存到隐藏目录，点按授权</string>
 </resources>

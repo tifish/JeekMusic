@@ -733,9 +733,15 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`）：按专辑键分组，用 `CoverStore.hasCover` 找出没有封面的组，逐组查询保存，通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
 - **保存**（`CoverStore.save`）：图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
   - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
-  - 写入文件：通过 SAF 文档 URI 以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片。文件的修改时间和大小会变，所以会被重新扫描，智能标签的签名也变了、需要重新分析
+  - 写入文件：经 `AudioFileEditor`（见下）以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片
   - 同名图片：`歌曲名.jpg`，已存在时覆盖
   - 写入文件或同名图片失败时改存到隐藏目录；存到别处时删掉这首歌在隐藏目录里原来的封面，否则新封面会被它挡住
+
+**写入音乐文件并保持修改时间（`AudioFileEditor`，需求 C-5）**：封面和歌词写入文件共用。
+
+- 通过 SAF 文档 URI 以 `rw` 打开文件，`Os.fstat` 记下修改时间，交给 TagLib 修改，再对 `/proc/self/fd/<fd>` 调 `File.setLastModified` 改回原来的值
+- 实测（Android 16 模拟器）：只有 SAF 写授权时，无论对描述符还是对路径设置修改时间都被拒绝；有"所有文件访问权限"（`MANAGE_EXTERNAL_STORAGE`）时对描述符设置成功。所以没有这个权限时不写入，返回失败让调用方改存隐藏目录；设置页用 `Environment.isExternalStorageManager()` 判断，从系统设置返回时（`LifecycleResumeEffect`）重新检查
+- 修改时间不变、大小变了：立即把曲库里同一文件（CUE 整轨的各首）的 `size` 改成新的，`track_features.signature` 从"时间:旧大小"改成"时间:新大小"。MediaStore 随后重新扫描这个文件，得到的修改时间和大小与曲库一致，扫描器不会再处理它，智能标签也不需要重新分析
 
 ### 7.5 队列与续播（QueuePersistence）
 
@@ -804,7 +810,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 - **同名 .lrc**（默认）：见下面的流程，不覆盖已有文件
 - **隐藏目录**：`<音乐文件夹>/.jeekmusic/lyrics/` 下与同名 .lrc 相同的文件名，已存在时覆盖（是自己的文件）
-- **写入文件**：通过 SAF 文档 URI 以 `rw` 打开，读出 TagLib 属性表、去掉原有的歌词字段、加上 `LYRICS`，整个写回（TagLib 的属性表写入会删掉表里没有的字段，所以必须先读）。MP3 写成 USLT。文件的修改时间和大小会变，会被重新扫描、重新分析智能标签。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
+- **写入文件**：经 `AudioFileEditor`（§7.4，保持修改时间不变，需要"所有文件访问权限"）以 `rw` 打开，读出 TagLib 属性表、去掉原有的歌词字段、加上 `LYRICS`，整个写回（TagLib 的属性表写入会删掉表里没有的字段，所以必须先读）。MP3 写成 USLT。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
 - **仅 App 内**：直接写入 `lyrics_cache`
 - 同名 .lrc 或写入文件失败时改存隐藏目录，再失败时写入 `lyrics_cache`；`save()` 返回实际保存的位置，播放页据此提示
 
@@ -930,8 +936,10 @@ MainActivity
 | `READ_EXTERNAL_STORAGE` | `maxSdkVersion=32` | 在 Android 12 上读取 MediaStore 音频 |
 | `POST_NOTIFICATIONS` | API 33+ | 媒体通知 |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | | 后台播放 |
-| `INTERNET` | | 只用于在线歌词 |
-| `ACCESS_NETWORK_STATE` | | 判断是否连着 Wi-Fi，用于"仅 Wi-Fi 自动获取" |
+| `INTERNET` | | 在线歌词、在线封面、检查更新 |
+| `ACCESS_NETWORK_STATE` | | 判断是否连着 Wi-Fi，用于"仅 Wi-Fi 下自动" |
+| `REQUEST_INSTALL_PACKAGES`、`UPDATE_PACKAGES_WITHOUT_USER_ACTION` | | 从 GitHub 自动更新 |
+| `MANAGE_EXTERNAL_STORAGE` | 可选，用户选择"写入音乐文件"时才引导授权 | 写入封面、歌词后把文件的修改时间改回原来的值（§7.4） |
 
 SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` 持久化。启动时（推迟到首帧之后）检查 `persistedUriPermissions`，如果授权已失效（比如 SD 卡更换了），在文件夹列表中标红并提示重新授权。
 

@@ -7,7 +7,7 @@ import android.util.LruCache
 import com.tinyfish.jeekmusic.data.db.LyricsCacheEntity
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
 import com.tinyfish.jeekmusic.data.library.appDirectory
-import com.tinyfish.jeekmusic.data.library.childDocumentId
+import com.tinyfish.jeekmusic.data.library.AudioFileEditor
 import com.tinyfish.jeekmusic.data.library.create
 import com.tinyfish.jeekmusic.data.library.writeFile
 import com.tinyfish.jeekmusic.data.settings.FetchMode
@@ -47,6 +47,7 @@ class LyricsRepository @Inject constructor(
     private val tree: DocumentTree,
     private val settings: SettingsRepository,
     private val lrcLib: dagger.Lazy<LrcLibClient>,
+    private val editor: AudioFileEditor,
 ) {
     /** 按目录缓存子文件列表；写入 .lrc 后要使对应目录失效。 */
     private val directoryCache = LruCache<String, List<DocumentTree.Child>>(32)
@@ -161,16 +162,16 @@ class LyricsRepository @Inject constructor(
             .also { invalidateDirectory(folder.id, DocumentTree.appPath(folder, LYRICS_DIR)) }
     }
 
-    /** 写进歌词标签：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。 */
-    private fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean = runCatching {
-        val fileId = childDocumentId(DocumentTree.directoryDocumentId(folder, track.relativePath), track.fileName)
-        tree.resolver.openFileDescriptor(tree.documentUri(folder, fileId), "rw")?.use { pfd ->
-            val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap ?: return false
-            TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
-            map["LYRICS"] = arrayOf(text)
-            TagLib.savePropertyMap(pfd.dup().detachFd(), map)
-        } ?: false
-    }.getOrDefault(false)
+    /**
+     * 写进歌词标签：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。
+     * 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），改存到隐藏目录。
+     */
+    private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean = editor.edit(folder, track) { pfd ->
+        val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap ?: return@edit false
+        TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
+        map["LYRICS"] = arrayOf(text)
+        TagLib.savePropertyMap(pfd.dup().detachFd(), map)
+    }
 
     private fun writeLrc(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)

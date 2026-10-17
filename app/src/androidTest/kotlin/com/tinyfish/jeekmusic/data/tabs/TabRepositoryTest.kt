@@ -54,6 +54,18 @@ class TabRepositoryTest {
     }
 
     @Test
+    fun restoredArtistsGoAfterFoldersInBackupOrder() = runTest {
+        keys()
+        repository.pinArtist("a")
+        // 从备份恢复：已经固定的 a 跳过，x、y 按备份里的顺序排在"文件夹"后面
+        assertEquals(2, repository.pinArtists(listOf("x", "a", "y")))
+        assertEquals(
+            listOf(Tab.Folders.key, "ARTIST:x", "ARTIST:y", "ARTIST:a", Tab.Artists.key, Tab.Playlists.key),
+            keys(),
+        )
+    }
+
+    @Test
     fun legacyMoodTabsAreRemoved() = runTest {
         // 旧版本把"运动 / 安静"固定成了标签；现在改成筛选，启动时清掉
         db.tabDao().insert(

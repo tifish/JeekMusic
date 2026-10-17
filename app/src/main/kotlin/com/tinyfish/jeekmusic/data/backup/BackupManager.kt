@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.data.backup
 
+import com.tinyfish.jeekmusic.data.tabs.TabRepository
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -11,7 +12,6 @@ import com.tinyfish.jeekmusic.BuildConfig
 import com.tinyfish.jeekmusic.data.db.FolderDao
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
-import com.tinyfish.jeekmusic.data.db.PinnedTabEntity
 import com.tinyfish.jeekmusic.data.db.PlaylistDao
 import com.tinyfish.jeekmusic.data.db.TabDao
 import com.tinyfish.jeekmusic.data.db.TrackDao
@@ -81,6 +81,7 @@ class BackupManager @Inject constructor(
     private val trackDao: TrackDao,
     private val playlistDao: PlaylistDao,
     private val tabDao: TabDao,
+    private val tabs: TabRepository,
     private val playlists: PlaylistRepository,
     private val settings: SettingsRepository,
     private val scanner: LibraryScanner,
@@ -265,14 +266,11 @@ class BackupManager @Inject constructor(
             items += keys.size
         }
 
-        val existingTabs = tabDao.all().map { it.type to it.ref }.toSet()
-        var position = tabDao.maxPosition()
-        val newTabs = backup.pinnedTabs.filter { it !in existingTabs && it.first == "ARTIST" }
-            .map { (type, ref) -> PinnedTabEntity(type = type, ref = ref, position = ++position) }
-        tabDao.insert(newTabs)
+        // 固定的艺术家和手动固定时一样，排在"文件夹"标签后面
+        val pinnedCount = tabs.pinArtists(backup.pinnedTabs.filter { it.first == "ARTIST" }.map { it.second })
 
         backup.settings?.let { applySettings(it) }
-        RestoreReport(backup.playlists.size, items, missing, newTabs.size)
+        RestoreReport(backup.playlists.size, items, missing, pinnedCount)
     }
 
     private suspend fun applySettings(json: JSONObject) {

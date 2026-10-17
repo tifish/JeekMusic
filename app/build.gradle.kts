@@ -46,6 +46,11 @@ android {
     }
 
     buildTypes {
+        // debug 包用不同的包名，和正式签名的 release 包共存：跑设备测试时不会覆盖或卸载正式版
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

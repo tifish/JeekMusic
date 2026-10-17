@@ -174,9 +174,6 @@ interface TabDao {
 
     @Query("UPDATE pinned_tab SET position = :position WHERE id = :id")
     suspend fun setPosition(id: Long, position: Int)
-
-    @Query("SELECT COALESCE(MAX(position), -1) FROM pinned_tab")
-    suspend fun maxPosition(): Int
 }
 
 data class PlaylistWithCount(

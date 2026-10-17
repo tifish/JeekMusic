@@ -33,15 +33,26 @@ class TabRepository @Inject constructor(
     }
 
     /** 新固定的艺术家放在"文件夹"标签之后（不是追加到末尾），保证在标签栏里一眼能看到。 */
-    suspend fun pinArtist(nameKey: String) = db.withTransaction {
+    suspend fun pinArtist(nameKey: String) {
+        pinArtists(listOf(nameKey))
+    }
+
+    /**
+     * 按给定顺序把一组艺术家固定到"文件夹"标签之后（需求 T-3）；已经固定的跳过。
+     * 从备份恢复时也走这里，恢复的艺术家同样排在"文件夹"后面。返回新固定的个数。
+     */
+    suspend fun pinArtists(nameKeys: List<String>): Int = db.withTransaction {
         val tabs = tabDao.all()
-        if (tabs.any { it.type == TYPE_ARTIST && it.ref == nameKey }) return@withTransaction
+        val pinned = tabs.filter { it.type == TYPE_ARTIST }.mapTo(HashSet()) { it.ref }
+        val added = nameKeys.distinct().filter { it !in pinned }
+        if (added.isEmpty()) return@withTransaction 0
         val at = tabs.indexOfFirst { it.type == TYPE_FOLDERS } + 1
         tabs.forEachIndexed { i, tab ->
-            val position = if (i < at) i else i + 1
+            val position = if (i < at) i else i + added.size
             if (tab.position != position) tabDao.setPosition(tab.id, position)
         }
-        tabDao.insert(listOf(PinnedTabEntity(type = TYPE_ARTIST, ref = nameKey, position = at)))
+        tabDao.insert(added.mapIndexed { i, key -> PinnedTabEntity(type = TYPE_ARTIST, ref = key, position = at + i) })
+        added.size
     }
 
     /** 内置标签不能取消固定（需求 T-2）。 */

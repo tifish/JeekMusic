@@ -1,10 +1,22 @@
 package com.tinyfish.jeekmusic.ui.artists
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -153,31 +165,105 @@ private fun ArtistRow(artist: ArtistEntity, onClick: () -> Unit) {
     }
 }
 
-/** 右侧字母快速索引：点击或拖动跳到对应分组。 */
+/**
+ * 右侧字母快速索引：点击或拖动跳到对应分组。
+ * 拖动索引或滚动列表时，索引左侧浮动显示当前字母，停止后淡出。
+ */
 @Composable
 private fun LetterIndex(letters: List<String>, listState: LazyListState, headerIndex: Map<String, Int>, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    fun jump(y: Float, height: Int) {
+    // 手指按在索引上时指向的字母；没按时为 -1
+    var touched by remember { mutableIntStateOf(-1) }
+    var indexHeight by remember { mutableIntStateOf(0) }
+    // 列表第一个可见项所在的分组
+    val starts = remember(letters, headerIndex) { letters.map { headerIndex[it] ?: 0 } }
+    val firstVisible by remember(starts) {
+        derivedStateOf {
+            val first = listState.firstVisibleItemIndex
+            starts.indexOfLast { it <= first }.coerceAtLeast(0)
+        }
+    }
+    val shown = if (touched >= 0) touched else firstVisible
+
+    val active = touched >= 0 || listState.isScrollInProgress
+    var bubbleVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(active) {
+        if (active) bubbleVisible = true else { delay(800); bubbleVisible = false }
+    }
+
+    fun touch(y: Float, height: Int) {
         if (letters.isEmpty() || height <= 0) return
         val i = (y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)
+        if (i == touched) return
+        touched = i
         headerIndex[letters[i]]?.let { scope.launch { listState.scrollToItem(it) } }
     }
-    Column(
-        modifier
-            .fillMaxHeight()
-            .padding(vertical = 8.dp)
-            .width(24.dp)
-            .testTag("letter_index")
-            .pointerInput(letters) { detectTapGestures { jump(it.y, size.height) } }
-            .pointerInput(letters) { detectVerticalDragGestures { change, _ -> jump(change.position.y, size.height) } },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
-    ) {
-        letters.forEach {
-            Text(it, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+
+    Box(modifier.fillMaxHeight()) {
+        Column(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(vertical = IndexPadding)
+                .width(24.dp)
+                .onSizeChanged { indexHeight = it.height }
+                .testTag("letter_index")
+                .pointerInput(letters) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        touch(down.position.y, size.height)
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            touch(change.position.y, size.height)
+                        }
+                        touched = -1
+                    }
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // 每个字母占相同高度，和 touch() 中按高度均分的换算一致，气泡也能对准字母
+            letters.forEach {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(it, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = bubbleVisible && letters.isNotEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 24.dp + 8.dp)
+                .offset {
+                    val i = shown.coerceIn(0, (letters.size - 1).coerceAtLeast(0))
+                    val center = IndexPadding.roundToPx() + (i + 0.5f) * indexHeight / letters.size.coerceAtLeast(1)
+                    IntOffset(0, (center - BubbleSize.toPx() / 2).toInt().coerceAtLeast(0))
+                },
+        ) {
+            Box(
+                Modifier
+                    .size(BubbleSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .testTag("letter_bubble"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    letters.getOrElse(shown) { "" },
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
     }
 }
+
+private val IndexPadding = 8.dp
+private val BubbleSize = 56.dp
 
 @HiltViewModel(assistedFactory = ArtistDetailViewModel.Factory::class)
 class ArtistDetailViewModel @AssistedInject constructor(

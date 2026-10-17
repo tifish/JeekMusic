@@ -190,7 +190,13 @@ class PlayerConnection @Inject constructor(
 
     fun previous() = withController { seekToPrevious() }
 
-    fun seekTo(positionMs: Long) = withController { seekTo(positionMs) }
+    /**
+     * 跳转到当前歌曲的某个位置。重启后恢复的队列还没准备（省电），这时"在歌曲内跳转"的命令不可用、
+     * 会被直接忽略，改用"跳到这首歌的这个位置"（这个命令在未准备时也可用），第一次播放就从这里开始。
+     */
+    fun seekTo(positionMs: Long) = withController {
+        if (isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) seekTo(positionMs) else seekTo(currentMediaItemIndex, positionMs)
+    }
 
     fun toggleShuffle() = withController { shuffleModeEnabled = !shuffleModeEnabled }
 

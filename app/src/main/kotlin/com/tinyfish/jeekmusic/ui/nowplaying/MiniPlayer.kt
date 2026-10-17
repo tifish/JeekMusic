@@ -1,5 +1,10 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.clickable
 import com.tinyfish.jeekmusic.ui.components.formatDuration
 import androidx.compose.ui.input.pointer.pointerInput
@@ -18,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,7 +42,8 @@ import com.tinyfish.jeekmusic.ui.components.Artwork
 
 /**
  * 底部常驻迷你播放条（需求 T-7）：封面、标题、艺术家、上一首 / 播放暂停 / 下一首，点击展开播放页。
- * 左右拖动播放条可以调整进度：拖动时进度条加粗、副标题显示目标时间，松手后才跳转。
+ * 调整进度（需求 T-7）：顶部的进度条有圆点标出当前位置，进度条所在的 28dp 高的区域内按下即跳到手指位置、
+ * 拖动时圆点跟着手指；在播放条其他地方左右拖动则按距离相对调整。拖动时副标题显示目标时间，松手后才跳转。
  */
 @Composable
 fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
@@ -73,17 +78,19 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
                     }
                 },
         ) {
-            // 固定高度的容器：拖动时进度条加粗，不推动下面的内容
-            Box(Modifier.fillMaxWidth().height(6.dp).testTag("mini_seek")) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth().height(if (dragFraction != null) 6.dp else 2.dp),
-                    drawStopIndicator = {},
-                    gapSize = 0.dp,
-                )
-            }
+            SeekStrip(
+                progress = progress,
+                dragging = dragFraction != null,
+                enabled = duration > 0,
+                onDrag = { dragFraction = it },
+                onRelease = {
+                    dragFraction?.let { viewModel.seekTo((it * duration).toLong()) }
+                    dragFraction = null
+                },
+                onCancel = { dragFraction = null },
+            )
             Row(
-                Modifier.fillMaxWidth().clickable(onClick = onExpand).padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 6.dp),
+                Modifier.fillMaxWidth().clickable(onClick = onExpand).padding(start = 12.dp, end = 4.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Artwork(nowPlaying.artworkUri, 44.dp)
@@ -117,3 +124,67 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
 }
 
 private val SeekTouchHeight = 8.dp
+
+/**
+ * 迷你播放条顶部的进度条：圆点标出当前位置；整条 [StripHeight] 高的区域都是热区，
+ * 按下立即跳到手指所在的位置（拖动时圆点跟着手指走），松手后由 [onRelease] 真正跳转。
+ * 按下和移动事件都在这里消费掉，外层"整条相对拖动"的手势不会同时触发。
+ */
+@Composable
+private fun SeekStrip(
+    progress: Float,
+    dragging: Boolean,
+    enabled: Boolean,
+    onDrag: (Float) -> Unit,
+    onRelease: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val active = MaterialTheme.colorScheme.primary
+    val inactive = active.copy(alpha = 0.25f)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnCancel by rememberUpdatedState(onCancel)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(StripHeight)
+            .testTag("mini_seek")
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                val inset = StripInset.toPx()
+                fun fraction(x: Float) = ((x - inset) / (size.width - 2 * inset)).coerceIn(0f, 1f)
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    currentOnDrag(fraction(down.position.x))
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                        if (change == null) {
+                            currentOnCancel()
+                            break
+                        }
+                        if (!change.pressed) {
+                            change.consume()
+                            currentOnRelease()
+                            break
+                        }
+                        change.consume()
+                        currentOnDrag(fraction(change.position.x))
+                    }
+                }
+            }
+            .drawBehind {
+                val inset = StripInset.toPx()
+                val y = size.height / 2
+                val track = (if (dragging) 6.dp else 4.dp).toPx()
+                val x = inset + (size.width - 2 * inset) * progress
+                drawLine(inactive, Offset(inset, y), Offset(size.width - inset, y), strokeWidth = track, cap = StrokeCap.Round)
+                drawLine(active, Offset(inset, y), Offset(x, y), strokeWidth = track, cap = StrokeCap.Round)
+                // 当前位置：明显的圆点，拖动时放大
+                drawCircle(active, radius = (if (dragging) 9.dp else 6.dp).toPx(), center = Offset(x, y))
+            },
+    )
+}
+
+private val StripHeight = 28.dp
+private val StripInset = 12.dp

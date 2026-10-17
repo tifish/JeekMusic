@@ -31,7 +31,6 @@ class MoodRepository @Inject constructor(
 
     val analyzerVersion: Int get() = ANALYZER_VERSION
 
-    fun tracks(mood: Mood): Flow<List<TrackEntity>> = dao.observeTracks(mood.name)
 
     fun pendingCount(): Flow<Int> = dao.observePendingCount(ANALYZER_VERSION)
 

@@ -68,7 +68,7 @@ fun TabManagerScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(tabTitle(tab), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            if (tab is Tab.PinnedArtist || tab is Tab.Mood) {
+                            if (tab is Tab.PinnedArtist) {
                                 IconButton(onClick = { viewModel.unpin(tab) }) {
                                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.menu_unpin_tab))
                                 }

@@ -133,7 +133,6 @@ class StartupSnapshot @Inject constructor(
 
     private fun encodeTab(tab: Tab): String = when (tab) {
         is Tab.PinnedArtist -> "ARTIST\t${tab.nameKey}\t${tab.name}"
-        is Tab.Mood -> "MOOD\t${tab.mood}"
         else -> tab.key
     }
 
@@ -144,7 +143,6 @@ class StartupSnapshot @Inject constructor(
             Tab.Artists.key -> Tab.Artists
             Tab.Playlists.key -> Tab.Playlists
             "ARTIST" -> parts.getOrNull(1)?.let { Tab.PinnedArtist(it, parts.getOrNull(2) ?: it) }
-            "MOOD" -> parts.getOrNull(1)?.let { Tab.Mood(it) }
             else -> null
         }
     }

@@ -14,6 +14,12 @@ data class FolderWithCount(
     @ColumnInfo(name = "track_count") val trackCount: Int,
 )
 
+/** 某个艺术家在当前筛选下的歌曲数。 */
+data class ArtistCount(
+    @ColumnInfo(name = "artist_id") val artistId: Long,
+    val count: Int,
+)
+
 data class DirectoryCount(
     @ColumnInfo(name = "relative_path") val relativePath: String,
     val count: Int,
@@ -44,11 +50,11 @@ interface FolderDao {
 
     @Query(
         """
-        SELECT f.*, (SELECT COUNT(*) FROM track t WHERE t.folder_id = f.id) AS track_count
+        SELECT f.*, (SELECT COUNT(*) FROM track t WHERE t.folder_id = f.id AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))) AS track_count
         FROM library_folder f ORDER BY f.display_name
         """,
     )
-    fun observeWithCounts(): Flow<List<FolderWithCount>>
+    fun observeWithCounts(mood: String?): Flow<List<FolderWithCount>>
 }
 
 @Dao
@@ -80,15 +86,15 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM track")
     fun observeCount(): Flow<Int>
 
-    /** 某个音乐文件夹下、以 prefix 开头的各目录的歌曲数，用来在内存中折叠出子文件夹。 */
+    /** 某个音乐文件夹下、以 prefix 开头的各目录的歌曲数（只算符合筛选的），用来在内存中折叠出子文件夹。 */
     @Query(
         """
-        SELECT relative_path, COUNT(*) AS count FROM track
-        WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\'
+        SELECT relative_path, COUNT(*) AS count FROM track t
+        WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\' AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))
         GROUP BY relative_path
         """,
     )
-    fun observeDirectoryCounts(folderId: Long, prefix: String): Flow<List<DirectoryCount>>
+    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?): Flow<List<DirectoryCount>>
 
     @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path = :relativePath")
     fun observeInDirectory(folderId: Long, relativePath: String): Flow<List<TrackEntity>>
@@ -136,12 +142,26 @@ interface ArtistDao {
 
     @Query("SELECT * FROM artist WHERE name_key = :nameKey")
     fun observeByNameKey(nameKey: String): Flow<ArtistEntity?>
+
+    /** 每个艺术家属于某个智能标签的歌曲数；没有这类歌的艺术家不在结果里。 */
+    @Query(
+        """
+        SELECT ta.artist_id, COUNT(*) AS count FROM track_artist ta
+        JOIN track t ON t.id = ta.track_id
+        JOIN track_mood m ON m.track_key = t.track_key
+        WHERE m.mood = :mood GROUP BY ta.artist_id
+        """,
+    )
+    fun observeCounts(mood: String): Flow<List<ArtistCount>>
 }
 
 @Dao
 interface TabDao {
     @Query("SELECT * FROM pinned_tab ORDER BY position")
     fun observeAll(): Flow<List<PinnedTabEntity>>
+
+    @Query("DELETE FROM pinned_tab WHERE type = :type")
+    suspend fun deleteType(type: String)
 
     @Query("SELECT * FROM pinned_tab ORDER BY position")
     suspend fun all(): List<PinnedTabEntity>
@@ -332,6 +352,6 @@ interface MoodDao {
     @Query("SELECT * FROM track_mood WHERE track_key = :trackKey")
     suspend fun mood(trackKey: String): TrackMoodEntity?
 
-    @Query("SELECT t.* FROM track_mood m JOIN track t ON t.track_key = m.track_key WHERE m.mood = :mood ORDER BY t.title COLLATE NOCASE")
-    fun observeTracks(mood: String): Flow<List<TrackEntity>>
+    @Query("SELECT track_key FROM track_mood WHERE mood = :mood")
+    fun observeKeys(mood: String): Flow<List<String>>
 }

@@ -81,13 +81,13 @@ class LibraryDaoTest {
                 track(id, "Music/100%_Hits/", "d.mp3"),
             ),
         )
-        val counts = tracks.observeDirectoryCounts(id, "Music/").first()
+        val counts = tracks.observeDirectoryCounts(id, "Music/", null).first()
         assertEquals(
             listOf(FolderNode("100%_Hits", "Music/100%_Hits/", 1), FolderNode("Pop", "Music/Pop/", 2)),
             FolderTree.children("Music/", counts),
         )
         // LIKE 中的 % 和 _ 必须被转义，否则 "Music/100%_Hits/" 会匹配到别的目录
-        val escaped = tracks.observeDirectoryCounts(id, "Music/100\\%\\_Hits/").first()
+        val escaped = tracks.observeDirectoryCounts(id, "Music/100\\%\\_Hits/", null).first()
         assertEquals(1, escaped.sumOf { it.count })
         assertEquals(1, tracks.observeInDirectory(id, "Music/").first().size)
     }
@@ -127,7 +127,7 @@ class LibraryDaoTest {
         val a = addFolder("Music/")
         val b = addFolder("Download/")
         tracks.insert(listOf(track(a, "Music/", "1.mp3"), track(a, "Music/x/", "2.mp3"), track(b, "Download/", "3.mp3")))
-        assertEquals(listOf(1, 2), folders.observeWithCounts().first().sortedBy { it.trackCount }.map { it.trackCount })
+        assertEquals(listOf(1, 2), folders.observeWithCounts(null).first().sortedBy { it.trackCount }.map { it.trackCount })
 
         folders.delete(listOf(a))
         assertEquals(1, tracks.signatures().size)
@@ -158,5 +158,34 @@ class LibraryDaoTest {
         tracks.delete(listOf(ids[0]))
         artists.deleteOrphans()
         assertEquals(listOf("周杰伦"), artists.observeAll().first().map { it.name })
+    }
+
+    @Test
+    fun moodFilterCounts() = runTest {
+        val id = addFolder("Music/")
+        val ids = tracks.insert(
+            listOf(track(id, "Music/", "a.mp3"), track(id, "Music/Pop/", "b.mp3"), track(id, "Music/Rock/", "c.mp3")),
+        )
+        val moods = db.moodDao()
+        moods.insertMoods(
+            listOf(
+                TrackMoodEntity("external_primary:Music/a.mp3", "SPORT", "AUTO"),
+                TrackMoodEntity("external_primary:Music/Pop/b.mp3", "SPORT", "MANUAL"),
+                TrackMoodEntity("external_primary:Music/Rock/c.mp3", "QUIET", "AUTO"),
+            ),
+        )
+        // 筛选"运动"：Rock 子文件夹里没有运动歌曲，不再出现
+        assertEquals(
+            listOf(FolderNode("Pop", "Music/Pop/", 1)),
+            FolderTree.children("Music/", tracks.observeDirectoryCounts(id, "Music/", "SPORT").first()),
+        )
+        assertEquals(listOf(2), folders.observeWithCounts("SPORT").first().map { it.trackCount })
+        assertEquals(setOf("external_primary:Music/Rock/c.mp3"), moods.observeKeys("QUIET").first().toSet())
+
+        artists.insert(listOf(ArtistEntity(name = "A", nameKey = "a", sortKey = "a", indexLetter = "A")))
+        val artistId = artists.byNameKeys(listOf("a")).single().id
+        artists.insertLinks(ids.map { TrackArtistEntity(it, artistId) })
+        assertEquals(listOf(ArtistCount(artistId, 2)), artists.observeCounts("SPORT").first())
+        assertEquals(listOf(ArtistCount(artistId, 1)), artists.observeCounts("QUIET").first())
     }
 }

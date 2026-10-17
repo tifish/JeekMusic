@@ -267,7 +267,7 @@ class BackupManager @Inject constructor(
 
         val existingTabs = tabDao.all().map { it.type to it.ref }.toSet()
         var position = tabDao.maxPosition()
-        val newTabs = backup.pinnedTabs.filter { it !in existingTabs && it.first in listOf("ARTIST", "MOOD") }
+        val newTabs = backup.pinnedTabs.filter { it !in existingTabs && it.first == "ARTIST" }
             .map { (type, ref) -> PinnedTabEntity(type = type, ref = ref, position = ++position) }
         tabDao.insert(newTabs)
 

@@ -67,6 +67,9 @@
 
     <string name="tab_sport">运动</string>
     <string name="tab_quiet">安静</string>
+    <string name="filter_all">全部</string>
+    <string name="action_filter">按运动 / 安静筛选</string>
+    <string name="filter_empty">没有符合“%s”筛选的歌曲</string>
 
     <string name="menu_play_next">下一首播放</string>
     <string name="menu_add_to_queue">添加到队列</string>
@@ -190,7 +193,6 @@
         <item quantity="other">还有 %d 首未分析</item>
     </plurals>
     <string name="mood_analyze_now">立即分析</string>
-    <string name="mood_empty">这里还没有歌曲。音频分析完成后会自动归类，也可以在歌曲菜单里手动标记。</string>
     <string name="settings_moods">智能标签</string>
     <string name="settings_analysis_mode">分析时机</string>
     <string name="analysis_charging">仅充电时（推荐）</string>

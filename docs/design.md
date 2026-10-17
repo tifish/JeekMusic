@@ -432,7 +432,7 @@ interface TagReader {
 
 ### 5.1 标签栏（TabRepository）
 
-- 标签列表来自 `pinned_tab ORDER BY position`。首次安装时写入默认值：文件夹、艺术家、播放列表、运动、安静
+- 标签列表来自 `pinned_tab ORDER BY position`。首次安装时写入默认值：文件夹、艺术家、播放列表（"运动 / 安静"已改为筛选，见 §5.5；启动时删除旧版本留下的 `MOOD` 类型标签）
 - 固定艺术家时插入到"文件夹"标签之后（在同一个事务里把后面的标签 `position` 依次加一），而不是追加到末尾，否则标签多时新标签在屏幕外看不到
 - 固定艺术家：插入 `(ARTIST, name_key)`，位置放在最后；如果已经存在就忽略
 - 固定的艺术家在重扫后不存在了（name_key 查不到）：标签保留，页面显示"暂无歌曲"，并提供"取消固定"按钮。这样 SD 卡暂时拔出时，标签不会丢失
@@ -482,12 +482,16 @@ albumDir = relative_path；如果最后一级目录名匹配 ^(cd|disc|disk)\s*\
 
 入口（需求 AL-1）：`TrackRow` 的"更多"菜单、播放页上的专辑名（`MediaItem` 的 extras 里带上 `album_key`）。路由：`Album(albumKey: String)`。
 
-### 5.5 智能标签页
+### 5.5 运动 / 安静筛选
 
-- 查询：`SELECT track.* FROM track_mood JOIN track USING(track_key) WHERE mood = ?`，默认按标题排序
-- 顶部提示：`未分析数 = 曲库总数 - 已分析数`（排除 `failed`），大于 0 时显示"还有 N 首未分析"，并提供"立即分析"按钮（触发一次不要求充电的任务）
-- 点击歌曲（需求 M-9）：构造的队列为 `[点击的歌] + shuffled(其余歌曲)`，用 `setMediaItems(items, startIndex = 0)` 提交。随机是在构造队列时完成的，不调用 `setShuffleModeEnabled`，所以不影响全局的随机开关
-- 路由：`MoodTracks(mood: Mood)`
+最初"运动"和"安静"是两个标签页；后来改为全局筛选（需求 M-6），在任何歌曲列表里都能用。
+
+- 状态：`MoodFilter { ALL, SPORT, QUIET }`，保存在设置 DataStore 里（`mood_filter`），由 `MoodFilterRepository` 提供 `filter` 和 `allowedKeys`（`SELECT track_key FROM track_mood WHERE mood = ?` 的集合，`ALL` 时为 null）。分析完成或手动修正后 `track_mood` 变化，所有列表自动刷新
+- 只有歌曲列表在内存里按 `allowedKeys` 过滤（艺术家页、专辑页、文件夹内的歌曲、播放列表、搜索结果）；需要计数的地方在 SQL 里加条件：
+  - 文件夹：`observeWithCounts(mood)`、`observeDirectoryCounts(..., mood)` 加 `(:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_mood WHERE mood = :mood))`。子文件夹由计数折叠得到，没有这类歌的子文件夹自然不出现；根级的音乐文件夹总是显示
+  - 艺术家列表：`ArtistDao.observeCounts(mood)` 按艺术家统计这类歌的数量，没有的艺术家去掉，`track_count` 换成筛选后的数量
+- 播放列表在筛选时隐藏拖动手柄：只看到部分条目时，按可见条目重排会打乱看不到的条目
+- 标题栏的筛选菜单里显示未分析数（`未分析数 = 曲库总数 - 已分析数`，排除 `failed`），并提供"立即分析"（触发一次不要求充电的任务）。未分析数只在菜单打开时查询，不影响启动
 
 ### 5.6 搜索
 

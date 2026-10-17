@@ -69,6 +69,9 @@
 
     <string name="tab_sport">Workout</string>
     <string name="tab_quiet">Calm</string>
+    <string name="filter_all">All</string>
+    <string name="action_filter">Filter by Workout / Calm</string>
+    <string name="filter_empty">No songs match “%s”</string>
 
     <string name="menu_play_next">Play next</string>
     <string name="menu_add_to_queue">Add to queue</string>
@@ -197,7 +200,6 @@
         <item quantity="other">%d songs not analyzed yet</item>
     </plurals>
     <string name="mood_analyze_now">Analyze now</string>
-    <string name="mood_empty">No songs here yet. Songs are tagged automatically after audio analysis, or you can tag them from a song’s menu.</string>
     <string name="settings_moods">Smart tags</string>
     <string name="settings_analysis_mode">When to analyze</string>
     <string name="analysis_charging">Only while charging (recommended)</string>

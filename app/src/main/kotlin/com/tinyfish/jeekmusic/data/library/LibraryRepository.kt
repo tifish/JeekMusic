@@ -20,6 +20,11 @@ import com.tinyfish.jeekmusic.data.scanner.SafPaths
 import com.tinyfish.jeekmusic.data.scanner.VolumePath
 import com.tinyfish.jeekmusic.util.NaturalOrderComparator
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
+import com.tinyfish.jeekmusic.data.filter.filterByMood
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -41,6 +46,7 @@ sealed interface AddFolderResult {
 
 data class DirectoryContent(val folders: List<FolderNode>, val tracks: List<TrackEntity>)
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class LibraryRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -49,10 +55,19 @@ class LibraryRepository @Inject constructor(
     private val trackDao: TrackDao,
     private val artistDao: ArtistDao,
     private val scanner: LibraryScanner,
+    private val moodFilter: MoodFilterRepository,
 ) {
-    val folders: Flow<List<FolderWithCount>> = folderDao.observeWithCounts()
+    /** 根级音乐文件夹；歌曲数只算符合筛选的（需求 M-6），文件夹本身总是显示。 */
+    val folders: Flow<List<FolderWithCount>> = moodFilter.filter.flatMapLatest { folderDao.observeWithCounts(it.mood) }
 
-    val artists: Flow<List<ArtistEntity>> = artistDao.observeAll()
+    /** 艺术家列表；筛选时只保留有这类歌的艺术家，歌曲数也只算这类歌（需求 M-6）。 */
+    val artists: Flow<List<ArtistEntity>> = moodFilter.filter.flatMapLatest { filter ->
+        val mood = filter.mood ?: return@flatMapLatest artistDao.observeAll()
+        combine(artistDao.observeAll(), artistDao.observeCounts(mood)) { artists, counts ->
+            val byId = counts.associate { it.artistId to it.count }
+            artists.mapNotNull { artist -> byId[artist.id]?.let { artist.copy(trackCount = it) } }
+        }
+    }
 
     val trackCount: Flow<Int> = trackDao.observeCount()
 
@@ -99,10 +114,14 @@ class LibraryRepository @Inject constructor(
 
     fun directory(folderId: Long, path: String): Flow<DirectoryContent> {
         val prefix = MediaStoreSource.escapeLike(path)
-        return combine(
-            trackDao.observeDirectoryCounts(folderId, prefix),
-            trackDao.observeInDirectory(folderId, path),
-        ) { counts, tracks ->
+        // 筛选时没有符合歌曲的子文件夹不显示（计数查询里已经过滤）
+        return moodFilter.filter.flatMapLatest { filter ->
+            combine(
+                trackDao.observeDirectoryCounts(folderId, prefix, filter.mood),
+                trackDao.observeInDirectory(folderId, path),
+                moodFilter.allowedKeys,
+            ) { counts, tracks, allowed -> Triple(counts, tracks.filterByMood(allowed) { it.trackKey }, allowed) }
+        }.map { (counts, tracks, _) ->
             DirectoryContent(
                 folders = FolderTree.children(path, counts),
                 // CUE 虚拟歌曲排在同目录普通歌曲的后面，按音轨号排序
@@ -118,6 +137,7 @@ class LibraryRepository @Inject constructor(
     /** 文件夹及其子文件夹中的全部歌曲，按路径和文件名自然排序（"播放全部（含子文件夹）"）。 */
     suspend fun tracksUnder(folderId: Long, path: String): List<TrackEntity> =
         trackDao.under(folderId, MediaStoreSource.escapeLike(path))
+            .filterByMood(moodFilter.allowedKeys.first()) { it.trackKey }
             .sortedWith(
                 compareBy<TrackEntity, String>(NaturalOrderComparator) { it.relativePath }
                     .thenBy(NaturalOrderComparator) { it.fileName }
@@ -129,8 +149,9 @@ class LibraryRepository @Inject constructor(
     private val sortKeys by lazy { SortKeys.android() }
 
     /** 艺术家的全部歌曲，不分组，按标题排序（中文按拼音），同名的再按文件名排序（需求 A-6）。 */
-    fun artistTracks(nameKey: String): Flow<List<TrackEntity>> = trackDao.observeByArtist(nameKey).map { tracks ->
-        tracks.map { it to sortKeys.sortKey(it.title) }
+    fun artistTracks(nameKey: String): Flow<List<TrackEntity>> = combine(trackDao.observeByArtist(nameKey), moodFilter.allowedKeys) { tracks, allowed ->
+        tracks.filterByMood(allowed) { it.trackKey }
+            .map { it to sortKeys.sortKey(it.title) }
             .sortedWith(
                 compareBy<Pair<TrackEntity, String>, String>(NaturalOrderComparator) { it.second }
                     .thenBy(NaturalOrderComparator) { it.first.fileName }
@@ -139,7 +160,8 @@ class LibraryRepository @Inject constructor(
             .map { it.first }
     }.flowOn(Dispatchers.Default)
 
-    fun albumTracks(albumKey: String): Flow<List<TrackEntity>> = trackDao.observeByAlbum(albumKey)
+    fun albumTracks(albumKey: String): Flow<List<TrackEntity>> =
+        combine(trackDao.observeByAlbum(albumKey), moodFilter.allowedKeys) { tracks, allowed -> tracks.filterByMood(allowed) { it.trackKey } }
 
     suspend fun tracksByIds(ids: List<Long>): List<TrackEntity> {
         val byId = ids.chunked(500).flatMap { trackDao.byIds(it) }.associateBy { it.id }

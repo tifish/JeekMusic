@@ -40,6 +40,9 @@ data class ScanConfig(
     val legacyCharset: Charset? = null,
 )
 
+/** 全局的"运动 / 安静"筛选（需求 M-6）；[mood] 对应 track_mood.mood，ALL 为 null。 */
+enum class MoodFilter(val mood: String?) { ALL(null), SPORT("SPORT"), QUIET("QUIET") }
+
 /** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
 data class SleepPrefs(
     val finishSong: Boolean = false,
@@ -59,6 +62,7 @@ data class Settings(
     val autoFetchLyricsOnWifi: Boolean = false,
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
     val sleep: SleepPrefs = SleepPrefs(),
+    val moodFilter: MoodFilter = MoodFilter.ALL,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -84,6 +88,7 @@ class SettingsRepository @Inject constructor(
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
+        val MOOD_FILTER = stringPreferencesKey("mood_filter")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -109,6 +114,8 @@ class SettingsRepository @Inject constructor(
         it[Keys.SLEEP_CUSTOM_MINUTES] = prefs.customMinutes
         it[Keys.SLEEP_SONG_COUNT] = prefs.songCount
     }
+
+    suspend fun setMoodFilter(filter: MoodFilter) = context.dataStore.edit { it[Keys.MOOD_FILTER] = filter.name }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -144,5 +151,6 @@ class SettingsRepository @Inject constructor(
             customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,
             songCount = this[Keys.SLEEP_SONG_COUNT] ?: 3,
         ),
+        moodFilter = this[Keys.MOOD_FILTER]?.let { runCatching { MoodFilter.valueOf(it) }.getOrNull() } ?: MoodFilter.ALL,
     )
 }

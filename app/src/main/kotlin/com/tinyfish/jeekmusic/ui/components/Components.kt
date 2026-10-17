@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import com.tinyfish.jeekmusic.data.settings.MoodFilter
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -194,6 +195,20 @@ suspend fun LazyListState.scrollToCenter(index: Int, animate: Boolean = true) {
     if (abs(delta) < 1f) return
     if (animate) animateScrollBy(delta) else scrollBy(delta)
 }
+
+/** 筛选的显示名称：全部 / 运动 / 安静（需求 M-6）。 */
+@Composable
+fun moodFilterLabel(filter: MoodFilter): String = stringResource(
+    when (filter) {
+        MoodFilter.ALL -> R.string.filter_all
+        MoodFilter.SPORT -> R.string.tab_sport
+        MoodFilter.QUIET -> R.string.tab_quiet
+    },
+)
+
+/** 筛选后列表为空时的提示。 */
+@Composable
+fun FilterEmptyMessage(filter: MoodFilter) = CenteredMessage(stringResource(R.string.filter_empty, moodFilterLabel(filter)))
 
 fun formatDuration(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)

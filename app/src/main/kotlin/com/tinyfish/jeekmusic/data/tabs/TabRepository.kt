@@ -44,15 +44,10 @@ class TabRepository @Inject constructor(
         tabDao.insert(listOf(PinnedTabEntity(type = TYPE_ARTIST, ref = nameKey, position = at)))
     }
 
-    suspend fun pinMood(mood: String) {
-        tabDao.insert(listOf(PinnedTabEntity(type = TYPE_MOOD, ref = mood, position = tabDao.maxPosition() + 1)))
-    }
-
     /** 内置标签不能取消固定（需求 T-2）。 */
     suspend fun unpin(tab: Tab) {
         when (tab) {
             is Tab.PinnedArtist -> tabDao.delete(TYPE_ARTIST, tab.nameKey)
-            is Tab.Mood -> tabDao.delete(TYPE_MOOD, tab.mood)
             else -> Unit
         }
     }
@@ -65,6 +60,8 @@ class TabRepository @Inject constructor(
     }
 
     private suspend fun ensureDefaults() {
+        // "运动 / 安静"从标签改成了全局筛选（需求 M-6），去掉旧版本固定的这两个标签
+        tabDao.deleteType(TYPE_MOOD)
         if (tabDao.all().isNotEmpty()) return
         tabDao.insert(DEFAULTS.mapIndexed { i, (type, ref) -> PinnedTabEntity(type = type, ref = ref, position = i) })
     }
@@ -74,7 +71,6 @@ class TabRepository @Inject constructor(
         TYPE_ARTISTS -> Tab.Artists
         TYPE_PLAYLISTS -> Tab.Playlists
         TYPE_ARTIST -> Tab.PinnedArtist(ref, names[ref] ?: ref)
-        TYPE_MOOD -> Tab.Mood(ref)
         else -> null
     }
 
@@ -83,15 +79,14 @@ class TabRepository @Inject constructor(
         const val TYPE_ARTISTS = "ARTISTS"
         const val TYPE_PLAYLISTS = "PLAYLISTS"
         const val TYPE_ARTIST = "ARTIST"
-        const val TYPE_MOOD = "MOOD"
+        /** 旧版本的"运动 / 安静"标签，现在只用于清理。 */
+        private const val TYPE_MOOD = "MOOD"
 
-        /** 首次安装时的标签：文件夹、艺术家、播放列表、运动、安静（需求 T-2、T-4）。 */
+        /** 首次安装时的标签：文件夹、艺术家、播放列表（需求 T-2）。 */
         val DEFAULTS = listOf(
             TYPE_FOLDERS to "",
             TYPE_ARTISTS to "",
             TYPE_PLAYLISTS to "",
-            TYPE_MOOD to "SPORT",
-            TYPE_MOOD to "QUIET",
         )
     }
 }

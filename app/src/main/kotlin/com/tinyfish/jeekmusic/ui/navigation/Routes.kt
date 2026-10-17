@@ -18,7 +18,6 @@ sealed interface TabRoute {
     data class Album(val albumKey: String) : TabRoute
     data object PlaylistList : TabRoute
     data class PlaylistDetail(val playlistId: Long) : TabRoute
-    data class MoodTracks(val mood: String) : TabRoute
 }
 
 /** 标签栏上的一个标签（需求 T-1 ~ T-4）。[key] 在所有标签中唯一，用于保存返回栈和上次选中的标签。 */
@@ -44,10 +43,5 @@ sealed interface Tab {
     data class PinnedArtist(val nameKey: String, val name: String) : Tab {
         override val key = "ARTIST:$nameKey"
         override val root = TabRoute.ArtistDetail(nameKey, isTabRoot = true)
-    }
-
-    data class Mood(val mood: String) : Tab {
-        override val key = "MOOD:$mood"
-        override val root = TabRoute.MoodTracks(mood)
     }
 }

@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.search
 
+import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
+import com.tinyfish.jeekmusic.data.filter.filterByMood
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,6 +66,7 @@ data class SearchResults(val query: String, val artists: List<ArtistEntity>, val
 class SearchViewModel @Inject constructor(
     private val dao: SearchDao,
     private val player: PlayerConnection,
+    private val moodFilters: MoodFilterRepository,
 ) : ViewModel() {
 
     val query = MutableStateFlow("")
@@ -77,7 +81,9 @@ class SearchViewModel @Inject constructor(
                 null
             } else {
                 val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
-                SearchResults(q, dao.artists(pattern, 20), dao.tracks(pattern, 200))
+                // 歌曲结果也按"运动 / 安静"筛选（需求 M-6）
+                val allowed = moodFilters.allowedKeys.first()
+                SearchResults(q, dao.artists(pattern, 20), dao.tracks(pattern, 200).filterByMood(allowed) { it.trackKey })
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

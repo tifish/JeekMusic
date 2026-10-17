@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.artists
 
+import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
+import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -91,7 +94,9 @@ fun artistName(artist: ArtistEntity): String =
 data class ArtistSection(val letter: String, val artists: List<ArtistEntity>)
 
 @HiltViewModel
-class ArtistListViewModel @Inject constructor(library: LibraryRepository) : ViewModel() {
+class ArtistListViewModel @Inject constructor(library: LibraryRepository, moodFilters: MoodFilterRepository) : ViewModel() {
+    val filter: StateFlow<MoodFilter> = moodFilters.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MoodFilter.ALL)
+
     /** 按字母分组，A–Z 在前、"#" 在最后（需求 A-1）。 */
     val sections: StateFlow<List<ArtistSection>?> = library.artists.map { artists ->
         artists.groupBy { it.indexLetter }
@@ -107,9 +112,10 @@ fun ArtistListScreen(
     viewModel: ArtistListViewModel = hiltViewModel(),
 ) {
     val sections by viewModel.sections.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
     val data = sections ?: return
     if (data.isEmpty()) {
-        CenteredMessage(stringResource(R.string.empty_library_title))
+        if (filter != MoodFilter.ALL) FilterEmptyMessage(filter) else CenteredMessage(stringResource(R.string.empty_library_title))
         return
     }
     val listState = rememberLazyListState()
@@ -336,7 +342,8 @@ fun ArtistDetailScreen(
 
     Column(Modifier.fillMaxSize()) {
         val name = artist?.let { artistName(it) }.orEmpty()
-        val subtitle = artist?.let { songCount(it.trackCount) }
+        // 筛选时显示符合筛选的歌曲数
+        val subtitle = tracks?.size?.let { songCount(it) } ?: artist?.let { songCount(it.trackCount) }
         if (route.isTabRoot) {
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

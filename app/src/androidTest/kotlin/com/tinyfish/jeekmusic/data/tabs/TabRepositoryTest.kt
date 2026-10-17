@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
+import com.tinyfish.jeekmusic.data.db.PinnedTabEntity
 import com.tinyfish.jeekmusic.ui.navigation.Tab
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -41,14 +42,27 @@ class TabRepositoryTest {
             listOf(Tab.Folders.key, Tab.PinnedArtist("b", "").key, Tab.PinnedArtist("a", "").key, Tab.Artists.key),
             keys().take(4),
         )
-        assertEquals(7, keys().size)
+        assertEquals(5, keys().size)
     }
 
     @Test
     fun pinnedArtistFollowsMovedFolders() = runTest {
         keys()
-        repository.move(0, 4) // 把"文件夹"移到最后
+        repository.move(0, 2) // 把"文件夹"移到最后
         repository.pinArtist("a")
         assertEquals(listOf(Tab.Folders.key, Tab.PinnedArtist("a", "").key), keys().takeLast(2))
+    }
+
+    @Test
+    fun legacyMoodTabsAreRemoved() = runTest {
+        // 旧版本把"运动 / 安静"固定成了标签；现在改成筛选，启动时清掉
+        db.tabDao().insert(
+            listOf(
+                PinnedTabEntity(type = "FOLDERS", position = 0),
+                PinnedTabEntity(type = "MOOD", ref = "SPORT", position = 1),
+                PinnedTabEntity(type = "MOOD", ref = "QUIET", position = 2),
+            ),
+        )
+        assertEquals(listOf(Tab.Folders.key), keys())
     }
 }

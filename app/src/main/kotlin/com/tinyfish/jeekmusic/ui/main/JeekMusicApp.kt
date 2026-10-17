@@ -1,5 +1,16 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
+import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import com.tinyfish.jeekmusic.ui.components.moodFilterLabel
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -59,7 +70,6 @@ import com.tinyfish.jeekmusic.ui.artists.ArtistListScreen
 import com.tinyfish.jeekmusic.ui.components.TrackMenuHost
 import com.tinyfish.jeekmusic.ui.folders.FolderRootScreen
 import com.tinyfish.jeekmusic.ui.folders.FolderScreen
-import com.tinyfish.jeekmusic.ui.moods.MoodScreen
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
 import com.tinyfish.jeekmusic.ui.navigation.Tab
 import com.tinyfish.jeekmusic.ui.navigation.TabRoute
@@ -147,6 +157,7 @@ private fun MainScreen(viewModel: MainViewModel) {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
                     actions = {
+                        MoodFilterButton(viewModel)
                         // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
                         IconButton(onClick = playerViewModel::toggleShuffleAndAnnounce, modifier = Modifier.testTag("top_shuffle")) {
                             Icon(
@@ -215,6 +226,49 @@ private fun MainScreen(viewModel: MainViewModel) {
     if (showSleepTimer) SleepTimerDialog(playerViewModel, playerState.sleepTimer, onDismiss = { showSleepTimer = false })
 }
 
+/**
+ * 标题栏上的"运动 / 安静"筛选（需求 M-6）：筛选中图标高亮并显示名称；
+ * 菜单里还显示未分析的歌曲数，可以立即分析。
+ */
+@Composable
+private fun MoodFilterButton(viewModel: MainViewModel) {
+    val filter by viewModel.moodFilter.collectAsStateWithLifecycle()
+    var open by remember { mutableStateOf(false) }
+    val active = filter != MoodFilter.ALL
+    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Box {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .clickable { open = true }
+                .testTag("top_filter")
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
+            if (active) Text(moodFilterLabel(filter), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelLarge, color = color)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            MoodFilter.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(moodFilterLabel(option)) },
+                    onClick = { viewModel.setMoodFilter(option); open = false },
+                    leadingIcon = {
+                        if (option == filter) Icon(painterResource(R.drawable.ic_check), contentDescription = null) else Spacer(Modifier.size(24.dp))
+                    },
+                    modifier = Modifier.testTag("filter_" + option.name.lowercase()),
+                )
+            }
+            val pending by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
+            if (pending > 0) {
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text(pluralStringResource(R.plurals.mood_pending, pending, pending)) }, onClick = {}, enabled = false)
+                DropdownMenuItem(text = { Text(stringResource(R.string.mood_analyze_now)) }, onClick = { viewModel.analyzeNow(); open = false })
+            }
+        }
+    }
+}
+
 /** 标签：点击切换；长按弹出"取消固定 / 左移 / 右移"（需求 T-5）。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -237,7 +291,7 @@ private fun TabWithMenu(
             Box {
                 Text(tabTitle(tab), Modifier.combinedClickable(onClick = onSelect, onLongClick = { menuOpen = true }))
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (tab is Tab.PinnedArtist || tab is Tab.Mood) {
+                    if (tab is Tab.PinnedArtist) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.menu_unpin_tab)) }, onClick = { menuOpen = false; onUnpin() })
                     }
                     if (canMoveLeft) DropdownMenuItem(text = { Text(stringResource(R.string.menu_move_left)) }, onClick = { menuOpen = false; onMove(-1) })
@@ -269,7 +323,6 @@ private fun TabContent(tab: Tab, viewModel: MainViewModel, onFirstContent: () ->
             entry<TabRoute.Album> { route -> AlbumScreen(route, onBack = pop) }
             entry<TabRoute.PlaylistList> { PlaylistListScreen(onOpen = { push(TabRoute.PlaylistDetail(it)) }) }
             entry<TabRoute.PlaylistDetail> { route -> PlaylistDetailScreen(route, onBack = pop) }
-            entry<TabRoute.MoodTracks> { route -> MoodScreen(route) }
         },
     )
 }
@@ -280,5 +333,4 @@ fun tabTitle(tab: Tab): String = when (tab) {
     Tab.Artists -> stringResource(R.string.tab_artists)
     Tab.Playlists -> stringResource(R.string.tab_playlists)
     is Tab.PinnedArtist -> tab.name.ifEmpty { stringResource(R.string.unknown_artist) }
-    is Tab.Mood -> stringResource(if (tab.mood == "SPORT") R.string.tab_sport else R.string.tab_quiet)
 }

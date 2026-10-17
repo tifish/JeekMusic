@@ -1,5 +1,9 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.data.filter.MoodFilterRepository
+import com.tinyfish.jeekmusic.data.filter.filterByMood
+import com.tinyfish.jeekmusic.data.settings.MoodFilter
+import kotlinx.coroutines.flow.combine
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -152,7 +156,12 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     private val player: PlayerConnection,
     @param:ApplicationContext private val context: Context,
     private val messages: MessageBus,
+    moodFilters: MoodFilterRepository,
 ) : ViewModel() {
+
+    /** 筛选中不能拖动排序：只看到部分条目时排序会打乱看不到的条目（需求 M-6）。 */
+    val filtering: StateFlow<Boolean> = moodFilters.filter.map { it != MoodFilter.ALL }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @AssistedFactory
     interface Factory {
@@ -170,7 +179,9 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     val playlist: StateFlow<PlaylistEntity?> = repository.playlist(playlistId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val entries: StateFlow<List<PlaylistEntry>?> = repository.entries(playlistId)
+    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), moodFilters.allowedKeys) { entries, allowed ->
+        entries.filterByMood(allowed) { it.track?.trackKey }
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
@@ -227,6 +238,7 @@ fun PlaylistDetailScreen(
             },
         )
         val list = entries ?: return@Column
+        val filtering by viewModel.filtering.collectAsStateWithLifecycle()
 
         val items = remember(list) { list.toMutableStateList() }
         val listState = rememberLazyListState()
@@ -239,14 +251,16 @@ fun PlaylistDetailScreen(
                     ReorderableItem(reorderState, key = entry.item.id) {
                         val track = entry.track
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                painterResource(R.drawable.ic_drag_handle),
-                                contentDescription = stringResource(R.string.action_reorder),
-                                modifier = Modifier.padding(start = 8.dp).size(40.dp).padding(8.dp).draggableHandle(
-                                    onDragStopped = { viewModel.reorder(items.map { it.item.id }) },
-                                ),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (!filtering) {
+                                Icon(
+                                    painterResource(R.drawable.ic_drag_handle),
+                                    contentDescription = stringResource(R.string.action_reorder),
+                                    modifier = Modifier.padding(start = 8.dp).size(40.dp).padding(8.dp).draggableHandle(
+                                        onDragStopped = { viewModel.reorder(items.map { it.item.id }) },
+                                    ),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Box(Modifier.weight(1f)) {
                                 if (track != null) {
                                     TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(entry) })

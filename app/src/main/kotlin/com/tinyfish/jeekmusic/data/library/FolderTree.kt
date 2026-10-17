@@ -11,7 +11,8 @@ data class FolderNode(val name: String, val relativePath: String, val trackCount
  */
 object FolderTree {
 
-    fun children(path: String, counts: List<DirectoryCount>): List<FolderNode> {
+    /** [sortKey] 把文件夹名转成排序键（中文转拼音，需求 U-8）；单元测试里可以不转。 */
+    fun children(path: String, counts: List<DirectoryCount>, sortKey: (String) -> String = { it }): List<FolderNode> {
         val byChild = LinkedHashMap<String, Int>()
         for (count in counts) {
             if (!count.relativePath.startsWith(path) || count.relativePath == path) continue
@@ -21,6 +22,6 @@ object FolderTree {
         }
         return byChild.entries
             .map { (name, total) -> FolderNode(name, "$path$name/", total) }
-            .sortedWith(compareBy(NaturalOrderComparator) { it.name })
+            .sortedWith(compareBy(NaturalOrderComparator) { sortKey(it.name) })
     }
 }

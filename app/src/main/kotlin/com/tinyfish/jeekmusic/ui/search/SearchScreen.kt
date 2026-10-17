@@ -88,8 +88,8 @@ class SearchViewModel @Inject constructor(
                 // 歌曲结果也按"运动 / 安静"筛选（需求 M-6）
                 val allowed = tagFilters.allowedKeys.first()
                 val tracks = dao.tracks(pattern).filterByTags(allowed) { it.trackKey }
-                // 排序（需求 U-8）：默认按歌名，中文按拼音（和艺术家页一样）。先排序再截取，否则截到的不是排在最前面的那些
-                val sorted = sorter.sorted(tracks, sorter.sort.first()) { it } ?: tracks.sortedWith(sorter.byTitle)
+                // 按全局排序（需求 U-8，默认按文件名，中文按拼音）。先排序再截取，否则截到的不是排在最前面的那些
+                val sorted = sorter.sorted(tracks, sorter.sort.first()) { it }
                 SearchResults(q, dao.artists(pattern, MAX_ARTISTS), sorted.take(MAX_TRACKS))
             }
         }

@@ -91,7 +91,6 @@
     <string name="dim_genre">曲风</string>
     <string name="filter_clear">清除筛选</string>
     <string name="sort_group">排序</string>
-    <string name="sort_default">默认</string>
     <string name="sort_modified">修改时间</string>
     <string name="sort_file_name">文件名</string>
     <string name="sort_title">歌名</string>

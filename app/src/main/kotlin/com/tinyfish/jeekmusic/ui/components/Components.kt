@@ -250,7 +250,6 @@ fun filterLabel(filter: TagFilter): String =
 @Composable
 fun sortName(sort: SongSort): String = stringResource(
     when (sort) {
-        SongSort.DEFAULT -> R.string.sort_default
         SongSort.MODIFIED -> R.string.sort_modified
         SongSort.FILE_NAME -> R.string.sort_file_name
         SongSort.TITLE -> R.string.sort_title

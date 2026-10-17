@@ -334,7 +334,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
     val filter by viewModel.tagFilter.collectAsStateWithLifecycle()
     val sort by viewModel.songSort.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
-    val active = filter.isActive || sort != SongSort.DEFAULT
+    val active = filter.isActive || sort != SongSort.FILE_NAME
     // 有筛选或排序时整个按钮用主题色填充（需求 U-11）
     val color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
@@ -350,7 +350,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
             if (active) {
                 // 比如"安静·纯音乐·按歌名"
-                val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.DEFAULT })
+                val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.FILE_NAME })
                 Text(label.joinToString("·"), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
             }
         }

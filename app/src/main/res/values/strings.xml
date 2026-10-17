@@ -93,7 +93,6 @@
     <string name="dim_genre">Style</string>
     <string name="filter_clear">Clear filter</string>
     <string name="sort_group">Sort</string>
-    <string name="sort_default">Default</string>
     <string name="sort_modified">Date modified</string>
     <string name="sort_file_name">File name</string>
     <string name="sort_title">Title</string>

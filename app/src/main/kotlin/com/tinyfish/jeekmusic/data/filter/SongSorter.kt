@@ -13,8 +13,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 全局的歌曲排序（需求 U-8）：标题栏菜单里选一次，所有歌曲列表都按它排；"默认"时各列表用自己的顺序
- * （文件夹按文件名、艺术家按歌名、专辑按音轨号、播放列表按手动顺序）。
+ * 全局的歌曲排序（需求 U-8）：标题栏菜单里选一次，所有歌曲列表都按它排，默认按文件名
+ * （播放列表按文件名时保持手动排的顺序，由调用方处理）。
  * 修改时间新的在前；文件名、歌名、歌手从 A 到 Z，中文按拼音，数字按数值（"2" 在 "10" 前面）。
  */
 @Singleton
@@ -30,24 +30,21 @@ class SongSorter @Inject constructor(settings: SettingsRepository) {
     /** 中文转拼音后的排序键（"周杰伦" → "zhou jie lun"）。 */
     fun key(text: String): String = keyCache.getOrPut(text) { sortKeys.sortKey(text) }
 
-    private val byFileName: Comparator<TrackEntity> =
-        compareBy<TrackEntity, String>(NaturalOrderComparator) { it.fileName }.thenBy { it.cueTrackNo ?: 0 }
+    /** 按文件名（中文按拼音），CUE 整轨里的各首按音轨号。 */
+    val byFileName: Comparator<TrackEntity> =
+        compareBy<TrackEntity, String>(NaturalOrderComparator) { key(it.fileName) }.thenBy { it.cueTrackNo ?: 0 }
 
-    /** 按歌名（拼音），同名的按文件名。艺术家页的默认顺序也是这个。 */
+    /** 按歌名（拼音），同名的按文件名。 */
     val byTitle: Comparator<TrackEntity> = compareBy<TrackEntity, String>(NaturalOrderComparator) { key(it.title) }.then(byFileName)
 
-    /**
-     * 按 [sort] 排序；[track] 为 null 的条目（播放列表里暂时不可用的歌）排在最后。
-     * [SongSort.DEFAULT] 时返回 null，由调用方用列表自己的默认顺序。
-     */
-    fun <T> sorted(items: List<T>, sort: SongSort, track: (T) -> TrackEntity?): List<T>? {
-        val comparator = comparator(sort) ?: return null
+    /** 按 [sort] 排序；[track] 为 null 的条目（播放列表里暂时不可用的歌）排在最后。 */
+    fun <T> sorted(items: List<T>, sort: SongSort, track: (T) -> TrackEntity?): List<T> {
+        val comparator = comparator(sort)
         val (present, missing) = items.partition { track(it) != null }
         return present.sortedWith(compareBy(comparator) { track(it)!! }) + missing
     }
 
-    fun comparator(sort: SongSort): Comparator<TrackEntity>? = when (sort) {
-        SongSort.DEFAULT -> null
+    fun comparator(sort: SongSort): Comparator<TrackEntity> = when (sort) {
         SongSort.MODIFIED -> compareByDescending<TrackEntity> { it.dateModified }.then(byFileName)
         SongSort.FILE_NAME -> byFileName
         SongSort.TITLE -> byTitle

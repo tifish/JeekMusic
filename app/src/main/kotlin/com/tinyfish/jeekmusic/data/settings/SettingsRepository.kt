@@ -98,8 +98,11 @@ data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: T
     }
 }
 
-/** 歌曲列表的排序（需求 U-8）。DEFAULT 时各列表用自己的默认顺序。 */
-enum class SongSort { DEFAULT, MODIFIED, FILE_NAME, TITLE, ARTIST }
+/**
+ * 歌曲列表的排序（需求 U-8），默认按文件名。播放列表按文件名时保持手动排的顺序。
+ * 旧版本保存的 DEFAULT 读成 FILE_NAME（找不到这个值时用默认值）。
+ */
+enum class SongSort { FILE_NAME, MODIFIED, TITLE, ARTIST }
 
 /** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
 data class SleepPrefs(
@@ -129,7 +132,7 @@ data class Settings(
     val lyricsSources: Set<OnlineSource> = OnlineSource.FOR_LYRICS.toSet(),
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
-    val songSort: SongSort = SongSort.DEFAULT,
+    val songSort: SongSort = SongSort.FILE_NAME,
     /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheck: Long = 0,
@@ -290,7 +293,7 @@ class SettingsRepository @Inject constructor(
             voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
         ),
-        songSort = this[Keys.SONG_SORT]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.DEFAULT,
+        songSort = this[Keys.SONG_SORT]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.FILE_NAME,
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,

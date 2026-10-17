@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.data.library
 
+import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import android.content.Context
 import android.content.Intent
@@ -124,41 +125,40 @@ class LibraryRepository @Inject constructor(
             ) { counts, tracks, allowed -> Triple(counts, tracks.filterByTags(allowed) { it.trackKey }, allowed) }
         }.combine(sorter.sort) { (counts, tracks, _), sort ->
             DirectoryContent(
-                folders = FolderTree.children(path, counts),
-                // 默认：CUE 虚拟歌曲排在同目录普通歌曲的后面，按音轨号排序
-                tracks = sorter.sorted(tracks, sort) { it } ?: tracks.sortedWith(
-                    compareBy<TrackEntity> { it.cueTrackNo != null }
-                        .thenBy(NaturalOrderComparator) { it.fileName }
-                        .thenBy { it.cueTrackNo ?: 0 },
-                ),
+                folders = FolderTree.children(path, counts, sorter::key),
+                // 按文件名时 CUE 虚拟歌曲排在同目录普通歌曲的后面，按音轨号排序
+                tracks = if (sort == SongSort.FILE_NAME) {
+                    tracks.sortedWith(compareBy<TrackEntity> { it.cueTrackNo != null }.then(sorter.byFileName))
+                } else {
+                    sorter.sorted(tracks, sort) { it }
+                },
             )
         }.flowOn(Dispatchers.Default)
     }
 
-    /** 文件夹及其子文件夹中的全部歌曲（"播放全部（含子文件夹）"）；默认按路径和文件名自然排序。 */
+    /** 文件夹及其子文件夹中的全部歌曲（"播放全部（含子文件夹）"）；按文件名时先按所在目录、再按文件名。 */
     suspend fun tracksUnder(folderId: Long, path: String): List<TrackEntity> {
         val tracks = trackDao.under(folderId, MediaStoreSource.escapeLike(path)).filterByTags(tagFilter.allowedKeys.first()) { it.trackKey }
-        return sorter.sorted(tracks, sorter.sort.first()) { it } ?: tracks.sortedWith(
-            compareBy<TrackEntity, String>(NaturalOrderComparator) { it.relativePath }
-                .thenBy(NaturalOrderComparator) { it.fileName }
-                .thenBy { it.cueTrackNo ?: 0 },
-        )
+        val sort = sorter.sort.first()
+        return if (sort == SongSort.FILE_NAME) {
+            tracks.sortedWith(compareBy<TrackEntity, String>(NaturalOrderComparator) { sorter.key(it.relativePath) }.then(sorter.byFileName))
+        } else {
+            sorter.sorted(tracks, sort) { it }
+        }
     }
 
     fun artist(nameKey: String): Flow<ArtistEntity?> = artistDao.observeByNameKey(nameKey)
 
-    /** 艺术家的全部歌曲，不分组；默认按歌名排序（中文按拼音），同名的再按文件名排序（需求 A-6）。 */
+    /** 艺术家的全部歌曲，不分组，按全局排序（默认按文件名，需求 A-6、U-8）。 */
     fun artistTracks(nameKey: String): Flow<List<TrackEntity>> =
         combine(trackDao.observeByArtist(nameKey), tagFilter.allowedKeys, sorter.sort) { tracks, allowed, sort ->
-            val filtered = tracks.filterByTags(allowed) { it.trackKey }
-            sorter.sorted(filtered, sort) { it } ?: filtered.sortedWith(sorter.byTitle)
+            sorter.sorted(tracks.filterByTags(allowed) { it.trackKey }, sort) { it }
         }.flowOn(Dispatchers.Default)
 
-    /** 专辑的歌曲；默认按碟号、音轨号排序。 */
+    /** 专辑的歌曲，按全局排序（默认按文件名；CUE 整轨里按音轨号）。 */
     fun albumTracks(albumKey: String): Flow<List<TrackEntity>> =
         combine(trackDao.observeByAlbum(albumKey), tagFilter.allowedKeys, sorter.sort) { tracks, allowed, sort ->
-            val filtered = tracks.filterByTags(allowed) { it.trackKey }
-            sorter.sorted(filtered, sort) { it } ?: filtered
+            sorter.sorted(tracks.filterByTags(allowed) { it.trackKey }, sort) { it }
         }.flowOn(Dispatchers.Default)
 
     suspend fun tracksByIds(ids: List<Long>): List<TrackEntity> {

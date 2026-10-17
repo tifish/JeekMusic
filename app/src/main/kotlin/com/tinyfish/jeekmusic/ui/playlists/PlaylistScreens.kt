@@ -169,7 +169,7 @@ class PlaylistDetailViewModel @AssistedInject constructor(
      * 筛选中或按其他方式排序时不能拖动排序：只看到部分条目时会打乱看不到的条目，
      * 按歌名等排序时拖动也没有意义（需求 M-6、U-8）。
      */
-    val reorderLocked: StateFlow<Boolean> = combine(tagFilters.filter, sorter.sort) { filter, sort -> filter.isActive || sort != SongSort.DEFAULT }
+    val reorderLocked: StateFlow<Boolean> = combine(tagFilters.filter, sorter.sort) { filter, sort -> filter.isActive || sort != SongSort.FILE_NAME }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @AssistedFactory
@@ -190,7 +190,8 @@ class PlaylistDetailViewModel @AssistedInject constructor(
 
     val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), tagFilters.allowedKeys, sorter.sort) { entries, allowed, sort ->
         val filtered = entries.filterByTags(allowed) { it.track?.trackKey }
-        sorter.sorted(filtered, sort) { it.track } ?: filtered
+        // 按文件名（默认）时保持手动排的顺序，可以拖动调整（需求 U-8、PL-3）
+        if (sort == SongSort.FILE_NAME) filtered else sorter.sorted(filtered, sort) { it.track }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

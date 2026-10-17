@@ -74,7 +74,7 @@ class MainViewModel @Inject constructor(
     fun clearFilter() = viewModelScope.launch { tagFilters.set(TagFilter()) }
 
     /** 全局的歌曲排序（需求 U-8）。 */
-    val songSort: StateFlow<SongSort> = sorter.sort.stateIn(viewModelScope, SharingStarted.Eagerly, SongSort.DEFAULT)
+    val songSort: StateFlow<SongSort> = sorter.sort.stateIn(viewModelScope, SharingStarted.Eagerly, SongSort.FILE_NAME)
 
     fun setSort(sort: SongSort) = viewModelScope.launch { settingsRepository.setSongSort(sort) }
 

@@ -28,6 +28,14 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** 在线歌词保存位置（需求 LY-11）。 */
 enum class LyricsSaveLocation { MUSIC_FOLDER, APP_CACHE }
 
+/**
+ * 在线封面的保存方式（需求 C-3）：
+ * - HIDDEN_FOLDER：音乐目录根下的 .jeekmusic/covers/，按"艺术家 - 专辑（或歌名）.jpg"命名，不改动音乐文件
+ * - EMBED：写进音乐文件的标签
+ * - SIDECAR：歌曲旁边的同名 .jpg
+ */
+enum class CoverSaveMode { HIDDEN_FOLDER, EMBED, SIDECAR }
+
 /** 智能标签的分析时机（需求 M-5）。 */
 enum class AnalysisMode { CHARGING, ANYTIME }
 
@@ -86,6 +94,9 @@ data class Settings(
     val onlineLyrics: Boolean = false,
     val autoFetchLyricsOnWifi: Boolean = false,
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
+    /** 在线封面，默认关闭（需求 C-3）。 */
+    val onlineCovers: Boolean = false,
+    val coverSaveMode: CoverSaveMode = CoverSaveMode.HIDDEN_FOLDER,
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
     val songSort: SongSort = SongSort.DEFAULT,
@@ -118,6 +129,8 @@ class SettingsRepository @Inject constructor(
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
         val AUTO_FETCH = booleanPreferencesKey("auto_fetch_lyrics_wifi")
         val LYRICS_SAVE = stringPreferencesKey("lyrics_save_location")
+        val ONLINE_COVERS = booleanPreferencesKey("online_covers")
+        val COVER_SAVE_MODE = stringPreferencesKey("cover_save_mode")
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
@@ -150,6 +163,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoFetchLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_FETCH] = enabled }
 
     suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit { it[Keys.LYRICS_SAVE] = location.name }
+
+    suspend fun setOnlineCovers(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_COVERS] = enabled }
+
+    suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit { it[Keys.COVER_SAVE_MODE] = mode.name }
 
     suspend fun setSleepPrefs(prefs: SleepPrefs) = context.dataStore.edit {
         it[Keys.SLEEP_FINISH_SONG] = prefs.finishSong
@@ -204,6 +221,8 @@ class SettingsRepository @Inject constructor(
         onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
         autoFetchLyricsOnWifi = this[Keys.AUTO_FETCH] ?: false,
         lyricsSaveLocation = this[Keys.LYRICS_SAVE]?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.MUSIC_FOLDER,
+        onlineCovers = this[Keys.ONLINE_COVERS] ?: false,
+        coverSaveMode = this[Keys.COVER_SAVE_MODE]?.let { runCatching { CoverSaveMode.valueOf(it) }.getOrNull() } ?: CoverSaveMode.HIDDEN_FOLDER,
         sleep = SleepPrefs(
             finishSong = this[Keys.SLEEP_FINISH_SONG] ?: false,
             customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,

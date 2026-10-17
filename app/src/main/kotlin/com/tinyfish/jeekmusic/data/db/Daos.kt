@@ -120,6 +120,9 @@ interface TrackDao {
 
     @Query("SELECT * FROM track WHERE album_key = :albumKey ORDER BY disc_no, track_no, file_name")
     fun observeByAlbum(albumKey: String): Flow<List<TrackEntity>>
+
+    @Query("SELECT id FROM track WHERE album_key = :albumKey")
+    suspend fun idsByAlbum(albumKey: String): List<Long>
 }
 
 @Dao

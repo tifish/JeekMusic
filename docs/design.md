@@ -62,6 +62,7 @@ com.tinyfish.jeekmusic
 │   ├── backup/                // BackupManager（导出 / 恢复 .jeekmusic/backup.json）
 │   ├── tabs/                  // TabRepository（标签栏）
 │   ├── lyrics/                // LrcParser, LyricsRepository, LyricsWriter, LrcLibClient, CharsetDetector
+│   ├── cover/                 // CoverStore（封面查找、缓存、保存）, CoverClient（iTunes / MusicBrainz）, CoverMatcher, CoverFetchWorker
 │   ├── playlist/
 │   └── settings/              // SettingsRepository (DataStore)
 ├── analysis                   // 智能标签
@@ -79,7 +80,8 @@ com.tinyfish.jeekmusic
 │   ├── MediaItemMapper.kt
 │   ├── QueuePersistence.kt
 │   ├── SleepTimer.kt
-│   ├── ArtworkProvider.kt
+│   ├── ArtworkProvider.kt     // 封面 ContentProvider，实际工作在 data/cover/CoverStore
+│   ├── ArtworkVersions.kt     // 换过封面的歌曲，封面 URI 加版本号让 Coil 重新加载
 │   └── PlayerConnection.kt    // UI 侧对 MediaController 的封装，暴露 StateFlow
 └── ui
     ├── theme/  components/    // TrackRow 等通用组件
@@ -713,7 +715,26 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 方案 A（默认）：直接使用 ClippingConfiguration，利用 ExoPlayer 预加载下一首。如果实测停顿听不出来，就采用这个方案
 - 方案 B（备选）：当队列中连续几首都来自同一个整轨文件时，把它们合并成一个覆盖整段的 MediaItem，由 Service 根据播放位置换算出"当前是第几首"，再更新元数据、通知栏和歌词。这样衔接完全无缝，但队列和进度条的逻辑要复杂很多
 
-封面通过自建的 `ArtworkProvider`（ContentProvider）提供，按需提取内嵌封面或文件夹封面，缩放后缓存到 `cacheDir`。缓存两种尺寸：列表用的 144px 和通知、播放页用的 512px。通知栏、锁屏、蓝牙车机和 Coil 共用这一个入口，避免重复解码。
+封面通过自建的 `ArtworkProvider`（ContentProvider，`content://<authority>/track/<id>/<small|large>`）提供，通知栏、锁屏、蓝牙车机和 Coil 共用这一个入口。查找和缓存在 `CoverStore`：
+
+- **查找顺序**：`.jeekmusic/covers/` 里的在线封面 → 歌曲旁边的同名图片（`歌曲名.jpg/png/webp`）→ 内嵌封面 → 同目录的 `cover.jpg` / `folder.jpg` 等。在线封面是用户为这首歌选的，所以最优先
+- **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork`，"没有封面"也记一个 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
+- **换封面后刷新**：保存时直接用新图片重写这张专辑的缓存，再通过 `ArtworkVersions` 给同专辑所有歌曲的封面 URI 加上 `?v=n`。`Artwork` 组件用 `derivedStateOf` 只读自己那首歌的版本号，所以只有换了封面的条目会重新加载；Provider 忽略查询参数
+
+**在线封面（需求 C-3、C-4）**：
+
+- **来源**：`CoverClient` 用 HttpURLConnection + org.json，不引入网络库
+  - iTunes Search API（`entity=song`）：中文只有繁体能搜到，含汉字时用 ICU `Simplified-Traditional` 转成繁体、查台湾区，其余查美国区；`artworkUrl100` 换成 `1000x1000` 取大图。限速约 20 次 / 分钟，请求间隔 3s
+  - MusicBrainz 录音搜索（`recording:"歌名" AND artist:"艺术家"`）：中文收录比 iTunes 全；要求 User-Agent、每秒不超过 1 次。封面取 Cover Art Archive 发行组的代表封面（`release-group/<id>/front-1200`，没有时 `front-500`），比按单个发行版查命中率高
+  - 搜索艺术家只用第一位：多位艺术家拼在一起时两个来源往往都搜不到
+- **匹配**（`CoverMatcher`）：NFKC、小写、繁转简（ICU `Traditional-Simplified`），去掉标点空白和括号里的附注、` - Remastered` 之类的后缀后比较。歌名必须完全相同（"Baby" 和 "Baby Shark" 不算）；艺术家拆分后任意一位与结果互相包含即可。手动搜索时对得上的排前面，括号附注也相同的（不是 Remix / Live）再往前；批量获取只采用对得上的，专辑名也对得上的优先
+- **手动搜索**：两个来源分别请求、各张缩略图分别下载，谁先返回先显示谁，不用等最慢的 Cover Art Archive
+- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`，要求联网）：按专辑键分组，用 `CoverStore.hasCover` 找出没有封面的组，逐组查询保存，通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
+- **保存**（`CoverStore.save`）：图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
+  - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
+  - 写入文件：通过 SAF 文档 URI 以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片。文件的修改时间和大小会变，所以会被重新扫描，智能标签的签名也变了、需要重新分析
+  - 同名图片：`歌曲名.jpg`，已存在时覆盖
+  - 写入文件或同名图片失败时改存到隐藏目录；存到别处时删掉这首歌在隐藏目录里原来的封面，否则新封面会被它挡住
 
 ### 7.5 队列与续播（QueuePersistence）
 

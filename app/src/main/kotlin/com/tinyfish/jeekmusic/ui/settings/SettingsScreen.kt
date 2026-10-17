@@ -62,6 +62,9 @@ import com.tinyfish.jeekmusic.analysis.Sensitivity
 import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
+import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
+import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
+import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
@@ -89,6 +92,7 @@ class SettingsViewModel @Inject constructor(
     private val analysis: AnalysisScheduler,
     private val lyrics: LyricsRepository,
     private val updater: AppUpdater,
+    private val coverFetch: CoverFetchScheduler,
 ) : ViewModel() {
     fun setAutoUpdateCheck(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoUpdateCheck(enabled) }
 
@@ -151,6 +155,18 @@ class SettingsViewModel @Inject constructor(
     fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setOnlineLyrics(enabled) }
     fun setAutoFetchLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoFetchLyrics(enabled) }
     fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch { settingsRepository.setLyricsSaveLocation(location) }
+    fun setOnlineCovers(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setOnlineCovers(enabled)
+        if (!enabled) coverFetch.cancel()
+    }
+    fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch { settingsRepository.setCoverSaveMode(mode) }
+
+    val coverProgress: StateFlow<CoverFetchProgress?> = coverFetch.progress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** 正在获取时再点一下是停止。 */
+    fun toggleCoverFetch() = if (coverProgress.value?.running == true) coverFetch.cancel() else coverFetch.start()
+
     fun clearLyricsCache() = viewModelScope.launch {
         lyrics.clearCache()
         messages.post(UiMessage(R.string.lyrics_cache_cleared))
@@ -166,11 +182,13 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val navigator = LocalNavigator.current
     val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
     val pendingAnalysis by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
+    val coverProgress by viewModel.coverProgress.collectAsStateWithLifecycle()
     val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.restoreFrom(uri)
     }
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
     var confirmOnline by remember { mutableStateOf(false) }
+    var confirmCovers by remember { mutableStateOf(false) }
     var showLicenses by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
@@ -295,6 +313,49 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 item { SettingItem(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
             }
 
+            item { SectionHeader(stringResource(R.string.settings_covers)) }
+            item {
+                SwitchRow(
+                    title = stringResource(R.string.online_covers),
+                    summary = stringResource(R.string.online_covers_summary),
+                    checked = settings.onlineCovers,
+                    // 开启时先说明会发送哪些信息、发给谁（需求 C-3）
+                    onChange = { if (it) confirmCovers = true else viewModel.setOnlineCovers(false) },
+                    modifier = Modifier.testTag("online_covers"),
+                )
+            }
+            if (settings.onlineCovers) {
+                item {
+                    val progress = coverProgress
+                    SettingItem(
+                        title = stringResource(R.string.cover_fetch_missing),
+                        summary = when {
+                            progress == null -> stringResource(R.string.cover_fetch_summary)
+                            progress.checking -> stringResource(R.string.cover_fetch_checking)
+                            progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
+                            else -> stringResource(R.string.cover_fetch_done, progress.found, progress.total)
+                        },
+                        onClick = viewModel::toggleCoverFetch,
+                        modifier = Modifier.testTag("fetch_covers"),
+                    )
+                }
+                item { Text(stringResource(R.string.cover_save_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(CoverSaveMode.entries) { mode ->
+                    val (title, summary) = when (mode) {
+                        CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_save_hidden to R.string.cover_save_hidden_summary
+                        CoverSaveMode.EMBED -> R.string.cover_save_embed to R.string.cover_save_embed_summary
+                        CoverSaveMode.SIDECAR -> R.string.cover_save_sidecar to R.string.cover_save_sidecar_summary
+                    }
+                    RadioRow(
+                        selected = settings.coverSaveMode == mode,
+                        text = stringResource(title),
+                        summary = stringResource(summary),
+                        onClick = { viewModel.setCoverSaveMode(mode) },
+                        modifier = Modifier.testTag("cover_mode_${mode.name}"),
+                    )
+                }
+            }
+
             item { SectionHeader(stringResource(R.string.settings_moods)) }
             item {
                 SettingItem(
@@ -405,6 +466,16 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
 
+    if (confirmCovers) {
+        AlertDialog(
+            onDismissRequest = { confirmCovers = false },
+            title = { Text(stringResource(R.string.online_covers_privacy_title)) },
+            text = { Text(stringResource(R.string.online_covers_privacy)) },
+            confirmButton = { TextButton(onClick = { viewModel.setOnlineCovers(true); confirmCovers = false }) { Text(stringResource(R.string.confirm)) } },
+            dismissButton = { TextButton(onClick = { confirmCovers = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
     if (confirmOnline) {
         AlertDialog(
             onDismissRequest = { confirmOnline = false },
@@ -443,13 +514,16 @@ private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChang
 }
 
 @Composable
-private fun RadioRow(selected: Boolean, text: String, onClick: () -> Unit) {
+private fun RadioRow(selected: Boolean, text: String, onClick: () -> Unit, modifier: Modifier = Modifier, summary: String? = null) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
+        modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onClick)
-        Text(text)
+        Column {
+            Text(text)
+            if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

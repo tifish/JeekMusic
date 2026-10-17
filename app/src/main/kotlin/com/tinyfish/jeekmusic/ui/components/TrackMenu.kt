@@ -67,7 +67,17 @@ import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
 import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.tinyfish.jeekmusic.data.cover.CoverCandidate
+import com.tinyfish.jeekmusic.data.cover.CoverClient
+import com.tinyfish.jeekmusic.data.cover.CoverSource
+import com.tinyfish.jeekmusic.data.cover.CoverStore
+import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
+import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -87,7 +97,36 @@ class TrackMenuViewModel @Inject constructor(
     private val trackDao: TrackDao,
     private val messages: MessageBus,
     private val tags: TagRepository,
+    private val settings: SettingsRepository,
+    private val coverClient: CoverClient,
+    private val coverStore: CoverStore,
 ) : ViewModel() {
+
+    val onlineCovers: StateFlow<Boolean> = settings.settings.map { it.onlineCovers }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun enableOnlineCovers() = viewModelScope.launch { settings.setOnlineCovers(true) }
+
+    suspend fun searchCovers(source: CoverSource, title: String, artist: String?): List<CoverCandidate> =
+        runCatching { coverClient.search(source, title, artist) }.getOrDefault(emptyList())
+
+    suspend fun coverThumbnail(candidate: CoverCandidate): ByteArray? = coverClient.thumbnail(candidate)
+
+    /** 下载大图并按设置保存（需求 C-3）；大图下载失败时退而用缩略图。 */
+    suspend fun saveCover(track: TrackEntity, candidate: CoverCandidate) {
+        val image = coverClient.downloadImage(candidate)
+        val saved = image?.let { coverStore.save(track, it, settings.current().coverSaveMode) }
+        messages.post(
+            UiMessage(
+                when (saved) {
+                    CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_saved_hidden
+                    CoverSaveMode.EMBED -> R.string.cover_saved_embed
+                    CoverSaveMode.SIDECAR -> R.string.cover_saved_sidecar
+                    null -> R.string.cover_save_failed
+                },
+            ),
+        )
+    }
 
     suspend fun tagInfo(track: TrackEntity): TagInfo = tags.info(track.trackKey)
 
@@ -143,6 +182,7 @@ private sealed interface MenuDialog {
     data class Artists(val artists: List<ArtistEntity>) : MenuDialog
     data object Info : MenuDialog
     data object Tags : MenuDialog
+    data object Cover : MenuDialog
 }
 
 /**
@@ -156,6 +196,7 @@ fun TrackMenuHost(
     content: @Composable () -> Unit,
 ) {
     val track by viewModel.track.collectAsStateWithLifecycle()
+    val onlineCovers by viewModel.onlineCovers.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<MenuDialog?>(null) }
@@ -207,6 +248,7 @@ fun TrackMenuHost(
                         }
                     }
                 }
+                MenuItem(R.drawable.ic_image, R.string.menu_search_cover) { dialogTrack = current; dialog = MenuDialog.Cover; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_bolt, R.string.menu_edit_tags) { dialogTrack = current; dialog = MenuDialog.Tags; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
             }
@@ -234,6 +276,7 @@ fun TrackMenuHost(
         )
         MenuDialog.Info -> if (target != null) SongInfoDialog(target, viewModel) { dialog = null }
         MenuDialog.Tags -> if (target != null) TagEditDialog(target, viewModel) { dialog = null }
+        MenuDialog.Cover -> if (target != null) CoverSearchDialog(target, viewModel, onlineCovers) { dialog = null }
         null -> Unit
     }
 }

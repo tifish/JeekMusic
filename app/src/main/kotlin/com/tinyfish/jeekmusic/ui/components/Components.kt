@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.runtime.collectAsState
+import com.tinyfish.jeekmusic.playback.ArtworkVersions
 import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.analysis.Tag
@@ -68,8 +70,11 @@ fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (uri != null) {
+            // 换过封面的歌曲在 URI 上加版本号，只有这些封面会重新加载（需求 C-3）
+            val versions = ArtworkVersions.versions.collectAsState()
+            val model by remember(uri) { derivedStateOf { ArtworkVersions.withVersion(uri, versions.value) } }
             AsyncImage(
-                model = uri,
+                model = model,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

@@ -271,4 +271,30 @@
 
     <string name="settings_licenses">Open-source licenses</string>
     <string name="settings_source">Source code</string>
+
+    <string name="settings_covers">Covers</string>
+    <string name="online_covers">Online covers (iTunes / MusicBrainz)</string>
+    <string name="online_covers_summary">Off by default. Search covers for songs from the song menu, or fetch all missing covers at once</string>
+    <string name="online_covers_privacy_title">Turn on online covers?</string>
+    <string name="online_covers_privacy">When searching, the song’s title, artist and album are sent to Apple iTunes (itunes.apple.com) and MusicBrainz (musicbrainz.org), and images are downloaded from Apple and the Cover Art Archive. Nothing else is sent, and nothing is sent until you search.</string>
+    <string name="cover_save_mode">Save online covers to</string>
+    <string name="cover_save_hidden">Hidden folder (recommended)</string>
+    <string name="cover_save_hidden_summary">.jeekmusic/covers/ in the music folder, one image per album. Music files are not changed</string>
+    <string name="cover_save_embed">Inside the music file</string>
+    <string name="cover_save_embed_summary">Other players can see it too. Changes the file, so the song is rescanned and reanalyzed</string>
+    <string name="cover_save_sidecar">Next to the song, with the same name</string>
+    <string name="cover_save_sidecar_summary">Song name.jpg; these images also show up in the gallery</string>
+    <string name="cover_fetch_missing">Fetch all missing covers</string>
+    <string name="cover_fetch_summary">Only accepts results whose title and artist both match. Needs a network connection</string>
+    <string name="cover_fetch_checking">Checking which songs have no cover… tap to stop</string>
+    <string name="cover_fetch_progress">Fetching %1$d / %2$d (found: %3$d)… tap to stop</string>
+    <string name="cover_fetch_done">Last run: covers found %1$d / %2$d</string>
+    <string name="menu_search_cover">Search cover online</string>
+    <string name="cover_search_title">Search cover</string>
+    <string name="cover_search_failed">Nothing found, or the network is unavailable.</string>
+    <string name="cover_enable_and_search">Turn on and search</string>
+    <string name="cover_saved_hidden">Cover saved to the hidden folder</string>
+    <string name="cover_saved_embed">Cover saved into the music file</string>
+    <string name="cover_saved_sidecar">Cover saved next to the song</string>
+    <string name="cover_save_failed">Couldn’t save the cover</string>
 </resources>

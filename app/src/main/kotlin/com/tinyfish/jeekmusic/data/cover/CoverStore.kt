@@ -34,13 +34,12 @@ import javax.inject.Singleton
 /**
  * 封面的查找、缓存和保存（需求 C-1～C-3，docs/design.md §7.4）。
  *
- * 查找顺序：
- * 1. .jeekmusic/covers/ 里的在线封面（用户为这首歌选的，所以最优先）
- * 2. 歌曲旁边的同名图片（歌名.jpg）
- * 3. 内嵌封面
- * 4. 同目录的 cover.jpg / folder.jpg 等
+ * 封面按专辑共用。查找顺序：
+ * 1. 这首歌自己的：.jeekmusic/covers/ 里的在线封面（用户选的，所以最优先）→ 歌曲旁边的同名图片 → 内嵌封面
+ * 2. 同专辑其他歌曲的（同样的顺序）：专辑里只要有一个文件带封面，整张专辑都用它，也不会再去下载
+ * 3. 同目录的 cover.jpg / folder.jpg 等
  *
- * 结果缩放后按专辑缓存在 cacheDir/artwork（没有专辑时按歌曲），"没有封面"也会缓存。
+ * 结果缩放后按专辑缓存在 cacheDir/artwork2（没有专辑时按歌曲），"没有封面"也会缓存。
  */
 @Singleton
 class CoverStore @Inject constructor(
@@ -50,7 +49,11 @@ class CoverStore @Inject constructor(
     private val tree: DocumentTree,
     private val editor: AudioFileEditor,
 ) {
-    private val cacheDir by lazy { File(context.cacheDir, "artwork").apply { mkdirs() } }
+    // 旧版本只看一首歌就缓存"没有封面"，同专辑其他文件里的封面会被漏掉：换个目录重建缓存
+    private val cacheDir by lazy {
+        File(context.cacheDir, "artwork").deleteRecursively()
+        File(context.cacheDir, "artwork2").apply { mkdirs() }
+    }
     private val locks = ConcurrentHashMap<String, Mutex>()
 
     /** 目录的子文件列表；只有一个大目录时每次都列一遍很慢。本 App 写入封面后使对应目录失效。 */
@@ -65,7 +68,7 @@ class CoverStore @Inject constructor(
             locks.getOrPut(key) { Mutex() }.withLock {
                 val none = File(cacheDir, "$key.none")
                 if (!file.exists() && !none.exists()) {
-                    val bytes = resolve(track)
+                    val bytes = albumImage(track)
                     if (bytes == null || !writeScaled(bytes, size, file)) none.createNewFile()
                 }
             }
@@ -75,13 +78,40 @@ class CoverStore @Inject constructor(
 
     suspend fun hasCover(track: TrackEntity): Boolean = cachedFile(track, large = false) != null
 
-    private suspend fun resolve(track: TrackEntity): ByteArray? {
-        val folder = folderDao.byId(track.folderId)
-        return folder?.let { hiddenCover(it, track) }
-            ?: folder?.let { sidecar(it, track) }
-            ?: embeddedCover(track)
-            ?: folder?.let { folderImage(it, track) }
+    /** 整张专辑的封面原图（查找顺序见类注释）；都没有时返回 null。 */
+    suspend fun albumImage(track: TrackEntity): ByteArray? = withContext(Dispatchers.IO) {
+        val folders = HashMap<Long, LibraryFolderEntity?>()
+        suspend fun folderOf(t: TrackEntity) = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) }
+        albumOf(track).take(MAX_ALBUM_FILES).firstNotNullOfOrNull { t -> ownImage(folderOf(t), t) }
+            ?: folderOf(track)?.let { folderImage(it, track) }
     }
+
+    /**
+     * 同专辑的歌曲，[track] 排第一；没有专辑时只有它自己。
+     * CUE 整轨的各首共用一个文件，只保留一首。
+     */
+    suspend fun albumOf(track: TrackEntity): List<TrackEntity> {
+        val others = track.albumKey?.let { trackDao.byAlbum(it) }.orEmpty().filter { it.id != track.id }
+        return (listOf(track) + others).distinctBy { it.fileKey }
+    }
+
+    /**
+     * 这首歌自己有没有按 [mode] 保存的封面：写入文件看文件里有没有内嵌封面，同名图片看有没有图片，
+     * 隐藏目录则看整张专辑（隐藏目录里同一专辑本来就只存一张）。
+     */
+    suspend fun hasOwnCover(track: TrackEntity, mode: CoverSaveMode): Boolean = withContext(Dispatchers.IO) {
+        when (mode) {
+            CoverSaveMode.EMBED -> embeddedCover(track) != null
+            CoverSaveMode.SIDECAR -> folderDao.byId(track.folderId)?.let { sidecar(it, track) } != null
+            CoverSaveMode.HIDDEN_FOLDER -> hasCover(track)
+        }
+    }
+
+    /** 能不能写入音乐文件（需要"所有文件访问权限"，见 [AudioFileEditor]）。 */
+    fun canEmbed(): Boolean = editor.canEdit()
+
+    private fun ownImage(folder: LibraryFolderEntity?, track: TrackEntity): ByteArray? =
+        folder?.let { hiddenCover(it, track) } ?: folder?.let { sidecar(it, track) } ?: embeddedCover(track)
 
     private fun hiddenCover(folder: LibraryFolderEntity, track: TrackEntity): ByteArray? {
         val children = listing(folder, coversPath(folder)).takeIf { it.isNotEmpty() } ?: return null
@@ -115,21 +145,38 @@ class CoverStore @Inject constructor(
         return listings.get(key) ?: tree.list(folder, relativePath).also { listings.put(key, it) }
     }
 
+    /** 保存结果：实际的保存位置；写入文件或同名图片时 [files] 是写了几个。 */
+    data class Saved(val mode: CoverSaveMode, val files: Int)
+
     /**
-     * 保存在线封面（需求 C-3）。图片统一转成 JPEG；写进文件失败时改存到隐藏目录。
+     * 把封面保存给同一专辑的 [tracks]（需求 C-3、C-4），第一首决定隐藏目录里的文件名。图片统一转成 JPEG。
+     * - 隐藏目录：整张专辑存一张
+     * - 写入文件 / 同名图片：每个文件都写；有写不进去的（比如没有"所有文件访问权限"）就再在隐藏目录存一张
      * 保存后立即用新封面替换缓存，并通知界面重新加载同一专辑的所有封面。
      */
-    suspend fun save(track: TrackEntity, image: ByteArray, mode: CoverSaveMode): CoverSaveMode? = withContext(Dispatchers.IO) {
+    suspend fun save(tracks: List<TrackEntity>, image: ByteArray, mode: CoverSaveMode): Saved? = withContext(Dispatchers.IO) {
+        val first = tracks.firstOrNull() ?: return@withContext null
         val jpeg = toJpeg(image) ?: return@withContext null
-        val folder = folderDao.byId(track.folderId) ?: return@withContext null
-        val saved = when (mode) {
-            CoverSaveMode.EMBED -> CoverSaveMode.EMBED.takeIf { embed(folder, track, jpeg) }
-            CoverSaveMode.SIDECAR -> CoverSaveMode.SIDECAR.takeIf { writeSidecar(folder, track, jpeg) }
-            CoverSaveMode.HIDDEN_FOLDER -> null
-        } ?: CoverSaveMode.HIDDEN_FOLDER.takeIf { writeHidden(folder, track, jpeg) }
-        // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示
-        if (saved != null && saved != CoverSaveMode.HIDDEN_FOLDER) deleteHidden(folder, track)
-        if (saved != null) replaceCache(track, jpeg)
+        val folders = HashMap<Long, LibraryFolderEntity?>()
+        suspend fun folderOf(t: TrackEntity) = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) }
+        var files = 0
+        var failed = false
+        if (mode != CoverSaveMode.HIDDEN_FOLDER) {
+            for (t in tracks.distinctBy { it.fileKey }) {
+                val folder = folderOf(t)
+                val ok = folder != null && if (mode == CoverSaveMode.EMBED) embed(folder, t, jpeg) else writeSidecar(folder, t, jpeg)
+                // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示
+                if (ok) deleteHidden(folder, t) else failed = true
+                if (ok) files++
+            }
+        }
+        val hidden = (mode == CoverSaveMode.HIDDEN_FOLDER || failed) && folderOf(first)?.let { writeHidden(it, first, jpeg) } == true
+        val saved = when {
+            files > 0 -> Saved(mode, files)
+            hidden -> Saved(CoverSaveMode.HIDDEN_FOLDER, 0)
+            else -> null
+        }
+        if (saved != null) replaceCache(first, jpeg)
         saved
     }
 
@@ -183,6 +230,9 @@ class CoverStore @Inject constructor(
         private const val SMALL_PX = 144
         private const val LARGE_PX = 720
         private const val MAX_SAVED_PX = 1200
+
+        /** 找同专辑封面时最多看几个文件：专辑一般不会更大，避免误把几百首归成一张"专辑"时逐个读文件。 */
+        private const val MAX_ALBUM_FILES = 50
         private const val FRONT_COVER = "Front Cover"
         const val COVERS_DIR = "covers"
 

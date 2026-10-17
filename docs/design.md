@@ -729,8 +729,8 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 封面通过自建的 `ArtworkProvider`（ContentProvider，`content://<authority>/track/<id>/<small|large>`）提供，通知栏、锁屏、蓝牙车机和 Coil 共用这一个入口。查找和缓存在 `CoverStore`：
 
-- **查找顺序**：`.jeekmusic/covers/` 里的在线封面 → 歌曲旁边的同名图片（`歌曲名.jpg/png/webp`）→ 内嵌封面 → 同目录的 `cover.jpg` / `folder.jpg` 等。在线封面是用户为这首歌选的，所以最优先
-- **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork`，"没有封面"也记一个 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
+- **查找顺序**（`albumImage`，封面按专辑共用）：先看这首歌自己的——`.jeekmusic/covers/` 里的在线封面 → 歌曲旁边的同名图片（`歌曲名.jpg/png/webp`）→ 内嵌封面（在线封面是用户选的，所以最优先）；没有时按同样的顺序看同专辑的其他歌曲（按碟号、音轨号排序，最多 50 个文件，CUE 整轨的各首只看一次）；最后是同目录的 `cover.jpg` / `folder.jpg` 等。以前只看第一首被请求的歌就缓存整张专辑，同专辑别的文件里有封面也会被漏掉
+- **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork2`（查找改为看整张专辑后换了目录，旧的 `artwork` 启动时删除），"没有封面"也记一个 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
 - **换封面后刷新**：保存时直接用新图片重写这张专辑的缓存，再通过 `ArtworkVersions` 给同专辑所有歌曲的封面 URI 加上 `?v=n`。`Artwork` 组件用 `derivedStateOf` 只读自己那首歌的版本号，所以只有换了封面的条目会重新加载；Provider 忽略查询参数
 
 **在线封面（需求 C-3、C-4）**：
@@ -742,12 +742,12 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **匹配**（`CoverMatcher`）：NFKC、小写、繁转简（ICU `Traditional-Simplified`），去掉标点空白和括号里的附注、` - Remastered` 之类的后缀后比较。歌名必须完全相同（"Baby" 和 "Baby Shark" 不算）；艺术家拆分后任意一位与结果互相包含即可。手动搜索时对得上的排前面，括号附注也相同的（不是 Remix / Live）再往前；批量获取只采用对得上的，专辑名也对得上的优先
 - **手动搜索**：两个来源分别请求、各张缩略图分别下载，谁先返回先显示谁，不用等最慢的 Cover Art Archive
 - **获取方式**（`CoverFetchScheduler`）：手动时只在用户点"获取所有缺失的封面"时以 `CONNECTED` 约束、`REPLACE` 提交（顶掉在等 Wi-Fi 的自动任务）；自动 / 仅 Wi-Fi 时，App 启动的推迟任务里和扫描到新增或变化的歌曲后调用 `scheduleAuto()`，分别以 `CONNECTED` / `UNMETERED` 约束、`KEEP` 提交。重复提交很便宜：有封面的（读缓存）和 30 天内找不到的都直接跳过。改获取方式时先取消还在排队的任务再按新方式提交。注意 `UNMETERED` 要等系统验证过 Wi-Fi 能上网才会运行
-- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`）：按专辑键分组，用 `CoverStore.hasCover` 找出没有封面的组，逐组查询保存，通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
-- **保存**（`CoverStore.save`）：图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
+- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`）：按专辑键分组，先找出每张专辑里还需要封面的文件——隐藏目录模式下整张专辑没有封面才需要；写入文件 / 同名图片模式下是自己没有内嵌封面 / 同名图片的文件（选了写入文件但没有"所有文件访问权限"时按隐藏目录判断，否则每次都会重复改存）。有需要的专辑先用 `albumImage` 找同专辑已有的封面，有就直接提取保存，不联网；都没有才在线查询一次，保存给整张专辑。通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
+- **保存**（`CoverStore.save(tracks, …)`）：保存给同一专辑的一组歌曲，第一首决定隐藏目录里的文件名。手动选的封面也保存给整张专辑。图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
   - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
   - 写入文件：经 `AudioFileEditor`（见下）以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片
   - 同名图片：`歌曲名.jpg`，已存在时覆盖
-  - 写入文件或同名图片失败时改存到隐藏目录；存到别处时删掉这首歌在隐藏目录里原来的封面，否则新封面会被它挡住
+  - 写入文件、同名图片每个文件都写（CUE 整轨只写一次）；有写不进去的再在隐藏目录存一张；存到别处时删掉这首歌在隐藏目录里原来的封面，否则新封面会被它挡住
 
 **写入音乐文件并保持修改时间（`AudioFileEditor`，需求 C-5）**：封面和歌词写入文件共用。
 

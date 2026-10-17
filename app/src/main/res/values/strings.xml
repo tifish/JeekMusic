@@ -293,8 +293,8 @@
     <string name="cover_search_failed">Nothing found, or the network is unavailable.</string>
     <string name="cover_enable_and_search">Turn on and search</string>
     <string name="cover_saved_hidden">Cover saved to the hidden folder</string>
-    <string name="cover_saved_embed">Cover saved into the music file</string>
-    <string name="cover_saved_sidecar">Cover saved next to the song</string>
+    <string name="cover_saved_embed">Cover saved into %1$s music file(s)</string>
+    <string name="cover_saved_sidecar">Cover saved next to %1$s song(s)</string>
     <string name="cover_save_failed">Couldn’t save the cover</string>
     <string name="cover_fetch_mode">Fetch missing covers</string>
     <string name="cover_fetch_manual">Manually</string>

@@ -125,6 +125,9 @@ interface TrackDao {
     @Query("UPDATE track SET size = :size WHERE file_key = :fileKey")
     suspend fun updateSize(fileKey: String, size: Long)
 
+    @Query("SELECT * FROM track WHERE album_key = :albumKey ORDER BY disc_no, track_no, file_name")
+    suspend fun byAlbum(albumKey: String): List<TrackEntity>
+
     @Query("SELECT id FROM track WHERE album_key = :albumKey")
     suspend fun idsByAlbum(albumKey: String): List<Long>
 }

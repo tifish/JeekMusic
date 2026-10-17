@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.tinyfish.jeekmusic.data.db.TrackDao
+import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.EntryPoint
@@ -28,8 +29,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 批量获取缺失的封面（需求 C-3，docs/design.md §7.4）：按专辑（没有专辑时按歌曲）逐个检查，
- * 没有封面的在线搜索，只接受歌名和艺术家都对得上的结果。
+ * 批量获取缺失的封面（需求 C-3，docs/design.md §7.4）：按专辑（没有专辑时按歌曲）逐个检查。
+ * - 同专辑已经有封面（别的文件里内嵌的、同名图片等）：直接提取，不重复下载。隐藏目录模式下整张专辑共用，什么也不用做；
+ *   写入文件 / 同名图片模式下给还没有的文件补上
+ * - 整张专辑都没有：在线搜索一次，只接受歌名和艺术家都对得上的结果，保存给整张专辑
  *
  * 找不到的记下来，30 天内不再查；被系统停止时已保存的封面不会丢，重新运行时会跳过它们。
  */
@@ -51,16 +54,37 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val misses = MissLog(File(applicationContext.filesDir, MISSES_FILE))
 
         setProgress(workDataOf(KEY_CHECKING to true))
-        val groups = deps.trackDao().all().groupBy { it.albumKey ?: it.trackKey }
-        val missing = groups.filter { (key, tracks) -> !isStopped && !misses.recent(key) && !deps.coverStore().hasCover(tracks.first()) }
+        val store = deps.coverStore()
+        // 选了写入文件但没有权限时，保存总会改存到隐藏目录：按隐藏目录的方式判断，否则每次都会重复保存
+        val mode = settings.coverSaveMode.takeUnless { it == CoverSaveMode.EMBED && !store.canEmbed() } ?: CoverSaveMode.HIDDEN_FOLDER
+        // 每张专辑里还需要封面的文件
+        val missing = deps.trackDao().all().groupBy { it.albumKey ?: it.trackKey }.mapNotNull { (key, tracks) ->
+            if (isStopped) return@mapNotNull null
+            val album = store.albumOf(tracks.first())
+            val targets = when (mode) {
+                CoverSaveMode.HIDDEN_FOLDER -> if (store.hasCover(album.first())) emptyList() else album
+                else -> album.filter { !store.hasOwnCover(it, mode) }
+            }
+            if (targets.isEmpty()) null else key to targets
+        }
         var done = 0
         var found = 0
-        for ((key, tracks) in missing) {
+        var extracted = 0
+        for ((key, targets) in missing) {
             if (isStopped) break
             setProgress(workDataOf(KEY_DONE to done, KEY_TOTAL to missing.size, KEY_FOUND to found))
             done++
+            // 同专辑已有的封面直接提取，不用下载
+            store.albumImage(targets.first())?.let { existing ->
+                if (store.save(targets, existing, mode) != null) {
+                    found++
+                    extracted++
+                }
+                continue
+            }
+            if (misses.recent(key)) continue
             // 没有艺术家的歌只凭歌名很容易配错，不自动获取
-            val track = tracks.firstOrNull { it.artistDisplay.isNotBlank() }
+            val track = targets.firstOrNull { it.artistDisplay.isNotBlank() }
             if (track == null) {
                 misses.add(key)
                 continue
@@ -69,13 +93,13 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 .onFailure { Log.w(TAG, "fetch failed: ${track.title}", it) }
             val image = result.getOrNull()
             when {
-                image != null && deps.coverStore().save(track, image, settings.coverSaveMode) != null -> found++
+                image != null && store.save(listOf(track) + (targets - track), image, mode) != null -> found++
                 // 网络出错的不算"找不到"，下次还会再试
                 result.isSuccess -> misses.add(key)
             }
         }
         misses.save()
-        Log.i(TAG, "covers: $found found, $done checked, ${missing.size} missing")
+        Log.i(TAG, "covers: $found found ($extracted from the same album), $done checked, ${missing.size} missing")
         if (isStopped) return@withContext Result.retry()
         Result.success(workDataOf(KEY_DONE to done, KEY_TOTAL to missing.size, KEY_FOUND to found))
     }

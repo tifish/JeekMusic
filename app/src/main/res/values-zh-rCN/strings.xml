@@ -286,8 +286,8 @@
     <string name="cover_search_failed">没有找到，或网络不可用。</string>
     <string name="cover_enable_and_search">开启并搜索</string>
     <string name="cover_saved_hidden">封面已保存到隐藏目录</string>
-    <string name="cover_saved_embed">封面已写入音乐文件</string>
-    <string name="cover_saved_sidecar">封面已保存到歌曲旁边</string>
+    <string name="cover_saved_embed">封面已写入 %1$s 个音乐文件</string>
+    <string name="cover_saved_sidecar">封面已保存到 %1$s 首歌曲旁边</string>
     <string name="cover_save_failed">封面保存失败</string>
     <string name="cover_fetch_mode">缺失封面的获取方式</string>
     <string name="cover_fetch_manual">手动</string>

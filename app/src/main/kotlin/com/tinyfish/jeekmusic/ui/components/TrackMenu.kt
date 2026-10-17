@@ -112,19 +112,17 @@ class TrackMenuViewModel @Inject constructor(
 
     suspend fun coverThumbnail(candidate: CoverCandidate): ByteArray? = coverClient.thumbnail(candidate)
 
-    /** 下载大图并按设置保存（需求 C-3）；大图下载失败时退而用缩略图。 */
+    /** 下载大图并按设置保存给整张专辑（需求 C-3：封面按专辑共用）。 */
     suspend fun saveCover(track: TrackEntity, candidate: CoverCandidate) {
         val image = coverClient.downloadImage(candidate)
-        val saved = image?.let { coverStore.save(track, it, settings.current().coverSaveMode) }
+        val saved = image?.let { coverStore.save(coverStore.albumOf(track), it, settings.current().coverSaveMode) }
         messages.post(
-            UiMessage(
-                when (saved) {
-                    CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_saved_hidden
-                    CoverSaveMode.EMBED -> R.string.cover_saved_embed
-                    CoverSaveMode.SIDECAR -> R.string.cover_saved_sidecar
-                    null -> R.string.cover_save_failed
-                },
-            ),
+            when (saved?.mode) {
+                CoverSaveMode.HIDDEN_FOLDER -> UiMessage(R.string.cover_saved_hidden)
+                CoverSaveMode.EMBED -> UiMessage(R.string.cover_saved_embed, saved.files.toString())
+                CoverSaveMode.SIDECAR -> UiMessage(R.string.cover_saved_sidecar, saved.files.toString())
+                null -> UiMessage(R.string.cover_save_failed)
+            },
         )
     }
 

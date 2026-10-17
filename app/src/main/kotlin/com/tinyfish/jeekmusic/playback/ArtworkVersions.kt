@@ -21,6 +21,6 @@ object ArtworkVersions {
     fun withVersion(uri: Uri, versions: Map<Long, Int>): Uri {
         val trackId = uri.pathSegments.getOrNull(1)?.toLongOrNull() ?: return uri
         val version = versions[trackId] ?: return uri
-        return uri.buildUpon().appendQueryParameter("v", version.toString()).build()
+        return uri.buildUpon().clearQuery().appendQueryParameter("v", version.toString()).build()
     }
 }

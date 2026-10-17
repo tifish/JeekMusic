@@ -17,6 +17,8 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.tinyfish.jeekmusic.data.cover.CoverAutoFetcher
+import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -39,6 +41,8 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var library: LibraryRepository
     @Inject lateinit var persistence: QueuePersistence
     @Inject lateinit var settings: SettingsRepository
+    @Inject lateinit var trackDao: TrackDao
+    @Inject lateinit var coverFetcher: CoverAutoFetcher
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaLibrarySession? = null
@@ -49,6 +53,7 @@ class PlaybackService : MediaLibraryService() {
     private var queueTouched = false
     private var saveQueueJob: Job? = null
     private var progressJob: Job? = null
+    private var coverJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -68,6 +73,9 @@ class PlaybackService : MediaLibraryService() {
         scope.launch { settings.settings.collect { offload.mode = it.lowPowerMode } }
 
         player.addListener(PersistenceListener(player))
+        player.addListener(CoverListener(player))
+        // 当前歌曲的封面换了（播放时获取、批量获取、手动选择都会）：通知栏、锁屏按地址缓存图片，换个带版本号的地址才会重新加载
+        scope.launch { ArtworkVersions.versions.collect { refreshArtwork(player) } }
         scope.launch { restoreQueue(player) }
     }
 
@@ -104,6 +112,34 @@ class PlaybackService : MediaLibraryService() {
         player.shuffleModeEnabled = restored.shuffle
         player.repeatMode = restored.repeatMode
         queueTouched = false
+    }
+
+    /** 当前歌曲的封面地址加上版本号；只改元数据，Media3 不会打断播放。 */
+    private fun refreshArtwork(player: Player) {
+        val index = player.currentMediaItemIndex
+        if (index !in 0 until player.mediaItemCount) return
+        val item = player.getMediaItemAt(index)
+        val trackId = MediaItemMapper.trackId(item.mediaId) ?: return
+        val uri = ArtworkVersions.withVersion(MediaItemMapper.artworkUri(trackId, large = true), ArtworkVersions.versions.value)
+        if (item.mediaMetadata.artworkUri == uri) return
+        player.replaceMediaItem(index, item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(uri).build()).build())
+    }
+
+    /**
+     * 换歌时：先确保封面地址是最新的；自动获取封面打开、而这首歌没有封面时，为它的专辑查一次（需求 C-3）。
+     * 稍等一下再查，快速连续切歌时只查最后停下的那首。
+     */
+    private inner class CoverListener(private val player: Player) : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            refreshArtwork(player)
+            val trackId = mediaItem?.mediaId?.let(MediaItemMapper::trackId)
+            coverJob?.cancel()
+            if (trackId == null) return
+            coverJob = scope.launch {
+                delay(COVER_FETCH_DELAY_MS)
+                trackDao.byId(trackId)?.let { coverFetcher.fetchFor(it) }
+            }
+        }
     }
 
     private fun trackKeysOf(player: Player): List<String> = List(player.mediaItemCount) { i ->
@@ -266,3 +302,6 @@ object PlaybackCommands {
     const val EXTRA_SLEEP_SONGS = "sleep_songs_left"
     const val EXTRA_SLEEP_FINISH_SONG = "sleep_finish_song"
 }
+
+/** 换歌后等这么久再获取封面：快速连续切歌时只查最后停下的那首。 */
+private const val COVER_FETCH_DELAY_MS = 2_000L

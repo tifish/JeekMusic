@@ -25,7 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,22 +45,23 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         fun coverStore(): CoverStore
         fun coverClient(): CoverClient
         fun settings(): SettingsRepository
+        fun misses(): CoverMissLog
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val deps = EntryPointAccessors.fromApplication(applicationContext, Dependencies::class.java)
         val settings = deps.settings().current()
         if (!settings.onlineCovers) return@withContext Result.success()
-        val misses = MissLog(File(applicationContext.filesDir, MISSES_FILE))
+        val misses = deps.misses()
         // 只处理某个列表里的歌（需求 C-6）：用户明确要求的，不跳过 30 天内没找到的
-        val targets = inputData.getString(KEY_TARGETS)?.let(ListDownloadScheduler::readTargets)
+        val targetIds = inputData.getString(KEY_TARGETS)?.let(ListDownloadScheduler::readTargets)
 
         setProgress(workDataOf(KEY_CHECKING to true))
         val store = deps.coverStore()
         // 选了写入文件但没有权限时，保存总会改存到隐藏目录：按隐藏目录的方式判断，否则每次都会重复保存
-        val mode = settings.coverSaveMode.takeUnless { it == CoverSaveMode.EMBED && !store.canEmbed() } ?: CoverSaveMode.HIDDEN_FOLDER
+        val mode = store.effectiveMode(settings.coverSaveMode)
         // 每张专辑里还需要封面的文件
-        val tracks = targets?.chunked(SQL_CHUNK)?.flatMap { deps.trackDao().byIds(it) } ?: deps.trackDao().all()
+        val tracks = targetIds?.chunked(SQL_CHUNK)?.flatMap { deps.trackDao().byIds(it) } ?: deps.trackDao().all()
         val missing = tracks.groupBy { it.albumKey ?: it.trackKey }.mapNotNull { (key, tracks) ->
             if (isStopped) return@mapNotNull null
             val album = store.albumOf(tracks.first())
@@ -86,7 +86,8 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 }
                 continue
             }
-            if (targets == null && misses.recent(key)) continue
+            // 以前这里误用了循环里的 targets（总不为 null），没找到的记录形同虚设，每次自动获取都把它们重查一遍
+            if (targetIds == null && misses.recent(key)) continue
             // 没有艺术家的歌只凭歌名很容易配错，不自动获取
             val track = targets.firstOrNull { it.artistDisplay.isNotBlank() }
             if (track == null) {
@@ -108,26 +109,6 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         Result.success(workDataOf(KEY_DONE to done, KEY_TOTAL to missing.size, KEY_FOUND to found))
     }
 
-    /** 最近找不到封面的专辑（或歌曲），每行"时间\t键"。 */
-    private class MissLog(private val file: File) {
-        private val entries: MutableMap<String, Long> = runCatching {
-            file.readLines().mapNotNull { line ->
-                val (time, key) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
-                time.toLongOrNull()?.let { key to it }
-            }.toMap(HashMap())
-        }.getOrDefault(HashMap())
-        private val now = System.currentTimeMillis()
-
-        fun recent(key: String) = entries[key]?.let { now - it < RETRY_AFTER_MS } == true
-        fun add(key: String) {
-            entries[key] = now
-        }
-
-        fun save() = runCatching {
-            file.writeText(entries.filter { now - it.value < RETRY_AFTER_MS }.entries.joinToString("") { "${it.value}\t${it.key}\n" })
-        }
-    }
-
     companion object {
         const val TAG = "CoverFetchWorker"
         const val KEY_CHECKING = "checking"
@@ -137,8 +118,6 @@ class CoverFetchWorker(context: Context, params: WorkerParameters) : CoroutineWo
         /** 只处理这些歌：保存歌曲 id 的文件路径（id 可能上千个，超出 WorkManager 输入数据的大小限制）。 */
         const val KEY_TARGETS = "targets"
         private const val SQL_CHUNK = 900
-        private const val MISSES_FILE = "cover_misses.tsv"
-        private const val RETRY_AFTER_MS = 30L * 24 * 3600 * 1000
     }
 }
 

@@ -110,6 +110,10 @@ class CoverStore @Inject constructor(
     /** 能不能写入音乐文件（需要"所有文件访问权限"，见 [AudioFileEditor]）。 */
     fun canEmbed(): Boolean = editor.canEdit()
 
+    /** 实际会用的保存方式：选了写入文件但没有权限时，保存总会改存到隐藏目录。 */
+    fun effectiveMode(mode: CoverSaveMode): CoverSaveMode =
+        if (mode == CoverSaveMode.EMBED && !canEmbed()) CoverSaveMode.HIDDEN_FOLDER else mode
+
     private fun ownImage(folder: LibraryFolderEntity?, track: TrackEntity): ByteArray? =
         folder?.let { hiddenCover(it, track) } ?: folder?.let { sidecar(it, track) } ?: embeddedCover(track)
 

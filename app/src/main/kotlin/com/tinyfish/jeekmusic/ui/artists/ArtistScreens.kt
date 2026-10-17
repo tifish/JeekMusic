@@ -66,7 +66,9 @@ import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.TrackRow
 import com.tinyfish.jeekmusic.ui.components.songCount
 import com.tinyfish.jeekmusic.data.tabs.TabRepository
+import com.tinyfish.jeekmusic.ui.navigation.MessageBus
 import com.tinyfish.jeekmusic.ui.navigation.Tab
+import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import com.tinyfish.jeekmusic.ui.navigation.TabRoute
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -271,14 +273,21 @@ class ArtistDetailViewModel @AssistedInject constructor(
     library: LibraryRepository,
     private val player: PlayerConnection,
     private val tabs: TabRepository,
+    private val messages: MessageBus,
 ) : ViewModel() {
 
     val pinned: StateFlow<Boolean> = tabs.pinnedArtistKeys.map { nameKey in it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    /** 固定到标签栏 / 取消固定（需求 T-3）。 */
-    fun togglePin() = viewModelScope.launch {
-        if (pinned.value) tabs.unpin(Tab.PinnedArtist(nameKey, "")) else tabs.pinArtist(nameKey)
+    /** 固定到标签栏 / 取消固定，并提示结果（需求 T-3）。 */
+    fun togglePin(name: String) = viewModelScope.launch {
+        if (pinned.value) {
+            tabs.unpin(Tab.PinnedArtist(nameKey, ""))
+            messages.post(UiMessage(R.string.artist_unpinned, name))
+        } else {
+            tabs.pinArtist(nameKey)
+            messages.post(UiMessage(R.string.artist_pinned, name))
+        }
     }
 
     @AssistedFactory
@@ -320,9 +329,10 @@ fun ArtistDetailScreen(
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val pinAction = @Composable {
-        IconButton(onClick = viewModel::togglePin, modifier = Modifier.testTag("pin_artist")) {
+        val name = artist?.let { artistName(it) }.orEmpty()
+        IconButton(onClick = { viewModel.togglePin(name) }, modifier = Modifier.testTag("pin_artist")) {
             Icon(
-                painterResource(R.drawable.ic_push_pin),
+                painterResource(if (pinned) R.drawable.ic_push_pin else R.drawable.ic_push_pin_outline),
                 contentDescription = stringResource(if (pinned) R.string.menu_unpin_tab else R.string.menu_pin_tab),
                 tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -81,6 +81,8 @@
     <string name="menu_sleep_timer">Sleep timer</string>
     <string name="menu_pin_tab">Pin to tab bar</string>
     <string name="menu_unpin_tab">Unpin from tab bar</string>
+    <string name="artist_pinned">Pinned “%s” after Folders</string>
+    <string name="artist_unpinned">Unpinned “%s”</string>
     <string name="menu_move_left">Move left</string>
     <string name="menu_move_right">Move right</string>
     <string name="choose_artist">Choose artist</string>

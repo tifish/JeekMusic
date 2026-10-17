@@ -39,7 +39,7 @@
     <string name="empty_library_message">JeekMusic 播放你所选文件夹中的音乐。可以添加多个文件夹，包括 SD 卡上的文件夹。</string>
     <string name="permission_needed">JeekMusic 需要读取音频文件的权限。</string>
     <string name="scan_progress">正在扫描 %1$d / %2$d</string>
-    <string name="folder_already_covered">这个文件夹已经包含在"%s"中。</string>
+    <string name="folder_already_covered">这个文件夹已经包含在“%s”中。</string>
     <string name="folder_replace_title">替换子文件夹？</string>
     <string name="folder_replace_message">新文件夹包含以下音乐文件夹，它们将被新文件夹替换：\n%s</string>
     <string name="folder_unsupported">只能添加本机存储上的文件夹。</string>
@@ -52,7 +52,7 @@
     <string name="settings_rebuild">重建曲库</string>
     <string name="settings_rebuild_summary">重新读取所有歌曲的标签</string>
     <string name="settings_remove_folder_title">移除文件夹？</string>
-    <string name="settings_remove_folder_message">"%s"中的歌曲将从曲库中移除，文件本身不会被删除。</string>
+    <string name="settings_remove_folder_message">“%s”中的歌曲将从曲库中移除，文件本身不会被删除。</string>
     <plurals name="settings_unsupported_files">
         <item quantity="other">跳过了 %d 个不支持的文件（APE、WMA 等），转换成 FLAC 后即可播放。</item>
     </plurals>
@@ -79,19 +79,21 @@
     <string name="menu_sleep_timer">睡眠定时</string>
     <string name="menu_pin_tab">固定到标签栏</string>
     <string name="menu_unpin_tab">从标签栏取消固定</string>
+    <string name="artist_pinned">已将“%s”固定到“文件夹”之后</string>
+    <string name="artist_unpinned">已取消固定“%s”</string>
     <string name="menu_move_left">左移</string>
     <string name="menu_move_right">右移</string>
     <string name="choose_artist">选择艺术家</string>
     <string name="added_to_queue">已添加到队列</string>
-    <string name="added_to_playlist">已添加到"%s"</string>
-    <string name="playback_error">无法播放"%s"，已跳过</string>
+    <string name="added_to_playlist">已添加到“%s”</string>
+    <string name="playback_error">无法播放“%s”，已跳过</string>
 
     <string name="playlists_empty">还没有播放列表</string>
     <string name="playlist_new">新建播放列表</string>
     <string name="playlist_name">名称</string>
     <string name="playlist_rename">重命名</string>
     <string name="playlist_delete">删除播放列表</string>
-    <string name="playlist_delete_message">删除"%s"？歌曲本身不会被删除。</string>
+    <string name="playlist_delete_message">删除“%s”？歌曲本身不会被删除。</string>
     <string name="playlist_unavailable">不可用</string>
     <string name="create">创建</string>
     <string name="save">保存</string>

@@ -32,8 +32,16 @@ class TabRepository @Inject constructor(
         tabs.filter { it.type == TYPE_ARTIST }.map { it.ref }.toSet()
     }
 
-    suspend fun pinArtist(nameKey: String) {
-        tabDao.insert(listOf(PinnedTabEntity(type = TYPE_ARTIST, ref = nameKey, position = tabDao.maxPosition() + 1)))
+    /** 新固定的艺术家放在"文件夹"标签之后（不是追加到末尾），保证在标签栏里一眼能看到。 */
+    suspend fun pinArtist(nameKey: String) = db.withTransaction {
+        val tabs = tabDao.all()
+        if (tabs.any { it.type == TYPE_ARTIST && it.ref == nameKey }) return@withTransaction
+        val at = tabs.indexOfFirst { it.type == TYPE_FOLDERS } + 1
+        tabs.forEachIndexed { i, tab ->
+            val position = if (i < at) i else i + 1
+            if (tab.position != position) tabDao.setPosition(tab.id, position)
+        }
+        tabDao.insert(listOf(PinnedTabEntity(type = TYPE_ARTIST, ref = nameKey, position = at)))
     }
 
     suspend fun pinMood(mood: String) {

@@ -1,9 +1,9 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,7 +36,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings_licenses)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScrollWithScrollbar(rememberScrollState())) {
                 LICENSES.forEach { (name, license) ->
                     Column(Modifier.padding(vertical = 6.dp)) {
                         Text(name, style = MaterialTheme.typography.bodyMedium)

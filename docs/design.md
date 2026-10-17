@@ -930,6 +930,14 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 ## 10. UI 结构
 
+**滚动条**（需求 U-9，`ui/components/Scrollbar.kt`）：Compose 的 LazyColumn 没有滚动条，自己画。`Modifier.verticalScrollbar(state)` 支持 `LazyListState`、`LazyGridState`、`ScrollState`（`verticalScrollWithScrollbar` 把它和 `verticalScroll` 连在一起，滚动条要在 `verticalScroll` 之前，按视口坐标绘制）。
+
+- 只在 `canScrollForward || canScrollBackward` 时绘制，用 `drawWithContent` 画在内容上面：读滚动状态只触发重绘，不重组
+- 滑块大小、位置按可见项的平均高度估算全部内容的高度；到头、到底时直接贴边，避免估算误差
+- 可拖动时用 `pointerInput` 在 Initial 阶段判断按下点是否在滑块上（右边 32dp、滑块上下各放宽 12dp）：是就消费掉，列表不会同时滚动；拖动时按比例 `scrollToItem`。不在滑块上就不处理，点按、滑动照常交给列表
+- 平时透明度 0.5，滚动时 0.9，拖动时变成主题色并加粗
+
+
 ```
 MainActivity
 └── JeekNavHost（全局）

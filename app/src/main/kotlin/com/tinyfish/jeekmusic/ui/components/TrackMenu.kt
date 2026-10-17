@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -215,7 +215,7 @@ fun TrackMenuHost(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             modifier = Modifier.testTag("track_menu"),
         ) {
-            Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState())) {
+            Column(Modifier.navigationBarsPadding().verticalScrollWithScrollbar(rememberScrollState())) {
                 Text(current.title, Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(trackSubtitle(current), Modifier.padding(horizontal = 24.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -303,7 +303,8 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
         title = { Text(stringResource(R.string.menu_add_to_playlist)) },
         text = {
             Column {
-                LazyColumn(Modifier.heightIn(max = 280.dp)) {
+                val listState = rememberLazyListState()
+                LazyColumn(Modifier.heightIn(max = 280.dp).verticalScrollbar(listState), state = listState) {
                     items(lists.orEmpty(), key = { it.id }) { playlist ->
                         Text(
                             playlist.name,
@@ -344,7 +345,7 @@ private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onD
         title = { Text(stringResource(R.string.menu_edit_tags)) },
         text = {
             val current = info ?: return@AlertDialog
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScrollWithScrollbar(rememberScrollState())) {
                 TagDimension.entries.forEach { dimension ->
                     val manual = dimension in current.manual
                     val auto = current.auto[dimension]
@@ -389,7 +390,7 @@ private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, on
         onDismissRequest = onDismiss,
         title = { Text(track.title) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScrollWithScrollbar(rememberScrollState())) {
                 InfoRow(R.string.info_path, track.relativePath + track.fileName)
                 InfoRow(R.string.info_album, track.album)
                 InfoRow(R.string.info_track, listOfNotNull(track.discNo?.let { "$it-" }, track.trackNo?.toString()).joinToString("").ifEmpty { null })

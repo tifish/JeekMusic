@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.artists
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
@@ -358,7 +359,7 @@ fun ArtistDetailScreen(
         val data = tracks ?: return@Column
         val currentRow = data.indexOfFirst { it.id == currentTrackId }
         Box(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks"), state = listState) {
+            LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("artist_tracks"), state = listState) {
                 itemsIndexed(data, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
                     TrackRow(
                         track = track,

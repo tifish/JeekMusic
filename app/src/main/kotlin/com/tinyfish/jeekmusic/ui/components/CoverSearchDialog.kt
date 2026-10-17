@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -62,6 +63,7 @@ fun CoverSearchDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onlineC
     var pending by remember { mutableIntStateOf(0) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
     var saving by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
     val searching = pending > 0
 
     fun search() {
@@ -126,7 +128,8 @@ fun CoverSearchDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onlineC
                     results.isEmpty() -> Text(stringResource(R.string.cover_search_failed))
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
-                        modifier = Modifier.heightIn(max = 360.dp).testTag("cover_results"),
+                        state = gridState,
+                        modifier = Modifier.heightIn(max = 360.dp).verticalScrollbar(gridState).testTag("cover_results"),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

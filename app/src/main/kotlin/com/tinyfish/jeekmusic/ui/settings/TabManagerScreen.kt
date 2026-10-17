@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,7 +50,7 @@ fun TabManagerScreen(viewModel: MainViewModel, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("tab_manager")) {
         SubScreenHeader(title = stringResource(R.string.settings_tabs), onBack = onBack)
-        LazyColumn(state = listState) {
+        LazyColumn(state = listState, modifier = Modifier.verticalScrollbar(listState)) {
             items(items, key = { it.key }) { tab ->
                 ReorderableItem(reorderState, key = tab.key) { dragging ->
                     Surface(tonalElevation = if (dragging) 6.dp else 0.dp) {

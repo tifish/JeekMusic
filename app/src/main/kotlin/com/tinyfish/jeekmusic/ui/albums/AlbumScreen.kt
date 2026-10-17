@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.albums
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -118,7 +119,7 @@ fun AlbumScreen(
             .let { if (it >= 0) it + 2 else -1 }
 
         Box(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().testTag("album_tracks"), state = listState) {
+            LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("album_tracks"), state = listState) {
                 item(key = "header") {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Artwork(MediaItemMapper.artworkUri(album.coverTrackId, large = true), 112.dp, cornerRadius = 12.dp)

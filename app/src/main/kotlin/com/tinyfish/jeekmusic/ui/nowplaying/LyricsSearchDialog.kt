@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +54,7 @@ fun LyricsSearchDialog(viewModel: PlayerViewModel, onDismiss: () -> Unit) {
     var failures by remember { mutableIntStateOf(0) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
     val searching = pending > 0
+    val resultsState = rememberLazyListState()
 
     fun search() {
         searchJob?.cancel()
@@ -99,7 +102,7 @@ fun LyricsSearchDialog(viewModel: PlayerViewModel, onDismiss: () -> Unit) {
                     searching && results.isEmpty() -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(16.dp))
                     results.isEmpty() && failures > 0 -> Text(stringResource(R.string.lyrics_search_failed), color = MaterialTheme.colorScheme.error)
                     results.isEmpty() -> Text(stringResource(R.string.search_no_results))
-                    else -> LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    else -> LazyColumn(Modifier.heightIn(max = 320.dp).verticalScrollbar(resultsState), state = resultsState) {
                         items(results, key = { "${it.source}:${it.id}" }) { r ->
                             val current = track
                             Column(

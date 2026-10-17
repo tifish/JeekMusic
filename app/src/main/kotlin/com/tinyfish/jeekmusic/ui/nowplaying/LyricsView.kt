@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 import com.tinyfish.jeekmusic.ui.components.formatDuration
@@ -189,7 +190,8 @@ private suspend fun LazyListState.centerOn(index: Int, anchor: Int) {
 
 @Composable
 private fun PlainLyrics(lyrics: Lyrics, modifier: Modifier) {
-    LazyColumn(modifier.fillMaxSize().testTag("lyrics"), contentPadding = PaddingValues(24.dp)) {
+    val listState = rememberLazyListState()
+    LazyColumn(modifier.fillMaxSize().verticalScrollbar(listState).testTag("lyrics"), state = listState, contentPadding = PaddingValues(24.dp)) {
         itemsIndexed(lyrics.lines) { _, line ->
             Text(
                 line.text,

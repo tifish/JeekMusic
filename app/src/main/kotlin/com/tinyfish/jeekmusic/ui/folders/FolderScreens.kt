@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.folders
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
@@ -90,7 +91,8 @@ fun FolderRootScreen(
         EmptyLibrary()
         return
     }
-    LazyColumn(Modifier.fillMaxSize().testTag("folder_list")) {
+    val listState = rememberLazyListState()
+    LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("folder_list"), state = listState) {
         items(list, key = { it.folder.id }) { (folder, count) ->
             FolderRow(
                 name = folder.displayName,
@@ -237,7 +239,7 @@ fun FolderScreen(
         }
         val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + data.folders.size else -1 }
         Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize().testTag("folder_content"), state = listState) {
+        LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("folder_content"), state = listState) {
             items(data.folders, key = { "dir:" + it.relativePath }, contentType = { "folder" }) { node ->
                 FolderRow(
                     name = node.name,

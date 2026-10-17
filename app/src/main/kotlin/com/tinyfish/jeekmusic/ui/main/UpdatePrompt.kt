@@ -1,12 +1,12 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +51,7 @@ fun UpdatePrompt(viewModel: UpdateViewModel = hiltViewModel()) {
                     if (s.info.notes.isNotEmpty()) {
                         Text(
                             s.info.notes,
-                            Modifier.padding(top = 8.dp).heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                            Modifier.padding(top = 8.dp).heightIn(max = 240.dp).verticalScrollWithScrollbar(rememberScrollState()),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }

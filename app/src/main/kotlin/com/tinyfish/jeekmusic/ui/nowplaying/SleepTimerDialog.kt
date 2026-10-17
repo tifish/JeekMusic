@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
 import android.os.SystemClock
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Checkbox
@@ -68,7 +68,7 @@ fun SleepTimerDialog(viewModel: PlayerViewModel, timer: SleepTimerState, onDismi
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.sleep_timer_title)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScrollWithScrollbar(rememberScrollState())) {
                 SectionLabel(stringResource(R.string.sleep_by_time))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MINUTE_OPTIONS.forEach { minutes ->

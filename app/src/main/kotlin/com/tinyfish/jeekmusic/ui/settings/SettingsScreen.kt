@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.update.AppUpdater
 import com.tinyfish.jeekmusic.update.CheckResult
 import androidx.compose.foundation.clickable
@@ -248,7 +250,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
         SubScreenHeader(title = stringResource(R.string.settings_title), onBack = onBack)
-        LazyColumn(Modifier.fillMaxSize()) {
+        val listState = rememberLazyListState()
+        LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true), state = listState) {
             item { SectionHeader(stringResource(R.string.settings_library)) }
             items(folders, key = { it.folder.id }) { (folder, count) ->
                 Row(

@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
@@ -119,10 +120,11 @@ fun PlaylistListScreen(onOpen: (Long) -> Unit, viewModel: PlaylistListViewModel 
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp).testTag("import_m3u"),
         ) { Text(stringResource(R.string.m3u_import)) }
         val list = playlists
+        val listState = rememberLazyListState()
         when {
             list == null -> Unit
             list.isEmpty() -> CenteredMessage(stringResource(R.string.playlists_empty))
-            else -> LazyColumn(Modifier.fillMaxSize().testTag("playlist_list")) {
+            else -> LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("playlist_list"), state = listState) {
                 items(list, key = { it.playlist.id }) { (playlist, count) ->
                     Row(
                         Modifier.fillMaxWidth().clickable { onOpen(playlist.id) }.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -253,7 +255,7 @@ fun PlaylistDetailScreen(
             items.add(to.index, items.removeAt(from.index))
         }
         Box(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().testTag("playlist_tracks"), state = listState) {
+            LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("playlist_tracks"), state = listState) {
                 items(items, key = { it.item.id }) { entry ->
                     ReorderableItem(reorderState, key = entry.item.id) {
                         val track = entry.track

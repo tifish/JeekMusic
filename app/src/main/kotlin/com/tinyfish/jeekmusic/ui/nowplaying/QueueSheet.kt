@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,7 +67,7 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
                 Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.titleMedium,
             )
-            LazyColumn(state = listState, modifier = Modifier.testTag("queue_list")) {
+            LazyColumn(state = listState, modifier = Modifier.verticalScrollbar(listState).testTag("queue_list")) {
                 itemsIndexed(items, key = { _, item -> item.uid }) { index, item ->
                     ReorderableItem(reorderState, key = item.uid) { isDragging ->
                         val current = item.uid == state.queue.getOrNull(state.currentIndex)?.uid

@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.search
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.filter.filterByTags
@@ -136,7 +138,8 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             CenteredMessage(stringResource(R.string.search_no_results))
             return@Column
         }
-        LazyColumn(Modifier.fillMaxSize().testTag("search_results")) {
+        val listState = rememberLazyListState()
+        LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("search_results"), state = listState) {
             if (data.artists.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.search_artists)) }
                 items(data.artists, key = { "a:" + it.nameKey }) { artist ->

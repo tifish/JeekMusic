@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +82,7 @@ fun ArtistSettingsScreen(onBack: () -> Unit, viewModel: ArtistSettingsViewModel 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("artist_settings")) {
         SubScreenHeader(title = stringResource(R.string.settings_artists), onBack = onBack)
         if (c == null) return@Column
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().verticalScrollWithScrollbar(rememberScrollState(), draggable = true)) {
             SectionHeader(stringResource(R.string.artist_separators))
             Text(stringResource(R.string.artist_separators_summary), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

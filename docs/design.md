@@ -857,7 +857,9 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 ### 8.6 歌词 UI
 
 - `LazyColumn` 显示歌词行。当前行索引通过 `derivedStateOf { 二分查找(position) }` 计算，**只有行号变化时才重组**，200ms 的进度轮询不会让整个列表重组
-- 自动滚动用 `animateScrollToItem` 让当前行居中；用户拖动后 3s 内暂停跟随；点击某一行时执行 `seekTo(line.time)`
+- 自动滚动让当前行的中心对准歌词区的垂直中间（上下各留半屏的 contentPadding，第一行和最后一行也能居中）：行在屏幕上时 `animateScrollBy` 平滑滚过去，不在时先 `scrollToItem` 再微调。以前用 `animateScrollToItem(i, -viewport/3)`，实际停在 2/3 高度
+- 点击某一行时执行 `seekTo(line.time)`
+- **拖动跳转**（需求 LY-12）：`collectIsDraggedAsState` 检测到拖动就进入浏览状态，暂停跟随；滚动停下 3s 后退出浏览、滚回当前行。浏览时用 `derivedStateOf` 取中心离定位线最近的行（只在行号变化时重组），画定位线（时间 + 分隔线 + 播放按钮）并加亮那一行。点播放按钮后 `seekTo`，并在 2s 内先跟随这一行：播放位置是轮询的，当前行要过一会儿才更新，否则会先滚回旧位置再滚过去
 - 当前行高亮只改变颜色和字重，不做缩放或模糊动画
 
 ## 9. 启动性能

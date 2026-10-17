@@ -327,4 +327,5 @@
     <string name="source_ok">%1$d 毫秒</string>
     <string name="source_failed">无法连接</string>
     <string name="source_check_hint">连不上的来源可以取消勾选，免得每次都等它超时。</string>
+    <string name="lyrics_seek_here">从这里播放</string>
 </resources>

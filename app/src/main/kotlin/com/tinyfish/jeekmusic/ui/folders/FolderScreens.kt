@@ -194,9 +194,11 @@ fun FolderScreen(
     var menuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
+        // 歌曲数包括子文件夹里的，和上一级列表里显示的一致；筛选时只算符合筛选的（需求 F-9）
+        val total = content?.let { data -> data.tracks.size + data.folders.sumOf { it.trackCount } }
         SubScreenHeader(
             title = route.title,
-            subtitle = route.relativePath,
+            subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
             actions = {
                 IconButton(onClick = { menuOpen = true }) {

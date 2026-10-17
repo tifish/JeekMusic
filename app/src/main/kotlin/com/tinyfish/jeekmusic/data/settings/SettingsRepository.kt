@@ -69,6 +69,8 @@ data class Settings(
     val lastUpdateCheck: Long = 0,
     /** 用户选择"跳过此版本"的 versionCode；0 表示没有。 */
     val skippedUpdateVersion: Int = 0,
+    /** 标签栏数据的整理版本，见 TabRepository.ensureDefaults。 */
+    val tabLayoutVersion: Int = 0,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -98,6 +100,7 @@ class SettingsRepository @Inject constructor(
         val AUTO_UPDATE = booleanPreferencesKey("auto_update_check")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
         val SKIPPED_UPDATE = intPreferencesKey("skipped_update_version")
+        val TAB_LAYOUT_VERSION = intPreferencesKey("tab_layout_version")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -129,6 +132,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setLastUpdateCheck(time: Long) = context.dataStore.edit { it[Keys.LAST_UPDATE_CHECK] = time }
 
     suspend fun setSkippedUpdateVersion(versionCode: Int) = context.dataStore.edit { it[Keys.SKIPPED_UPDATE] = versionCode }
+
+    suspend fun setTabLayoutVersion(version: Int) = context.dataStore.edit { it[Keys.TAB_LAYOUT_VERSION] = version }
 
     suspend fun setMoodFilter(filter: MoodFilter) = context.dataStore.edit { it[Keys.MOOD_FILTER] = filter.name }
 
@@ -170,5 +175,6 @@ class SettingsRepository @Inject constructor(
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,
+        tabLayoutVersion = this[Keys.TAB_LAYOUT_VERSION] ?: 0,
     )
 }

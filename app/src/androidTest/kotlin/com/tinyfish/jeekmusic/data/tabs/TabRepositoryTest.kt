@@ -5,8 +5,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
 import com.tinyfish.jeekmusic.data.db.PinnedTabEntity
+import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.ui.navigation.Tab
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -19,12 +21,15 @@ class TabRepositoryTest {
 
     private lateinit var db: JeekDatabase
     private lateinit var repository: TabRepository
+    private lateinit var settings: SettingsRepository
 
     @Before
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         db = Room.inMemoryDatabaseBuilder(context, JeekDatabase::class.java).build()
-        repository = TabRepository(db, db.tabDao(), db.artistDao())
+        settings = SettingsRepository(context)
+        runBlocking { settings.setTabLayoutVersion(0) }
+        repository = TabRepository(db, db.tabDao(), db.artistDao(), settings)
     }
 
     @After
@@ -63,6 +68,27 @@ class TabRepositoryTest {
             listOf(Tab.Folders.key, "ARTIST:x", "ARTIST:y", "ARTIST:a", Tab.Artists.key, Tab.Playlists.key),
             keys(),
         )
+    }
+
+    @Test
+    fun pinnedArtistsAtTheEndAreMovedAfterFoldersOnce() = runTest {
+        // 1.0.27 及以前从备份恢复的固定艺术家排在最后
+        db.tabDao().insert(
+            listOf(
+                PinnedTabEntity(type = "FOLDERS", position = 0),
+                PinnedTabEntity(type = "ARTISTS", position = 1),
+                PinnedTabEntity(type = "PLAYLISTS", position = 2),
+                PinnedTabEntity(type = "ARTIST", ref = "x", position = 3),
+                PinnedTabEntity(type = "ARTIST", ref = "y", position = 4),
+            ),
+        )
+        val grouped = listOf(Tab.Folders.key, "ARTIST:x", "ARTIST:y", Tab.Artists.key, Tab.Playlists.key)
+        assertEquals(grouped, keys())
+
+        // 只整理一次：之后用户把 y 挪到最后，不会再被改回来
+        repository.move(2, 4)
+        val fresh = TabRepository(db, db.tabDao(), db.artistDao(), settings)
+        assertEquals(listOf(Tab.Folders.key, "ARTIST:x", Tab.Artists.key, Tab.Playlists.key, "ARTIST:y"), fresh.tabs.first().map { it.key })
     }
 
     @Test

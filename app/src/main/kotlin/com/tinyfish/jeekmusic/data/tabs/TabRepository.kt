@@ -5,6 +5,7 @@ import com.tinyfish.jeekmusic.data.db.ArtistDao
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
 import com.tinyfish.jeekmusic.data.db.PinnedTabEntity
 import com.tinyfish.jeekmusic.data.db.TabDao
+import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.ui.navigation.Tab
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -19,6 +20,7 @@ class TabRepository @Inject constructor(
     private val db: JeekDatabase,
     private val tabDao: TabDao,
     private val artistDao: ArtistDao,
+    private val settings: SettingsRepository,
 ) {
     val tabs: Flow<List<Tab>> = combine(
         tabDao.observeAll().onStart { ensureDefaults() },
@@ -73,8 +75,25 @@ class TabRepository @Inject constructor(
     private suspend fun ensureDefaults() {
         // "运动 / 安静"从标签改成了全局筛选（需求 M-6），去掉旧版本固定的这两个标签
         tabDao.deleteType(TYPE_MOOD)
-        if (tabDao.all().isNotEmpty()) return
-        tabDao.insert(DEFAULTS.mapIndexed { i, (type, ref) -> PinnedTabEntity(type = type, ref = ref, position = i) })
+        if (tabDao.all().isEmpty()) {
+            tabDao.insert(DEFAULTS.mapIndexed { i, (type, ref) -> PinnedTabEntity(type = type, ref = ref, position = i) })
+        } else if (settings.current().tabLayoutVersion < TAB_LAYOUT_VERSION) {
+            // 1.0.27 及以前从备份恢复的固定艺术家被追加到了最后；升级后一次性挪回"文件夹"之后（需求 T-3）。
+            // 只做一次，之后用户自己调整的顺序不会被改回来
+            groupPinnedArtists()
+        }
+        if (settings.current().tabLayoutVersion < TAB_LAYOUT_VERSION) settings.setTabLayoutVersion(TAB_LAYOUT_VERSION)
+    }
+
+    /** 把所有固定的艺术家挪到"文件夹"标签之后，保持它们之间的相对顺序；其他标签的顺序不变。 */
+    private suspend fun groupPinnedArtists() = db.withTransaction {
+        val tabs = tabDao.all()
+        val artists = tabs.filter { it.type == TYPE_ARTIST }
+        val others = tabs.filter { it.type != TYPE_ARTIST }
+        val at = others.indexOfFirst { it.type == TYPE_FOLDERS } + 1
+        (others.take(at) + artists + others.drop(at)).forEachIndexed { i, tab ->
+            if (tab.position != i) tabDao.setPosition(tab.id, i)
+        }
     }
 
     private fun PinnedTabEntity.toTab(names: Map<String, String>): Tab? = when (type) {
@@ -90,6 +109,9 @@ class TabRepository @Inject constructor(
         const val TYPE_ARTISTS = "ARTISTS"
         const val TYPE_PLAYLISTS = "PLAYLISTS"
         const val TYPE_ARTIST = "ARTIST"
+        /** 升级时需要整理标签数据就加一，见 [ensureDefaults]。 */
+        private const val TAB_LAYOUT_VERSION = 1
+
         /** 旧版本的"运动 / 安静"标签，现在只用于清理。 */
         private const val TYPE_MOOD = "MOOD"
 

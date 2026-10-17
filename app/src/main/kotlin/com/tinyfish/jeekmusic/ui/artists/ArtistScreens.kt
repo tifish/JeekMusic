@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -45,9 +46,7 @@ import com.tinyfish.jeekmusic.data.db.ArtistEntity
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.db.UNKNOWN_ARTIST_KEY
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
-import com.tinyfish.jeekmusic.playback.MediaItemMapper
 import com.tinyfish.jeekmusic.playback.PlayerConnection
-import com.tinyfish.jeekmusic.ui.components.Artwork
 import com.tinyfish.jeekmusic.ui.components.CenteredMessage
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
 import com.tinyfish.jeekmusic.ui.components.PlayButtons
@@ -180,9 +179,6 @@ private fun LetterIndex(letters: List<String>, listState: LazyListState, headerI
     }
 }
 
-/** 艺术家详情中按专辑分组的一段。 */
-data class AlbumGroup(val albumKey: String?, val album: String?, val year: Int?, val firstTrackId: Long, val tracks: List<IndexedValue<TrackEntity>>)
-
 @HiltViewModel(assistedFactory = ArtistDetailViewModel.Factory::class)
 class ArtistDetailViewModel @AssistedInject constructor(
     @Assisted private val nameKey: String,
@@ -207,16 +203,9 @@ class ArtistDetailViewModel @AssistedInject constructor(
     val artist: StateFlow<ArtistEntity?> = library.artist(nameKey)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val tracks: StateFlow<List<TrackEntity>?> = library.artistTracks(nameKey)
+    /** 直接显示全部歌曲，不按专辑分组（需求 A-6）。 */
+    val tracks: StateFlow<List<TrackEntity>?> = library.artistTracks(nameKey)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    /** 直接显示全部歌曲，按专辑分组（需求 A-6）。 */
-    val groups: StateFlow<List<AlbumGroup>?> = tracks.map { list ->
-        list?.withIndex()?.groupBy { it.value.albumKey ?: "none" }?.values?.map { items ->
-            val first = items.first().value
-            AlbumGroup(first.albumKey, first.album, items.mapNotNull { it.value.year }.minOrNull(), first.id, items)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -230,19 +219,17 @@ class ArtistDetailViewModel @AssistedInject constructor(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ArtistDetailScreen(
     route: TabRoute.ArtistDetail,
     onBack: () -> Unit,
-    onOpenAlbum: (String) -> Unit,
     viewModel: ArtistDetailViewModel = hiltViewModel<ArtistDetailViewModel, ArtistDetailViewModel.Factory>(
         key = route.toString(),
         creationCallback = { it.create(route.nameKey) },
     ),
 ) {
     val artist by viewModel.artist.collectAsStateWithLifecycle()
-    val groups by viewModel.groups.collectAsStateWithLifecycle()
+    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -270,64 +257,20 @@ fun ArtistDetailScreen(
         } else {
             SubScreenHeader(title = name, subtitle = subtitle, onBack = onBack, actions = { pinAction() })
         }
-        val data = groups ?: return@Column
+        val data = tracks ?: return@Column
         PlayButtons(onPlayAll = { viewModel.playAll(false) }, onShuffle = { viewModel.playAll(true) })
-        var row = 0
-        var currentRow = -1
-        data.forEach { group ->
-            row++
-            group.tracks.forEach { if (it.value.id == currentTrackId) currentRow = row; row++ }
-        }
+        val currentRow = data.indexOfFirst { it.id == currentTrackId }
         Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks"), state = listState) {
-            data.forEach { group ->
-                stickyHeader(key = "album:" + (group.albumKey ?: "none"), contentType = "album") {
-                    AlbumHeader(group, onClick = group.albumKey?.let { key -> { onOpenAlbum(key) } })
-                }
-                items(group.tracks, key = { it.value.id }, contentType = { "track" }) { (index, track) ->
+            LazyColumn(Modifier.fillMaxSize().testTag("artist_tracks"), state = listState) {
+                itemsIndexed(data, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
                     TrackRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
                         onClick = { viewModel.play(index) },
-                        subtitle = track.artistDisplay.ifEmpty { stringResource(R.string.unknown_artist) },
-                        leading = {
-                            Text(
-                                track.trackNo?.toString() ?: "–",
-                                Modifier.width(32.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
                     )
                 }
             }
-        }
-        LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
-        }
-    }
-}
-
-@Composable
-private fun AlbumHeader(group: AlbumGroup, onClick: (() -> Unit)?) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Artwork(MediaItemMapper.artworkUri(group.firstTrackId), 40.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                group.album ?: stringResource(R.string.unknown_album),
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val detail = listOfNotNull(group.year?.toString(), songCount(group.tracks.size)).joinToString(" · ")
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
         }
     }
 }

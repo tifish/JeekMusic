@@ -243,7 +243,7 @@ private fun TabContent(tab: Tab, viewModel: MainViewModel, onFirstContent: () ->
             entry<TabRoute.FolderRoot> { FolderRootScreen(onOpen = push, onLoaded = onFirstContent) }
             entry<TabRoute.Folder> { route -> FolderScreen(route, onOpen = push, onBack = pop) }
             entry<TabRoute.ArtistList> { ArtistListScreen(onOpen = { push(TabRoute.ArtistDetail(it.nameKey)) }) }
-            entry<TabRoute.ArtistDetail> { route -> ArtistDetailScreen(route, onBack = pop, onOpenAlbum = { push(TabRoute.Album(it)) }) }
+            entry<TabRoute.ArtistDetail> { route -> ArtistDetailScreen(route, onBack = pop) }
             entry<TabRoute.Album> { route -> AlbumScreen(route, onBack = pop) }
             entry<TabRoute.PlaylistList> { PlaylistListScreen(onOpen = { push(TabRoute.PlaylistDetail(it)) }) }
             entry<TabRoute.PlaylistDetail> { route -> PlaylistDetailScreen(route, onBack = pop) }

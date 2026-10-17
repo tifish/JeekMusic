@@ -30,7 +30,6 @@
     <string name="replace">Replace</string>
 
     <string name="unknown_artist">Unknown artist</string>
-    <string name="unknown_album">Unknown album</string>
     <plurals name="song_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>

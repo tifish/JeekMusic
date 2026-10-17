@@ -23,6 +23,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import com.tinyfish.jeekmusic.data.scanner.SortKeys
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -123,17 +126,18 @@ class LibraryRepository @Inject constructor(
 
     fun artist(nameKey: String): Flow<ArtistEntity?> = artistDao.observeByNameKey(nameKey)
 
-    /** 艺术家的全部歌曲，按专辑分组的顺序排列：专辑名、碟号、音轨号、文件名（需求 A-6）。 */
+    private val sortKeys by lazy { SortKeys.android() }
+
+    /** 艺术家的全部歌曲，不分组，按标题排序（中文按拼音），同名的再按文件名排序（需求 A-6）。 */
     fun artistTracks(nameKey: String): Flow<List<TrackEntity>> = trackDao.observeByArtist(nameKey).map { tracks ->
-        tracks.sortedWith(
-            compareBy<TrackEntity> { it.album == null }
-                .thenBy(NaturalOrderComparator) { it.album.orEmpty() }
-                .thenBy { it.albumKey.orEmpty() }
-                .thenBy { it.discNo ?: 0 }
-                .thenBy { it.trackNo ?: Int.MAX_VALUE }
-                .thenBy(NaturalOrderComparator) { it.fileName },
-        )
-    }
+        tracks.map { it to sortKeys.sortKey(it.title) }
+            .sortedWith(
+                compareBy<Pair<TrackEntity, String>, String>(NaturalOrderComparator) { it.second }
+                    .thenBy(NaturalOrderComparator) { it.first.fileName }
+                    .thenBy { it.first.cueTrackNo ?: 0 },
+            )
+            .map { it.first }
+    }.flowOn(Dispatchers.Default)
 
     fun albumTracks(albumKey: String): Flow<List<TrackEntity>> = trackDao.observeByAlbum(albumKey)
 

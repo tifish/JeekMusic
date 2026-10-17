@@ -479,7 +479,7 @@ albumDir = relative_path；如果最后一级目录名匹配 ^(cd|disc|disk)\s*\
 
 查询：`SELECT * FROM track WHERE album_key = ? ORDER BY disc_no, track_no, file_name`。页头信息在内存中汇总：专辑名取第一条；艺术家取 `album_artist`，没有时取所有歌曲艺术家去重；年份取最小值；封面取第一首有封面的歌。存在多个 `disc_no` 时按碟分组。
 
-入口（需求 AL-1）：`TrackRow` 的"更多"菜单、播放页上的专辑名（`MediaItem` 的 extras 里带上 `album_key`）、艺术家详情页的专辑分组标题。路由：`Album(albumKey: String)`。
+入口（需求 AL-1）：`TrackRow` 的"更多"菜单、播放页上的专辑名（`MediaItem` 的 extras 里带上 `album_key`）。路由：`Album(albumKey: String)`。
 
 ### 5.5 智能标签页
 

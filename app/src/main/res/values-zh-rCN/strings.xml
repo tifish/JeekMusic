@@ -30,7 +30,6 @@
     <string name="replace">替换</string>
 
     <string name="unknown_artist">未知艺术家</string>
-    <string name="unknown_album">未知专辑</string>
     <plurals name="song_count">
         <item quantity="other">%d 首</item>
     </plurals>

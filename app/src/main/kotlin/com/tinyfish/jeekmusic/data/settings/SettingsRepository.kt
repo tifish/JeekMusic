@@ -40,6 +40,13 @@ data class ScanConfig(
     val legacyCharset: Charset? = null,
 )
 
+/** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
+data class SleepPrefs(
+    val finishSong: Boolean = false,
+    val customMinutes: Int = 20,
+    val songCount: Int = 3,
+)
+
 data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val scan: ScanConfig = ScanConfig(),
@@ -51,6 +58,7 @@ data class Settings(
     val onlineLyrics: Boolean = false,
     val autoFetchLyricsOnWifi: Boolean = false,
     val lyricsSaveLocation: LyricsSaveLocation = LyricsSaveLocation.MUSIC_FOLDER,
+    val sleep: SleepPrefs = SleepPrefs(),
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -73,6 +81,9 @@ class SettingsRepository @Inject constructor(
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
         val AUTO_FETCH = booleanPreferencesKey("auto_fetch_lyrics_wifi")
         val LYRICS_SAVE = stringPreferencesKey("lyrics_save_location")
+        val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
+        val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
+        val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -92,6 +103,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoFetchLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_FETCH] = enabled }
 
     suspend fun setLyricsSaveLocation(location: LyricsSaveLocation) = context.dataStore.edit { it[Keys.LYRICS_SAVE] = location.name }
+
+    suspend fun setSleepPrefs(prefs: SleepPrefs) = context.dataStore.edit {
+        it[Keys.SLEEP_FINISH_SONG] = prefs.finishSong
+        it[Keys.SLEEP_CUSTOM_MINUTES] = prefs.customMinutes
+        it[Keys.SLEEP_SONG_COUNT] = prefs.songCount
+    }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
 
@@ -122,5 +139,10 @@ class SettingsRepository @Inject constructor(
         onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
         autoFetchLyricsOnWifi = this[Keys.AUTO_FETCH] ?: false,
         lyricsSaveLocation = this[Keys.LYRICS_SAVE]?.let { runCatching { LyricsSaveLocation.valueOf(it) }.getOrNull() } ?: LyricsSaveLocation.MUSIC_FOLDER,
+        sleep = SleepPrefs(
+            finishSong = this[Keys.SLEEP_FINISH_SONG] ?: false,
+            customMinutes = this[Keys.SLEEP_CUSTOM_MINUTES] ?: 20,
+            songCount = this[Keys.SLEEP_SONG_COUNT] ?: 3,
+        ),
     )
 }

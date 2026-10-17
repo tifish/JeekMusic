@@ -110,8 +110,24 @@
         <item quantity="one">%d minute</item>
         <item quantity="other">%d minutes</item>
     </plurals>
-    <string name="sleep_end_of_track">At the end of this song</string>
     <string name="sleep_cancel">Turn off timer</string>
+    <string name="sleep_by_time">By time</string>
+    <string name="sleep_custom">Custom</string>
+    <string name="sleep_minutes_unit">min</string>
+    <string name="sleep_start">Start</string>
+    <string name="sleep_finish_song">When time is up, finish the current song first</string>
+    <string name="sleep_by_songs">By songs</string>
+    <string name="sleep_songs_prefix">Stop after</string>
+    <string name="sleep_songs_suffix">songs</string>
+    <string name="sleep_remaining_finish_song">Stops after the song playing in %s</string>
+    <plurals name="sleep_remaining_songs">
+        <item quantity="one">Stops after %d more song</item>
+        <item quantity="other">Stops after %d more songs</item>
+    </plurals>
+    <plurals name="sleep_short_songs">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
     <string name="sleep_remaining">Stops in %s</string>
     <string name="sleep_short_end_of_track">This song</string>
     <string name="mode_shuffle">Shuffle</string>

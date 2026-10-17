@@ -56,10 +56,11 @@ class PlaybackService : MediaLibraryService() {
         val session = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
         this.session = session
 
-        sleepTimer = SleepTimer(player, scope) { endAt, endOfTrack ->
+        sleepTimer = SleepTimer(player, scope) { status ->
             session.sessionExtras = Bundle().apply {
-                putLong(PlaybackCommands.EXTRA_SLEEP_END, endAt ?: 0L)
-                putBoolean(PlaybackCommands.EXTRA_SLEEP_END_OF_TRACK, endOfTrack)
+                putLong(PlaybackCommands.EXTRA_SLEEP_END, status.endElapsedMs)
+                putInt(PlaybackCommands.EXTRA_SLEEP_SONGS, status.songsLeft)
+                putBoolean(PlaybackCommands.EXTRA_SLEEP_FINISH_SONG, status.finishSong)
             }
         }
         offload = OffloadController(this, player).also { it.start() }
@@ -177,7 +178,7 @@ class PlaybackService : MediaLibraryService() {
                 builder.setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                         .add(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY))
-                        .add(SessionCommand(PlaybackCommands.SLEEP_END_OF_TRACK, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.SLEEP_SONGS, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY))
                         .build(),
                 )
@@ -192,8 +193,11 @@ class PlaybackService : MediaLibraryService() {
             args: Bundle,
         ): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
-                PlaybackCommands.SLEEP_MINUTES -> sleepTimer.startMinutes(args.getInt(PlaybackCommands.EXTRA_MINUTES))
-                PlaybackCommands.SLEEP_END_OF_TRACK -> sleepTimer.startEndOfTrack()
+                PlaybackCommands.SLEEP_MINUTES -> sleepTimer.startMinutes(
+                    args.getInt(PlaybackCommands.EXTRA_MINUTES),
+                    args.getBoolean(PlaybackCommands.EXTRA_FINISH_SONG),
+                )
+                PlaybackCommands.SLEEP_SONGS -> sleepTimer.startSongs(args.getInt(PlaybackCommands.EXTRA_COUNT))
                 PlaybackCommands.SLEEP_CANCEL -> sleepTimer.cancel()
                 else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
             }
@@ -249,12 +253,15 @@ class PlaybackService : MediaLibraryService() {
 /** 界面与播放服务之间的自定义命令和事件。 */
 object PlaybackCommands {
     const val SLEEP_MINUTES = "jeek.sleep.minutes"
-    const val SLEEP_END_OF_TRACK = "jeek.sleep.end_of_track"
+    const val SLEEP_SONGS = "jeek.sleep.songs"
     const val SLEEP_CANCEL = "jeek.sleep.cancel"
     const val EVENT_PLAYBACK_ERROR = "jeek.event.playback_error"
 
     const val EXTRA_MINUTES = "minutes"
+    const val EXTRA_FINISH_SONG = "finish_song"
+    const val EXTRA_COUNT = "count"
     const val EXTRA_TITLE = "title"
     const val EXTRA_SLEEP_END = "sleep_end_elapsed"
-    const val EXTRA_SLEEP_END_OF_TRACK = "sleep_end_of_track"
+    const val EXTRA_SLEEP_SONGS = "sleep_songs_left"
+    const val EXTRA_SLEEP_FINISH_SONG = "sleep_finish_song"
 }

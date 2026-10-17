@@ -16,6 +16,7 @@ import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
 import com.tinyfish.jeekmusic.data.lyrics.SaveResult
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import com.tinyfish.jeekmusic.data.settings.SleepPrefs
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
 import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -96,8 +97,22 @@ class PlayerViewModel @Inject constructor(
 
     suspend fun artistsOf(trackId: Long): List<ArtistEntity> = searchDao.artistsOfTrack(trackId)
 
-    fun sleepAfterMinutes(minutes: Int) = player.sleepAfterMinutes(minutes)
-    fun sleepAtEndOfTrack() = player.sleepAtEndOfTrack()
+    val sleepPrefs: StateFlow<SleepPrefs> = settings.settings.map { it.sleep }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepPrefs())
+
+    /** 按时间定时；同时记住"播完整首"的选择（和自定义的分钟数）供下次使用。 */
+    fun sleepAfterMinutes(minutes: Int, finishSong: Boolean, custom: Boolean) {
+        player.sleepAfterMinutes(minutes, finishSong)
+        viewModelScope.launch {
+            val prefs = sleepPrefs.value.copy(finishSong = finishSong)
+            settings.setSleepPrefs(if (custom) prefs.copy(customMinutes = minutes) else prefs)
+        }
+    }
+
+    fun sleepAfterSongs(count: Int) {
+        player.sleepAfterSongs(count)
+        viewModelScope.launch { settings.setSleepPrefs(sleepPrefs.value.copy(songCount = count)) }
+    }
     fun cancelSleepTimer() = player.cancelSleepTimer()
 
     val state: StateFlow<PlayerUiState> = player.state

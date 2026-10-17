@@ -65,10 +65,13 @@ data class PlayerUiState(
     val sleepTimer: SleepTimerState = SleepTimerState(),
 )
 
-/** 睡眠定时状态；[endElapsedMs] 是 SystemClock.elapsedRealtime() 时间。 */
+/**
+ * 睡眠定时状态（需求 P-8）：[endElapsedMs] 是 SystemClock.elapsedRealtime() 时间，0 表示不按时间；
+ * [songsLeft] 是还要播完的歌曲数，0 表示不按歌曲数；[finishSong] 表示时间到后播完当前这首再停止。
+ */
 @Immutable
-data class SleepTimerState(val endElapsedMs: Long = 0, val endOfTrack: Boolean = false) {
-    val active: Boolean get() = endElapsedMs > 0 || endOfTrack
+data class SleepTimerState(val endElapsedMs: Long = 0, val songsLeft: Int = 0, val finishSong: Boolean = false) {
+    val active: Boolean get() = endElapsedMs > 0 || songsLeft > 0
 }
 
 /**
@@ -165,12 +168,18 @@ class PlayerConnection @Inject constructor(
         }
     }
 
-    fun sleepAfterMinutes(minutes: Int) = withController {
-        sendCustomCommand(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY), Bundle().apply { putInt(PlaybackCommands.EXTRA_MINUTES, minutes) })
+    fun sleepAfterMinutes(minutes: Int, finishSong: Boolean) = withController {
+        sendCustomCommand(
+            SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY),
+            Bundle().apply {
+                putInt(PlaybackCommands.EXTRA_MINUTES, minutes)
+                putBoolean(PlaybackCommands.EXTRA_FINISH_SONG, finishSong)
+            },
+        )
     }
 
-    fun sleepAtEndOfTrack() = withController {
-        sendCustomCommand(SessionCommand(PlaybackCommands.SLEEP_END_OF_TRACK, Bundle.EMPTY), Bundle.EMPTY)
+    fun sleepAfterSongs(count: Int) = withController {
+        sendCustomCommand(SessionCommand(PlaybackCommands.SLEEP_SONGS, Bundle.EMPTY), Bundle().apply { putInt(PlaybackCommands.EXTRA_COUNT, count) })
     }
 
     fun cancelSleepTimer() = withController {
@@ -224,7 +233,8 @@ class PlayerConnection @Inject constructor(
         _state.value = _state.value.copy(
             sleepTimer = SleepTimerState(
                 endElapsedMs = extras.getLong(PlaybackCommands.EXTRA_SLEEP_END),
-                endOfTrack = extras.getBoolean(PlaybackCommands.EXTRA_SLEEP_END_OF_TRACK),
+                songsLeft = extras.getInt(PlaybackCommands.EXTRA_SLEEP_SONGS),
+                finishSong = extras.getBoolean(PlaybackCommands.EXTRA_SLEEP_FINISH_SONG),
             ),
         )
     }

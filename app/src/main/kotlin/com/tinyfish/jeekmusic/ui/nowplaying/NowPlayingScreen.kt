@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -115,31 +117,59 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
             }
         }
 
-        // 中间是歌词；没有歌词时显示大封面（需求 NP-2）
+        // 中间是歌词或大封面（需求 NP-2）：默认有歌词显示歌词、没有显示封面；自动下载到歌词后自然切到歌词。
+        // 点封面切到歌词、点歌词切到封面；手动的选择只对当前这首歌有效，换歌后恢复默认
         val lyricsState by viewModel.lyrics.collectAsStateWithLifecycle()
         val loaded = lyricsState as? LyricsState.Loaded
         val lyricsPosition = remember { viewModel.position(200) }
-        if (loaded != null) {
-            LyricsView(
-                lyrics = loaded.lyrics,
-                offsetMs = loaded.offsetMs,
-                position = lyricsPosition,
-                onSeek = viewModel::seekTo,
-                modifier = Modifier.weight(1f),
-            )
-            if (loaded.lyrics.synced) {
-                LyricsOffsetBar(loaded.offsetMs, onChange = { viewModel.setLyricsOffset(loaded.trackKey, it) }, modifier = Modifier.fillMaxWidth())
-            }
-        } else {
-            val online by viewModel.onlineLyricsEnabled.collectAsStateWithLifecycle()
-            Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Artwork(nowPlaying?.artworkUri, size = 320.dp, modifier = Modifier.weight(1f, fill = false).aspectRatio(1f), cornerRadius = 16.dp)
-                // 开启在线歌词后，没有歌词时提供"搜索歌词"（需求 NP-2）
-                if (online && lyricsState == LyricsState.None) {
-                    TextButton(onClick = { showLyricsSearch = true }, modifier = Modifier.testTag("search_lyrics")) {
-                        Text(stringResource(R.string.lyrics_search))
-                    }
+        val online by viewModel.onlineLyricsEnabled.collectAsStateWithLifecycle()
+        var manualLyrics by remember(nowPlaying?.trackId) { mutableStateOf<Boolean?>(null) }
+        val showLyrics = manualLyrics ?: (loaded != null)
+        val searchButton: @Composable () -> Unit = {
+            // 开启在线歌词后，没有歌词时提供"搜索歌词"
+            if (online && lyricsState == LyricsState.None) {
+                TextButton(onClick = { showLyricsSearch = true }, modifier = Modifier.testTag("search_lyrics")) {
+                    Text(stringResource(R.string.lyrics_search))
                 }
+            }
+        }
+        when {
+            showLyrics && loaded != null -> {
+                LyricsView(
+                    lyrics = loaded.lyrics,
+                    offsetMs = loaded.offsetMs,
+                    position = lyricsPosition,
+                    onSeek = viewModel::seekTo,
+                    onTap = { manualLyrics = false },
+                    modifier = Modifier.weight(1f),
+                )
+                if (loaded.lyrics.synced) {
+                    LyricsOffsetBar(loaded.offsetMs, onChange = { viewModel.setLyricsOffset(loaded.trackKey, it) }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+            // 点了封面但这首歌没有歌词：显示"暂无歌词"，再点一下回到封面
+            showLyrics -> Column(
+                Modifier.weight(1f).fillMaxWidth().tapToToggle { manualLyrics = false }.testTag("no_lyrics"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                if (lyricsState == LyricsState.None) {
+                    Text(stringResource(R.string.lyrics_none), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                searchButton()
+            }
+            else -> Column(
+                Modifier.weight(1f).fillMaxWidth().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Artwork(
+                    nowPlaying?.artworkUri,
+                    size = 320.dp,
+                    modifier = Modifier.weight(1f, fill = false).aspectRatio(1f).tapToToggle { manualLyrics = true }.testTag("now_playing_cover"),
+                    cornerRadius = 16.dp,
+                )
+                searchButton()
             }
         }
 
@@ -252,3 +282,6 @@ private fun Controls(viewModel: PlayerViewModel, state: PlayerUiState) {
     }
     Spacer(Modifier.height(4.dp))
 }
+
+/** 点一下切换歌词 / 封面：不显示点击水波纹，大面积的歌词、封面闪一下不好看。 */
+private fun Modifier.tapToToggle(onTap: () -> Unit): Modifier = pointerInput(onTap) { detectTapGestures { onTap() } }

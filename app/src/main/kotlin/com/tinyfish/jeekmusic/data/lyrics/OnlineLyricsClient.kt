@@ -87,7 +87,7 @@ class OnlineLyricsClient @Inject constructor(
             else -> null
         } ?: return null
         val parsed = LrcParser.parse(text)
-        if (parsed.lines.isEmpty()) return null
+        if (parsed.lines.isEmpty() || isInstrumentalPlaceholder(parsed)) return null
         return OnlineLyrics(
             source = song.source,
             id = song.id,
@@ -99,6 +99,10 @@ class OnlineLyricsClient @Inject constructor(
             plain = text.takeUnless { parsed.synced },
         )
     }
+
+    /** 网易云、QQ 音乐给纯音乐的占位歌词（"此歌曲为没有填词的纯音乐，请您欣赏"），不算歌词。 */
+    private fun isInstrumentalPlaceholder(lyrics: Lyrics): Boolean =
+        lyrics.lines.count { it.text.isNotBlank() } <= 2 && lyrics.lines.any { "纯音乐" in it.text }
 
     private fun matches(song: OnlineSong, title: String, artist: String): Boolean =
         matcher.titleMatches(title, song.title) && matcher.artistMatches(artist, song.artist)

@@ -858,7 +858,9 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 - `LazyColumn` 显示歌词行。当前行索引通过 `derivedStateOf { 二分查找(position) }` 计算，**只有行号变化时才重组**，200ms 的进度轮询不会让整个列表重组
 - 自动滚动让当前行的中心对准歌词区的垂直中间（上下各留半屏的 contentPadding，第一行和最后一行也能居中）：行在屏幕上时 `animateScrollBy` 平滑滚过去，不在时先 `scrollToItem` 再微调。以前用 `animateScrollToItem(i, -viewport/3)`，实际停在 2/3 高度
-- 点击某一行时执行 `seekTo(line.time)`
+- 点歌词切换到封面（需求 NP-2）：点按由歌词区外层的 `detectTapGestures` 处理（行上没有点击处理，列表只消费拖动，定位线的播放按钮自己消费点击）。以前点某一行是跳转，现在跳转统一用定位线
+- **歌词 / 封面切换**（`NowPlayingScreen`）：`manualLyrics: Boolean?` 按当前歌曲 id `remember`，null 表示自动（有歌词显示歌词，没有显示封面），点封面设为 true、点歌词设为 false，换歌后回到 null。自动下载或手动保存的歌词到达时 `LyricsState` 变成 Loaded，自动模式下自然切到歌词；手动选了歌词但没有歌词时显示"暂无歌词"（和搜索按钮），点一下回到封面
+- 网易云、QQ 音乐给纯音乐的占位歌词（"此歌曲为没有填词的纯音乐，请您欣赏"，不超过两行且含"纯音乐"）当作没有歌词
 - **拖动跳转**（需求 LY-12）：`collectIsDraggedAsState` 检测到拖动就进入浏览状态，暂停跟随；滚动停下 3s 后退出浏览、滚回当前行。浏览时用 `derivedStateOf` 取中心离定位线最近的行（只在行号变化时重组），画定位线（时间 + 分隔线 + 播放按钮）并加亮那一行。点播放按钮后 `seekTo`，并在 2s 内先跟随这一行：播放位置是轮询的，当前行要过一会儿才更新，否则会先滚回旧位置再滚过去
 - 当前行高亮只改变颜色和字重，不做缩放或模糊动画
 
@@ -956,7 +958,7 @@ MainActivity
     ├── Search · Settings · TabManager · SongInfo
     └── NowPlaying（从迷你播放条向上展开的全屏页面）
         ├── 顶部：封面缩略图 + 标题 / 艺术家 / 专辑（可点击跳转）
-        ├── 中部：歌词（无歌词时显示大封面；开启在线歌词时显示"搜索歌词"）
+        ├── 中部：歌词或大封面（默认有歌词显示歌词；点击切换；开启在线歌词时显示"搜索歌词"）
         ├── 底部：进度条 · ⏮ ⏯ ⏭ · 循环 / 随机 · 队列 · 更多
         └── 队列（ModalBottomSheet，支持拖动排序）
 ```

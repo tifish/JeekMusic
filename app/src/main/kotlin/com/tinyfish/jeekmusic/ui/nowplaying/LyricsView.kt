@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -50,7 +52,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * 歌词（需求 LY-3 ~ LY-5、LY-12，docs/design.md §8.6）：
  * - 当前行通过 derivedStateOf 计算，只有行号变化时才重组，200ms 的进度轮询不会让整个列表重组
- * - 自动滚动让当前行居中；点击某一行跳到对应时间
+ * - 自动滚动让当前行居中；点一下歌词（[onTap]）切换到封面
  * - 拖动歌词时暂停跟随，中间出现一条定位线，显示线上那一行的时间和播放按钮，点播放按钮跳到那里；
  *   松手后 3 秒没有操作就收起定位线、回到当前行。只拖不点不会跳转，避免误操作
  * - 当前行只改颜色和字重，不做缩放或模糊动画（省电）
@@ -63,10 +65,11 @@ fun LyricsView(
     offsetMs: Long,
     position: Flow<Long>,
     onSeek: (Long) -> Unit,
+    onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!lyrics.synced) {
-        PlainLyrics(lyrics, modifier)
+        PlainLyrics(lyrics, onTap, modifier)
         return
     }
     val positionMs by position.collectAsStateWithLifecycle(0L)
@@ -94,7 +97,8 @@ fun LyricsView(
         }
     }
 
-    BoxWithConstraints(modifier.fillMaxSize().testTag("lyrics")) {
+    // 点按交给外层：行上没有点击处理，滚动只消费拖动，定位线的播放按钮自己消费点击
+    BoxWithConstraints(modifier.fillMaxSize().pointerInput(onTap) { detectTapGestures { onTap() } }.testTag("lyrics")) {
         val viewport = with(LocalDensity.current) { maxHeight.roundToPx() }
         // 定位线和跟随的位置：列表的垂直中间
         val anchor = viewport / 2
@@ -133,7 +137,6 @@ fun LyricsView(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { onSeek((line.timeMs - offsetMs).coerceAtLeast(0)) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -189,9 +192,9 @@ private suspend fun LazyListState.centerOn(index: Int, anchor: Int) {
 }
 
 @Composable
-private fun PlainLyrics(lyrics: Lyrics, modifier: Modifier) {
+private fun PlainLyrics(lyrics: Lyrics, onTap: () -> Unit, modifier: Modifier) {
     val listState = rememberLazyListState()
-    LazyColumn(modifier.fillMaxSize().verticalScrollbar(listState).testTag("lyrics"), state = listState, contentPadding = PaddingValues(24.dp)) {
+    LazyColumn(modifier.fillMaxSize().pointerInput(onTap) { detectTapGestures { onTap() } }.verticalScrollbar(listState).testTag("lyrics"), state = listState, contentPadding = PaddingValues(24.dp)) {
         itemsIndexed(lyrics.lines) { _, line ->
             Text(
                 line.text,

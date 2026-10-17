@@ -335,4 +335,5 @@
     <string name="source_failed">Can’t connect</string>
     <string name="source_check_hint">Turn off sources that can’t be reached to avoid waiting for them.</string>
     <string name="lyrics_seek_here">Play from here</string>
+    <string name="lyrics_none">No lyrics</string>
 </resources>

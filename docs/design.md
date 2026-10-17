@@ -689,6 +689,13 @@ class PlaybackService : MediaLibraryService() {
 - `onTaskRemoved` 时如果没有在播放就 `stopSelf()`；暂停一段时间后，服务退出前台并允许系统回收
 - 播放出错（`onPlayerError`）时跳到下一首，并通过自定义事件通知 UI 弹出提示
 
+**"下一首"始终可用（需求 P-11）**：交给 `MediaLibrarySession` 的不是 ExoPlayer 本身，而是包了一层 `NextAlwaysPlayer`（`ForwardingPlayer`）：
+- 队列不为空时 `getAvailableCommands()` / `isCommandAvailable()` 总是包含 `COMMAND_SEEK_TO_NEXT(_MEDIA_ITEM)`，所以系统媒体控件（通知、锁屏）总显示"下一首"
+- `seekToNext()` / `seekToNextMediaItem()`：没有下一首时 `seekTo(0, 0)` 跳回第一首（只有一首时就是从头重播）
+- 会话直接使用"可用命令变化"事件里的参数（不会再调 `getAvailableCommands()`，反编译 Media3 1.11 确认过），而这个参数来自 ExoPlayer、不含"下一首"。所以 `addListener` 时用 `CommandsListener` 包装监听器，转发前补上
+- `CommandsListener` 逐个写出 `Player.Listener` 的全部回调：这些都是 Java 默认方法，Kotlin 的 `by` 委托不会转发它们（单元测试验证过），否则播放状态等事件会丢失。`NextAlwaysPlayerTest` 用反射检查是否覆盖了全部回调，升级 Media3 新增回调时会提醒
+- 播放出错时自动跳下一首（`onPlayerError`）仍用 ExoPlayer 本身判断，最后一首出错不会绕回开头
+
 ### 7.4 MediaItem 映射
 
 ```

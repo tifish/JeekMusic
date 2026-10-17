@@ -53,7 +53,8 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         val player = playerFactory.create()
-        val session = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+        // 交给会话的播放器包一层：队列最后一首时"下一首"也可用（跳回第一首），通知和锁屏上总有这个按钮
+        val session = MediaLibrarySession.Builder(this, NextAlwaysPlayer(player), LibraryCallback()).build()
         this.session = session
 
         sleepTimer = SleepTimer(player, scope) { status ->

@@ -363,8 +363,8 @@ private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onD
                                 label = { Text(tagLabel(tag)) },
                             )
                         }
-                        // 人声 / 纯音乐总有一个，不提供"都不是"
-                        if (dimension != TagDimension.VOICE) {
+                        // 人声 / 纯音乐、古典 / 非古典总有一个，只有氛围提供"都不是"
+                        if (dimension == TagDimension.MOOD) {
                             FilterChip(
                                 selected = manual && current.tags[dimension] == null,
                                 onClick = { apply { viewModel.setTag(track, dimension, null) } },

@@ -85,7 +85,7 @@
     <string name="tag_vocal">人声</string>
     <string name="tag_instrumental">纯音乐</string>
     <string name="tag_classical">古典</string>
-    <string name="tag_pop">流行</string>
+    <string name="tag_non_classical">非古典</string>
     <string name="dim_mood">氛围</string>
     <string name="dim_voice">人声</string>
     <string name="dim_genre">曲风</string>

@@ -135,6 +135,8 @@ data class Settings(
     val lastUpdateCheck: Long = 0,
     /** 用户选择"跳过此版本"的 versionCode；0 表示没有。 */
     val skippedUpdateVersion: Int = 0,
+    /** 智能标签分类规则的版本，见 TagRepository.recomputeIfRulesChanged。 */
+    val tagRulesVersion: Int = 0,
     /** 标签栏数据的整理版本，见 TabRepository.ensureDefaults。 */
     val tabLayoutVersion: Int = 0,
 )
@@ -179,6 +181,7 @@ class SettingsRepository @Inject constructor(
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
         val SKIPPED_UPDATE = intPreferencesKey("skipped_update_version")
         val TAB_LAYOUT_VERSION = intPreferencesKey("tab_layout_version")
+        val TAG_RULES_VERSION = intPreferencesKey("tag_rules_version")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -223,6 +226,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setLastUpdateCheck(time: Long) = context.dataStore.edit { it[Keys.LAST_UPDATE_CHECK] = time }
 
     suspend fun setSkippedUpdateVersion(versionCode: Int) = context.dataStore.edit { it[Keys.SKIPPED_UPDATE] = versionCode }
+
+    suspend fun setTagRulesVersion(version: Int) = context.dataStore.edit { it[Keys.TAG_RULES_VERSION] = version }
 
     suspend fun setTabLayoutVersion(version: Int) = context.dataStore.edit { it[Keys.TAB_LAYOUT_VERSION] = version }
 
@@ -290,6 +295,7 @@ class SettingsRepository @Inject constructor(
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,
         tabLayoutVersion = this[Keys.TAB_LAYOUT_VERSION] ?: 0,
+        tagRulesVersion = this[Keys.TAG_RULES_VERSION] ?: 0,
     )
 
     /** 没设置过时全部启用；只认 [allowed] 里的来源。 */

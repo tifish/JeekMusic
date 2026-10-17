@@ -49,20 +49,28 @@ class TagClassifierTest {
     }
 
     @Test
-    fun 古典和流行() {
-        assertEquals(Tag.POP, TagClassifier.genre(pokerFace))
-        assertEquals(Tag.POP, TagClassifier.genre(starFish))
+    fun 古典和非古典() {
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.genre(pokerFace))
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.genre(starFish))
         assertEquals(Tag.CLASSICAL, TagClassifier.genre(nocturne))
         assertEquals(Tag.CLASSICAL, TagClassifier.genre(jupiter))
-        // 介于两者之间的（爵士、配乐等）都不算
-        assertNull(TagClassifier.genre(ModelScores(vocal = -3.0, classical = -1.0, calm = 0.01, energy = 0.01, orchestra = 0.0)))
+        // 爵士、配乐等以前"都不是"的，现在算非古典
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.genre(ModelScores(vocal = -3.0, classical = -1.0, calm = 0.01, energy = 0.01, orchestra = 0.0)))
+    }
+
+    @Test
+    fun `旧版本保存的流行读成非古典`() {
+        assertEquals(Tag.NON_CLASSICAL, Tag.of(TagDimension.GENRE, "POP"))
+        assertEquals(Tag.CLASSICAL, Tag.of(TagDimension.GENRE, "CLASSICAL"))
+        assertNull(Tag.of(TagDimension.MOOD, "POP"))
+        assertEquals(listOf(Tag.CLASSICAL, Tag.NON_CLASSICAL), Tag.of(TagDimension.GENRE))
     }
 
     @Test
     fun `弦乐编曲的流行歌和小提琴翻奏不算古典`() {
-        assertEquals(Tag.POP, TagClassifier.genre(violinCover))
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.genre(violinCover))
         // 区瑞强 - 偏偏喜欢你：旧算法（钢琴、弦乐也算古典）得分 0.82，被判为古典
-        assertEquals(Tag.POP, TagClassifier.genre(ModelScores(vocal = -1.30, classical = -2.918, calm = 0.05, energy = 0.0, orchestra = 0.0)))
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.genre(ModelScores(vocal = -1.30, classical = -2.918, calm = 0.05, energy = 0.0, orchestra = 0.0)))
     }
 
     @Test
@@ -72,8 +80,8 @@ class TagClassifierTest {
             loudnessRange = 5.0, onsetRate = 1.0, centroidHz = 1000.0, lowRatio = 0.3, analyzedAt = 0,
             vocalScore = -4.0, classicalScore = classical, calmLevel = 0.01, energyLevel = 0.01, orchestraLevel = 0.0,
         )
-        // v3 的得分 0.0 在旧阈值下"都不是"，在新阈值下是古典
-        assertNull(TagClassifier.classify(features(3, 0.0), Sensitivity.NORMAL)[TagDimension.GENRE])
+        // v3 的得分 0.0 在旧阈值下是非古典，在新阈值下是古典
+        assertEquals(Tag.NON_CLASSICAL, TagClassifier.classify(features(3, 0.0), Sensitivity.NORMAL)[TagDimension.GENRE])
         assertEquals(Tag.CLASSICAL, TagClassifier.classify(features(4, 0.0), Sensitivity.NORMAL)[TagDimension.GENRE])
     }
 

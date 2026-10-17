@@ -214,7 +214,7 @@ fun tagLabel(tag: Tag): String = stringResource(
         Tag.VOCAL -> R.string.tag_vocal
         Tag.INSTRUMENTAL -> R.string.tag_instrumental
         Tag.CLASSICAL -> R.string.tag_classical
-        Tag.POP -> R.string.tag_pop
+        Tag.NON_CLASSICAL -> R.string.tag_non_classical
     },
 )
 

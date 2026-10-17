@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.analysis
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
 import com.tinyfish.jeekmusic.data.db.TagDao
@@ -47,14 +48,34 @@ class TagRepository @Inject constructor(
                 if (dimension.name in manual || tag == null) null else TrackTagEntity(f.trackKey, dimension.name, tag.name, SOURCE_AUTO)
             }
         }
-        val manual = dao.overrides().mapNotNull { o -> o.value?.let { TrackTagEntity(o.trackKey, o.dimension, it, SOURCE_MANUAL) } }
+        val manual = dao.overrides().mapNotNull { o ->
+            val dimension = TagDimension.entries.firstOrNull { it.name == o.dimension } ?: return@mapNotNull null
+            overrideTag(dimension, o.value)?.let { TrackTagEntity(o.trackKey, o.dimension, it.name, SOURCE_MANUAL) }
+        }
         db.withTransaction {
             dao.clearTags()
             dao.insertTags(auto + manual)
         }
     }
 
-    /** 手动修正（需求 M-4）：[tag] 为 null 表示"这个维度的哪个标签都不是"。 */
+    /**
+     * 曲风规则改过之后（只有古典 / 非古典，原来没有曲风的歌现在是非古典）需要重算一次：App 启动时检查。
+     */
+    suspend fun recomputeIfRulesChanged() {
+        val saved = settings.current().tagRulesVersion
+        if (saved >= RULES_VERSION) return
+        recomputeAll()
+        settings.setTagRulesVersion(RULES_VERSION)
+        Log.i(TAG, "tag rules $saved -> $RULES_VERSION: recomputed ${dao.countTags()} tags")
+    }
+
+    /**
+     * 手动修正的值。旧版本的曲风有"流行"（POP）和"都不是"（null），现在都算非古典。
+     */
+    private fun overrideTag(dimension: TagDimension, value: String?): Tag? =
+        Tag.of(dimension, value) ?: Tag.NON_CLASSICAL.takeIf { dimension == TagDimension.GENRE }
+
+    /** 手动修正（需求 M-4）：[tag] 为 null 表示"这个维度的哪个标签都不是"（只有氛围可以）。 */
     suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) {
         dao.setOverride(TagOverrideEntity(trackKey, dimension.name, tag?.name))
         recomputeAll()
@@ -71,7 +92,7 @@ class TagRepository @Inject constructor(
         val auto = features?.takeIf { !it.failed }?.let { TagClassifier.classify(it, settings.current().sensitivity) }.orEmpty()
         val overrides = dao.overrides(trackKey).associateBy { TagDimension.valueOf(it.dimension) }
         val tags = TagDimension.entries.associateWith { d ->
-            if (d in overrides) Tag.of(d, overrides.getValue(d).value) else auto[d]
+            if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]
         }
         return TagInfo(tags, auto, overrides.keys, features)
     }
@@ -84,7 +105,10 @@ class TagRepository @Inject constructor(
          * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
         const val ANALYZER_VERSION = 4
+        /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典。 */
+        const val RULES_VERSION = 1
         const val SOURCE_AUTO = "AUTO"
+        private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"
     }
 }

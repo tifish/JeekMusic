@@ -184,6 +184,8 @@ fun FolderScreen(
     route: TabRoute.Folder,
     onOpen: (TabRoute.Folder) -> Unit,
     onBack: () -> Unit,
+    /** 内容第一次加载出来；启动时恢复到子文件夹的话，首屏就是这里（docs/design.md §9.3）。 */
+    onLoaded: () -> Unit = {},
     viewModel: FolderViewModel = hiltViewModel<FolderViewModel, FolderViewModel.Factory>(
         key = route.toString(),
         creationCallback = { it.create(route) },
@@ -192,6 +194,8 @@ fun FolderScreen(
     val content by viewModel.content.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
+    val loaded = content != null
+    LaunchedEffect(loaded) { if (loaded) onLoaded() }
 
     Column(Modifier.fillMaxSize()) {
         // 歌曲数包括子文件夹里的，和上一级列表里显示的一致；筛选时只算符合筛选的（需求 F-9）

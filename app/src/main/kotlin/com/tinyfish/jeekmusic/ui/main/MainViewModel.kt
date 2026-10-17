@@ -193,6 +193,7 @@ class MainViewModel @Inject constructor(
             scanner.requestScan()
             backups.startAutoBackup()
             analysis.schedule()
+            tags.recomputeIfRulesChanged()
             // 自动获取封面（需求 C-3）：补上上次没联网或网络出错时漏掉的
             coverFetch.scheduleAuto()
             // 检查更新放在最后，不和启动抢资源；每天最多一次（需求 U-6）

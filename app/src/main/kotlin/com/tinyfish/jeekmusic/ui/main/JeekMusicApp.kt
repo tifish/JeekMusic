@@ -494,7 +494,8 @@ private fun TabContent(tab: Tab, viewModel: MainViewModel, onFirstContent: () ->
         ),
         entryProvider = entryProvider {
             entry<TabRoute.FolderRoot> { FolderRootScreen(onOpen = push, onLoaded = onFirstContent) }
-            entry<TabRoute.Folder> { route -> FolderScreen(route, onOpen = push, onBack = pop) }
+            // 启动时文件夹标签可能恢复到某个子文件夹（需求 F-8），这时首屏是子文件夹：它也要报告首屏内容，否则推迟的启动任务不会执行
+            entry<TabRoute.Folder> { route -> FolderScreen(route, onOpen = push, onBack = pop, onLoaded = onFirstContent) }
             entry<TabRoute.ArtistList> { ArtistListScreen(onOpen = { push(TabRoute.ArtistDetail(it.nameKey)) }) }
             entry<TabRoute.ArtistDetail> { route -> ArtistDetailScreen(route, onBack = pop) }
             entry<TabRoute.Album> { route -> AlbumScreen(route, onBack = pop) }

@@ -1,4 +1,4 @@
-"""用人工标注（labels.tsv）评估智能标签的规则，与 App 中的 AudioTagger / TagClassifier 保持一致（docs/design.md §6.6）。
+"""用人工标注（labels.tsv）评估智能标签的规则（曲风分古典 / 非古典），与 App 中的 AudioTagger / TagClassifier 保持一致（docs/design.md §6.6）。
 
 用法：
     python tools/calibration/evaluate.py build/calibration16/scores.npz [--report]
@@ -21,7 +21,7 @@ ORCHESTRA = 179
 
 # 与 TagClassifier.kt 一致（灵敏度"标准"）
 VOCAL_THRESHOLD = -2.3
-CLASSICAL_THRESHOLD, POP_THRESHOLD = -0.4, -1.5
+CLASSICAL_THRESHOLD = -0.4
 SPORT_THRESHOLD, QUIET_THRESHOLD, ORCHESTRA_MAX = 3.25, 0.2, 0.1
 
 
@@ -34,13 +34,15 @@ def predict(frames):
     quiet = np.log(calm + 0.01) - np.log(energy + 0.01)
     return {
         "voice": "V" if vocal >= VOCAL_THRESHOLD else "I",
-        "genre": "C" if classical >= CLASSICAL_THRESHOLD else "P" if classical <= POP_THRESHOLD else "-",
+        "genre": "C" if classical >= CLASSICAL_THRESHOLD else "N",
+        "classical": classical,
         "mood": "S" if sport >= SPORT_THRESHOLD else "Q" if quiet >= QUIET_THRESHOLD and orchestra <= ORCHESTRA_MAX else "-",
         "scores": f"vocal={vocal:.2f} classical={classical:.2f} sport={sport:.2f} quiet={quiet:.2f} orchestra={orchestra:.3f}",
     }
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     data = np.load(sys.argv[1], allow_pickle=True)
     labels = {}
     for line in open(os.path.join(os.path.dirname(__file__), "labels.tsv"), encoding="utf-8"):
@@ -48,7 +50,9 @@ def main():
             continue
         parts = line.rstrip("\n").split("\t")
         if len(parts) == 4:
-            labels[parts[0]] = dict(voice=parts[1], genre=parts[2], mood=parts[3])
+            # 曲风只分古典 / 非古典：标注里的流行（P）和都不是（-）都算非古典
+            genre = {"C": "C", "P": "N", "-": "N"}.get(parts[2], parts[2])
+            labels[parts[0]] = dict(voice=parts[1], genre=genre, mood=parts[3])
     classical = {}
     for line in open(os.path.join(os.path.dirname(__file__), "genre_labels.tsv"), encoding="utf-8"):
         if line.startswith("#") or line.startswith("name\t"):
@@ -74,8 +78,8 @@ def main():
                 marks.append("古典漏判" if classical[name] else "误判为古典")
         for dim in results:
             t = truth.get(dim)
-            # 古典 / 流行只评估两类都有标注的歌；"?" 不参与评估
-            if t in (None, "?") or (dim == "genre" and t not in ("C", "P")):
+            # "?" 不参与评估
+            if t in (None, "?"):
                 continue
             results[dim][1] += 1
             if p[dim] == t:

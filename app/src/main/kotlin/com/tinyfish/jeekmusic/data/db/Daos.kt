@@ -372,6 +372,9 @@ interface TagDao {
     @Query("DELETE FROM track_tag")
     suspend fun clearTags()
 
+    @Query("SELECT COUNT(*) FROM track_tag")
+    suspend fun countTags(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTags(tags: List<TrackTagEntity>)
 

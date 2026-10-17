@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableLongStateOf
@@ -109,13 +112,18 @@ fun TrackRow(
     Row(
         modifier
             .fillMaxWidth()
+            // 正在播放的歌整行加底色，一眼就能找到（需求 U-11）
+            .background(if (isCurrent) currentRowColor() else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = { openMenu(track) })
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
             leading != null -> leading()
-            showArtwork -> Artwork(MediaItemMapper.artworkUri(track.id), 48.dp)
+            showArtwork -> Box {
+                Artwork(MediaItemMapper.artworkUri(track.id), 48.dp)
+                if (isCurrent) NowPlayingMark(48.dp)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -124,7 +132,7 @@ fun TrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = highlight,
-                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
@@ -132,7 +140,7 @@ fun TrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.width(8.dp))
@@ -318,6 +326,61 @@ private fun LazyListState.isFullyVisible(index: Int): Boolean {
 }
 
 private const val FOLLOW_PAUSE_MS = 3_000L
+
+/*
+ * 选中 / 当前状态的统一样式（需求 U-11）：动态取色下主题色和普通文字的灰色往往很接近，
+ * 只改文字或图标的颜色看不出来，所以选中的按钮、标签用主题色实心填充，正在播放的歌整行加底色。
+ */
+
+/** 正在播放的那一行的底色。 */
+@Composable
+fun currentRowColor(): Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+
+/** 盖在正在播放的歌的封面上：半透明遮罩加一个"正在播放"图标。 */
+@Composable
+fun NowPlayingMark(size: Dp) {
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.45f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_equalizer),
+            contentDescription = stringResource(R.string.now_playing_mark),
+            tint = Color.White,
+            modifier = Modifier.size(size / 2),
+        )
+    }
+}
+
+/** 选中时实心填充主题色的 FilterChip 颜色。 */
+@Composable
+fun selectedChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primary,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimary,
+)
+
+/** 开关型的图标按钮（随机播放、循环、睡眠定时……）：打开时主题色圆底、反色图标。 */
+@Composable
+fun ToggleIconButton(
+    checked: Boolean,
+    onClick: () -> Unit,
+    icon: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
+            contentColor = if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Icon(painterResource(icon), contentDescription = contentDescription)
+    }
+}
 
 /** 在线歌词、封面来源的名称（docs/design.md §8.4）。 */
 @Composable

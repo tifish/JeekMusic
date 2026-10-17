@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import com.tinyfish.jeekmusic.ui.components.ToggleIconButton
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.activity.compose.BackHandler
@@ -179,13 +180,13 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { showSleepTimer = true }, modifier = Modifier.testTag("sleep_timer")) {
-                Icon(
-                    painterResource(R.drawable.ic_bedtime),
-                    contentDescription = stringResource(R.string.menu_sleep_timer),
-                    tint = if (state.sleepTimer.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            ToggleIconButton(
+                checked = state.sleepTimer.active,
+                onClick = { showSleepTimer = true },
+                icon = R.drawable.ic_bedtime,
+                contentDescription = stringResource(R.string.menu_sleep_timer),
+                modifier = Modifier.testTag("sleep_timer"),
+            )
             SleepTimerLabel(state.sleepTimer, Modifier.weight(1f))
             IconButton(onClick = { showQueue = true }, modifier = Modifier.testTag("open_queue")) {
                 Icon(painterResource(R.drawable.ic_queue), contentDescription = stringResource(R.string.action_queue))
@@ -245,20 +246,18 @@ private fun SeekBar(viewModel: PlayerViewModel, state: PlayerUiState) {
 
 @Composable
 private fun Controls(viewModel: PlayerViewModel, state: PlayerUiState) {
-    val active = MaterialTheme.colorScheme.primary
-    val inactive = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = viewModel::toggleShuffle, modifier = Modifier.testTag("shuffle")) {
-            Icon(
-                painterResource(R.drawable.ic_shuffle),
-                contentDescription = stringResource(R.string.action_shuffle_mode),
-                tint = if (state.shuffle) active else inactive,
-            )
-        }
+        ToggleIconButton(
+            checked = state.shuffle,
+            onClick = viewModel::toggleShuffle,
+            icon = R.drawable.ic_shuffle,
+            contentDescription = stringResource(R.string.action_shuffle_mode),
+            modifier = Modifier.testTag("shuffle"),
+        )
         IconButton(onClick = viewModel::previous, modifier = Modifier.size(56.dp)) {
             Icon(painterResource(R.drawable.ic_skip_previous), contentDescription = stringResource(R.string.action_previous), modifier = Modifier.size(32.dp))
         }
@@ -272,13 +271,13 @@ private fun Controls(viewModel: PlayerViewModel, state: PlayerUiState) {
         IconButton(onClick = viewModel::next, modifier = Modifier.size(56.dp)) {
             Icon(painterResource(R.drawable.ic_skip_next), contentDescription = stringResource(R.string.action_next), modifier = Modifier.size(32.dp))
         }
-        IconButton(onClick = viewModel::cycleRepeat, modifier = Modifier.testTag("repeat")) {
-            Icon(
-                painterResource(if (state.repeat == RepeatMode.ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat),
-                contentDescription = stringResource(R.string.action_repeat),
-                tint = if (state.repeat == RepeatMode.OFF) inactive else active,
-            )
-        }
+        ToggleIconButton(
+            checked = state.repeat != RepeatMode.OFF,
+            onClick = viewModel::cycleRepeat,
+            icon = if (state.repeat == RepeatMode.ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
+            contentDescription = stringResource(R.string.action_repeat),
+            modifier = Modifier.testTag("repeat"),
+        )
     }
     Spacer(Modifier.height(4.dp))
 }

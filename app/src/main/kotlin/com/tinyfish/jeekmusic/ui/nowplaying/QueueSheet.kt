@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import com.tinyfish.jeekmusic.ui.components.currentRowColor
 import com.tinyfish.jeekmusic.ui.components.FollowCurrentTrack
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.clickable
@@ -76,7 +79,9 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
                         val current = item.uid == state.queue.getOrNull(state.currentIndex)?.uid
                         Surface(tonalElevation = if (isDragging) 6.dp else 0.dp) {
                             Row(
-                                Modifier.fillMaxWidth().clickable { viewModel.skipTo(state.queue.indexOfFirst { it.uid == item.uid }) }
+                                Modifier.fillMaxWidth()
+                                    .background(if (current) currentRowColor() else Color.Transparent)
+                                    .clickable { viewModel.skipTo(state.queue.indexOfFirst { it.uid == item.uid }) }
                                     .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -101,7 +106,7 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                                        fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
                                     )
                                     Text(
                                         item.artist ?: stringResource(R.string.unknown_artist),

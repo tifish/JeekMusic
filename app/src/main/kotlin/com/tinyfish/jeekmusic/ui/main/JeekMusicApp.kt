@@ -1,5 +1,10 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import com.tinyfish.jeekmusic.ui.components.selectedChipColors
+import com.tinyfish.jeekmusic.ui.components.ToggleIconButton
 import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.ui.components.sortLabel
 import com.tinyfish.jeekmusic.ui.components.sortName
@@ -209,21 +214,21 @@ private fun MainScreen(viewModel: MainViewModel) {
                     actions = {
                         TagFilterButton(viewModel)
                         // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
-                        IconButton(onClick = playerViewModel::toggleShuffleAndAnnounce, modifier = Modifier.testTag("top_shuffle")) {
-                            Icon(
-                                painterResource(R.drawable.ic_shuffle),
-                                contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
-                                tint = if (playerState.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        ToggleIconButton(
+                            checked = playerState.shuffle,
+                            onClick = playerViewModel::toggleShuffleAndAnnounce,
+                            icon = R.drawable.ic_shuffle,
+                            contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
+                            modifier = Modifier.testTag("top_shuffle"),
+                        )
                         SleepTimerCountdown(playerState.sleepTimer)
-                        IconButton(onClick = { showSleepTimer = true }, modifier = Modifier.testTag("top_sleep_timer")) {
-                            Icon(
-                                painterResource(R.drawable.ic_bedtime),
-                                contentDescription = stringResource(R.string.menu_sleep_timer),
-                                tint = if (playerState.sleepTimer.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        ToggleIconButton(
+                            checked = playerState.sleepTimer.active,
+                            onClick = { showSleepTimer = true },
+                            icon = R.drawable.ic_bedtime,
+                            contentDescription = stringResource(R.string.menu_sleep_timer),
+                            modifier = Modifier.testTag("top_sleep_timer"),
+                        )
                         IconButton(onClick = { viewModel.open(TopRoute.Search) }, modifier = Modifier.testTag("open_search")) {
                             Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
                         }
@@ -330,11 +335,13 @@ private fun TagFilterButton(viewModel: MainViewModel) {
     val sort by viewModel.songSort.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     val active = filter.isActive || sort != SongSort.DEFAULT
-    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    // 有筛选或排序时整个按钮用主题色填充（需求 U-11）
+    val color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         Row(
             Modifier
                 .clip(CircleShape)
+                .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable { open = true }
                 .testTag("top_filter")
                 .padding(horizontal = 8.dp, vertical = 12.dp),
@@ -362,6 +369,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                                 selected = filter[dimension] == tag,
                                 onClick = { viewModel.toggleFilter(tag) },
                                 label = { Text(tagLabel(tag)) },
+                                colors = selectedChipColors(),
                                 modifier = Modifier.testTag("filter_" + tag.name.lowercase()),
                             )
                         }
@@ -380,6 +388,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                             selected = sort == option,
                             onClick = { viewModel.setSort(option) },
                             label = { Text(sortName(option)) },
+                            colors = selectedChipColors(),
                             modifier = Modifier.testTag("sort_" + option.name.lowercase()),
                         )
                     }
@@ -427,6 +436,9 @@ private fun TabWithMenu(
     Tab(
         selected = selected,
         onClick = onSelect,
+        // 选中的标签：主题色加粗；其他：灰色常规（需求 U-11）
+        selectedContentColor = MaterialTheme.colorScheme.primary,
+        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             // 手势放在 graphicsLayer 之前：坐标不受拖动时的平移影响
             .pointerInput(tab.key) {
@@ -466,7 +478,7 @@ private fun TabWithMenu(
             },
         text = {
             Box {
-                Text(tabTitle(tab))
+                Text(tabTitle(tab), fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (tab is Tab.PinnedArtist) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.menu_unpin_tab)) }, onClick = { menuOpen = false; onUnpin() })

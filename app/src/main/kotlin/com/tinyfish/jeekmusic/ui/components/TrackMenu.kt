@@ -353,12 +353,14 @@ private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onD
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         fun apply(block: suspend () -> Unit) = scope.launch { block(); info = viewModel.tagInfo(track) }
                         FilterChip(
+                            colors = selectedChipColors(),
                             selected = !manual,
                             onClick = { apply { viewModel.resetTag(track, dimension) } },
                             label = { Text(stringResource(R.string.tag_auto, auto?.let { tagLabel(it) } ?: stringResource(R.string.tag_none))) },
                         )
                         Tag.of(dimension).forEach { tag ->
                             FilterChip(
+                                colors = selectedChipColors(),
                                 selected = manual && current.tags[dimension] == tag,
                                 onClick = { apply { viewModel.setTag(track, dimension, tag) } },
                                 label = { Text(tagLabel(tag)) },
@@ -367,6 +369,7 @@ private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onD
                         // 人声 / 纯音乐、古典 / 非古典总有一个，只有氛围提供"都不是"
                         if (dimension == TagDimension.MOOD) {
                             FilterChip(
+                                colors = selectedChipColors(),
                                 selected = manual && current.tags[dimension] == null,
                                 onClick = { apply { viewModel.setTag(track, dimension, null) } },
                                 label = { Text(stringResource(R.string.tag_none)) },

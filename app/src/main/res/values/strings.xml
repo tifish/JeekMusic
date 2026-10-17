@@ -348,4 +348,5 @@
     <string name="list_download_background_hint">Downloading continues in the background after you close this.</string>
     <string name="list_download_background">Run in background</string>
     <string name="list_download_stop">Stop</string>
+    <string name="now_playing_mark">Now playing</string>
 </resources>

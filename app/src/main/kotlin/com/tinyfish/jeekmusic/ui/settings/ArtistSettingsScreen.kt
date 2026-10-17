@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.ui.components.selectedChipColors
 import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +90,7 @@ fun ArtistSettingsScreen(onBack: () -> Unit, viewModel: ArtistSettingsViewModel 
                 ArtistSplitConfig.ALL_SEPARATORS.forEach { sep ->
                     val selected = sep in c.split.separators
                     FilterChip(
+                        colors = selectedChipColors(),
                         selected = selected,
                         onClick = {
                             val next = if (selected) c.split.separators - sep else c.split.separators + sep

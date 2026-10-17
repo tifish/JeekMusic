@@ -11,6 +11,7 @@ import com.tinyfish.jeekmusic.data.library.AudioFileEditor
 import com.tinyfish.jeekmusic.data.library.create
 import com.tinyfish.jeekmusic.data.library.writeFile
 import com.tinyfish.jeekmusic.data.settings.FetchMode
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.library.delete
 import com.tinyfish.jeekmusic.data.library.listById
 import com.tinyfish.jeekmusic.data.library.write
@@ -46,7 +47,7 @@ class LyricsRepository @Inject constructor(
     private val lyricsDao: LyricsDao,
     private val tree: DocumentTree,
     private val settings: SettingsRepository,
-    private val lrcLib: dagger.Lazy<LrcLibClient>,
+    private val online: dagger.Lazy<OnlineLyricsClient>,
     private val editor: AudioFileEditor,
 ) {
     /** 按目录缓存子文件列表；写入 .lrc 后要使对应目录失效。 */
@@ -121,7 +122,7 @@ class LyricsRepository @Inject constructor(
             return@withContext null
         }
         val artist = track.artistDisplay.ifEmpty { return@withContext null }
-        val result = runCatching { lrcLib.get().get(track.titleTag ?: track.title, artist, track.album, track.durationMs / 1000) }
+        val result = runCatching { online.get().best(track.titleTag ?: track.title, artist, track.album, track.durationMs / 1000) }
             .getOrElse { return@withContext null }
         if (result?.text == null) {
             lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, null, false, System.currentTimeMillis()))
@@ -131,7 +132,9 @@ class LyricsRepository @Inject constructor(
         LrcParser.parse(result.text!!)
     }
 
-    suspend fun search(title: String, artist: String?): List<OnlineLyrics> = lrcLib.get().search(title, artist)
+    suspend fun lyricsSources(): List<OnlineSource> = online.get().enabledSources()
+
+    suspend fun search(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics> = online.get().search(source, title, artist)
 
     /**
      * 保存在线歌词（需求 LY-10、LY-11），返回实际保存的位置（docs/design.md §8.5）：
@@ -211,7 +214,8 @@ class LyricsRepository @Inject constructor(
     }
 
     private companion object {
-        const val SOURCE = "lrclib"
+        /** lyrics_cache 的来源列；以前只有 LRCLIB 时是 "lrclib"。 */
+        const val SOURCE = "online"
         const val NEGATIVE_CACHE_MS = 7 * 24 * 3600_000L
         const val LYRICS_DIR = "lyrics"
     }

@@ -41,13 +41,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.cover.CoverCandidate
-import com.tinyfish.jeekmusic.data.cover.CoverSource
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * 在线搜索封面（需求 C-3）：iTunes 和 MusicBrainz 的结果以缩略图网格列出，点一张即按设置的方式保存。
+ * 在线搜索封面（需求 C-3）：设置里启用的各来源的结果以缩略图网格列出，点一张即按设置的方式保存。
  * 还没开启在线封面时先说明会发送哪些信息，确认后开启并搜索。
  */
 @Composable
@@ -71,13 +71,13 @@ fun CoverSearchDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onlineC
         pending = 0
         searchJob = scope.launch {
             val query = title to artist.ifBlank { null }
-            CoverSource.entries.forEach { source ->
+            viewModel.coverSources().forEach { source ->
                 pending++
                 launch {
                     val found = viewModel.searchCovers(source, query.first, query.second)
                     found.forEachIndexed { i, c ->
-                        // 各来源内对得上的已排在前面；iTunes 在前
-                        ranks[c] = source.ordinal * 100 + i
+                        // 对得上的排前面（跨来源），同样对得上时按来源的顺序、来源内的顺序
+                        ranks[c] = (2 - c.score) * 10_000 + source.ordinal * 100 + i
                         pending++
                         launch {
                             val thumb = viewModel.coverThumbnail(c)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }?.asImageBitmap()
@@ -161,7 +161,7 @@ private fun CoverCell(candidate: CoverCandidate, thumb: ImageBitmap, onClick: ()
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            if (candidate.source == CoverSource.ITUNES) "iTunes" else "MusicBrainz",
+            sourceName(candidate.source),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

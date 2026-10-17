@@ -42,6 +42,22 @@ enum class LyricsSaveLocation { SIDECAR, HIDDEN_FOLDER, EMBED, APP_CACHE }
  */
 enum class CoverSaveMode { HIDDEN_FOLDER, EMBED, SIDECAR }
 
+/**
+ * 在线歌词、封面的来源（docs/design.md §8.4）。枚举的顺序就是自动获取时尝试的顺序：国内访问稳定的排在前面。
+ * - 网易云音乐、QQ 音乐：非官方的网页接口，国内稳定，中文歌全
+ * - iTunes：国内可以访问，英文歌全，中文歌只有繁体能搜到
+ * - MusicBrainz：资料全但访问慢；封面图片在 archive.org，国内通常无法访问
+ * - LRCLIB：开放的歌词库，国内访问不稳定
+ */
+enum class OnlineSource {
+    NETEASE, QQ, ITUNES, MUSICBRAINZ, LRCLIB;
+
+    companion object {
+        val FOR_COVERS = listOf(NETEASE, QQ, ITUNES, MUSICBRAINZ)
+        val FOR_LYRICS = listOf(NETEASE, QQ, LRCLIB)
+    }
+}
+
 /** 在线歌词、封面的获取方式（需求 LY-8、C-3）：手动 / 自动（任何网络）/ 仅 Wi-Fi（不计流量的网络）下自动。 */
 enum class FetchMode { MANUAL, AUTO, WIFI }
 
@@ -108,6 +124,9 @@ data class Settings(
     val onlineCovers: Boolean = false,
     val coverSaveMode: CoverSaveMode = CoverSaveMode.HIDDEN_FOLDER,
     val coverFetchMode: FetchMode = FetchMode.MANUAL,
+    /** 启用的封面来源，按 [OnlineSource] 的顺序尝试。 */
+    val coverSources: Set<OnlineSource> = OnlineSource.FOR_COVERS.toSet(),
+    val lyricsSources: Set<OnlineSource> = OnlineSource.FOR_LYRICS.toSet(),
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
     val songSort: SongSort = SongSort.DEFAULT,
@@ -145,6 +164,8 @@ class SettingsRepository @Inject constructor(
         val ONLINE_COVERS = booleanPreferencesKey("online_covers")
         val COVER_SAVE_MODE = stringPreferencesKey("cover_save_mode")
         val COVER_FETCH_MODE = stringPreferencesKey("cover_fetch_mode")
+        val COVER_SOURCES = stringSetPreferencesKey("cover_sources")
+        val LYRICS_SOURCES = stringSetPreferencesKey("lyrics_sources")
         val SLEEP_FINISH_SONG = booleanPreferencesKey("sleep_finish_song")
         val SLEEP_CUSTOM_MINUTES = intPreferencesKey("sleep_custom_minutes")
         val SLEEP_SONG_COUNT = intPreferencesKey("sleep_song_count")
@@ -185,7 +206,11 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setCoverSaveMode(mode: CoverSaveMode) = context.dataStore.edit { it[Keys.COVER_SAVE_MODE] = mode.name }
 
-    suspend fun setFetchMode(mode: FetchMode) = context.dataStore.edit { it[Keys.COVER_FETCH_MODE] = mode.name }
+    suspend fun setCoverSources(sources: Set<OnlineSource>) = context.dataStore.edit { it[Keys.COVER_SOURCES] = sources.map { s -> s.name }.toSet() }
+
+    suspend fun setLyricsSources(sources: Set<OnlineSource>) = context.dataStore.edit { it[Keys.LYRICS_SOURCES] = sources.map { s -> s.name }.toSet() }
+
+    suspend fun setCoverFetchMode(mode: FetchMode) = context.dataStore.edit { it[Keys.COVER_FETCH_MODE] = mode.name }
 
     suspend fun setSleepPrefs(prefs: SleepPrefs) = context.dataStore.edit {
         it[Keys.SLEEP_FINISH_SONG] = prefs.finishSong
@@ -247,6 +272,8 @@ class SettingsRepository @Inject constructor(
         },
         onlineCovers = this[Keys.ONLINE_COVERS] ?: false,
         coverSaveMode = this[Keys.COVER_SAVE_MODE]?.let { runCatching { CoverSaveMode.valueOf(it) }.getOrNull() } ?: CoverSaveMode.HIDDEN_FOLDER,
+        coverSources = sources(this[Keys.COVER_SOURCES], OnlineSource.FOR_COVERS),
+        lyricsSources = sources(this[Keys.LYRICS_SOURCES], OnlineSource.FOR_LYRICS),
         coverFetchMode = this[Keys.COVER_FETCH_MODE]?.let { runCatching { FetchMode.valueOf(it) }.getOrNull() } ?: FetchMode.MANUAL,
         sleep = SleepPrefs(
             finishSong = this[Keys.SLEEP_FINISH_SONG] ?: false,
@@ -264,4 +291,8 @@ class SettingsRepository @Inject constructor(
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,
         tabLayoutVersion = this[Keys.TAB_LAYOUT_VERSION] ?: 0,
     )
+
+    /** 没设置过时全部启用；只认 [allowed] 里的来源。 */
+    private fun sources(saved: Set<String>?, allowed: List<OnlineSource>): Set<OnlineSource> =
+        saved?.mapNotNull { name -> allowed.firstOrNull { it.name == name } }?.toSet() ?: allowed.toSet()
 }

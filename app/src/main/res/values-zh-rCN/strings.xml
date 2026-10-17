@@ -234,7 +234,7 @@
     <string name="sensitivity_strict">严格（歌更少）</string>
 
     <string name="lyrics_search">在线搜索歌词</string>
-    <string name="lyrics_search_title">搜索歌词（LRCLIB）</string>
+    <string name="lyrics_search_title">搜索歌词</string>
     <string name="lyrics_search_button">搜索</string>
     <string name="lyrics_title_field">歌名</string>
     <string name="lyrics_artist_field">艺术家</string>
@@ -244,10 +244,10 @@
     <string name="lyrics_saved_folder">歌词已保存为歌曲旁边的 .lrc 文件</string>
     <string name="lyrics_saved_cache">歌词已保存在 App 内</string>
     <string name="settings_lyrics">歌词</string>
-    <string name="online_lyrics">在线歌词（LRCLIB）</string>
-    <string name="online_lyrics_summary">默认关闭。歌曲没有本地歌词时，可以在 lrclib.net 上搜索</string>
+    <string name="online_lyrics">在线歌词</string>
+    <string name="online_lyrics_summary">默认关闭。歌曲没有本地歌词时，从下面选择的来源搜索</string>
     <string name="online_lyrics_privacy_title">开启在线歌词？</string>
-    <string name="online_lyrics_privacy">搜索时会把歌曲的标题、艺术家、专辑和时长发送给 lrclib.net，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
+    <string name="online_lyrics_privacy">搜索时会把歌曲的标题、艺术家、专辑和时长发送给你选择的歌词来源（默认是网易云音乐、QQ 音乐和 LRCLIB），不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
     <string name="auto_fetch_lyrics_summary">没有找到的歌曲 7 天内不再重试</string>
     <string name="lyrics_save_location">在线歌词保存位置</string>
     <string name="lyrics_save_folder">歌曲旁边的同名 .lrc（推荐）</string>
@@ -265,10 +265,10 @@
     <string name="settings_source">源代码</string>
 
     <string name="settings_covers">封面</string>
-    <string name="online_covers">在线封面（iTunes / MusicBrainz）</string>
+    <string name="online_covers">在线封面</string>
     <string name="online_covers_summary">默认关闭。可以在歌曲菜单里搜索封面，或一次获取所有缺失的封面</string>
     <string name="online_covers_privacy_title">开启在线封面？</string>
-    <string name="online_covers_privacy">搜索时会把歌曲的标题、艺术家和专辑发送给 Apple iTunes（itunes.apple.com）和 MusicBrainz（musicbrainz.org），并从 Apple 和 Cover Art Archive 下载图片，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
+    <string name="online_covers_privacy">搜索时会把歌曲的标题、艺术家和专辑发送给你选择的封面来源（默认是网易云音乐、QQ 音乐、Apple iTunes 和 MusicBrainz），并从这些来源下载图片，不会发送其他任何信息；在你搜索（或开启自动获取）之前不会发送任何内容。</string>
     <string name="cover_save_mode">在线封面保存位置</string>
     <string name="cover_save_hidden">隐藏目录（推荐）</string>
     <string name="cover_save_hidden_summary">音乐目录下的 .jeekmusic/covers/，同一专辑共用一张，不改动音乐文件</string>
@@ -309,4 +309,22 @@
     <string name="all_files_message">写入音乐文件时要保持文件的修改时间不变。Android 不允许普通 App 修改其他文件的修改时间，有了“所有文件访问权限”才可以。这个权限只用于写入封面和歌词后恢复修改时间。\n\n没有授权时不会改动音乐文件，封面和歌词改存到隐藏目录。</string>
     <string name="all_files_grant">去授权</string>
     <string name="all_files_missing">未授予“所有文件访问权限”：暂时改存到隐藏目录，点按授权</string>
+    <string name="online_sources">来源（按从上到下的顺序尝试）</string>
+    <string name="source_netease">网易云音乐</string>
+    <string name="source_qq">QQ 音乐</string>
+    <string name="source_itunes">Apple iTunes</string>
+    <string name="source_musicbrainz">MusicBrainz</string>
+    <string name="source_lrclib">LRCLIB</string>
+    <string name="source_netease_summary">国内访问稳定，中文歌全，歌词常带翻译；非官方接口，可能失效</string>
+    <string name="source_qq_summary">国内访问稳定，有网易云没有的歌（如周杰伦）；非官方接口，可能失效</string>
+    <string name="source_itunes_summary">国内可以访问；英文歌全，中文歌较少</string>
+    <string name="source_musicbrainz_summary">开放的音乐资料库，访问较慢；封面图片在 archive.org，国内通常无法访问</string>
+    <string name="source_lrclib_summary">开放的歌词库，英文歌较全；国内访问不稳定</string>
+    <string name="source_check">检测连接</string>
+    <string name="source_check_summary">看看当前网络下哪些来源能连上</string>
+    <string name="source_checking">正在检测…</string>
+    <string name="source_images">%1$s 图片</string>
+    <string name="source_ok">%1$d 毫秒</string>
+    <string name="source_failed">无法连接</string>
+    <string name="source_check_hint">连不上的来源可以取消勾选，免得每次都等它超时。</string>
 </resources>

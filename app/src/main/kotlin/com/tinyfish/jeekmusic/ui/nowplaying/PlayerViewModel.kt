@@ -14,6 +14,7 @@ import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.data.settings.SleepPrefs
@@ -56,8 +57,11 @@ class PlayerViewModel @Inject constructor(
 
     suspend fun currentTrack(): TrackEntity? = player.state.value.nowPlaying?.trackId?.let { trackDao.byId(it) }
 
-    suspend fun searchLyrics(title: String, artist: String?): List<OnlineLyrics>? =
-        runCatching { lyricsRepository.search(title, artist) }.getOrNull()
+    suspend fun lyricsSources(): List<OnlineSource> = lyricsRepository.lyricsSources()
+
+    /** 搜索一个来源；网络出错时返回 null。 */
+    suspend fun searchLyrics(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics>? =
+        runCatching { lyricsRepository.search(source, title, artist) }.getOrNull()
 
     /** 保存选中的在线歌词并刷新播放页（需求 LY-10）。 */
     fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) = viewModelScope.launch {

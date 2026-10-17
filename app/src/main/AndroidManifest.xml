@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- 只用于在线歌词（默认关闭） -->
+    <!-- 在线歌词、在线封面（默认关闭）和检查更新 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 从 GitHub 自动更新：用 PackageInstaller 安装新版本（需求 U-6） -->

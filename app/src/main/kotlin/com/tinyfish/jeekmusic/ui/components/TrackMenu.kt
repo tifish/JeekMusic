@@ -69,7 +69,7 @@ import com.tinyfish.jeekmusic.ui.navigation.UiMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.tinyfish.jeekmusic.data.cover.CoverCandidate
 import com.tinyfish.jeekmusic.data.cover.CoverClient
-import com.tinyfish.jeekmusic.data.cover.CoverSource
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.cover.CoverStore
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
@@ -107,7 +107,9 @@ class TrackMenuViewModel @Inject constructor(
 
     fun enableOnlineCovers() = viewModelScope.launch { settings.setOnlineCovers(true) }
 
-    suspend fun searchCovers(source: CoverSource, title: String, artist: String?): List<CoverCandidate> =
+    suspend fun coverSources(): List<OnlineSource> = coverClient.enabledSources()
+
+    suspend fun searchCovers(source: OnlineSource, title: String, artist: String?): List<CoverCandidate> =
         runCatching { coverClient.search(source, title, artist) }.getOrDefault(emptyList())
 
     suspend fun coverThumbnail(candidate: CoverCandidate): ByteArray? = coverClient.thumbnail(candidate)

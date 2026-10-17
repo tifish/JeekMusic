@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import androidx.compose.runtime.collectAsState
 import com.tinyfish.jeekmusic.playback.ArtworkVersions
 import com.tinyfish.jeekmusic.data.settings.SongSort
@@ -281,3 +282,15 @@ fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier
         Icon(painterResource(R.drawable.ic_my_location), contentDescription = stringResource(R.string.action_locate_current))
     }
 }
+
+/** 在线歌词、封面来源的名称（docs/design.md §8.4）。 */
+@Composable
+fun sourceName(source: OnlineSource): String = stringResource(
+    when (source) {
+        OnlineSource.NETEASE -> R.string.source_netease
+        OnlineSource.QQ -> R.string.source_qq
+        OnlineSource.ITUNES -> R.string.source_itunes
+        OnlineSource.MUSICBRAINZ -> R.string.source_musicbrainz
+        OnlineSource.LRCLIB -> R.string.source_lrclib
+    },
+)

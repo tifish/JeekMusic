@@ -241,7 +241,7 @@
     <string name="sensitivity_strict">Strict (fewer songs)</string>
 
     <string name="lyrics_search">Search lyrics online</string>
-    <string name="lyrics_search_title">Search lyrics (LRCLIB)</string>
+    <string name="lyrics_search_title">Search lyrics</string>
     <string name="lyrics_search_button">Search</string>
     <string name="lyrics_title_field">Title</string>
     <string name="lyrics_artist_field">Artist</string>
@@ -251,10 +251,10 @@
     <string name="lyrics_saved_folder">Lyrics saved as .lrc next to the song</string>
     <string name="lyrics_saved_cache">Lyrics saved in the app only</string>
     <string name="settings_lyrics">Lyrics</string>
-    <string name="online_lyrics">Online lyrics (LRCLIB)</string>
-    <string name="online_lyrics_summary">Off by default. When a song has no local lyrics, you can search lrclib.net</string>
+    <string name="online_lyrics">Online lyrics</string>
+    <string name="online_lyrics_summary">Off by default. When a song has no local lyrics, search the sources you choose below</string>
     <string name="online_lyrics_privacy_title">Turn on online lyrics?</string>
-    <string name="online_lyrics_privacy">When searching, the song’s title, artist, album and duration are sent to lrclib.net. Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
+    <string name="online_lyrics_privacy">When searching, the song’s title, artist, album and duration are sent to the lyrics sources you choose (by default NetEase Cloud Music, QQ Music and LRCLIB). Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
     <string name="auto_fetch_lyrics_summary">Songs that weren’t found are not retried for 7 days</string>
     <string name="lyrics_save_location">Save online lyrics to</string>
     <string name="lyrics_save_folder">Next to the song, as .lrc (recommended)</string>
@@ -272,10 +272,10 @@
     <string name="settings_source">Source code</string>
 
     <string name="settings_covers">Covers</string>
-    <string name="online_covers">Online covers (iTunes / MusicBrainz)</string>
-    <string name="online_covers_summary">Off by default. Search covers for songs from the song menu, or fetch all missing covers at once</string>
+    <string name="online_covers">Online covers</string>
+    <string name="online_covers_summary">Off by default. Search covers from the song menu, or fetch all missing covers at once</string>
     <string name="online_covers_privacy_title">Turn on online covers?</string>
-    <string name="online_covers_privacy">When searching, the song’s title, artist and album are sent to Apple iTunes (itunes.apple.com) and MusicBrainz (musicbrainz.org), and images are downloaded from Apple and the Cover Art Archive. Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
+    <string name="online_covers_privacy">When searching, the song’s title, artist and album are sent to the cover sources you choose (by default NetEase Cloud Music, QQ Music, Apple iTunes and MusicBrainz), and images are downloaded from them. Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
     <string name="cover_save_mode">Save online covers to</string>
     <string name="cover_save_hidden">Hidden folder (recommended)</string>
     <string name="cover_save_hidden_summary">.jeekmusic/covers/ in the music folder, one image per album. Music files are not changed</string>
@@ -316,4 +316,22 @@
     <string name="all_files_message">To keep the file’s modified time unchanged when writing into music files, JeekMusic needs “All files access”. Android doesn’t let apps change the modified time of other apps’ files without it. It is only used to restore the modified time after writing covers and lyrics.\n\nWithout it, music files are not changed and covers and lyrics are saved to the hidden folder instead.</string>
     <string name="all_files_grant">Allow</string>
     <string name="all_files_missing">“All files access” not allowed: saving to the hidden folder for now. Tap to allow</string>
+    <string name="online_sources">Sources (tried from top to bottom)</string>
+    <string name="source_netease">NetEase Cloud Music</string>
+    <string name="source_qq">QQ Music</string>
+    <string name="source_itunes">Apple iTunes</string>
+    <string name="source_musicbrainz">MusicBrainz</string>
+    <string name="source_lrclib">LRCLIB</string>
+    <string name="source_netease_summary">Reliable in mainland China, best for Chinese songs, lyrics often come with translations. Unofficial API, may stop working</string>
+    <string name="source_qq_summary">Reliable in mainland China, has songs NetEase lacks (e.g. Jay Chou). Unofficial API, may stop working</string>
+    <string name="source_itunes_summary">Reachable in mainland China; best for English songs, few Chinese songs</string>
+    <string name="source_musicbrainz_summary">Open music database, slow. Its cover images are hosted on archive.org, which is usually blocked in mainland China</string>
+    <string name="source_lrclib_summary">Open lyrics database, good for English songs; unreliable in mainland China</string>
+    <string name="source_check">Test connections</string>
+    <string name="source_check_summary">Check which sources can be reached on the current network</string>
+    <string name="source_checking">Testing…</string>
+    <string name="source_images">%1$s images</string>
+    <string name="source_ok">%1$d ms</string>
+    <string name="source_failed">Can’t connect</string>
+    <string name="source_check_hint">Turn off sources that can’t be reached to avoid waiting for them.</string>
 </resources>

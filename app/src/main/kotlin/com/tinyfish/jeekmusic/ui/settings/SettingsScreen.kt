@@ -70,6 +70,13 @@ import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
+import com.tinyfish.jeekmusic.data.settings.OnlineSource
+import com.tinyfish.jeekmusic.data.online.SourceCheck
+import com.tinyfish.jeekmusic.ui.components.sourceName
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
 import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
@@ -101,7 +108,38 @@ class SettingsViewModel @Inject constructor(
     private val lyrics: LyricsRepository,
     private val updater: AppUpdater,
     private val coverFetch: CoverFetchScheduler,
+    private val sourceCheck: SourceCheck,
 ) : ViewModel() {
+    /** 勾选 / 取消在线来源；至少保留一个（需求 LY-8、C-3）。 */
+    fun toggleLyricsSource(source: OnlineSource) = viewModelScope.launch {
+        val current = settings.value.lyricsSources
+        val next = if (source in current) current - source else current + source
+        if (next.isNotEmpty()) settingsRepository.setLyricsSources(next)
+    }
+
+    fun toggleCoverSource(source: OnlineSource) = viewModelScope.launch {
+        val current = settings.value.coverSources
+        val next = if (source in current) current - source else current + source
+        if (next.isNotEmpty()) settingsRepository.setCoverSources(next)
+    }
+
+    /** 连接检测：null 表示没在显示；结果为 null 表示正在检测。 */
+    private val _sourceCheck = MutableStateFlow<SourceCheckState?>(null)
+    val sourceCheckState: StateFlow<SourceCheckState?> = _sourceCheck
+
+    fun checkSources(sources: List<OnlineSource>) {
+        _sourceCheck.value = SourceCheckState(null)
+        viewModelScope.launch {
+            val results = sourceCheck.check(sources)
+            // 检测期间关掉了对话框就不再显示
+            if (_sourceCheck.value != null) _sourceCheck.value = SourceCheckState(results)
+        }
+    }
+
+    fun dismissSourceCheck() {
+        _sourceCheck.value = null
+    }
+
     fun setAutoUpdateCheck(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoUpdateCheck(enabled) }
 
     /** 手动检查更新；有新版本时由最外层的更新提示接管（需求 U-6）。 */
@@ -167,8 +205,8 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setOnlineCovers(enabled)
         if (enabled) coverFetch.scheduleAuto() else coverFetch.cancel()
     }
-    fun setFetchMode(mode: FetchMode) = viewModelScope.launch {
-        settingsRepository.setFetchMode(mode)
+    fun setCoverFetchMode(mode: FetchMode) = viewModelScope.launch {
+        settingsRepository.setCoverFetchMode(mode)
         coverFetch.onModeChanged()
     }
     fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch { settingsRepository.setCoverSaveMode(mode) }
@@ -195,6 +233,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
     val pendingAnalysis by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
     val coverProgress by viewModel.coverProgress.collectAsStateWithLifecycle()
+    val sourceCheckState by viewModel.sourceCheckState.collectAsStateWithLifecycle()
     val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.restoreFrom(uri)
     }
@@ -310,6 +349,18 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             if (settings.onlineLyrics) {
+                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(OnlineSource.FOR_LYRICS) { source ->
+                    SourceRow(source, checked = source in settings.lyricsSources, onClick = { viewModel.toggleLyricsSource(source) }, modifier = Modifier.testTag("lyrics_source_${source.name}"))
+                }
+                item {
+                    SettingItem(
+                        title = stringResource(R.string.source_check),
+                        summary = stringResource(R.string.source_check_summary),
+                        onClick = { viewModel.checkSources(OnlineSource.FOR_LYRICS) },
+                        modifier = Modifier.testTag("check_lyrics_sources"),
+                    )
+                }
                 item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
                 items(FetchMode.entries) { mode ->
                     RadioRow(
@@ -363,6 +414,18 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             if (settings.onlineCovers) {
+                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                items(OnlineSource.FOR_COVERS) { source ->
+                    SourceRow(source, checked = source in settings.coverSources, onClick = { viewModel.toggleCoverSource(source) }, modifier = Modifier.testTag("cover_source_${source.name}"))
+                }
+                item {
+                    SettingItem(
+                        title = stringResource(R.string.source_check),
+                        summary = stringResource(R.string.source_check_summary),
+                        onClick = { viewModel.checkSources(OnlineSource.FOR_COVERS) },
+                        modifier = Modifier.testTag("check_cover_sources"),
+                    )
+                }
                 item {
                     val progress = coverProgress
                     SettingItem(
@@ -389,7 +452,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                                 FetchMode.WIFI -> R.string.cover_fetch_wifi
                             },
                         ),
-                        onClick = { viewModel.setFetchMode(mode) },
+                        onClick = { viewModel.setCoverFetchMode(mode) },
                         modifier = Modifier.testTag("cover_fetch_${mode.name}"),
                     )
                 }
@@ -523,6 +586,40 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
     if (showLicenses) LicensesDialog(onDismiss = { showLicenses = false })
 
+    sourceCheckState?.let { state ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSourceCheck,
+            title = { Text(stringResource(R.string.source_check)) },
+            text = {
+                val results = state.results
+                if (results == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Text(stringResource(R.string.source_checking))
+                    }
+                } else {
+                    Column {
+                        results.forEach { r ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Text(
+                                    if (r.imageHost) stringResource(R.string.source_images, sourceName(r.source)) else sourceName(r.source),
+                                    Modifier.weight(1f),
+                                )
+                                Text(
+                                    r.millis?.let { stringResource(R.string.source_ok, it) } ?: stringResource(R.string.source_failed),
+                                    color = if (r.millis == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                        Text(stringResource(R.string.source_check_hint), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = viewModel::dismissSourceCheck) { Text(stringResource(R.string.confirm)) } },
+        )
+    }
+
     askAllFiles?.let { apply ->
         AlertDialog(
             onDismissRequest = { askAllFiles = null },
@@ -615,6 +712,36 @@ private fun RadioRow(
         }
     }
 }
+
+/** 一个在线来源：勾选框、名称和国内访问情况的说明。 */
+@Composable
+private fun SourceRow(source: OnlineSource, checked: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = { onClick() })
+        Column {
+            Text(sourceName(source))
+            Text(
+                stringResource(
+                    when (source) {
+                        OnlineSource.NETEASE -> R.string.source_netease_summary
+                        OnlineSource.QQ -> R.string.source_qq_summary
+                        OnlineSource.ITUNES -> R.string.source_itunes_summary
+                        OnlineSource.MUSICBRAINZ -> R.string.source_musicbrainz_summary
+                        OnlineSource.LRCLIB -> R.string.source_lrclib_summary
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 连接检测的状态：[results] 为 null 表示正在检测。 */
+data class SourceCheckState(val results: List<SourceCheck.Result>?)
 
 /** 是否有"所有文件访问权限"；从系统设置返回时重新检查。 */
 @Composable

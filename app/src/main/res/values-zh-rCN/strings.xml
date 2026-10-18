@@ -12,6 +12,8 @@
     <string name="action_add_folder">添加音乐文件夹</string>
     <string name="action_play_all_recursive">播放全部（含子文件夹）</string>
     <string name="action_shuffle">随机播放</string>
+    <string name="shuffle_on">关闭随机播放</string>
+    <string name="shuffle_off">开启随机播放</string>
     <string name="action_play">播放</string>
     <string name="action_pause">暂停</string>
     <string name="action_next">下一首</string>

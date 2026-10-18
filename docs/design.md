@@ -718,6 +718,7 @@ class PlaybackService : MediaLibraryService() {
 ```
 
 - 通知栏使用 Media3 的 `DefaultMediaNotificationProvider`，零额外代码
+- **随机播放开关**（需求 P-13）：自定义命令 `TOGGLE_SHUFFLE` 开放给本 App 和通知栏控制器（`isMediaNotificationController`）；通知栏控制器连接时用 `setMediaButtonPreferences` 放一个 `CommandButton`（`ICON_SHUFFLE_ON` / `ICON_SHUFFLE_OFF`，`SLOT_OVERFLOW`），系统媒体控件把它显示在"下一首"旁边，锁屏跟着通知栏的平台会话。`onShuffleModeEnabledChanged` 时换成对应状态的按钮，所以 App 里切换随机播放，通知栏也跟着变
 - `onTaskRemoved` 时如果没有在播放就 `stopSelf()`；暂停一段时间后，服务退出前台并允许系统回收
 - 播放出错（`onPlayerError`）时跳到下一首，并通过自定义事件通知 UI 弹出提示
 

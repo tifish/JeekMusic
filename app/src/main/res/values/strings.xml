@@ -12,6 +12,8 @@
     <string name="action_add_folder">Add music folder</string>
     <string name="action_play_all_recursive">Play all (including subfolders)</string>
     <string name="action_shuffle">Shuffle</string>
+    <string name="shuffle_on">Turn off shuffle</string>
+    <string name="shuffle_off">Turn on shuffle</string>
     <string name="action_play">Play</string>
     <string name="action_pause">Pause</string>
     <string name="action_next">Next</string>

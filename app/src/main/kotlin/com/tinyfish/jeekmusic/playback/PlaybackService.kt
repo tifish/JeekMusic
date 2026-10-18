@@ -12,11 +12,13 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.CommandButton
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.online.AutoFetcher
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
@@ -74,6 +76,12 @@ class PlaybackService : MediaLibraryService() {
 
         player.addListener(PersistenceListener(player))
         player.addListener(FetchListener(player))
+        // 通知栏、锁屏上的随机播放开关跟着当前状态换图标（需求 P-13）
+        player.addListener(object : Player.Listener {
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                session.setMediaButtonPreferences(listOf(shuffleButton(shuffleModeEnabled)))
+            }
+        })
         // 当前歌曲的封面换了（播放时获取、批量获取、手动选择都会）：通知栏、锁屏按地址缓存图片，换个带版本号的地址才会重新加载
         scope.launch { ArtworkVersions.versions.collect { refreshArtwork(player) } }
         scope.launch { restoreQueue(player) }
@@ -143,6 +151,15 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /** 通知栏、锁屏上的随机播放开关（需求 P-13）：图标表示当前状态，点一下切换。 */
+    @OptIn(UnstableApi::class)
+    private fun shuffleButton(enabled: Boolean): CommandButton =
+        CommandButton.Builder(if (enabled) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF)
+            .setDisplayName(getString(if (enabled) R.string.shuffle_on else R.string.shuffle_off))
+            .setSessionCommand(SessionCommand(PlaybackCommands.TOGGLE_SHUFFLE, Bundle.EMPTY))
+            .setSlots(CommandButton.SLOT_OVERFLOW)
+            .build()
+
     private fun trackKeysOf(player: Player): List<String> = List(player.mediaItemCount) { i ->
         player.getMediaItemAt(i).mediaMetadata.extras?.getString(MediaItemMapper.EXTRA_TRACK_KEY).orEmpty()
     }.filter { it.isNotEmpty() }
@@ -209,18 +226,25 @@ class PlaybackService : MediaLibraryService() {
 
     @OptIn(UnstableApi::class)
     private inner class LibraryCallback : MediaLibrarySession.Callback {
-        /** 自定义命令（睡眠定时）只开放给本 App 的界面；系统和其他 App 使用 Media3 的默认命令集。 */
+        /**
+         * 自定义命令：睡眠定时只开放给本 App 的界面；随机播放开关开放给本 App 和通知栏（锁屏、系统媒体控件跟着通知栏）。
+         * 其他 App 使用 Media3 的默认命令集。
+         */
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val builder = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
-            if (controller.packageName == packageName) {
-                builder.setAvailableSessionCommands(
-                    MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
-                        .add(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY))
+            val own = controller.packageName == packageName
+            val notification = session.isMediaNotificationController(controller)
+            if (own || notification) {
+                val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                    .add(SessionCommand(PlaybackCommands.TOGGLE_SHUFFLE, Bundle.EMPTY))
+                if (own) {
+                    commands.add(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_SONGS, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY))
-                        .build(),
-                )
+                }
+                builder.setAvailableSessionCommands(commands.build())
             }
+            if (notification) builder.setMediaButtonPreferences(listOf(shuffleButton(session.player.shuffleModeEnabled)))
             return builder.build()
         }
 
@@ -237,6 +261,7 @@ class PlaybackService : MediaLibraryService() {
                 )
                 PlaybackCommands.SLEEP_SONGS -> sleepTimer.startSongs(args.getInt(PlaybackCommands.EXTRA_COUNT))
                 PlaybackCommands.SLEEP_CANCEL -> sleepTimer.cancel()
+                PlaybackCommands.TOGGLE_SHUFFLE -> session.player.shuffleModeEnabled = !session.player.shuffleModeEnabled
                 else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -293,6 +318,7 @@ object PlaybackCommands {
     const val SLEEP_MINUTES = "jeek.sleep.minutes"
     const val SLEEP_SONGS = "jeek.sleep.songs"
     const val SLEEP_CANCEL = "jeek.sleep.cancel"
+    const val TOGGLE_SHUFFLE = "jeek.shuffle.toggle"
     const val EVENT_PLAYBACK_ERROR = "jeek.event.playback_error"
 
     const val EXTRA_MINUTES = "minutes"

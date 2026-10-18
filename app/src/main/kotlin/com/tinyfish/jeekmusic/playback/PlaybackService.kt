@@ -78,6 +78,7 @@ class PlaybackService : MediaLibraryService() {
         player.addListener(FetchListener(player))
         // 通知栏、锁屏上的随机播放开关跟着当前状态换图标（需求 P-13）
         player.addListener(object : Player.Listener {
+            @OptIn(UnstableApi::class)
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 session.setMediaButtonPreferences(listOf(shuffleButton(shuffleModeEnabled)))
             }

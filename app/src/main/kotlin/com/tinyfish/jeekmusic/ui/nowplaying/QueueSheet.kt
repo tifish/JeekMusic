@@ -64,7 +64,7 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
         if (state.currentIndex > 0) listState.scrollToCenter(state.currentIndex, animate = false)
     }
     // 打开队列时播到下一首，也让当前歌曲留在屏幕上（拖动排序时不跟随）
-    FollowCurrentTrack(listState, if (draggingUid == null) state.currentIndex else -1)
+    FollowCurrentTrack(listState, state.currentIndex, enabled = draggingUid == null)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxHeight(0.85f)) {

@@ -102,6 +102,7 @@ import com.tinyfish.jeekmusic.ui.albums.AlbumScreen
 import com.tinyfish.jeekmusic.ui.artists.ArtistDetailScreen
 import com.tinyfish.jeekmusic.ui.artists.ArtistListScreen
 import com.tinyfish.jeekmusic.ui.components.TrackMenuHost
+import com.tinyfish.jeekmusic.ui.components.LocalPlaybackStatus
 import com.tinyfish.jeekmusic.ui.folders.FolderRootScreen
 import com.tinyfish.jeekmusic.ui.folders.FolderScreen
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
@@ -125,6 +126,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun JeekMusicApp(viewModel: MainViewModel) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
     // 提示放在最外层收集：设置、搜索等页面发出的提示（比如"已是最新版本"）也要显示，
     // 以前只在主界面收集，其他页面打开时的提示都丢了
     val snackbar = remember { SnackbarHostState() }
@@ -134,7 +136,7 @@ fun JeekMusicApp(viewModel: MainViewModel) {
         launch { viewModel.playbackErrors.collect { snackbar.showSnackbar(resources.getString(R.string.playback_error, it)) } }
     }
     JeekTheme(themeMode = themeMode) {
-        CompositionLocalProvider(LocalNavigator provides viewModel, LocalSnackbar provides snackbar) {
+        CompositionLocalProvider(LocalNavigator provides viewModel, LocalSnackbar provides snackbar, LocalPlaybackStatus provides playbackStatus) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                 UpdatePrompt()
                 TrackMenuHost {

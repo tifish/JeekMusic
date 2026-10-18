@@ -972,7 +972,7 @@ App 自己保存的（1、2）排在音乐目录里原有的（3、4）前面：
 
 **选中和当前状态**（需求 U-11，`Components.kt`）：`ToggleIconButton`（打开时 `primary` 圆底、`onPrimary` 图标）、`selectedChipColors()`（选中的 FilterChip 用 `primary` 填充）、`currentRowColor()`（正在播放的行用 16% 透明度的 `primary` 做底色）和 `NowPlayingMark`（封面上 45% 黑色遮罩加均衡器图标，静态图标，不做动画省电）。
 
-**跟随正在播放的歌**（需求 U-10，`FollowCurrentTrack`）：放在各列表的"定位当前歌曲"按钮里（队列另外调用），所以有定位按钮的列表都会跟随。记住上一次的当前行号，换成列表里的另一行、并且新行不完整在可视区域内时调用 `scrollToCenter`。上一次不在列表里（-1）时不跟随：说明不是在连续播放这个列表。用 `collectIsDraggedAsState` 记下用户最近一次拖动（按下和松手都记），3 秒内不跟随。
+**跟随正在播放的歌**（需求 U-10，`FollowCurrentTrack`）：放在各列表的"定位当前歌曲"按钮里（队列另外调用），所以有定位按钮的列表都会跟随。正在播放的歌曲 id 和是否在播放由 `MainViewModel.playbackStatus` 在界面根部通过 `LocalPlaybackStatus` 提供。歌曲 id 变了、或者从暂停变成播放（第一次组合时按"之前没在播放"算，所以播放中打开列表也算）时记一个待办 `pending`；行号有效、可以跟随时等列表完成第一次布局，新行不完整在可视区域内就 `scrollToCenter`（刚打开的列表不用动画），滚完才清掉待办，途中被取消（列表数据或播放状态变了）下次接着做。行号 -1（不在这个列表里或还没加载）时待办留着。用 `collectIsDraggedAsState` 记下用户最近一次拖动（按下和松手都记，刚显示时不记），3 秒内不跟随并清掉待办；队列拖动排序时传 `enabled = false`。
 
 **滚动条**（需求 U-9，`ui/components/Scrollbar.kt`）：Compose 的 LazyColumn 没有滚动条，自己画。`Modifier.verticalScrollbar(state)` 支持 `LazyListState`、`LazyGridState`、`ScrollState`（`verticalScrollWithScrollbar` 把它和 `verticalScroll` 连在一起，滚动条要在 `verticalScroll` 之前，按视口坐标绘制）。
 

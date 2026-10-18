@@ -6,7 +6,11 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.Immutable
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import android.os.SystemClock
 import com.tinyfish.jeekmusic.data.settings.OnlineSource
@@ -314,24 +318,46 @@ fun LocateCurrentButton(listState: LazyListState, index: Int, modifier: Modifier
     }
 }
 
+/** 正在播放的歌曲和是否在播放，供 [FollowCurrentTrack] 使用；在界面根部提供。 */
+@Immutable
+data class PlaybackStatus(val trackId: Long? = null, val playing: Boolean = false)
+
+val LocalPlaybackStatus = compositionLocalOf { PlaybackStatus() }
+
 /**
- * 连续播放列表里的歌时，让正在播放的歌一直在屏幕上（需求 U-10）：当前歌曲从列表里的一首换成列表里的另一首、
- * 而新的这首不完整在屏幕上时，把它滚到中间。用户最近 3 秒内自己滚动过列表时不跟随，免得和用户抢；
- * 从别处开始播放、正好播到这个列表里的歌时也不跟随（之前那首不在这个列表里）。
+ * 播放时让正在播放的歌一直在列表的屏幕上（需求 U-10）。[index] 是它在 LazyColumn 里的位置，-1 表示不在这个列表里。
+ * 换歌（不管是连续播放、播放全部、随机播放还是从别处开始播放）、开始播放、或者播放中打开这个列表时，
+ * 如果它在这个列表里但不完整在屏幕上，就把它滚到中间。用户最近 3 秒内自己滚动过列表时不跟随，免得和用户抢；
+ * [enabled] 为 false 时（拖动排序队列）也不跟随，换歌的事记着，恢复后再跟随。
  */
 @Composable
-fun FollowCurrentTrack(listState: LazyListState, index: Int) {
+fun FollowCurrentTrack(listState: LazyListState, index: Int, enabled: Boolean = true) {
+    val status = LocalPlaybackStatus.current
     val dragged by listState.interactionSource.collectIsDraggedAsState()
     var lastUserScroll by remember { mutableLongStateOf(0L) }
-    // 按下和松手都记一下：松手后列表可能还在惯性滚动
-    LaunchedEffect(dragged) { lastUserScroll = SystemClock.elapsedRealtime() }
-    var previous by remember { mutableIntStateOf(index) }
-    LaunchedEffect(index) {
-        val before = previous
-        previous = index
-        if (before < 0 || index < 0 || index == before) return@LaunchedEffect
-        if (dragged || SystemClock.elapsedRealtime() - lastUserScroll < FOLLOW_PAUSE_MS) return@LaunchedEffect
-        if (!listState.isFullyVisible(index)) listState.scrollToCenter(index)
+    // 按下和松手都记一下：松手后列表可能还在惯性滚动。刚显示时（还没拖过）不算
+    LaunchedEffect(dragged) { if (dragged || lastUserScroll != 0L) lastUserScroll = SystemClock.elapsedRealtime() }
+    var seenTrack by remember { mutableStateOf(status.trackId) }
+    // 初始为 false：播放中打开列表也算"开始播放"
+    var seenPlaying by remember { mutableStateOf(false) }
+    // 换了歌或开始播放，但还没把它滚到屏幕上（列表还没加载、不在这个列表里或暂时不跟随）
+    var pending by remember { mutableStateOf(false) }
+    LaunchedEffect(index, status, enabled) {
+        if (status.trackId != seenTrack || (status.playing && !seenPlaying)) pending = true
+        seenTrack = status.trackId
+        seenPlaying = status.playing
+        if (!pending || !enabled || index < 0) return@LaunchedEffect
+        if (dragged || SystemClock.elapsedRealtime() - lastUserScroll < FOLLOW_PAUSE_MS) {
+            pending = false
+            return@LaunchedEffect
+        }
+        // 刚打开的列表要等第一次布局完成（有了可视区域和这一行）才知道它在不在屏幕上
+        val firstLayout = listState.layoutInfo.viewportEndOffset <= 0
+        snapshotFlow { listState.layoutInfo }.first { it.viewportEndOffset > 0 && it.totalItemsCount > index }
+        // 刚打开时直接跳过去，不用动画从头滚过去
+        if (!listState.isFullyVisible(index)) listState.scrollToCenter(index, animate = !firstLayout)
+        // 滚完才算完成：途中列表数据或播放状态变了，这次会被取消，下一次接着做
+        pending = false
     }
 }
 

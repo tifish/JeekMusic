@@ -9,6 +9,7 @@ import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import com.tinyfish.jeekmusic.ui.components.PlaybackStatus
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,6 +102,11 @@ class MainViewModel @Inject constructor(
     val scanState: StateFlow<ScanState> = scanner.state
     val messages: SharedFlow<UiMessage> = messageBus.messages
     val playbackErrors: SharedFlow<String> = player.errors
+
+    /** 各列表跟随正在播放的歌要用（需求 U-10）。 */
+    val playbackStatus: StateFlow<PlaybackStatus> = player.state.map { PlaybackStatus(it.nowPlaying?.trackId, it.isPlaying) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PlaybackStatus())
 
     /** 顶层返回栈：主界面、设置等全屏页面。 */
     val topStack: SnapshotStateList<TopRoute> = mutableStateListOf(TopRoute.Main)

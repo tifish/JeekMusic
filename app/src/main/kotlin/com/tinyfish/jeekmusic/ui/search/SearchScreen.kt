@@ -1,6 +1,8 @@
 package com.tinyfish.jeekmusic.ui.search
 
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
+import androidx.compose.foundation.layout.Box
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
@@ -152,6 +154,10 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             return@Column
         }
         val listState = rememberLazyListState()
+        // 歌曲前面还有艺术家标题、艺术家和歌曲标题
+        val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }
+            .let { if (it < 0) -1 else it + 1 + if (data.artists.isEmpty()) 0 else data.artists.size + 1 }
+        Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("search_results"), state = listState) {
             if (data.artists.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.search_artists)) }
@@ -172,6 +178,8 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
                     TrackRow(track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(data.tracks, index) }, selection = selection)
                 }
             }
+        }
+        LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
         }
     }
 }

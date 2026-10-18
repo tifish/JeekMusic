@@ -2,7 +2,8 @@ package com.tinyfish.jeekmusic.ui.artists
 
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
-import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
+import com.tinyfish.jeekmusic.ui.components.ListMoreButton
+import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
@@ -345,6 +346,7 @@ fun ArtistDetailScreen(
     }
 
     val selection = rememberTrackSelection()
+    val download = rememberListDownload(tracks = { viewModel.tracks.value.orEmpty() })
     Column(Modifier.fillMaxSize()) {
         val name = artist?.let { artistName(it) }.orEmpty()
         // 筛选时显示符合筛选的歌曲数
@@ -358,6 +360,7 @@ fun ArtistDetailScreen(
                     if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 pinAction()
+                ListMoreButton(download, selection)
             }
         } else {
             SubScreenHeader(
@@ -365,8 +368,8 @@ fun ArtistDetailScreen(
                 subtitle = subtitle,
                 onBack = onBack,
                 actions = {
-                    ListDownloadButton(tracks = { viewModel.tracks.value.orEmpty() })
                     pinAction()
+                    ListMoreButton(download, selection)
                 },
             )
         }

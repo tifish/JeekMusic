@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 歌曲列表的多选状态（需求 F-10）。从歌曲"更多"菜单的"多选"进入；多选时点歌曲是选中 / 取消，选中的都取消时退出。
+ * 歌曲列表的多选状态（需求 F-10）。从歌曲或列表"更多"菜单的"多选"进入；多选时点歌曲是选中 / 取消，选中的都取消时退出。
  * 每个列表页各有一个，通过 [LocalTrackSelection] 交给 [TrackRow]。
  */
 @Stable
@@ -74,6 +74,11 @@ class TrackSelection {
 
     fun start(track: TrackEntity) {
         ids[track.id] = Unit
+        active = true
+    }
+
+    /** 从列表的"更多"菜单进入，还没选歌。 */
+    fun begin() {
         active = true
     }
 

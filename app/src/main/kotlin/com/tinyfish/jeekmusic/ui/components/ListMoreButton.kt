@@ -1,11 +1,13 @@
 package com.tinyfish.jeekmusic.ui.components
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -65,18 +67,35 @@ class ListDownloadViewModel @Inject constructor(
 }
 
 /**
- * 列表标题栏上的"下载"按钮（需求 C-6、LY-13）：给这个列表里的所有歌下载封面或歌词。
- * 标题栏已经有"更多"菜单的列表（文件夹、播放列表）不用这个按钮，把 [ListDownloadMenuItems] 放进"更多"菜单。
+ * 歌曲列表标题栏的"更多"按钮（需求 U-12）：[items] 是这个列表自己的条目（播放全部、改名等），
+ * 后面是下载这些歌的封面 / 歌词（需求 C-6、LY-13）和多选（需求 F-10，改名、移动、删除在多选操作栏里）。
  */
 @Composable
-fun ListDownloadButton(tracks: suspend () -> List<TrackEntity>) {
-    val download = rememberListDownload(tracks)
+fun ListMoreButton(
+    download: (DownloadKind) -> Unit,
+    selection: TrackSelection,
+    items: (@Composable (close: () -> Unit) -> Unit)? = null,
+) {
     var menuOpen by remember { mutableStateOf(false) }
-    IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_download")) {
-        Icon(painterResource(R.drawable.ic_download), contentDescription = stringResource(R.string.list_download))
-    }
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        ListDownloadMenuItems(download, onClick = { menuOpen = false })
+    val close = { menuOpen = false }
+    // 包一层 Box，菜单才会对齐这个按钮
+    Box {
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_more")) {
+            Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = close) {
+            if (items != null) {
+                items(close)
+                HorizontalDivider()
+            }
+            ListDownloadMenuItems(download, onClick = close)
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_select)) },
+                onClick = { close(); selection.begin() },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_checklist), contentDescription = null) },
+                modifier = Modifier.testTag("list_select"),
+            )
+        }
     }
 }
 

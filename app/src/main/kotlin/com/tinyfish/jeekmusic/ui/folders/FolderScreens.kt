@@ -2,7 +2,7 @@ package com.tinyfish.jeekmusic.ui.folders
 
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
-import com.tinyfish.jeekmusic.ui.components.ListDownloadMenuItems
+import com.tinyfish.jeekmusic.ui.components.ListMoreButton
 import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
@@ -25,11 +25,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Box
 import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -203,7 +200,6 @@ fun FolderScreen(
 ) {
     val content by viewModel.content.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
-    var menuOpen by remember { mutableStateOf(false) }
     val selection = rememberTrackSelection()
     val loaded = content != null
     LaunchedEffect(loaded) { if (loaded) onLoaded() }
@@ -217,21 +213,16 @@ fun FolderScreen(
             subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
             actions = {
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_more")) {
-                    Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                // 下载的是这个文件夹（包括子文件夹）里所有歌的封面、歌词（需求 C-6、LY-13）
+                ListMoreButton(download, selection) { close ->
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_play_all_recursive)) },
-                        onClick = { menuOpen = false; viewModel.playAllRecursive(shuffle = false) },
+                        onClick = { close(); viewModel.playAllRecursive(shuffle = false) },
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_shuffle)) },
-                        onClick = { menuOpen = false; viewModel.playAllRecursive(shuffle = true) },
+                        onClick = { close(); viewModel.playAllRecursive(shuffle = true) },
                     )
-                    HorizontalDivider()
-                    // 给这个文件夹（包括子文件夹）里的所有歌下载封面、歌词（需求 C-6、LY-13）
-                    ListDownloadMenuItems(download, onClick = { menuOpen = false })
                 }
             },
         )

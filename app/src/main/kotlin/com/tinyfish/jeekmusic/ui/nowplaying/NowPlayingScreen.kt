@@ -13,6 +13,8 @@ import com.tinyfish.jeekmusic.data.db.ArtistEntity
 import com.tinyfish.jeekmusic.ui.components.LocalTrackMenuById
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
 import kotlinx.coroutines.launch
+import com.tinyfish.jeekmusic.data.db.TrackEntity
+import com.tinyfish.jeekmusic.ui.components.LyricsSearchDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +62,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
-    var showLyricsSearch by remember { mutableStateOf(false) }
+    var lyricsSearchTrack by remember { mutableStateOf<TrackEntity?>(null) }
     var artistChoices by remember { mutableStateOf<List<ArtistEntity>>(emptyList()) }
     val navigator = LocalNavigator.current
     val openMenu = LocalTrackMenuById.current
@@ -129,7 +131,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
         val searchButton: @Composable () -> Unit = {
             // 开启在线歌词后，没有歌词时提供"搜索歌词"
             if (online && lyricsState == LyricsState.None) {
-                TextButton(onClick = { showLyricsSearch = true }, modifier = Modifier.testTag("search_lyrics")) {
+                TextButton(onClick = { scope.launch { lyricsSearchTrack = viewModel.currentTrack() } }, modifier = Modifier.testTag("search_lyrics")) {
                     Text(stringResource(R.string.lyrics_search))
                 }
             }
@@ -199,7 +201,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onCollapse: () -> Unit) {
 
     if (showQueue) QueueSheet(viewModel, state, onDismiss = { showQueue = false })
     if (showSleepTimer) SleepTimerDialog(viewModel, state.sleepTimer, onDismiss = { showSleepTimer = false })
-    if (showLyricsSearch) LyricsSearchDialog(viewModel, onDismiss = { showLyricsSearch = false })
+    lyricsSearchTrack?.let { LyricsSearchDialog(it, viewModel, onDismiss = { lyricsSearchTrack = null }) }
     if (artistChoices.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { artistChoices = emptyList() },

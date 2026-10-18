@@ -36,11 +36,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 歌词来源与优先级（docs/design.md §8.1）：
+ * 歌词来源与优先级（docs/design.md §8.1）：本 App 保存的在线歌词在前，这样手动换的歌词（需求 LY-15）一定能显示。
  * 1. .jeekmusic/lyrics/ 里保存的在线歌词
- * 2. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感）
- * 3. 内嵌歌词
- * 4. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
+ * 2. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
+ * 3. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感）
+ * 4. 内嵌歌词
+ * 保存时删掉这首歌排在新保存位置前面的、本 App 保存的那份，见 [save]。
  */
 @Singleton
 class LyricsRepository @Inject constructor(
@@ -65,9 +66,9 @@ class LyricsRepository @Inject constructor(
 
     suspend fun load(track: TrackEntity): Lyrics? = withContext(Dispatchers.IO) {
         hiddenLrc(track)?.let { return@withContext it }
+        lyricsDao.cached(track.trackKey)?.content?.let { LrcParser.parse(it) }?.takeIf { it.lines.isNotEmpty() }?.let { return@withContext it }
         lrcFile(track)?.let { return@withContext it }
-        if (track.cueTrackNo == null) embedded(track)?.let { return@withContext it }
-        lyricsDao.cached(track.trackKey)?.content?.let { LrcParser.parse(it) }
+        if (track.cueTrackNo == null) embedded(track) else null
     }
 
     /**
@@ -119,8 +120,14 @@ class LyricsRepository @Inject constructor(
         lyricsDao.deleteCached(track.trackKey)
     }
 
+    private suspend fun deleteHidden(folder: LibraryFolderEntity, track: TrackEntity) {
+        val path = DocumentTree.appPath(folder, LYRICS_DIR)
+        findLrc(folder, path, track)?.let { tree.delete(folder, it.documentId) }
+        invalidateDirectory(folder.id, path)
+    }
+
     /**
-     * 把已经下载的歌词写入音乐文件（需求 LY-14）：每首歌用读取时排在最前的那份（隐藏目录 > 同名 .lrc > App 内缓存），
+     * 把已经下载的歌词写入音乐文件（需求 LY-14）：每首歌用读取时排在最前的那份（隐藏目录 > App 内缓存 > 同名 .lrc），
      * 写入成功后删掉这些文件和缓存。CUE 整轨的歌不能写进整个文件，不动。返回写入了几首。
      */
     suspend fun embedDownloaded(tracks: List<TrackEntity>, isStopped: () -> Boolean = { false }): Int = withContext(Dispatchers.IO) {
@@ -132,9 +139,13 @@ class LyricsRepository @Inject constructor(
         for (t in tracks.filter { it.cueTrackNo == null }.distinctBy { it.fileKey }.sortedWith(compareBy({ it.folderId }, { it.relativePath }))) {
             if (isStopped()) break
             val folder = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) } ?: continue
-            val file = findLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), t) ?: findLrc(folder, t.relativePath, t)
-            // 文件读不出来时不用缓存代替：写进去后文件会被删掉
-            val text = (if (file != null) readText(folder, file) else cached[t.trackKey]) ?: continue
+            val hidden = findLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), t)
+            // 文件读不出来时不用下一份代替：写进去后它会被删掉
+            val text = when {
+                hidden != null -> readText(folder, hidden)
+                cached[t.trackKey] != null -> cached[t.trackKey]
+                else -> findLrc(folder, t.relativePath, t)?.let { readText(folder, it) }
+            } ?: continue
             if (text.isBlank() || !embed(folder, t, text.replace("\r\n", "\n"))) continue
             deleteDownloaded(folder, t)
             count++
@@ -224,6 +235,10 @@ class LyricsRepository @Inject constructor(
      * - 隐藏目录：.jeekmusic/lyrics/ 下与歌曲同名的 .lrc
      * - 写入文件：歌词标签（MP3 的 USLT 等）；CUE 整轨的一首歌不能写进整个文件，改存到隐藏目录
      * 写同名 .lrc 或写入文件失败时改存到隐藏目录，再失败或选择了"仅 App 内"时存入 lyrics_cache。
+     *
+     * 也用于手动替换现有的歌词（需求 LY-15）：保存成功后删掉本 App 保存的、读取时排在前面的那份
+     * （存到同名 .lrc 时删隐藏目录和缓存，存到隐藏目录时删缓存，存到缓存时删隐藏目录），写入文件时还删同名 .lrc。
+     * 同名 .lrc 已存在时不覆盖，改存到隐藏目录（排在它前面）。
      */
     suspend fun save(track: TrackEntity, text: String): LyricsSaveLocation = withContext(Dispatchers.IO) {
         val normalized = text.replace("\r\n", "\n")
@@ -232,15 +247,22 @@ class LyricsRepository @Inject constructor(
         val saved = folder?.let {
             when (mode) {
                 LyricsSaveLocation.SIDECAR -> LyricsSaveLocation.SIDECAR.takeIf { writeLrc(folder, track, normalized) }
+                    ?.also {
+                        deleteHidden(folder, track)
+                        lyricsDao.deleteCached(track.trackKey)
+                    }
                 LyricsSaveLocation.EMBED -> LyricsSaveLocation.EMBED.takeIf { track.cueTrackNo == null && embed(folder, track, normalized) }
                     ?.also { deleteDownloaded(folder, track) }
                 LyricsSaveLocation.HIDDEN_FOLDER, LyricsSaveLocation.APP_CACHE -> null
             } ?: LyricsSaveLocation.HIDDEN_FOLDER.takeIf { mode != LyricsSaveLocation.APP_CACHE && writeHidden(folder, track, normalized) }
+                ?.also { lyricsDao.deleteCached(track.trackKey) }
+        }
+        if (saved == null) {
+            lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, normalized, LrcParser.parse(normalized).synced, System.currentTimeMillis()))
+            folder?.let { deleteHidden(it, track) }
         }
         changed()
-        if (saved != null) return@withContext saved
-        lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, normalized, LrcParser.parse(normalized).synced, System.currentTimeMillis()))
-        LyricsSaveLocation.APP_CACHE
+        saved ?: LyricsSaveLocation.APP_CACHE
     }
 
     private fun writeHidden(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {

@@ -281,6 +281,7 @@
     <string name="cover_fetch_progress">正在获取 %1$d / %2$d，已找到 %3$d…点按停止</string>
     <string name="cover_fetch_done">上次：%2$d 个缺失封面中找到 %1$d 个</string>
     <string name="menu_search_cover">在线搜索封面</string>
+    <string name="menu_search_lyrics">在线搜索歌词</string>
     <string name="cover_search_title">搜索封面</string>
     <string name="cover_search_failed">没有找到，或网络不可用。</string>
     <string name="cover_enable_and_search">开启并搜索</string>

@@ -288,6 +288,7 @@
     <string name="cover_fetch_progress">Fetching %1$d / %2$d (found: %3$d)… tap to stop</string>
     <string name="cover_fetch_done">Last run: covers found %1$d / %2$d</string>
     <string name="menu_search_cover">Search cover online</string>
+    <string name="menu_search_lyrics">Search lyrics online</string>
     <string name="cover_search_title">Search cover</string>
     <string name="cover_search_failed">Nothing found, or the network is unavailable.</string>
     <string name="cover_enable_and_search">Turn on and search</string>

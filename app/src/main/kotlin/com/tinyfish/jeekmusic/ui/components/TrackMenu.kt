@@ -73,6 +73,8 @@ import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.cover.CoverStore
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
+import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -100,12 +102,27 @@ class TrackMenuViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val coverClient: CoverClient,
     private val coverStore: CoverStore,
-) : ViewModel() {
+    private val lyrics: LyricsRepository,
+) : ViewModel(), LyricsSearchHost {
 
     val onlineCovers: StateFlow<Boolean> = settings.settings.map { it.onlineCovers }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun enableOnlineCovers() = viewModelScope.launch { settings.setOnlineCovers(true) }
+
+    val onlineLyrics: StateFlow<Boolean> = settings.settings.map { it.onlineLyrics }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun enableOnlineLyrics() = viewModelScope.launch { settings.setOnlineLyrics(true) }
+
+    override suspend fun lyricsSources(): List<OnlineSource> = lyrics.lyricsSources()
+
+    override suspend fun searchLyrics(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics>? =
+        runCatching { lyrics.search(source, title, artist) }.getOrNull()
+
+    override fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) {
+        viewModelScope.launch { saveChosenLyrics(this@TrackMenuViewModel.lyrics, messages, track, lyrics) }
+    }
 
     suspend fun coverSources(): List<OnlineSource> = coverClient.enabledSources()
 
@@ -183,6 +200,7 @@ private sealed interface MenuDialog {
     data object Info : MenuDialog
     data object Tags : MenuDialog
     data object Cover : MenuDialog
+    data object Lyrics : MenuDialog
 }
 
 /**
@@ -197,6 +215,7 @@ fun TrackMenuHost(
 ) {
     val track by viewModel.track.collectAsStateWithLifecycle()
     val onlineCovers by viewModel.onlineCovers.collectAsStateWithLifecycle()
+    val onlineLyrics by viewModel.onlineLyrics.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<MenuDialog?>(null) }
@@ -249,6 +268,7 @@ fun TrackMenuHost(
                     }
                 }
                 MenuItem(R.drawable.ic_image, R.string.menu_search_cover) { dialogTrack = current; dialog = MenuDialog.Cover; viewModel.dismiss() }
+                MenuItem(R.drawable.ic_lyrics, R.string.menu_search_lyrics) { dialogTrack = current; dialog = MenuDialog.Lyrics; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_bolt, R.string.menu_edit_tags) { dialogTrack = current; dialog = MenuDialog.Tags; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
             }
@@ -277,6 +297,9 @@ fun TrackMenuHost(
         MenuDialog.Info -> if (target != null) SongInfoDialog(target, viewModel) { dialog = null }
         MenuDialog.Tags -> if (target != null) TagEditDialog(target, viewModel) { dialog = null }
         MenuDialog.Cover -> if (target != null) CoverSearchDialog(target, viewModel, onlineCovers) { dialog = null }
+        MenuDialog.Lyrics -> if (target != null) {
+            LyricsSearchDialog(target, viewModel, onDismiss = { dialog = null }, onlineLyrics = onlineLyrics, onEnable = viewModel::enableOnlineLyrics)
+        }
         null -> Unit
     }
 }

@@ -15,11 +15,12 @@ import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.lyrics.OnlineLyrics
 import com.tinyfish.jeekmusic.data.settings.OnlineSource
-import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.data.settings.SleepPrefs
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
+import com.tinyfish.jeekmusic.ui.components.LyricsSearchHost
 import com.tinyfish.jeekmusic.ui.navigation.UiMessage
+import com.tinyfish.jeekmusic.ui.components.saveChosenLyrics
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,7 +49,7 @@ class PlayerViewModel @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val settings: SettingsRepository,
     private val messages: MessageBus,
-) : ViewModel() {
+) : ViewModel(), LyricsSearchHost {
 
     private val offsetChanged = MutableStateFlow(0)
 
@@ -57,27 +58,14 @@ class PlayerViewModel @Inject constructor(
 
     suspend fun currentTrack(): TrackEntity? = player.state.value.nowPlaying?.trackId?.let { trackDao.byId(it) }
 
-    suspend fun lyricsSources(): List<OnlineSource> = lyricsRepository.lyricsSources()
+    override suspend fun lyricsSources(): List<OnlineSource> = lyricsRepository.lyricsSources()
 
-    /** 搜索一个来源；网络出错时返回 null。 */
-    suspend fun searchLyrics(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics>? =
+    override suspend fun searchLyrics(source: OnlineSource, title: String, artist: String?): List<OnlineLyrics>? =
         runCatching { lyricsRepository.search(source, title, artist) }.getOrNull()
 
-    /** 保存选中的在线歌词并刷新播放页（需求 LY-10）。 */
-    fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) = viewModelScope.launch {
-        val text = lyrics.text ?: return@launch
-        val result = lyricsRepository.save(track, text)
-        messages.post(
-            UiMessage(
-                when (result) {
-                    LyricsSaveLocation.SIDECAR -> R.string.lyrics_saved_folder
-                    LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_saved_hidden
-                    LyricsSaveLocation.EMBED -> R.string.lyrics_saved_embed
-                    LyricsSaveLocation.APP_CACHE -> R.string.lyrics_saved_cache
-                },
-            ),
-        )
-        offsetChanged.value++
+    /** 保存后播放页通过 [LyricsRepository.changes] 重新读取。 */
+    override fun saveLyrics(track: TrackEntity, lyrics: OnlineLyrics) {
+        viewModelScope.launch { saveChosenLyrics(lyricsRepository, messages, track, lyrics) }
     }
 
     /**

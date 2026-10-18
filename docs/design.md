@@ -802,11 +802,13 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 ```
 1. .jeekmusic/lyrics/ 里与歌曲同名的 .lrc（隐藏目录里保存的在线歌词）
-2. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感匹配）
-3. 内嵌歌词（TagReader.readLyrics）
-4. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
-5. 在线获取（仅当开关打开时）：自动模式直接取精确匹配（"仅 Wi-Fi"时要求当前网络不计流量），否则显示"搜索歌词"按钮
+2. lyrics_cache（选择了"仅 App 内"，或在线获取了但没能写进音乐目录的）
+3. 同目录同名 .lrc（通过 SAF 树 URI 查找，大小写不敏感匹配）
+4. 内嵌歌词（TagReader.readLyrics）
+5. 在线获取（仅当开关打开时）：自动模式由播放服务和批量任务获取（§8.4），否则显示"搜索歌词"按钮
 ```
+
+App 自己保存的（1、2）排在音乐目录里原有的（3、4）前面：手动替换歌词（需求 LY-15）时，选中的歌词不管存到哪里都要能显示。`LyricsRepository.save` 成功后删掉这首歌排在新位置前面的、App 自己保存的那份：存到同名 .lrc 时删隐藏目录和缓存，存到隐藏目录时删缓存，存到缓存时删隐藏目录，写入文件时删隐藏目录、同名 .lrc 和缓存。同名 .lrc 已存在时不覆盖用户的文件，改存隐藏目录（排在它前面）。以前缓存排在最后，选"仅 App 内"时换的歌词会被已有的 .lrc 或内嵌歌词挡住
 
 内嵌歌词读取 `LYRICS`（ID3 USLT、Vorbis LYRICS、MP4 ©lyr），也兼容一些工具写入的自定义字段 `UNSYNCEDLYRICS`、`USLT`（例如 ffmpeg 会把歌词写成 `TXXX:USLT`），以及带描述的 USLT 帧（属性表里是 `LYRICS:<描述>`；TagLib 自己写入的描述就是 `LYRICS`）。CUE 虚拟歌曲不读整轨文件的内嵌歌词。
 
@@ -839,7 +841,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 共用 `Http`（HttpURLConnection + org.json，不引入网络库）：MusicBrainz、LRCLIB 用 `User-Agent: JeekMusic/<version> (https://github.com/tifish/JeekMusic)`（它们的要求），网易云、QQ 音乐用浏览器的 User-Agent 和各自的 Referer；503 等 2 秒重试两次；每个来源有最小请求间隔（网易云、QQ 300ms，MusicBrainz 1.1s，iTunes 3s）
 - 网易云、QQ 音乐的翻译歌词接在原文后面，同一时间戳的两行由 `LrcParser` 合成"原文 + 翻译"（需求 LY-5）
 - **自动获取**（`OnlineLyricsClient.best`）：按顺序试启用的来源。LRCLIB 用精确查询；网易云、QQ 用"第一位艺术家 + 歌名"搜索，取歌名、艺术家都对得上（`CoverMatcher`，繁简统一）且时长相差不到 5 秒的前两首，取到歌词就用。某个来源出错时试下一个；全部出错时抛出异常，不记"未找到"
-- **手动搜索**（`LyricsSearchDialog`）：每个来源一个协程，结果到了就合并进列表；网易云、QQ 取前 6 首的歌词一起返回，没有歌词的不列出。排序：歌名和艺术家对得上的在前，再按时长差、来源顺序。每行标明来源
+- **手动搜索**（`ui/components/LyricsSearchDialog`，需求 LY-8、LY-15）：播放页（没有歌词时的"搜索歌词"）和歌曲"更多"菜单的"在线搜索歌词"共用，调用方实现 `LyricsSearchHost`（`PlayerViewModel`、`TrackMenuViewModel`），保存由 `saveChosenLyrics` 统一提示保存位置。没开在线歌词时先显示隐私说明，确认后开启并搜索。每个来源一个协程，结果到了就合并进列表；网易云、QQ 取前 6 首的歌词一起返回，没有歌词的不列出。排序：歌名和艺术家对得上的在前，再按时长差、来源顺序。每行标明来源
 - **检测连接**（`SourceCheck`，需求 OL-3）：每个来源并行发一个最轻的请求（MusicBrainz 另外检测 `archive.org`），显示耗时或"无法连接"
 - 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内自动获取不再重复请求
 - **自动获取的时机**和封面相同（§7.4 的 `OnlineFetcher`、`AutoFetcher`、`OnlineFetchScheduler`）：播放时由播放服务获取（以前放在播放页的 ViewModel 里，只有打开播放页才获取），App 启动和扫描到新歌后批量获取整个曲库；设置里有"获取所有缺失的歌词"

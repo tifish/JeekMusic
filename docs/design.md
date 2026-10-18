@@ -845,7 +845,7 @@ App 自己保存的（1、2）排在音乐目录里原有的（3、4）前面：
 - **检测连接**（`SourceCheck`，需求 OL-3）：每个来源并行发一个最轻的请求（MusicBrainz 另外检测 `archive.org`），显示耗时或"无法连接"
 - 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内自动获取不再重复请求
 - **自动获取的时机**和封面相同（§7.4 的 `OnlineFetcher`、`AutoFetcher`、`OnlineFetchScheduler`）：播放时由播放服务获取（以前放在播放页的 ViewModel 里，只有打开播放页才获取），App 启动和扫描到新歌后批量获取整个曲库；设置里有"获取所有缺失的歌词"
-- **列表批量下载**（需求 LY-13、C-6，`ListDownloadScheduler`、`ListDownloadButton`）：列表标题栏的下载按钮把列表里歌曲的 id 写进 `filesDir/download_targets_<kind>.txt`（id 可能上千个，超出 WorkManager 输入数据 10KB 的限制），以唯一任务 `list-download-covers` / `list-download-lyrics`（`REPLACE`，要求联网，expedited）启动 `OnlineFetchWorker`，只获取这一种内容、只处理这些歌，不跳过最近没找到的（封面 30 天、歌词 7 天）。进度对话框里显示，可以停止或转到后台
+- **列表批量下载**（需求 LY-13、C-6，`ListDownloadScheduler`、`ListDownloadButton`）：文件夹、播放列表把 `ListDownloadMenuItems` 放进标题栏的"更多"菜单，艺术家、专辑用单独的 `ListDownloadButton`，对话框都由 `rememberListDownload` 负责。它把列表里歌曲的 id 写进 `filesDir/download_targets_<kind>.txt`（id 可能上千个，超出 WorkManager 输入数据 10KB 的限制），以唯一任务 `list-download-covers` / `list-download-lyrics`（`REPLACE`，要求联网，expedited）启动 `OnlineFetchWorker`，只获取这一种内容、只处理这些歌，不跳过最近没找到的（封面 30 天、歌词 7 天）。进度对话框里显示，可以停止或转到后台
 - 网络客户端（`OnlineLyricsClient`）通过 `dagger.Lazy` 注入，只在开关打开后第一次使用时才创建，不影响启动
 
 ### 8.5 歌词写回音乐目录（LyricsWriter）

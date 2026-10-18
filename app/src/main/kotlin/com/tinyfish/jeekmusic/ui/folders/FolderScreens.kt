@@ -1,6 +1,7 @@
 package com.tinyfish.jeekmusic.ui.folders
 
-import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
+import com.tinyfish.jeekmusic.ui.components.ListDownloadMenuItems
+import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
@@ -24,6 +25,7 @@ import com.tinyfish.jeekmusic.ui.components.LocateCurrentButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -203,6 +205,7 @@ fun FolderScreen(
     val loaded = content != null
     LaunchedEffect(loaded) { if (loaded) onLoaded() }
 
+    val download = rememberListDownload(tracks = viewModel::tracksRecursive)
     Column(Modifier.fillMaxSize()) {
         // 歌曲数包括子文件夹里的，和上一级列表里显示的一致；筛选时只算符合筛选的（需求 F-9）
         val total = content?.let { data -> data.tracks.size + data.folders.sumOf { it.trackCount } }
@@ -211,8 +214,7 @@ fun FolderScreen(
             subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
             actions = {
-                ListDownloadButton(tracks = viewModel::tracksRecursive)
-                IconButton(onClick = { menuOpen = true }) {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_more")) {
                     Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -224,6 +226,9 @@ fun FolderScreen(
                         text = { Text(stringResource(R.string.action_shuffle)) },
                         onClick = { menuOpen = false; viewModel.playAllRecursive(shuffle = true) },
                     )
+                    HorizontalDivider()
+                    // 给这个文件夹（包括子文件夹）里的所有歌下载封面、歌词（需求 C-6、LY-13）
+                    ListDownloadMenuItems(download, onClick = { menuOpen = false })
                 }
             },
         )

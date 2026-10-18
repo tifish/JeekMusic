@@ -66,34 +66,49 @@ class ListDownloadViewModel @Inject constructor(
 
 /**
  * 列表标题栏上的"下载"按钮（需求 C-6、LY-13）：给这个列表里的所有歌下载封面或歌词。
+ * 标题栏已经有"更多"菜单的列表（文件夹、播放列表）不用这个按钮，把 [ListDownloadMenuItems] 放进"更多"菜单。
+ */
+@Composable
+fun ListDownloadButton(tracks: suspend () -> List<TrackEntity>) {
+    val download = rememberListDownload(tracks)
+    var menuOpen by remember { mutableStateOf(false) }
+    IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_download")) {
+        Icon(painterResource(R.drawable.ic_download), contentDescription = stringResource(R.string.list_download))
+    }
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        ListDownloadMenuItems(download, onClick = { menuOpen = false })
+    }
+}
+
+/** "下载这些歌的封面""下载这些歌的歌词"两个菜单项；[onClick] 用来关闭所在的菜单。 */
+@Composable
+fun ListDownloadMenuItems(download: (DownloadKind) -> Unit, onClick: () -> Unit) {
+    DownloadKind.entries.forEach { kind ->
+        DropdownMenuItem(
+            text = { Text(stringResource(if (kind == DownloadKind.COVERS) R.string.list_download_covers else R.string.list_download_lyrics)) },
+            onClick = {
+                onClick()
+                download(kind)
+            },
+            leadingIcon = { Icon(painterResource(if (kind == DownloadKind.COVERS) R.drawable.ic_image else R.drawable.ic_lyrics), contentDescription = null) },
+            modifier = Modifier.testTag("list_download_${kind.name}"),
+        )
+    }
+}
+
+/**
+ * 给列表里的所有歌下载封面或歌词（需求 C-6、LY-13），返回开始下载的函数，并负责显示相关对话框：
  * 还没开启在线封面 / 歌词时先说明会发送哪些信息，确认后开启并下载；下载在后台进行，对话框显示进度。
  */
 @Composable
-fun ListDownloadButton(tracks: suspend () -> List<TrackEntity>, viewModel: ListDownloadViewModel = hiltViewModel()) {
+fun rememberListDownload(tracks: suspend () -> List<TrackEntity>, viewModel: ListDownloadViewModel = hiltViewModel()): (DownloadKind) -> Unit {
     val scope = rememberCoroutineScope()
-    var menuOpen by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf<DownloadKind?>(null) }
     var showing by remember { mutableStateOf<DownloadKind?>(null) }
 
     fun start(kind: DownloadKind) = scope.launch {
         viewModel.start(kind, tracks())
         showing = kind
-    }
-
-    IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_download")) {
-        Icon(painterResource(R.drawable.ic_download), contentDescription = stringResource(R.string.list_download))
-    }
-    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        DownloadKind.entries.forEach { kind ->
-            DropdownMenuItem(
-                text = { Text(stringResource(if (kind == DownloadKind.COVERS) R.string.list_download_covers else R.string.list_download_lyrics)) },
-                onClick = {
-                    menuOpen = false
-                    scope.launch { if (viewModel.enabled(kind)) start(kind) else asking = kind }
-                },
-                modifier = Modifier.testTag("list_download_${kind.name}"),
-            )
-        }
     }
 
     asking?.let { kind ->
@@ -116,6 +131,8 @@ fun ListDownloadButton(tracks: suspend () -> List<TrackEntity>, viewModel: ListD
     }
 
     showing?.let { kind -> DownloadProgressDialog(kind, viewModel) { showing = null } }
+
+    return { kind -> scope.launch { if (viewModel.enabled(kind)) start(kind) else asking = kind } }
 }
 
 @Composable

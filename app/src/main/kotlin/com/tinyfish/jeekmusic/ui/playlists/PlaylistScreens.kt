@@ -1,6 +1,7 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
-import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
+import com.tinyfish.jeekmusic.ui.components.ListDownloadMenuItems
+import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.settings.SongSort
@@ -24,6 +25,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -230,6 +232,7 @@ fun PlaylistDetailScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    val download = rememberListDownload(tracks = { viewModel.entries.value.orEmpty().mapNotNull { it.track } })
     val exportM3u = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/x-mpegurl")) { uri -> if (uri != null) viewModel.export(uri) }
 
     Column(Modifier.fillMaxSize()) {
@@ -238,14 +241,16 @@ fun PlaylistDetailScreen(
             subtitle = entries?.let { songCount(it.size) },
             onBack = onBack,
             actions = {
-                ListDownloadButton(tracks = { viewModel.entries.value.orEmpty().mapNotNull { it.track } })
-                IconButton(onClick = { menuOpen = true }) {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("list_more")) {
                     Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.playlist_rename)) }, onClick = { menuOpen = false; renaming = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.m3u_export)) }, onClick = { menuOpen = false; exportM3u.launch("${playlist?.name ?: "playlist"}.m3u8") })
                     DropdownMenuItem(text = { Text(stringResource(R.string.playlist_delete)) }, onClick = { menuOpen = false; deleting = true })
+                    HorizontalDivider()
+                    // 给列表里的所有歌下载封面、歌词（需求 C-6、LY-13）
+                    ListDownloadMenuItems(download, onClick = { menuOpen = false })
                 }
             },
         )

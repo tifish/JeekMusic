@@ -267,6 +267,11 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
     var confirmOnline by remember { mutableStateOf(false) }
     var confirmCovers by remember { mutableStateOf(false) }
+    // 对整个曲库获取缺失的封面 / 歌词前先确认（需求 C-3、LY-8）
+    var confirmFetch by remember { mutableStateOf<DownloadKind?>(null) }
+    fun fetchClicked(kind: DownloadKind, progress: FetchProgress?) {
+        if (progress?.running == true) viewModel.toggleFetch(kind) else confirmFetch = kind
+    }
     // 选择"写入音乐文件"但还没有"所有文件访问权限"时：说明后去授权，[askAllFiles] 是确认后要应用的选择
     var askAllFiles by remember { mutableStateOf<(() -> Unit)?>(null) }
     val allFilesAccess = rememberAllFilesAccess()
@@ -401,7 +406,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                             progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
                             else -> stringResource(R.string.lyrics_fetch_done, progress.found, progress.missing)
                         },
-                        onClick = { viewModel.toggleFetch(DownloadKind.LYRICS) },
+                        onClick = { fetchClicked(DownloadKind.LYRICS, progress) },
                         modifier = Modifier.testTag("fetch_lyrics"),
                     )
                 }
@@ -481,7 +486,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                             progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
                             else -> stringResource(R.string.cover_fetch_done, progress.found, progress.missing)
                         },
-                        onClick = { viewModel.toggleFetch(DownloadKind.COVERS) },
+                        onClick = { fetchClicked(DownloadKind.COVERS, progress) },
                         modifier = Modifier.testTag("fetch_covers"),
                     )
                 }
@@ -677,6 +682,27 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 }) { Text(stringResource(R.string.all_files_grant)) }
             },
             dismissButton = { TextButton(onClick = { askAllFiles = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
+    confirmFetch?.let { kind ->
+        val covers = kind == DownloadKind.COVERS
+        val embed = if (covers) settings.coverSaveMode == CoverSaveMode.EMBED else settings.lyricsSaveLocation == LyricsSaveLocation.EMBED
+        AlertDialog(
+            onDismissRequest = { confirmFetch = null },
+            title = { Text(stringResource(if (covers) R.string.cover_fetch_confirm_title else R.string.lyrics_fetch_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(if (covers) R.string.cover_fetch_confirm else R.string.lyrics_fetch_confirm) +
+                        if (embed) "\n\n" + stringResource(R.string.fetch_confirm_embed) else "",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.toggleFetch(kind); confirmFetch = null }, modifier = Modifier.testTag("confirm_fetch")) {
+                    Text(stringResource(R.string.fetch_confirm_start))
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmFetch = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 

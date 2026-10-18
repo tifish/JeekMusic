@@ -283,6 +283,12 @@
     <string name="cover_save_sidecar">Next to the song, with the same name</string>
     <string name="cover_save_sidecar_summary">Song name.jpg; these images also show up in the gallery</string>
     <string name="cover_fetch_missing">Fetch all missing covers</string>
+    <string name="cover_fetch_confirm_title">Fetch all missing covers?</string>
+    <string name="cover_fetch_confirm">Every song in the library will be checked. Albums without a cover are looked up online (covers already in the same album are reused) and saved to the location set under “Save online covers to”. With many songs this takes a while; it runs in the background and you can tap to stop at any time.</string>
+    <string name="lyrics_fetch_confirm_title">Fetch all missing lyrics?</string>
+    <string name="lyrics_fetch_confirm">Every song in the library will be checked. Songs without lyrics are looked up online one by one and saved to the location set under “Save online lyrics to”. With many songs this takes a while; it runs in the background and you can tap to stop at any time.</string>
+    <string name="fetch_confirm_embed">They are currently saved inside the music files, so these music files will be modified (their modified time is kept).</string>
+    <string name="fetch_confirm_start">Start</string>
     <string name="cover_fetch_summary">Only accepts results whose title and artist both match. Needs a network connection</string>
     <string name="cover_fetch_checking">Checking which songs have no cover… tap to stop</string>
     <string name="cover_fetch_progress">Fetching %1$d / %2$d (found: %3$d)… tap to stop</string>

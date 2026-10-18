@@ -50,6 +50,10 @@ class PlaybackDiagnostics(
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
+        log.add(
+            "${if (isPlaying) "playing" else "stopped"} at ${player.currentPosition / 1000}s: ${title()}" +
+                if (isPlaying) "" else " (state ${player.playbackState}, playWhenReady ${player.playWhenReady}, suppressed ${player.playbackSuppressionReason})",
+        )
         val now = SystemClock.elapsedRealtime()
         if (isPlaying) {
             playingSince = now
@@ -60,13 +64,20 @@ class PlaybackDiagnostics(
     }
 
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-        if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) checkEnded(oldPosition)
+        if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+            checkEnded(oldPosition)
+        } else {
+            log.add("jump (reason $reason): ${oldPosition.mediaItem?.mediaMetadata?.title ?: "?"} ${oldPosition.positionMs / 1000}s -> ${newPosition.mediaItem?.mediaMetadata?.title ?: "?"} ${newPosition.positionMs / 1000}s")
+        }
         reanchor(newPosition.positionMs)
     }
 
     /** 换了队列（比如启动时恢复到上次的位置）：不一定有位置跳变的回调，按现在的位置重新开始计。 */
     override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
-        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) reanchor(player.currentPosition)
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+            log.add("queue changed at ${player.currentPosition / 1000}s: ${title()}")
+            reanchor(player.currentPosition)
+        }
     }
 
     private fun checkEnded(old: Player.PositionInfo) {
@@ -78,7 +89,8 @@ class PlaybackDiagnostics(
         val missing = durationMs - heard
         val name = old.mediaItem?.mediaMetadata?.title ?: "?"
         if (missing > EARLY_MS) {
-            log.add("EARLY next: $name heard ${heard / 1000}s of ${durationMs / 1000}s (${missing / 1000}s short), offload=$offloaded")
+            // 播放器自己的进度（pos）也到了结尾：进度比实际出声跑得快；没到结尾：数据提前读完了
+            log.add("EARLY next: $name heard ${heard / 1000}s of ${durationMs / 1000}s (${missing / 1000}s short), pos ${old.positionMs / 1000}s, offload=$offloaded")
             if (offloaded) offload.disableForSession()
         } else {
             log.add("next: $name ended (${durationMs / 1000}s), offload=$offloaded")

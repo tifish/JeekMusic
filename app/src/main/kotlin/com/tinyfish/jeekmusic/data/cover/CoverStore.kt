@@ -70,7 +70,8 @@ class CoverStore @Inject constructor(
                 val none = File(cacheDir, "$key.none")
                 if (!file.exists() && !none.exists()) {
                     val bytes = albumImage(track)
-                    if (bytes == null || !writeScaled(bytes, size, file)) none.createNewFile()
+                    // 写缓存失败（存储空间满）时不记"没有封面"
+                    if (bytes == null || writeScaled(bytes, size, file) == false) runCatching { none.createNewFile() }
                 }
             }
         }
@@ -215,6 +216,9 @@ class CoverStore @Inject constructor(
     }
 
     /** 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），由调用方改存到隐藏目录。 */
+    /** 这首歌正在播放，封面先存到了隐藏目录，播放完后写入文件（需求 P-14）。 */
+    fun embedDeferred(track: TrackEntity) = editor.isDeferred(track)
+
     private suspend fun embed(
         folder: LibraryFolderEntity,
         track: TrackEntity,
@@ -316,11 +320,18 @@ class CoverStore @Inject constructor(
         ArtworkVersions.bump(ids + track.id)
     }
 
-    private fun writeScaled(bytes: ByteArray, size: Int, target: File): Boolean {
+    /**
+     * 缩放后写入缓存文件。图片解不开返回 false；写不进去返回 null：存储空间不足时系统会清掉缓存目录，
+     * 目录没了要重建，空间满了写入会失败，都不能让 App 崩溃。
+     */
+    private fun writeScaled(bytes: ByteArray, size: Int, target: File): Boolean? {
         val bitmap = decodeScaled(bytes, size) ?: return false
         val tmp = File(target.parentFile, target.name + ".tmp")
-        tmp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        return tmp.renameTo(target)
+        return runCatching {
+            target.parentFile?.mkdirs()
+            tmp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            tmp.renameTo(target)
+        }.onFailure { tmp.delete() }.getOrNull()?.takeIf { it }
     }
 
     companion object {

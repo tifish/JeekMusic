@@ -113,17 +113,22 @@ class LyricsRepository @Inject constructor(
      * 它们读取时都排在内嵌歌词前面（缓存除外），不删的话写进去的歌词不会显示。
      */
     private suspend fun deleteDownloaded(folder: LibraryFolderEntity, track: TrackEntity) {
+        // 没删东西时不让目录列表失效：隐藏目录往往不存在，每次重新列都是一次失败的查询
         for (path in listOf(DocumentTree.appPath(folder, LYRICS_DIR), track.relativePath)) {
-            findLrc(folder, path, track)?.let { tree.delete(folder, it.documentId) }
-            invalidateDirectory(folder.id, path)
+            findLrc(folder, path, track)?.let {
+                tree.delete(folder, it.documentId)
+                invalidateDirectory(folder.id, path)
+            }
         }
         lyricsDao.deleteCached(track.trackKey)
     }
 
     private suspend fun deleteHidden(folder: LibraryFolderEntity, track: TrackEntity) {
         val path = DocumentTree.appPath(folder, LYRICS_DIR)
-        findLrc(folder, path, track)?.let { tree.delete(folder, it.documentId) }
-        invalidateDirectory(folder.id, path)
+        findLrc(folder, path, track)?.let {
+            tree.delete(folder, it.documentId)
+            invalidateDirectory(folder.id, path)
+        }
     }
 
     /**
@@ -264,6 +269,9 @@ class LyricsRepository @Inject constructor(
         changed()
         saved ?: LyricsSaveLocation.APP_CACHE
     }
+
+    /** 这首歌正在播放，歌词先存到了隐藏目录，播放完后写入文件（需求 P-14）。 */
+    fun embedDeferred(track: TrackEntity) = editor.isDeferred(track)
 
     private fun writeHidden(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {
         val dirId = tree.appDirectory(folder, LYRICS_DIR) ?: return false

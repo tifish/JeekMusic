@@ -301,6 +301,7 @@
     <string name="cover_search_failed">没有找到，或网络不可用。</string>
     <string name="cover_enable_and_search">开启并搜索</string>
     <string name="cover_saved_hidden">封面已保存到隐藏目录</string>
+    <string name="cover_saved_after_playing">封面已保存，这首歌放完后再写入音乐文件</string>
     <string name="cover_saved_embed">封面已写入 %1$s 个音乐文件</string>
     <string name="cover_saved_sidecar">封面已保存到 %1$s 首歌曲旁边</string>
     <string name="cover_save_failed">封面保存失败</string>
@@ -323,6 +324,7 @@
     <string name="lyrics_save_embed">写入音乐文件</string>
     <string name="lyrics_save_embed_summary">保持文件的修改时间不变，需要“所有文件访问权限”；CUE 整轨改存到隐藏目录。已下载的歌词也会写进去，并删掉下载的 .lrc</string>
     <string name="lyrics_saved_hidden">歌词已保存到隐藏目录</string>
+    <string name="lyrics_saved_after_playing">歌词已保存，这首歌放完后再写入音乐文件</string>
     <string name="lyrics_saved_embed">歌词已写入音乐文件</string>
     <string name="all_files_title">需要“所有文件访问权限”</string>
     <string name="all_files_message">写入音乐文件时要保持文件的修改时间不变。Android 不允许普通 App 修改其他文件的修改时间，有了“所有文件访问权限”才可以。这个权限只用于写入封面和歌词后恢复修改时间。\n\n没有授权时不会改动音乐文件，封面和歌词改存到隐藏目录。</string>
@@ -348,7 +350,6 @@
     <string name="source_check_hint">连不上的来源可以取消勾选，免得每次都等它超时。</string>
     <string name="lyrics_seek_here">从这里播放</string>
     <string name="lyrics_none">暂无歌词</string>
-    <string name="list_download">下载封面或歌词</string>
     <string name="list_download_covers">下载这些歌的封面</string>
     <string name="list_download_lyrics">下载这些歌的歌词</string>
     <string name="list_download_enable">开启并下载</string>

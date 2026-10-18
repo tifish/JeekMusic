@@ -698,7 +698,7 @@ ExoPlayer.Builder(context, renderersFactory)
 - OffloadController 监听 `ProcessLifecycleOwner`（前台 / 后台）和屏幕开关（`ACTION_SCREEN_ON/OFF`），按档位切换 offload 偏好
 - **不在歌曲中间切换**（需求 P-12）：改 offload 偏好会让 ExoPlayer 重新选择轨道、重建 AudioTrack（普通 ↔ offload），正在出声时能听到一下中断（模拟器不支持 offload，不会重建，只有真机能听到）。所以正在播放时只记下要切换，等到 `onIsPlayingChanged(false)`（暂停、停止）、`onPositionDiscontinuity(SEEK)`（拖动进度、切歌）或 `onMediaItemTransition`（自动播放到下一首）时再应用。自动换歌时切换，下一首开头可能多一点点停顿；连续的现场专辑等对此敏感的，可以把低功耗播放设为"始终使用"或"关闭"，就完全不切换
 - **提前换歌**（需求 P-14）：有的设备上 offload 时 DSP 报告的播放头比实际出声超前，播放器以为放完了就换歌，最后几秒被截掉；这时播放器的进度也是"放完了"，从进度上看不出来。`PlaybackDiagnostics` 按真实时间核对：记下起点（这首开始、拖动、换队列时的位置），累计 `isPlaying` 期间的 `elapsedRealtime`，在 `DISCONTINUITY_REASON_AUTO_TRANSITION` 时和这首的时长（`Timeline.Window.durationMs`，CUE 是截取后的长度）比较，差 3 秒以上记为 EARLY；当时实际在用 offload（`ExoPlayer.AudioOffloadListener.onOffloadedPlayback`）就 `disableForSession()`，服务重启前都用普通播放
-- **播放日志**（`PlaybackLog`）：换歌（正常 / 提前）、出错（错误码、重试还是跳过）、offload 实际开关都追加到外部私有目录的 `playback-log.txt`（超过 256KB 保留后一半），用 `adb pull /sdcard/Android/data/com.tinyfish.jeekmusic/files/playback-log.txt` 取出
+- **播放日志**（`PlaybackLog`，单例）：换歌（正常 / 提前；提前时还记下播放器自己的进度 pos，到了结尾说明进度跑得比出声快，没到说明数据提前读完了）、拖动和其他跳转、开始 / 停止播放（停止时记下状态、playWhenReady、抑制原因）、换队列、出错（错误码、重试还是跳过）、offload 实际开关、改写音乐文件（§7.4）都追加到外部私有目录的 `playback-log.txt`（超过 256KB 保留后一半），用 `adb pull /sdcard/Android/data/com.tinyfish.jeekmusic/files/playback-log.txt` 取出
 - 歌曲信息页显示的是已经生效的偏好，切换在等待时显示的仍是原来的状态
 - 设备或格式不支持 offload 时，ExoPlayer 会自动走普通播放路径
 - 音质：无损格式在 DSP 上的解码同样是比特精确的；有损格式由标准解码器解码，结果与软件解码等价
@@ -748,7 +748,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 封面通过自建的 `ArtworkProvider`（ContentProvider，`content://<authority>/track/<id>/<small|large>`）提供，通知栏、锁屏、蓝牙车机和 Coil 共用这一个入口。查找和缓存在 `CoverStore`：
 
 - **查找顺序**（`albumImage`，封面按专辑共用）：先看这首歌自己的——`.jeekmusic/covers/` 里的在线封面 → 歌曲旁边的同名图片（`歌曲名.jpg/png/webp`）→ 内嵌封面（在线封面是用户选的，所以最优先）；没有时按同样的顺序看同专辑的其他歌曲（按碟号、音轨号排序，最多 50 个文件，CUE 整轨的各首只看一次）；最后是同目录的 `cover.jpg` / `folder.jpg` 等。以前只看第一首被请求的歌就缓存整张专辑，同专辑别的文件里有封面也会被漏掉
-- **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork2`（查找改为看整张专辑后换了目录，旧的 `artwork` 启动时删除），"没有封面"也记一个 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
+- **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork2`（查找改为看整张专辑后换了目录，旧的 `artwork` 启动时删除），"没有封面"也记一个 `.none`。存储空间不足时系统会清掉缓存目录，写缓存前重建目录，写不进去（空间满）时不崩溃、也不记 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
 - **换封面后刷新**：保存时直接用新图片重写这张专辑的缓存，再通过 `ArtworkVersions` 给同专辑所有歌曲的封面 URI 加上 `?v=n`。`Artwork` 组件用 `derivedStateOf` 只读自己那首歌的版本号，所以只有换了封面的条目会重新加载；Provider 忽略查询参数
 - **通知栏和锁屏**：Media3 按封面地址缓存图片，地址不变就不会重新加载。`PlaybackService` 监听 `ArtworkVersions`，并在每次换歌时检查：当前歌曲的封面地址和带版本号的地址不同时，用 `replaceMediaItem` 只替换元数据里的 `artworkUri`（Media3 1.11 对地址和裁剪都相同的条目会就地更新，不打断播放）
 - **封面和歌词的共同流程**（`data/online/OnlineFetcher`，需求 C-3、LY-8）：播放时获取、批量获取、列表下载都用它，按"一组歌"处理——要封面时一组是一张专辑，只要歌词时一组是一首歌
@@ -782,6 +782,8 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 通过 SAF 文档 URI 以 `rw` 打开文件，`Os.fstat` 记下修改时间，交给 TagLib 修改，再对 `/proc/self/fd/<fd>` 调 `File.setLastModified` 改回原来的值
 - 实测（Android 16 模拟器）：只有 SAF 写授权时，无论对描述符还是对路径设置修改时间都被拒绝；有"所有文件访问权限"（`MANAGE_EXTERNAL_STORAGE`）时对描述符设置成功。所以没有这个权限时不写入，返回失败让调用方改存隐藏目录；设置页用 `Environment.isExternalStorageManager()` 判断，从系统设置返回时（`LifecycleResumeEffect`）重新检查
 - 修改时间不变、大小变了：立即把曲库里同一文件（CUE 整轨的各首）的 `size` 改成新的，`track_features.signature` 从"时间:旧大小"改成"时间:新大小"。MediaStore 随后重新扫描这个文件，得到的修改时间和大小与曲库一致，扫描器不会再处理它，智能标签也不需要重新分析
+- **不改写播放器正在用的文件**（需求 P-14，`PlayingFiles`）：vivo 手机上两次"提前二三十秒换歌"都发生在这首歌播放中被写入封面 / 歌词之后（文件的 ctime 落在播放区间内；模拟器上原地改文件、App 写封面都复现不了）。`PlaybackService` 在换歌、时间线、播放状态、随机 / 循环变化时，把 READY / BUFFERING 状态下当前这首和下一首（无缝播放会提前加载）的 file_key 交给 `PlayingFiles`；`edit()` 遇到这些文件不写、返回失败并记为推迟，调用方照常改存隐藏目录（立即显示），同时清掉"下载的都已写入"标记。播放器不再用这些文件时，服务用 `EmbedDownloadedScheduler.scheduleFor(ids)` 安排只处理这几首的 `EmbedDownloadedWorker`（输入 `tracks`，不改标记）；服务在那之前被关掉时，下次启动的整库任务补上。手动保存时提示"这首歌放完后再写入音乐文件"
+- 每次写入（完成 / 失败 / 推迟、前后大小）也记进播放日志
 
 ### 7.5 队列与续播（QueuePersistence）
 

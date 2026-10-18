@@ -7,6 +7,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.tinyfish.jeekmusic.data.cover.CoverStore
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
@@ -27,6 +28,8 @@ import javax.inject.Singleton
 /**
  * 保存位置是"写入音乐文件"时，把以前下载成文件的封面和歌词写进音乐文件，再删掉那些文件（需求 C-7、LY-14）。
  * 不用联网；全部处理完才记下"已写入"，被系统停止时下次接着做（已写入的文件已经删掉，不会重复）。
+ *
+ * 带 [KEY_TRACKS] 时只处理这几首：播放时推迟写入的歌，播放器用完后由播放服务安排（需求 P-14），不改"已写入"标记。
  */
 class EmbedDownloadedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -44,6 +47,15 @@ class EmbedDownloadedWorker(context: Context, params: WorkerParameters) : Corout
         val settings = deps.settings()
         val s = settings.current()
         if (!deps.coverStore().canEmbed()) return@withContext Result.success()
+        inputData.getLongArray(KEY_TRACKS)?.let { ids ->
+            val tracks = ids.toList().mapNotNull { deps.trackDao().byId(it) }
+            if (s.coverSaveMode == CoverSaveMode.EMBED) deps.coverStore().embedDownloaded(tracks) { isStopped }
+            if (s.lyricsSaveLocation == LyricsSaveLocation.EMBED) {
+                // 重新读一遍：写入封面后文件大小变了
+                deps.lyrics().embedDownloaded(ids.toList().mapNotNull { deps.trackDao().byId(it) }) { isStopped }
+            }
+            return@withContext Result.success()
+        }
         if (needsCovers(s)) {
             val count = deps.coverStore().embedDownloaded(deps.trackDao().all()) { isStopped }
             Log.i(TAG, "embedded $count downloaded covers")
@@ -62,6 +74,7 @@ class EmbedDownloadedWorker(context: Context, params: WorkerParameters) : Corout
 
     companion object {
         private const val TAG = "EmbedDownloadedWorker"
+        const val KEY_TRACKS = "tracks"
 
         fun needsCovers(s: Settings) = s.coverSaveMode == CoverSaveMode.EMBED && !s.coversEmbedded
         fun needsLyrics(s: Settings) = s.lyricsSaveLocation == LyricsSaveLocation.EMBED && !s.lyricsEmbedded
@@ -83,6 +96,15 @@ class EmbedDownloadedScheduler @Inject constructor(
         if (!editor.canEdit() || !EmbedDownloadedWorker.needsCovers(s) && !EmbedDownloadedWorker.needsLyrics(s)) return
         WorkManager.getInstance(context)
             .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, OneTimeWorkRequestBuilder<EmbedDownloadedWorker>().build())
+    }
+
+    /** 把播放时推迟写入的这几首歌写进文件（[PlayingFiles]），和其他写入任务排队执行。 */
+    fun scheduleFor(trackIds: List<Long>) {
+        if (trackIds.isEmpty() || !editor.canEdit()) return
+        val request = OneTimeWorkRequestBuilder<EmbedDownloadedWorker>()
+            .setInputData(workDataOf(EmbedDownloadedWorker.KEY_TRACKS to trackIds.toLongArray()))
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     private companion object {

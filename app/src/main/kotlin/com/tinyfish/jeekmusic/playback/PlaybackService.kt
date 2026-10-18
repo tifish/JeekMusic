@@ -25,6 +25,8 @@ import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
+import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
+import com.tinyfish.jeekmusic.data.library.PlayingFiles
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -49,12 +51,14 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var trackDao: TrackDao
     @Inject lateinit var autoFetcher: AutoFetcher
     @Inject lateinit var sources: QueueSourceRepository
+    @Inject lateinit var playingFiles: PlayingFiles
+    @Inject lateinit var embedDownloaded: EmbedDownloadedScheduler
+    @Inject lateinit var playbackLog: PlaybackLog
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaLibrarySession? = null
     private lateinit var sleepTimer: SleepTimer
     private lateinit var offload: OffloadController
-    private lateinit var playbackLog: PlaybackLog
     private lateinit var diagnostics: PlaybackDiagnostics
     private lateinit var queue: QueueController
     private var sleepStatus = SleepTimer.Status()
@@ -68,6 +72,7 @@ class PlaybackService : MediaLibraryService() {
     private var saveQueueJob: Job? = null
     private var progressJob: Job? = null
     private var fetchJob: Job? = null
+    private var playingFilesJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -85,12 +90,22 @@ class PlaybackService : MediaLibraryService() {
             scope.launch { persistence.saveContext(context) }
         }
         offload = OffloadController(this, player).also { it.start() }
-        playbackLog = PlaybackLog(this)
         diagnostics = PlaybackDiagnostics(player, offload, playbackLog).also { it.start() }
         scope.launch { settings.settings.collect { offload.mode = it.lowPowerMode } }
 
         player.addListener(PersistenceListener(player))
         player.addListener(FetchListener(player))
+        player.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                        Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED,
+                    )
+                ) {
+                    updatePlayingFiles(player)
+                }
+            }
+        })
         // 通知栏、锁屏上的随机播放开关跟着当前状态换图标（需求 P-13）
         player.addListener(object : Player.Listener {
             @OptIn(UnstableApi::class)
@@ -120,6 +135,7 @@ class PlaybackService : MediaLibraryService() {
         sleepTimer.release()
         offload.stop()
         diagnostics.stop()
+        embedDownloaded.scheduleFor(playingFiles.update(emptySet()))
         scope.cancel()
         session?.run {
             player.release()
@@ -154,6 +170,22 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** 当前歌曲的封面地址加上版本号；只改元数据，Media3 不会打断播放。 */
+    /**
+     * 播放器正在用的文件：准备好（或正在缓冲）时的当前这首和下一首（无缝播放会提前加载）。
+     * 不再用的文件如果有推迟的写入，现在写进去（需求 P-14，[PlayingFiles]）。
+     */
+    private fun updatePlayingFiles(player: Player) {
+        val active = player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING
+        val ids = if (!active) emptyList() else listOf(player.currentMediaItemIndex, player.nextMediaItemIndex)
+            .filter { it in 0 until player.mediaItemCount }
+            .mapNotNull { MediaItemMapper.trackId(player.getMediaItemAt(it).mediaId) }
+        playingFilesJob?.cancel()
+        playingFilesJob = scope.launch {
+            val keys = ids.mapNotNull { trackDao.byId(it)?.fileKey }.toSet()
+            embedDownloaded.scheduleFor(playingFiles.update(keys))
+        }
+    }
+
     private fun refreshArtwork(player: Player) {
         val index = player.currentMediaItemIndex
         if (index !in 0 until player.mediaItemCount) return

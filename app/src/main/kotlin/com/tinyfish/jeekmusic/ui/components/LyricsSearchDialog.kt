@@ -60,7 +60,7 @@ suspend fun saveChosenLyrics(repository: LyricsRepository, messages: MessageBus,
         UiMessage(
             when (result) {
                 LyricsSaveLocation.SIDECAR -> R.string.lyrics_saved_folder
-                LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_saved_hidden
+                LyricsSaveLocation.HIDDEN_FOLDER -> if (repository.embedDeferred(track)) R.string.lyrics_saved_after_playing else R.string.lyrics_saved_hidden
                 LyricsSaveLocation.EMBED -> R.string.lyrics_saved_embed
                 LyricsSaveLocation.APP_CACHE -> R.string.lyrics_saved_cache
             },

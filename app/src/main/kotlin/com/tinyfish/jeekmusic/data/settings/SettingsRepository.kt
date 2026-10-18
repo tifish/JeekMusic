@@ -227,6 +227,12 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setLyricsEmbedded() = context.dataStore.edit { it[Keys.LYRICS_EMBEDDED] = true }
 
+    /** 又有下载的封面、歌词等着写入文件了（播放时推迟写入的，需求 P-14）。 */
+    suspend fun clearDownloadedEmbedded() = context.dataStore.edit {
+        it.remove(Keys.COVERS_EMBEDDED)
+        it.remove(Keys.LYRICS_EMBEDDED)
+    }
+
     suspend fun setCoverSources(sources: Set<OnlineSource>) = context.dataStore.edit { it[Keys.COVER_SOURCES] = sources.map { s -> s.name }.toSet() }
 
     suspend fun setLyricsSources(sources: Set<OnlineSource>) = context.dataStore.edit { it[Keys.LYRICS_SOURCES] = sources.map { s -> s.name }.toSet() }

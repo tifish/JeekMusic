@@ -139,7 +139,7 @@ class TrackMenuViewModel @Inject constructor(
         val saved = image?.let { coverStore.save(coverStore.albumOf(track), it, settings.current().coverSaveMode) }
         messages.post(
             when (saved?.mode) {
-                CoverSaveMode.HIDDEN_FOLDER -> UiMessage(R.string.cover_saved_hidden)
+                CoverSaveMode.HIDDEN_FOLDER -> UiMessage(if (coverStore.embedDeferred(track)) R.string.cover_saved_after_playing else R.string.cover_saved_hidden)
                 CoverSaveMode.EMBED -> UiMessage(R.string.cover_saved_embed, saved.files.toString())
                 CoverSaveMode.SIDECAR -> UiMessage(R.string.cover_saved_sidecar, saved.files.toString())
                 null -> UiMessage(R.string.cover_save_failed)

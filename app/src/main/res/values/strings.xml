@@ -308,6 +308,7 @@
     <string name="cover_search_failed">Nothing found, or the network is unavailable.</string>
     <string name="cover_enable_and_search">Turn on and search</string>
     <string name="cover_saved_hidden">Cover saved to the hidden folder</string>
+    <string name="cover_saved_after_playing">Cover saved; it will be written into the music file after this song finishes</string>
     <string name="cover_saved_embed">Cover saved into %1$s music file(s)</string>
     <string name="cover_saved_sidecar">Cover saved next to %1$s song(s)</string>
     <string name="cover_save_failed">Couldn’t save the cover</string>
@@ -330,6 +331,7 @@
     <string name="lyrics_save_embed">Inside the music file</string>
     <string name="lyrics_save_embed_summary">The file’s modified time is kept. Needs “All files access”. CUE tracks are saved to the hidden folder instead. Lyrics already downloaded are written in too, and the downloaded .lrc files deleted</string>
     <string name="lyrics_saved_hidden">Lyrics saved to the hidden folder</string>
+    <string name="lyrics_saved_after_playing">Lyrics saved; they will be written into the music file after this song finishes</string>
     <string name="lyrics_saved_embed">Lyrics saved into the music file</string>
     <string name="all_files_title">Allow access to all files?</string>
     <string name="all_files_message">To keep the file’s modified time unchanged when writing into music files, JeekMusic needs “All files access”. Android doesn’t let apps change the modified time of other apps’ files without it. It is only used to restore the modified time after writing covers and lyrics.\n\nWithout it, music files are not changed and covers and lyrics are saved to the hidden folder instead.</string>
@@ -355,7 +357,6 @@
     <string name="source_check_hint">Turn off sources that can’t be reached to avoid waiting for them.</string>
     <string name="lyrics_seek_here">Play from here</string>
     <string name="lyrics_none">No lyrics</string>
-    <string name="list_download">Download covers or lyrics</string>
     <string name="list_download_covers">Download covers for these songs</string>
     <string name="list_download_lyrics">Download lyrics for these songs</string>
     <string name="list_download_enable">Turn on and download</string>

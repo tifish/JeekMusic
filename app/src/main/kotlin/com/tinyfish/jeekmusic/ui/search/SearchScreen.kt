@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.Box
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
-import com.tinyfish.jeekmusic.data.filter.SongSorter
-import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
-import com.tinyfish.jeekmusic.data.filter.filterByTags
+import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
+import com.tinyfish.jeekmusic.playback.QueueSource
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -74,8 +72,7 @@ data class SearchResults(val query: String, val artists: List<ArtistEntity>, val
 class SearchViewModel @Inject constructor(
     private val dao: SearchDao,
     private val player: PlayerConnection,
-    private val tagFilters: TagFilterRepository,
-    private val sorter: SongSorter,
+    private val sources: QueueSourceRepository,
 ) : ViewModel() {
 
     val query = MutableStateFlow("")
@@ -85,19 +82,14 @@ class SearchViewModel @Inject constructor(
         .debounce(200)
         .map { it.trim() }
         .distinctUntilChanged()
-        // 曲库变了（扫描、文件改名 / 移动 / 删除）也重新查询
-        .combine(dao.trackChanges()) { q, _ -> q }
+        // 曲库变了（扫描、文件改名 / 移动 / 删除）、筛选或排序变了也重新查询
+        .combine(sources.searchChanges()) { q, _ -> q }
         .mapLatest { q ->
             if (q.isEmpty()) {
                 null
             } else {
                 val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
-                // 歌曲结果也按智能标签筛选（需求 M-6）
-                val allowed = tagFilters.allowedKeys.first()
-                val tracks = dao.tracks(pattern).filterByTags(allowed) { it.trackKey }
-                // 按全局排序（需求 U-8，默认按文件名，中文按拼音）。先排序再截取，否则截到的不是排在最前面的那些
-                val sorted = sorter.sorted(tracks, sorter.sort.first()) { it }
-                SearchResults(q, dao.artists(pattern, MAX_ARTISTS), sorted.take(MAX_TRACKS))
+                SearchResults(q, dao.artists(pattern, MAX_ARTISTS), sources.searchTracks(q))
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -105,10 +97,9 @@ class SearchViewModel @Inject constructor(
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun play(tracks: List<TrackEntity>, index: Int) = player.play(tracks, index)
+    fun play(results: SearchResults, index: Int, title: String) = player.play(QueueSource.Search(results.query), title, results.tracks, index)
 
     private companion object {
-        const val MAX_TRACKS = 200
         const val MAX_ARTISTS = 20
     }
 }
@@ -154,6 +145,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             return@Column
         }
         val listState = rememberLazyListState()
+        val searchTitle = stringResource(R.string.queue_source_search, data.query)
         // 歌曲前面还有艺术家标题、艺术家和歌曲标题
         val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }
             .let { if (it < 0) -1 else it + 1 + if (data.artists.isEmpty()) 0 else data.artists.size + 1 }
@@ -175,7 +167,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             if (data.tracks.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.search_songs)) }
                 itemsIndexed(data.tracks, key = { _, t -> "t:" + t.id }) { index, track ->
-                    TrackRow(track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(data.tracks, index) }, selection = selection)
+                    TrackRow(track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(data, index, searchTitle) }, selection = selection)
                 }
             }
         }

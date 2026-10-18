@@ -83,6 +83,10 @@
     <string name="close">Close</string>
 
     <string name="queue_title">Queue</string>
+    <string name="queue_section_manual">Added by you</string>
+    <string name="queue_section_source">From %1$s</string>
+    <string name="queue_section_next">Up next</string>
+    <string name="queue_source_search">Search "%1$s"</string>
     <string name="queue_count">%1$d / %2$d</string>
 
     <string name="tab_sport">Workout</string>

@@ -46,7 +46,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
- * 播放队列（需求 P-6）：查看、点击跳转、移除、拖动排序。
+ * 播放队列（需求 P-6、P-15）：查看、点击跳转、移除、拖动排序。
+ * 当前歌曲后面分两段：手动添加的（"下一首播放""添加到队列"），然后是"来自 …"列表的，各有一个小标题。
  * 拖动时只改本地列表，松手后再把一次移动提交给播放器。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,9 +56,18 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
     val items = remember(state.queue) { state.queue.toMutableStateList() }
     var draggingUid by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    // 列表里还有小标题，按 key（uid）找到歌曲在 items 里的位置；拖到小标题上不动
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        items.add(to.index, items.removeAt(from.index))
+        val fromIndex = items.indexOfFirst { it.uid == from.key }
+        val toIndex = items.indexOfFirst { it.uid == to.key }
+        if (fromIndex >= 0 && toIndex >= 0) items.add(toIndex, items.removeAt(fromIndex))
     }
+    // 小标题都在当前歌曲后面，所以当前歌曲在列表里的位置和它在队列里的位置一样
+    val currentUid = state.queue.getOrNull(state.currentIndex)?.uid
+    val currentPosition = items.indexOfFirst { it.uid == currentUid }
+    val firstManual = items.indices.firstOrNull { it > currentPosition && items[it].manual } ?: -1
+    val firstSource = items.indices.firstOrNull { it > currentPosition && !items[it].manual } ?: -1
+    val sourceHeader = state.sourceTitle?.let { stringResource(R.string.queue_section_source, it) } ?: stringResource(R.string.queue_section_next)
     LaunchedEffect(Unit) {
         // 等列表完成第一次布局（拿到可视区域高度）后，把当前歌曲放到正中间
         snapshotFlow { listState.layoutInfo.viewportEndOffset }.first { it > 0 }
@@ -75,6 +85,16 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
             )
             LazyColumn(state = listState, modifier = Modifier.verticalScrollbar(listState).testTag("queue_list")) {
                 itemsIndexed(items, key = { _, item -> item.uid }) { index, item ->
+                    if (index == firstManual || index == firstSource) {
+                        Text(
+                            if (index == firstManual) stringResource(R.string.queue_section_manual) else sourceHeader,
+                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     ReorderableItem(reorderState, key = item.uid) { isDragging ->
                         val current = item.uid == state.queue.getOrNull(state.currentIndex)?.uid
                         Surface(tonalElevation = if (isDragging) 6.dp else 0.dp) {

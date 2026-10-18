@@ -81,6 +81,10 @@
     <string name="close">关闭</string>
 
     <string name="queue_title">播放队列</string>
+    <string name="queue_section_manual">手动添加的</string>
+    <string name="queue_section_source">来自「%1$s」</string>
+    <string name="queue_section_next">接下来</string>
+    <string name="queue_source_search">搜索“%1$s”</string>
     <string name="queue_count">%1$d / %2$d</string>
 
     <string name="tab_sport">运动</string>

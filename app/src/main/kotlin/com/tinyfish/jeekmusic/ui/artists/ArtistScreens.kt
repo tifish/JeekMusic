@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.artists
 
+import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListMoreButton
@@ -315,8 +316,8 @@ class ArtistDetailViewModel @AssistedInject constructor(
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun play(index: Int) {
-        tracks.value?.let { player.play(it, index) }
+    fun play(index: Int, title: String) {
+        tracks.value?.let { player.play(QueueSource.Artist(nameKey), title, it, index) }
     }
 }
 
@@ -381,7 +382,7 @@ fun ArtistDetailScreen(
                     TrackRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
-                        onClick = { viewModel.play(index) },
+                        onClick = { viewModel.play(index, name) },
                         selection = selection,
                     )
                 }

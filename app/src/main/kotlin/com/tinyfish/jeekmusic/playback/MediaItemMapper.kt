@@ -16,6 +16,9 @@ object MediaItemMapper {
     const val EXTRA_ALBUM_KEY = "album_key"
     const val EXTRA_ARTIST_KEYS = "artist_keys"
 
+    /** 手动添加到队列的（"下一首播放""添加到队列"，需求 P-15）；队列重新生成时不动它们。 */
+    const val EXTRA_MANUAL = "manual"
+
     private const val PREFIX = "track:"
     const val ARTWORK_AUTHORITY = "${BuildConfig.APPLICATION_ID}.artwork"
 
@@ -26,11 +29,13 @@ object MediaItemMapper {
     fun artworkUri(trackId: Long, large: Boolean = false): Uri =
         Uri.parse("content://$ARTWORK_AUTHORITY/track/$trackId/${if (large) "large" else "small"}")
 
+    fun isManual(item: MediaItem): Boolean = item.mediaMetadata.extras?.getBoolean(EXTRA_MANUAL) == true
+
     /** Service 端使用：带播放 URI 和完整元数据。 */
-    fun toMediaItem(track: TrackEntity): MediaItem = MediaItem.Builder()
+    fun toMediaItem(track: TrackEntity, manual: Boolean = false): MediaItem = MediaItem.Builder()
         .setMediaId(mediaId(track.id))
         .setUri(MediaStoreSource.contentUri(track.volumeName, track.mediaStoreId))
-        .setMediaMetadata(metadata(track))
+        .setMediaMetadata(metadata(track, manual))
         .apply {
             if (track.startMs != null) {
                 setClippingConfiguration(
@@ -43,13 +48,7 @@ object MediaItemMapper {
         }
         .build()
 
-    /** Controller 端使用：只需要 mediaId，Service 会从数据库补全；带上元数据让界面立即显示。 */
-    fun toRequest(track: TrackEntity): MediaItem = MediaItem.Builder()
-        .setMediaId(mediaId(track.id))
-        .setMediaMetadata(metadata(track))
-        .build()
-
-    private fun metadata(track: TrackEntity): MediaMetadata = MediaMetadata.Builder()
+    private fun metadata(track: TrackEntity, manual: Boolean = false): MediaMetadata = MediaMetadata.Builder()
         .setTitle(track.title)
         .setArtist(track.artistDisplay.ifEmpty { null })
         .setAlbumTitle(track.album)
@@ -61,6 +60,7 @@ object MediaItemMapper {
             Bundle().apply {
                 putString(EXTRA_TRACK_KEY, track.trackKey)
                 putString(EXTRA_ALBUM_KEY, track.albumKey)
+                if (manual) putBoolean(EXTRA_MANUAL, true)
             },
         )
         .build()

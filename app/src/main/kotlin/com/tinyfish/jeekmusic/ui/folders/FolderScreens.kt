@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.folders
 
+import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListMoreButton
@@ -172,7 +173,7 @@ class FolderViewModel @AssistedInject constructor(
 
     /** 点击歌曲：当前文件夹的歌曲（不含子文件夹）作为队列（需求 F-5）。 */
     fun play(index: Int) {
-        content.value?.tracks?.let { player.play(it, index) }
+        content.value?.tracks?.let { player.play(QueueSource.Folder(route.folderId, route.relativePath, recursive = false), route.title, it, index) }
     }
 
     /** 这个文件夹及子文件夹里的歌（按当前筛选），批量下载封面、歌词用。 */
@@ -180,7 +181,8 @@ class FolderViewModel @AssistedInject constructor(
 
     fun playAllRecursive(shuffle: Boolean) {
         viewModelScope.launch {
-            player.play(library.tracksUnder(route.folderId, route.relativePath), shuffle = shuffle)
+            val tracks = library.tracksUnder(route.folderId, route.relativePath)
+            player.play(QueueSource.Folder(route.folderId, route.relativePath, recursive = true), route.title, tracks, shuffle = shuffle)
         }
     }
 }

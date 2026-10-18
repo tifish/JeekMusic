@@ -49,7 +49,7 @@ data class NowPlaying(
 )
 
 @Immutable
-data class QueueItem(val uid: String, val trackId: Long, val title: String, val artist: String?)
+data class QueueItem(val uid: String, val trackId: Long, val title: String, val artist: String?, val manual: Boolean = false)
 
 enum class RepeatMode { OFF, ALL, ONE }
 
@@ -63,6 +63,8 @@ data class PlayerUiState(
     val queue: List<QueueItem> = emptyList(),
     val currentIndex: Int = -1,
     val sleepTimer: SleepTimerState = SleepTimerState(),
+    /** 队列来自的列表的名称（需求 P-15）；null 表示没有。 */
+    val sourceTitle: String? = null,
 )
 
 /**
@@ -116,7 +118,7 @@ class PlayerConnection @Inject constructor(
             val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
             MediaController.Builder(context, token)
                 .setListener(object : MediaController.Listener {
-                    override fun onExtrasChanged(controller: MediaController, extras: Bundle) = updateSleepTimer(extras)
+                    override fun onExtrasChanged(controller: MediaController, extras: Bundle) = updateExtras(extras)
 
                     override fun onCustomCommand(controller: MediaController, command: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                         if (command.customAction == PlaybackCommands.EVENT_PLAYBACK_ERROR) {
@@ -137,24 +139,37 @@ class PlayerConnection @Inject constructor(
         }
     }.flowOn(Dispatchers.Main.immediate)
 
-    /** 用 [tracks] 替换队列并从 [startIndex] 开始播放。 */
-    fun play(tracks: List<TrackEntity>, startIndex: Int = 0, shuffle: Boolean = false) = withController {
+    /**
+     * 播放某个列表（需求 P-15）：[tracks] 是列表里的歌（按显示顺序），[title] 是列表名称，播放队列里显示"来自 …"。
+     * 从 [startIndex] 开始；为 null 时从头开始，随机时随机挑一首。[shuffle] 为 null 时保持当前的随机模式。
+     * 之后筛选、排序或曲库变了，播放服务按 [source] 重新生成队列。
+     */
+    fun play(source: QueueSource, title: String, tracks: List<TrackEntity>, startIndex: Int? = null, shuffle: Boolean? = null) = withController {
         if (tracks.isEmpty()) return@withController
-        shuffleModeEnabled = shuffle
-        val start = if (shuffle && startIndex == 0) tracks.indices.random() else startIndex
-        setMediaItems(tracks.map(MediaItemMapper::toRequest), start, 0)
-        prepare()
-        play()
+        sendCustomCommand(
+            SessionCommand(PlaybackCommands.PLAY_SOURCE, Bundle.EMPTY),
+            Bundle().apply {
+                putString(PlaybackCommands.EXTRA_SOURCE, source.encode())
+                putString(PlaybackCommands.EXTRA_SOURCE_TITLE, title)
+                putLongArray(PlaybackCommands.EXTRA_TRACK_IDS, tracks.map { it.id }.toLongArray())
+                putInt(PlaybackCommands.EXTRA_START, startIndex ?: -1)
+                if (shuffle != null) putBoolean(PlaybackCommands.EXTRA_SHUFFLE, shuffle)
+            },
+        )
     }
 
-    fun playNext(tracks: List<TrackEntity>) = withController {
-        if (mediaItemCount == 0) return@withController play(tracks)
-        addMediaItems(currentMediaItemIndex + 1, tracks.map(MediaItemMapper::toRequest))
-    }
+    /** "下一首播放"：插到当前歌曲后面，作为手动添加的歌（需求 P-15）。 */
+    fun playNext(tracks: List<TrackEntity>) = sendTracks(PlaybackCommands.PLAY_NEXT, tracks)
 
-    fun addToQueue(tracks: List<TrackEntity>) = withController {
-        if (mediaItemCount == 0) return@withController play(tracks)
-        addMediaItems(tracks.map(MediaItemMapper::toRequest))
+    /** "添加到队列"：加到手动添加的歌的最后，在来自列表的歌前面（需求 P-15）。 */
+    fun addToQueue(tracks: List<TrackEntity>) = sendTracks(PlaybackCommands.ADD_TO_QUEUE, tracks)
+
+    private fun sendTracks(action: String, tracks: List<TrackEntity>) = withController {
+        if (tracks.isEmpty()) return@withController
+        sendCustomCommand(
+            SessionCommand(action, Bundle.EMPTY),
+            Bundle().apply { putLongArray(PlaybackCommands.EXTRA_TRACK_IDS, tracks.map { it.id }.toLongArray()) },
+        )
     }
 
     fun togglePlayPause() = withController {
@@ -239,16 +254,17 @@ class PlayerConnection @Inject constructor(
             }
         })
         update(controller, rebuildQueue = true)
-        updateSleepTimer(controller.sessionExtras)
+        updateExtras(controller.sessionExtras)
     }
 
-    private fun updateSleepTimer(extras: Bundle) {
+    private fun updateExtras(extras: Bundle) {
         _state.value = _state.value.copy(
             sleepTimer = SleepTimerState(
                 endElapsedMs = extras.getLong(PlaybackCommands.EXTRA_SLEEP_END),
                 songsLeft = extras.getInt(PlaybackCommands.EXTRA_SLEEP_SONGS),
                 finishSong = extras.getBoolean(PlaybackCommands.EXTRA_SLEEP_FINISH_SONG),
             ),
+            sourceTitle = extras.getString(PlaybackCommands.EXTRA_SOURCE_TITLE),
         )
     }
 
@@ -280,6 +296,7 @@ class PlayerConnection @Inject constructor(
             queue = if (rebuildQueue) buildQueue(player) else previous.queue,
             currentIndex = player.currentMediaItemIndex,
             sleepTimer = previous.sleepTimer,
+            sourceTitle = previous.sourceTitle,
         )
         if (nowPlaying?.trackId != previous.nowPlaying?.trackId) {
             scope.launch { snapshot.saveNowPlaying(nowPlaying?.trackId ?: -1, nowPlaying?.title, nowPlaying?.artist) }
@@ -293,6 +310,7 @@ class PlayerConnection @Inject constructor(
             trackId = MediaItemMapper.trackId(item.mediaId) ?: -1,
             title = item.mediaMetadata.title?.toString().orEmpty(),
             artist = item.mediaMetadata.artist?.toString(),
+            manual = MediaItemMapper.isManual(item),
         )
     }
 }

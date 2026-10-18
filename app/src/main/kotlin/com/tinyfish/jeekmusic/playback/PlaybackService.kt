@@ -22,6 +22,8 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.online.AutoFetcher
 import com.tinyfish.jeekmusic.data.db.TrackDao
+import com.tinyfish.jeekmusic.data.db.TrackEntity
+import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -46,6 +48,7 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var trackDao: TrackDao
     @Inject lateinit var autoFetcher: AutoFetcher
+    @Inject lateinit var sources: QueueSourceRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaLibrarySession? = null
@@ -53,6 +56,8 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var offload: OffloadController
     private lateinit var playbackLog: PlaybackLog
     private lateinit var diagnostics: PlaybackDiagnostics
+    private lateinit var queue: QueueController
+    private var sleepStatus = SleepTimer.Status()
 
     /** 上一次出错的歌和时间：同一首歌短时间内再出错才跳到下一首（需求 P-14）。 */
     private var lastErrorIndex = -1
@@ -72,11 +77,12 @@ class PlaybackService : MediaLibraryService() {
         this.session = session
 
         sleepTimer = SleepTimer(player, scope) { status ->
-            session.sessionExtras = Bundle().apply {
-                putLong(PlaybackCommands.EXTRA_SLEEP_END, status.endElapsedMs)
-                putInt(PlaybackCommands.EXTRA_SLEEP_SONGS, status.songsLeft)
-                putBoolean(PlaybackCommands.EXTRA_SLEEP_FINISH_SONG, status.finishSong)
-            }
+            sleepStatus = status
+            publishExtras()
+        }
+        queue = QueueController(player, scope, sources) { context ->
+            publishExtras()
+            scope.launch { persistence.saveContext(context) }
         }
         offload = OffloadController(this, player).also { it.start() }
         playbackLog = PlaybackLog(this)
@@ -127,10 +133,24 @@ class PlaybackService : MediaLibraryService() {
     private suspend fun restoreQueue(player: Player) {
         val restored = persistence.restore() ?: return
         if (queueTouched || player.mediaItemCount > 0) return
-        player.setMediaItems(restored.tracks.map(MediaItemMapper::toMediaItem), restored.index, restored.positionMs)
-        player.shuffleModeEnabled = restored.shuffle
+        player.setMediaItems(restored.mediaItems(), restored.index, restored.positionMs)
+        queue.restoreShuffle(restored.shuffle)
         player.repeatMode = restored.repeatMode
+        queue.restoreContext(restored.context)
         queueTouched = false
+    }
+
+    private fun RestoredQueue.mediaItems(): List<MediaItem> = tracks.mapIndexed { i, track -> MediaItemMapper.toMediaItem(track, manual = i in manual) }
+
+    /** 睡眠定时状态和队列来自的列表名称，界面通过会话的 extras 读取。 */
+    private fun publishExtras() {
+        val status = sleepStatus
+        session?.sessionExtras = Bundle().apply {
+            putLong(PlaybackCommands.EXTRA_SLEEP_END, status.endElapsedMs)
+            putInt(PlaybackCommands.EXTRA_SLEEP_SONGS, status.songsLeft)
+            putBoolean(PlaybackCommands.EXTRA_SLEEP_FINISH_SONG, status.finishSong)
+            queue.context?.let { putString(PlaybackCommands.EXTRA_SOURCE_TITLE, it.title) }
+        }
     }
 
     /** 当前歌曲的封面地址加上版本号；只改元数据，Media3 不会打断播放。 */
@@ -175,9 +195,10 @@ class PlaybackService : MediaLibraryService() {
             .setSlots(CommandButton.SLOT_OVERFLOW)
             .build()
 
-    private fun trackKeysOf(player: Player): List<String> = List(player.mediaItemCount) { i ->
-        player.getMediaItemAt(i).mediaMetadata.extras?.getString(MediaItemMapper.EXTRA_TRACK_KEY).orEmpty()
-    }.filter { it.isNotEmpty() }
+    private fun savedItemsOf(player: Player): List<SavedQueueItem> = List(player.mediaItemCount) { i ->
+        val item = player.getMediaItemAt(i)
+        SavedQueueItem(item.mediaMetadata.extras?.getString(MediaItemMapper.EXTRA_TRACK_KEY).orEmpty(), MediaItemMapper.isManual(item))
+    }.filter { it.trackKey.isNotEmpty() }
 
     private fun saveState(player: Player) {
         val index = player.currentMediaItemIndex
@@ -201,7 +222,7 @@ class PlaybackService : MediaLibraryService() {
             saveQueueJob?.cancel()
             saveQueueJob = scope.launch {
                 delay(1_000)
-                persistence.saveQueue(trackKeysOf(player))
+                persistence.saveQueue(savedItemsOf(player))
                 saveState(player)
             }
         }
@@ -274,6 +295,9 @@ class PlaybackService : MediaLibraryService() {
                     commands.add(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_SONGS, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.PLAY_SOURCE, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.PLAY_NEXT, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.ADD_TO_QUEUE, Bundle.EMPTY))
                 }
                 builder.setAvailableSessionCommands(commands.build())
             }
@@ -295,6 +319,16 @@ class PlaybackService : MediaLibraryService() {
                 PlaybackCommands.SLEEP_SONGS -> sleepTimer.startSongs(args.getInt(PlaybackCommands.EXTRA_COUNT))
                 PlaybackCommands.SLEEP_CANCEL -> sleepTimer.cancel()
                 PlaybackCommands.TOGGLE_SHUFFLE -> session.player.shuffleModeEnabled = !session.player.shuffleModeEnabled
+                PlaybackCommands.PLAY_SOURCE -> {
+                    val source = QueueSource.decode(args.getString(PlaybackCommands.EXTRA_SOURCE))
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                    val title = args.getString(PlaybackCommands.EXTRA_SOURCE_TITLE).orEmpty()
+                    val start = args.getInt(PlaybackCommands.EXTRA_START, -1).takeIf { it >= 0 }
+                    val shuffle = if (args.containsKey(PlaybackCommands.EXTRA_SHUFFLE)) args.getBoolean(PlaybackCommands.EXTRA_SHUFFLE) else null
+                    withTracks(args) { queue.play(source, title, it, start, shuffle) }
+                }
+                PlaybackCommands.PLAY_NEXT -> withTracks(args) { queue.playNext(it) }
+                PlaybackCommands.ADD_TO_QUEUE -> withTracks(args) { queue.addToQueue(it) }
                 else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -333,12 +367,21 @@ class PlaybackService : MediaLibraryService() {
             isForPlayback: Boolean,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future {
             val restored = persistence.restore() ?: throw UnsupportedOperationException("nothing to resume")
+            queue.restoreShuffle(restored.shuffle)
+            queue.restoreContext(restored.context)
             MediaSession.MediaItemsWithStartPosition(
-                restored.tracks.map(MediaItemMapper::toMediaItem),
+                restored.mediaItems(),
                 restored.index,
                 restored.positionMs,
             )
         }
+    }
+
+    /** 命令参数里的歌曲 id 换成歌曲（按原来的顺序，找不到的跳过）再交给 [block]。 */
+    private fun withTracks(args: Bundle, block: (List<TrackEntity>) -> Unit) {
+        val ids = args.getLongArray(PlaybackCommands.EXTRA_TRACK_IDS)?.toList().orEmpty()
+        queueTouched = true
+        scope.launch { block(library.tracksByIds(ids)) }
     }
 
     private companion object {
@@ -352,6 +395,9 @@ object PlaybackCommands {
     const val SLEEP_SONGS = "jeek.sleep.songs"
     const val SLEEP_CANCEL = "jeek.sleep.cancel"
     const val TOGGLE_SHUFFLE = "jeek.shuffle.toggle"
+    const val PLAY_SOURCE = "jeek.queue.play_source"
+    const val PLAY_NEXT = "jeek.queue.play_next"
+    const val ADD_TO_QUEUE = "jeek.queue.add"
     const val EVENT_PLAYBACK_ERROR = "jeek.event.playback_error"
 
     const val EXTRA_MINUTES = "minutes"
@@ -361,6 +407,11 @@ object PlaybackCommands {
     const val EXTRA_SLEEP_END = "sleep_end_elapsed"
     const val EXTRA_SLEEP_SONGS = "sleep_songs_left"
     const val EXTRA_SLEEP_FINISH_SONG = "sleep_finish_song"
+    const val EXTRA_SOURCE = "source"
+    const val EXTRA_SOURCE_TITLE = "source_title"
+    const val EXTRA_TRACK_IDS = "track_ids"
+    const val EXTRA_START = "start"
+    const val EXTRA_SHUFFLE = "shuffle"
 }
 
 /** 换歌后等这么久再获取封面和歌词：快速连续切歌时只查最后停下的那首。 */

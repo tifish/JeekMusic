@@ -785,7 +785,14 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 
 ### 7.5 队列与续播（QueuePersistence）
 
-- 持久化内容：`List<track_key>`、当前索引、播放进度、循环模式、随机开关（随机顺序本身不保存，恢复时重新生成）
+**队列**（需求 P-6、P-15，`QueueController`，在 PlaybackService 里）：队列分手动添加的和来自列表的两部分。手动添加的条目在 MediaItem 元数据 extras 里带 `manual = true`（`MediaItemMapper.isManual`）。
+
+- 播放：界面通过自定义命令 `PLAY_SOURCE` 传来源（`QueueSource.encode()`）、列表名称、歌曲 id、起点和随机模式（null 保持当前）；`PLAY_NEXT`、`ADD_TO_QUEUE` 传歌曲 id。服务从数据库补全歌曲后由 `QueueController` 处理
+- 来源：`QueueSourceRepository.tracks(source)` 返回和列表页一样的 Flow（按当前筛选、排序；列表页也用它，保证一致）。服务一直收集它，列表变了（比较歌曲 id）就重新生成：当前歌曲和它后面连着的手动添加的不动，用 `replaceMediaItems` 替换前后两段，不打断播放
+- 随机：ExoPlayer 的随机顺序换成不打乱的 `ShuffleOrder.UnshuffledShuffleOrder`，"随机"只是个标记；队列本身排成随机顺序。打开随机时当前歌曲之外全部重新打乱；重新生成时已经播过的（当前歌曲前面的）还在列表里的留在前面，后面的保持原顺序，去掉不在列表里的，新的插到随机位置；关闭随机或不随机时按列表顺序，当前歌曲放在它在列表里的位置（不在列表里时放在它后面第一首还在列表里的歌前面）。切换随机发生在播放器回调里，重排要 post 到回调结束后再做，否则媒体会话拿着旧的当前位置收到变短的队列会崩溃
+- 来源名称通过会话 extras（`EXTRA_SOURCE_TITLE`）给界面，队列界面据此显示"来自「…」"
+
+- 持久化内容：`List<track_key>`、当前索引、播放进度、循环模式、随机开关、手动添加的位置、来源和来源名称（队列已经是播放顺序，随机时也直接恢复）
 - 存储：`queue_item` 表加上 DataStore 中的标量；当前歌曲的标题、艺术家和封面缓存路径同时写入启动快照（§9.2），以便启动时迷你播放条立即显示
 - 写入时机：队列变化时（防抖 1s）；`onIsPlayingChanged(false)` 时；播放中每 10s 写一次进度；`onTaskRemoved` / `onDestroy` 时
 - 恢复：把 `track_key` 映射回 track，找不到的跳过；整个队列都失效时为空队列

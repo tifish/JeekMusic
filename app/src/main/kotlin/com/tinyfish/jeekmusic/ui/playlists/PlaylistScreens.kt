@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
+import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.data.db.TrackEntity
@@ -9,7 +11,6 @@ import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
-import com.tinyfish.jeekmusic.data.filter.filterByTags
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import kotlinx.coroutines.flow.combine
 import androidx.compose.foundation.clickable
@@ -166,6 +167,7 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     private val messages: MessageBus,
     tagFilters: TagFilterRepository,
     private val sorter: SongSorter,
+    sources: QueueSourceRepository,
 ) : ViewModel() {
 
     /**
@@ -191,11 +193,7 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     val playlist: StateFlow<PlaylistEntity?> = repository.playlist(playlistId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val entries: StateFlow<List<PlaylistEntry>?> = combine(repository.entries(playlistId), tagFilters.allowedKeys, sorter.sort) { entries, allowed, sort ->
-        val filtered = entries.filterByTags(allowed) { it.track?.trackKey }
-        // 按文件名（默认）时保持手动排的顺序，可以拖动调整（需求 U-8、PL-3）
-        if (sort == SongSort.FILE_NAME) filtered else sorter.sorted(filtered, sort) { it.track }
-    }
+    val entries: StateFlow<List<PlaylistEntry>?> = sources.playlistEntries(playlistId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
@@ -205,7 +203,7 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     fun play(entry: PlaylistEntry) {
         val available = entries.value.orEmpty().mapNotNull { it.track }
         val start = entry.track?.let { t -> available.indexOfFirst { it.id == t.id } }?.coerceAtLeast(0) ?: 0
-        player.play(available, start)
+        player.play(QueueSource.Playlist(playlistId), playlist.value?.name.orEmpty(), available, start)
     }
 
     fun remove(entry: PlaylistEntry) = viewModelScope.launch { repository.removeItem(playlistId, entry.item.id) }

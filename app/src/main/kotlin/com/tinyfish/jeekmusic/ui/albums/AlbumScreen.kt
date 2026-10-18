@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.albums
 
+import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListMoreButton
@@ -57,7 +58,7 @@ data class AlbumInfo(val name: String, val artist: String, val year: Int?, val c
 
 @HiltViewModel(assistedFactory = AlbumViewModel.Factory::class)
 class AlbumViewModel @AssistedInject constructor(
-    @Assisted albumKey: String,
+    @Assisted private val albumKey: String,
     library: LibraryRepository,
     private val player: PlayerConnection,
 ) : ViewModel() {
@@ -85,7 +86,8 @@ class AlbumViewModel @AssistedInject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun play(index: Int) {
-        tracks.value?.let { player.play(it, index) }
+        val title = info.value?.name.orEmpty()
+        tracks.value?.let { player.play(QueueSource.Album(albumKey), title, it, index) }
     }
 }
 

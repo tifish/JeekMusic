@@ -254,7 +254,7 @@
     <string name="online_lyrics_summary">Off by default. When a song has no local lyrics, search the sources you choose below</string>
     <string name="online_lyrics_privacy_title">Turn on online lyrics?</string>
     <string name="online_lyrics_privacy">When searching, the song’s title, artist, album and duration are sent to the lyrics sources you choose (by default NetEase Cloud Music, QQ Music and LRCLIB). Nothing else is sent, and nothing is sent until you search (or turn on automatic fetching).</string>
-    <string name="auto_fetch_lyrics_summary">Songs that weren’t found are not retried for 7 days</string>
+    <string name="auto_fetch_lyrics_summary">Fetched in the background while playing, at startup and after new songs are found. Songs that weren’t found are not retried for 7 days</string>
     <string name="lyrics_save_location">Save online lyrics to</string>
     <string name="lyrics_save_folder">Next to the song, as .lrc (recommended)</string>
     <string name="lyrics_save_app">App only</string>
@@ -301,9 +301,13 @@
     <string name="cover_fetch_wifi">Automatically, on Wi-Fi only</string>
     <string name="cover_fetch_waiting">Waiting for the network… tap to fetch now</string>
     <string name="lyrics_fetch_mode">Fetch lyrics for songs without lyrics</string>
-    <string name="lyrics_fetch_manual">Manually (search on the Now Playing screen)</string>
-    <string name="lyrics_fetch_auto">Automatically while playing, on any network</string>
-    <string name="lyrics_fetch_wifi">Automatically while playing, on Wi-Fi only</string>
+    <string name="lyrics_fetch_manual">Manually (search on the Now Playing screen, or tap “Fetch all missing lyrics”)</string>
+    <string name="lyrics_fetch_auto">Automatically, on any network</string>
+    <string name="lyrics_fetch_wifi">Automatically, on Wi-Fi only</string>
+    <string name="lyrics_fetch_missing">Fetch all missing lyrics</string>
+    <string name="lyrics_fetch_summary">Only accepts results whose title and artist match and whose length is within 5 seconds. Needs a network connection</string>
+    <string name="lyrics_fetch_checking">Checking which songs have no lyrics… tap to stop</string>
+    <string name="lyrics_fetch_done">Last run: lyrics found %1$d / %2$d</string>
     <string name="lyrics_save_folder_summary">Song name.lrc; other players can read it too</string>
     <string name="lyrics_save_hidden">Hidden folder</string>
     <string name="lyrics_save_hidden_summary">.jeekmusic/lyrics/ in the music folder. Music files are not changed</string>
@@ -343,7 +347,7 @@
     <string name="list_download_checking">Checking which songs have no cover…</string>
     <string name="list_download_progress">%1$d / %2$d (found: %3$d)</string>
     <string name="list_download_covers_done">Done. Missing covers: %1$d, found: %2$d</string>
-    <string name="list_download_lyrics_done">Done. Songs checked: %1$d, lyrics downloaded: %2$d (songs that already had lyrics were skipped)</string>
+    <string name="list_download_lyrics_done">Done. Songs missing lyrics: %1$d, found: %2$d (songs that already had lyrics were skipped)</string>
     <string name="list_download_background_hint">Downloading continues in the background after you close this.</string>
     <string name="list_download_background">Run in background</string>
     <string name="list_download_stop">Stop</string>

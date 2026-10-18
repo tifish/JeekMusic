@@ -125,6 +125,10 @@ interface TrackDao {
     @Query("UPDATE track SET size = :size WHERE file_key = :fileKey")
     suspend fun updateSize(fileKey: String, size: Long)
 
+    /** 本 App 把歌词写进了这个文件（需求 LY-11）；修改时间和大小都更新过，之后的扫描不会再读它。 */
+    @Query("UPDATE track SET has_embedded_lyrics = 1 WHERE file_key = :fileKey")
+    suspend fun setHasEmbeddedLyrics(fileKey: String)
+
     @Query("SELECT * FROM track WHERE album_key = :albumKey ORDER BY disc_no, track_no, file_name")
     suspend fun byAlbum(albumKey: String): List<TrackEntity>
 

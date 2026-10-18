@@ -80,11 +80,15 @@ class PlayerViewModel @Inject constructor(
         offsetChanged.value++
     }
 
-    /** 切歌时加载歌词（docs/design.md §8.1）；调整偏移后重新读取偏移。 */
+    /**
+     * 切歌时加载歌词（docs/design.md §8.1）；调整偏移后重新读取偏移。
+     * 没有歌词时由播放服务在后台获取（需求 LY-8），保存后（[LyricsRepository.changes]）重新读取。
+     */
     val lyrics: StateFlow<LyricsState> = combine(
         player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged(),
         offsetChanged,
-    ) { id, _ -> id }
+        lyricsRepository.changes,
+    ) { id, _, _ -> id }
         .transformLatest { id ->
             if (id == null || id < 0) {
                 emit(LyricsState.None)
@@ -95,10 +99,7 @@ class PlayerViewModel @Inject constructor(
                 emit(LyricsState.None)
                 return@transformLatest
             }
-            val lyrics = lyricsRepository.load(track) ?: run {
-                emit(LyricsState.None)
-                lyricsRepository.autoFetch(track)
-            }
+            val lyrics = lyricsRepository.load(track)
             emit(if (lyrics == null) LyricsState.None else LyricsState.Loaded(lyrics, track.trackKey, lyricsRepository.offset(track.trackKey)))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsState.Loading)

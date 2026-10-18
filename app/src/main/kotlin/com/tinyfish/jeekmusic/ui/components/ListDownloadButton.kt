@@ -28,7 +28,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.R
-import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
+import com.tinyfish.jeekmusic.data.online.FetchProgress
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.online.DownloadKind
 import com.tinyfish.jeekmusic.data.online.ListDownloadScheduler
@@ -49,7 +49,7 @@ class ListDownloadViewModel @Inject constructor(
         scheduler.progress(kind).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     }
 
-    fun progress(kind: DownloadKind): StateFlow<CoverFetchProgress?> = progress.getValue(kind)
+    fun progress(kind: DownloadKind): StateFlow<FetchProgress?> = progress.getValue(kind)
 
     suspend fun enabled(kind: DownloadKind): Boolean = settings.current().let {
         if (kind == DownloadKind.COVERS) it.onlineCovers else it.onlineLyrics
@@ -133,8 +133,8 @@ private fun DownloadProgressDialog(kind: DownloadKind, viewModel: ListDownloadVi
                     when {
                         p == null || p.waiting -> stringResource(R.string.list_download_waiting)
                         p.checking -> stringResource(R.string.list_download_checking)
-                        finished && covers -> stringResource(R.string.list_download_covers_done, p.total, p.found)
-                        finished -> stringResource(R.string.list_download_lyrics_done, p.total, p.found)
+                        finished && covers -> stringResource(R.string.list_download_covers_done, p.missing, p.found)
+                        finished -> stringResource(R.string.list_download_lyrics_done, p.missing, p.found)
                         else -> stringResource(R.string.list_download_progress, p.done, p.total, p.found)
                     },
                     modifier = Modifier.testTag("list_download_status"),

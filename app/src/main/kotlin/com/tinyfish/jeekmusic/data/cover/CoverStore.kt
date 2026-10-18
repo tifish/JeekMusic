@@ -3,6 +3,7 @@ package com.tinyfish.jeekmusic.data.cover
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import androidx.core.graphics.scale
 import com.kyant.taglib.Picture
@@ -153,26 +154,42 @@ class CoverStore @Inject constructor(
         return listings.get(key) ?: tree.list(folder, relativePath).also { listings.put(key, it) }
     }
 
-    /** 保存结果：实际的保存位置；写入文件或同名图片时 [files] 是写了几个。 */
-    data class Saved(val mode: CoverSaveMode, val files: Int)
+    /**
+     * 保存结果：实际的保存位置；写入文件或同名图片时 [files] 是写了几个。
+     * [alsoDone] 是 [save] 的 `also` 里一起写入成功的文件（file_key）。
+     */
+    data class Saved(val mode: CoverSaveMode, val files: Int, val alsoDone: Set<String> = emptySet())
 
     /**
      * 把封面保存给同一专辑的 [tracks]（需求 C-3、C-4），第一首决定隐藏目录里的文件名。图片统一转成 JPEG。
      * - 隐藏目录：整张专辑存一张
      * - 写入文件 / 同名图片：每个文件都写；有写不进去的（比如没有"所有文件访问权限"）就再在隐藏目录存一张
      * 保存后立即用新封面替换缓存，并通知界面重新加载同一专辑的所有封面。
+     *
+     * [also]：写入文件时，这些文件（按 file_key）在同一次打开里再做的修改，用来把歌词和封面一起写入（docs/design.md §7.4）。
      */
-    suspend fun save(tracks: List<TrackEntity>, image: ByteArray, mode: CoverSaveMode): Saved? = withContext(Dispatchers.IO) {
+    suspend fun save(
+        tracks: List<TrackEntity>,
+        image: ByteArray,
+        mode: CoverSaveMode,
+        also: Map<String, (ParcelFileDescriptor) -> Boolean> = emptyMap(),
+    ): Saved? = withContext(Dispatchers.IO) {
         val first = tracks.firstOrNull() ?: return@withContext null
         val jpeg = toJpeg(image) ?: return@withContext null
         val folders = HashMap<Long, LibraryFolderEntity?>()
         suspend fun folderOf(t: TrackEntity) = folders.getOrPut(t.folderId) { folderDao.byId(t.folderId) }
         var files = 0
         var failed = false
+        val alsoDone = HashSet<String>()
         if (mode != CoverSaveMode.HIDDEN_FOLDER) {
             for (t in tracks.distinctBy { it.fileKey }) {
                 val folder = folderOf(t)
-                val ok = folder != null && if (mode == CoverSaveMode.EMBED) embed(folder, t, jpeg) else writeSidecar(folder, t, jpeg)
+                val extra = also[t.fileKey]
+                val ok = folder != null && if (mode == CoverSaveMode.EMBED) {
+                    embed(folder, t, jpeg, extra?.let { op -> { pfd: ParcelFileDescriptor -> op(pfd).also { done -> if (done) alsoDone += t.fileKey } } })
+                } else {
+                    writeSidecar(folder, t, jpeg)
+                }
                 // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示；
                 // 写入文件时同名图片也排在前面，同样删掉（需求 C-7）
                 if (ok) {
@@ -186,7 +203,7 @@ class CoverStore @Inject constructor(
         }
         val hidden = (mode == CoverSaveMode.HIDDEN_FOLDER || failed) && folderOf(first)?.let { writeHidden(it, first, jpeg) } == true
         val saved = when {
-            files > 0 -> Saved(mode, files)
+            files > 0 -> Saved(mode, files, alsoDone)
             hidden -> Saved(CoverSaveMode.HIDDEN_FOLDER, 0)
             else -> null
         }
@@ -195,10 +212,18 @@ class CoverStore @Inject constructor(
     }
 
     /** 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），由调用方改存到隐藏目录。 */
-    private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean = editor.edit(folder, track) { pfd ->
+    private suspend fun embed(
+        folder: LibraryFolderEntity,
+        track: TrackEntity,
+        jpeg: ByteArray,
+        extra: ((ParcelFileDescriptor) -> Boolean)? = null,
+    ): Boolean = editor.edit(folder, track) { pfd ->
         val others = TagLib.getPictures(pfd.dup().detachFd()).filter { it.pictureType != FRONT_COVER }
         val pictures = listOf(Picture(jpeg, "", FRONT_COVER, "image/jpeg")) + others
-        TagLib.savePictures(pfd.dup().detachFd(), pictures.toTypedArray())
+        val ok = TagLib.savePictures(pfd.dup().detachFd(), pictures.toTypedArray())
+        // 歌词写不进去不影响封面：调用方会改用单独保存
+        if (ok) extra?.let { runCatching { it(pfd) } }
+        ok
     }
 
     private fun writeSidecar(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {

@@ -17,7 +17,7 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import com.tinyfish.jeekmusic.data.cover.CoverAutoFetcher
+import com.tinyfish.jeekmusic.data.online.AutoFetcher
 import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
@@ -42,7 +42,7 @@ class PlaybackService : MediaLibraryService() {
     @Inject lateinit var persistence: QueuePersistence
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var trackDao: TrackDao
-    @Inject lateinit var coverFetcher: CoverAutoFetcher
+    @Inject lateinit var autoFetcher: AutoFetcher
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaLibrarySession? = null
@@ -53,7 +53,7 @@ class PlaybackService : MediaLibraryService() {
     private var queueTouched = false
     private var saveQueueJob: Job? = null
     private var progressJob: Job? = null
-    private var coverJob: Job? = null
+    private var fetchJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -73,7 +73,7 @@ class PlaybackService : MediaLibraryService() {
         scope.launch { settings.settings.collect { offload.mode = it.lowPowerMode } }
 
         player.addListener(PersistenceListener(player))
-        player.addListener(CoverListener(player))
+        player.addListener(FetchListener(player))
         // 当前歌曲的封面换了（播放时获取、批量获取、手动选择都会）：通知栏、锁屏按地址缓存图片，换个带版本号的地址才会重新加载
         scope.launch { ArtworkVersions.versions.collect { refreshArtwork(player) } }
         scope.launch { restoreQueue(player) }
@@ -126,18 +126,19 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
-     * 换歌时：先确保封面地址是最新的；自动获取封面打开、而这首歌没有封面时，为它的专辑查一次（需求 C-3）。
-     * 稍等一下再查，快速连续切歌时只查最后停下的那首。
+     * 换歌时：先确保封面地址是最新的；自动获取打开时，为这首歌获取缺少的封面和歌词（需求 C-3、LY-8，[AutoFetcher]）。
+     * 稍等一下再查，快速连续切歌时只查最后停下的那首；已经开始的获取不因切歌而中断（另起一个协程）。
      */
-    private inner class CoverListener(private val player: Player) : Player.Listener {
+    private inner class FetchListener(private val player: Player) : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             refreshArtwork(player)
             val trackId = mediaItem?.mediaId?.let(MediaItemMapper::trackId)
-            coverJob?.cancel()
+            fetchJob?.cancel()
             if (trackId == null) return
-            coverJob = scope.launch {
-                delay(COVER_FETCH_DELAY_MS)
-                trackDao.byId(trackId)?.let { coverFetcher.fetchFor(it) }
+            fetchJob = scope.launch {
+                delay(FETCH_DELAY_MS)
+                val track = trackDao.byId(trackId) ?: return@launch
+                scope.launch { autoFetcher.fetchFor(track) }
             }
         }
     }
@@ -303,5 +304,5 @@ object PlaybackCommands {
     const val EXTRA_SLEEP_FINISH_SONG = "sleep_finish_song"
 }
 
-/** 换歌后等这么久再获取封面：快速连续切歌时只查最后停下的那首。 */
-private const val COVER_FETCH_DELAY_MS = 2_000L
+/** 换歌后等这么久再获取封面和歌词：快速连续切歌时只查最后停下的那首。 */
+private const val FETCH_DELAY_MS = 2_000L

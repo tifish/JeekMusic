@@ -17,7 +17,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
-import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
+import com.tinyfish.jeekmusic.data.online.OnlineFetchScheduler
 import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
 import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.scanner.LibraryObserver
@@ -56,7 +56,7 @@ class MainViewModel @Inject constructor(
     private val player: PlayerConnection,
     private val backups: BackupManager,
     private val analysis: AnalysisScheduler,
-    private val coverFetch: CoverFetchScheduler,
+    private val onlineFetch: OnlineFetchScheduler,
     private val embedDownloaded: EmbedDownloadedScheduler,
     private val tagFilters: TagFilterRepository,
     private val tags: TagRepository,
@@ -196,8 +196,8 @@ class MainViewModel @Inject constructor(
             backups.startAutoBackup()
             analysis.schedule()
             tags.recomputeIfRulesChanged()
-            // 自动获取封面（需求 C-3）：补上上次没联网或网络出错时漏掉的
-            coverFetch.scheduleAuto()
+            // 自动获取封面和歌词（需求 C-3、LY-8）：补上上次没联网或网络出错时漏掉的
+            onlineFetch.scheduleAuto()
             // 保存位置是写入文件时，把以前下载成文件的封面、歌词写进去（需求 C-7、LY-14）；做完一次后不再做
             embedDownloaded.schedule()
             // 检查更新放在最后，不和启动抢资源；每天最多一次（需求 U-6）

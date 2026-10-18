@@ -62,7 +62,7 @@ com.tinyfish.jeekmusic
 │   ├── backup/                // BackupManager（导出 / 恢复 .jeekmusic/backup.json）
 │   ├── tabs/                  // TabRepository（标签栏）
 │   ├── lyrics/                // LrcParser, LyricsRepository, LyricsWriter, LrcLibClient, CharsetDetector
-│   ├── cover/                 // CoverStore（封面查找、缓存、保存）, CoverClient（iTunes / MusicBrainz）, CoverMatcher, CoverFetchWorker
+│   ├── cover/                 // CoverStore（封面查找、缓存、保存）, CoverClient（iTunes / MusicBrainz）, CoverMatcher, CoverMissLog
 │   ├── playlist/
 │   └── settings/              // SettingsRepository (DataStore)
 ├── analysis                   // 智能标签
@@ -739,7 +739,11 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **缓存**：缩放到 144px（列表）和 720px（通知、播放页）的 JPEG，按专辑键（没有专辑时按歌曲键）的 SHA-1 存在 `cacheDir/artwork2`（查找改为看整张专辑后换了目录，旧的 `artwork` 启动时删除），"没有封面"也记一个 `.none`。目录列表放在内存 LRU 里：所有歌曲在同一个目录时，每次都通过 SAF 列一遍上千个文件很慢
 - **换封面后刷新**：保存时直接用新图片重写这张专辑的缓存，再通过 `ArtworkVersions` 给同专辑所有歌曲的封面 URI 加上 `?v=n`。`Artwork` 组件用 `derivedStateOf` 只读自己那首歌的版本号，所以只有换了封面的条目会重新加载；Provider 忽略查询参数
 - **通知栏和锁屏**：Media3 按封面地址缓存图片，地址不变就不会重新加载。`PlaybackService` 监听 `ArtworkVersions`，并在每次换歌时检查：当前歌曲的封面地址和带版本号的地址不同时，用 `replaceMediaItem` 只替换元数据里的 `artworkUri`（Media3 1.11 对地址和裁剪都相同的条目会就地更新，不打断播放）
-- **播放时获取**（`CoverAutoFetcher`，需求 C-3）：换歌 2 秒后（快速连续切歌时只查最后停下的那首），如果打开了在线封面、获取方式是自动（仅 Wi-Fi 时要求当前网络不计流量）、这张专辑没有封面、30 天内没查过"没找到"，就为它的专辑查一次并按设置保存。和批量获取共用 `CoverMissLog`。以前批量获取的循环变量 `targets` 遮住了外层的同名变量，"30 天内没找到的跳过"从来没生效，每次自动获取都把没找到的重查一遍，正在播放的歌要排很久
+- **封面和歌词的共同流程**（`data/online/OnlineFetcher`，需求 C-3、LY-8）：播放时获取、批量获取、列表下载都用它，按"一组歌"处理——要封面时一组是一张专辑，只要歌词时一组是一首歌
+  - `plan(group, kinds, explicit, quick)` 不联网，找出还需要封面的文件（规则见下面的"批量获取"；`quick` 时专辑已有封面就不再逐个读文件看有没有自己的，播放时用）和还没有歌词的歌（`LyricsRepository.hasLyrics`：曲库的 `has_embedded_lyrics`、隐藏目录和同名 `.lrc` 的目录列表、`lyrics_cache`；都没有时读一次文件确认内嵌歌词，读到就补记 `has_embedded_lyrics`——以前写入的歌词没有更新这一列。先看 7 天的负缓存，只查数据库）
+  - `execute(plan)`：封面先从同专辑提取，没有才在线查；歌词逐首在线查。然后保存：封面保存方式是写入文件、歌词也要写入同一个文件（`embedsInFile`：保存位置是写入文件、不是 CUE、有权限）时，把歌词的写入（`LyricsRepository.embedOperation`）作为 `CoverStore.save` 的 `also` 传进去，在写封面的同一次打开里接着写歌词，只改一次文件、恢复一次修改时间；成功的调用 `onEmbedded`（记 `has_embedded_lyrics`、删掉原来下载的、通知界面），其余的单独 `LyricsRepository.save`
+  - 取消（切歌、任务被停止）时直接抛出，不记"没找到"
+- **播放时获取**（`AutoFetcher`，由 `PlaybackService` 调用）：换歌 2 秒后（快速连续切歌时只查最后停下的那首），按封面、歌词各自的开关和获取方式（仅 Wi-Fi 时要求当前网络不计流量）决定要哪些，`quick` 地 `plan` 这一首歌，有缺的就 `execute`。等待在切歌时取消，已经开始的获取另起协程，不因切歌中断。不管播放页开没开都会获取；歌词保存后 `LyricsRepository.changes` 加一，播放页据此重新读取（没有手动切换过时自动切到歌词）。和批量获取共用 `CoverMissLog`
 
 **在线封面（需求 C-3、C-4）**：
 
@@ -749,8 +753,12 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
   - 搜索艺术家只用第一位：多位艺术家拼在一起时两个来源往往都搜不到
 - **匹配**（`CoverMatcher`）：NFKC、小写、繁转简（ICU `Traditional-Simplified`），去掉标点空白和括号里的附注、` - Remastered` 之类的后缀后比较。歌名必须完全相同（"Baby" 和 "Baby Shark" 不算）；艺术家拆分后任意一位与结果互相包含即可。手动搜索时对得上的排前面，括号附注也相同的（不是 Remix / Live）再往前；批量获取只采用对得上的，专辑名也对得上的优先
 - **手动搜索**：各来源分别请求、各张缩略图分别下载，谁先返回先显示谁，不用等最慢的来源。跨来源排序：对得上的在前（括号附注也相同的再往前），再按来源顺序
-- **获取方式**（`CoverFetchScheduler`）：手动时只在用户点"获取所有缺失的封面"时以 `CONNECTED` 约束、`REPLACE` 提交（顶掉在等 Wi-Fi 的自动任务）；自动 / 仅 Wi-Fi 时，App 启动的推迟任务里和扫描到新增或变化的歌曲后调用 `scheduleAuto()`，分别以 `CONNECTED` / `UNMETERED` 约束、`KEEP` 提交。重复提交很便宜：有封面的（读缓存）和 30 天内找不到的都直接跳过。改获取方式时先取消还在排队的任务再按新方式提交。注意 `UNMETERED` 要等系统验证过 Wi-Fi 能上网才会运行
-- **批量获取**（`CoverFetchWorker`，WorkManager 唯一任务 `cover-fetch`）：按专辑键分组，先找出每张专辑里还需要封面的文件——隐藏目录模式下整张专辑没有封面才需要；写入文件 / 同名图片模式下是自己没有内嵌封面 / 同名图片的文件（选了写入文件但没有"所有文件访问权限"时按隐藏目录判断，否则每次都会重复改存）。有需要的专辑先用 `albumImage` 找同专辑已有的封面，有就直接提取保存，不联网；都没有才在线查询一次，保存给整张专辑。通过 `setProgress` 报告进度，设置页显示"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
+- **获取方式**（`OnlineFetchScheduler`，封面和歌词共用）：两个唯一任务，`online-fetch`（手动获取和"自动（任何网络）"，`CONNECTED`）和 `online-fetch-wifi`（"仅 Wi-Fi 下自动"，`UNMETERED`）。任务的标签 `kind:COVERS` / `kind:LYRICS` 记着它要获取什么，`forced:*` 记着哪些是用户手动要求的（不看获取方式和网络）
+  - 手动：点"获取所有缺失的封面 / 歌词"时，把正在进行或排队的其他内容合并进来，以 `REPLACE`、expedited 提交到 `online-fetch`
+  - 自动：App 启动的推迟任务里和扫描到新增或变化的歌曲后调用 `scheduleAuto()`，按获取方式把内容分到两个任务；已有任务包含了要做的内容时不动，否则合并后 `REPLACE`。封面和歌词的获取方式相同时它们在同一个任务里，同一个文件的封面和歌词一起写入。重复提交很便宜：已有的和最近没找到的都直接跳过
+  - 停止某一种时，同一任务里的另一种以剩下的内容重新提交。改获取方式时先取消还在排队的任务再按新方式提交。注意 `UNMETERED` 要等系统验证过 Wi-Fi 能上网才会运行
+  - 任务开始时再按当前设置和网络筛一遍内容（排队后可能改了设置；合并进手动任务的"仅 Wi-Fi"内容在流量网络下跳过）
+- **批量获取**（`OnlineFetchWorker`）：歌曲按目录排序（目录列表的缓存才能命中）后分组——要封面时按专辑键，只要歌词时每首一组，先对每组 `plan`。还需要封面的文件——隐藏目录模式下整张专辑没有封面才需要；写入文件 / 同名图片模式下是自己没有内嵌封面 / 同名图片的文件（选了写入文件但没有"所有文件访问权限"时按隐藏目录判断，否则每次都会重复改存）。有需要的专辑先用 `albumImage` 找同专辑已有的封面，有就直接提取保存，不联网；都没有才在线查询一次，保存给整张专辑。歌词逐首查。通过 `setProgress` 报告进度（检查了几组，封面、歌词各自缺几个、找到几个），设置页的两个按钮各显示自己的"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
 - **保存**（`CoverStore.save(tracks, …)`）：保存给同一专辑的一组歌曲，第一首决定隐藏目录里的文件名。手动选的封面也保存给整张专辑。图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
   - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
   - 写入文件：经 `AudioFileEditor`（见下）以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片
@@ -833,8 +841,9 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **自动获取**（`OnlineLyricsClient.best`）：按顺序试启用的来源。LRCLIB 用精确查询；网易云、QQ 用"第一位艺术家 + 歌名"搜索，取歌名、艺术家都对得上（`CoverMatcher`，繁简统一）且时长相差不到 5 秒的前两首，取到歌词就用。某个来源出错时试下一个；全部出错时抛出异常，不记"未找到"
 - **手动搜索**（`LyricsSearchDialog`）：每个来源一个协程，结果到了就合并进列表；网易云、QQ 取前 6 首的歌词一起返回，没有歌词的不列出。排序：歌名和艺术家对得上的在前，再按时长差、来源顺序。每行标明来源
 - **检测连接**（`SourceCheck`，需求 OL-3）：每个来源并行发一个最轻的请求（MusicBrainz 另外检测 `archive.org`），显示耗时或"无法连接"
-- 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内不再重复请求
-- **列表批量下载**（需求 LY-13、C-6，`ListDownloadScheduler`、`ListDownloadButton`）：列表标题栏的下载按钮把列表里歌曲的 id 写进 `filesDir/download_targets_<kind>.txt`（id 可能上千个，超出 WorkManager 输入数据 10KB 的限制），以唯一任务 `list-download-covers` / `list-download-lyrics`（`REPLACE`，要求联网，expedited）启动。封面复用 `CoverFetchWorker`，有目标文件时只处理这些歌、不跳过 30 天内没找到的；歌词用 `LyricsFetchWorker` 逐首调用 `LyricsRepository.fetchMissing`（已有歌词的跳过，不看 7 天的负缓存）。进度格式相同，对话框里显示，可以停止或转到后台
+- 获取结果按 §8.5 保存；"未找到"写入 `lyrics_cache` 作为负缓存，7 天内自动获取不再重复请求
+- **自动获取的时机**和封面相同（§7.4 的 `OnlineFetcher`、`AutoFetcher`、`OnlineFetchScheduler`）：播放时由播放服务获取（以前放在播放页的 ViewModel 里，只有打开播放页才获取），App 启动和扫描到新歌后批量获取整个曲库；设置里有"获取所有缺失的歌词"
+- **列表批量下载**（需求 LY-13、C-6，`ListDownloadScheduler`、`ListDownloadButton`）：列表标题栏的下载按钮把列表里歌曲的 id 写进 `filesDir/download_targets_<kind>.txt`（id 可能上千个，超出 WorkManager 输入数据 10KB 的限制），以唯一任务 `list-download-covers` / `list-download-lyrics`（`REPLACE`，要求联网，expedited）启动 `OnlineFetchWorker`，只获取这一种内容、只处理这些歌，不跳过最近没找到的（封面 30 天、歌词 7 天）。进度对话框里显示，可以停止或转到后台
 - 网络客户端（`OnlineLyricsClient`）通过 `dagger.Lazy` 注入，只在开关打开后第一次使用时才创建，不影响启动
 
 ### 8.5 歌词写回音乐目录（LyricsWriter）

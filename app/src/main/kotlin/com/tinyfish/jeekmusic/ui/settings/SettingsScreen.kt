@@ -80,8 +80,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.tinyfish.jeekmusic.data.settings.FetchMode
-import com.tinyfish.jeekmusic.data.cover.CoverFetchProgress
-import com.tinyfish.jeekmusic.data.cover.CoverFetchScheduler
+import com.tinyfish.jeekmusic.data.online.DownloadKind
+import com.tinyfish.jeekmusic.data.online.FetchProgress
+import com.tinyfish.jeekmusic.data.online.OnlineFetchScheduler
 import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
 import androidx.compose.runtime.LaunchedEffect
 import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
@@ -111,7 +112,7 @@ class SettingsViewModel @Inject constructor(
     private val analysis: AnalysisScheduler,
     private val lyrics: LyricsRepository,
     private val updater: AppUpdater,
-    private val coverFetch: CoverFetchScheduler,
+    private val onlineFetch: OnlineFetchScheduler,
     private val sourceCheck: SourceCheck,
     private val embedDownloaded: EmbedDownloadedScheduler,
 ) : ViewModel() {
@@ -203,19 +204,25 @@ class SettingsViewModel @Inject constructor(
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 
-    fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch { settingsRepository.setOnlineLyrics(enabled) }
-    fun setLyricsFetchMode(mode: FetchMode) = viewModelScope.launch { settingsRepository.setLyricsFetchMode(mode) }
+    fun setOnlineLyrics(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setOnlineLyrics(enabled)
+        if (enabled) onlineFetch.scheduleAuto() else onlineFetch.cancel(DownloadKind.LYRICS)
+    }
+    fun setLyricsFetchMode(mode: FetchMode) = viewModelScope.launch {
+        settingsRepository.setLyricsFetchMode(mode)
+        onlineFetch.onModeChanged()
+    }
     fun setLyricsSaveLocation(location: LyricsSaveLocation) = viewModelScope.launch {
         settingsRepository.setLyricsSaveLocation(location)
         embedDownloaded.schedule()
     }
     fun setOnlineCovers(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setOnlineCovers(enabled)
-        if (enabled) coverFetch.scheduleAuto() else coverFetch.cancel()
+        if (enabled) onlineFetch.scheduleAuto() else onlineFetch.cancel(DownloadKind.COVERS)
     }
     fun setCoverFetchMode(mode: FetchMode) = viewModelScope.launch {
         settingsRepository.setCoverFetchMode(mode)
-        coverFetch.onModeChanged()
+        onlineFetch.onModeChanged()
     }
     fun setCoverSaveMode(mode: CoverSaveMode) = viewModelScope.launch {
         settingsRepository.setCoverSaveMode(mode)
@@ -225,11 +232,16 @@ class SettingsViewModel @Inject constructor(
     /** 选择写入文件后去授予了"所有文件访问权限"：把已下载的写进去（需求 C-7、LY-14）。 */
     fun onAllFilesAccessGranted() = viewModelScope.launch { embedDownloaded.schedule() }
 
-    val coverProgress: StateFlow<CoverFetchProgress?> = coverFetch.progress
+    val coverProgress: StateFlow<FetchProgress?> = onlineFetch.progress(DownloadKind.COVERS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lyricsProgress: StateFlow<FetchProgress?> = onlineFetch.progress(DownloadKind.LYRICS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** 正在获取时再点一下是停止；在等网络时点一下是立即用当前网络获取。 */
-    fun toggleCoverFetch() = if (coverProgress.value?.running == true) coverFetch.cancel() else coverFetch.start()
+    fun toggleFetch(kind: DownloadKind) = viewModelScope.launch {
+        val progress = if (kind == DownloadKind.COVERS) coverProgress.value else lyricsProgress.value
+        if (progress?.running == true) onlineFetch.cancel(kind) else onlineFetch.start(kind)
+    }
 
     fun clearLyricsCache() = viewModelScope.launch {
         lyrics.clearCache()
@@ -247,6 +259,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
     val pendingAnalysis by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
     val coverProgress by viewModel.coverProgress.collectAsStateWithLifecycle()
+    val lyricsProgress by viewModel.lyricsProgress.collectAsStateWithLifecycle()
     val sourceCheckState by viewModel.sourceCheckState.collectAsStateWithLifecycle()
     val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.restoreFrom(uri)
@@ -377,6 +390,21 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("check_lyrics_sources"),
                     )
                 }
+                item {
+                    val progress = lyricsProgress
+                    SettingItem(
+                        title = stringResource(R.string.lyrics_fetch_missing),
+                        summary = when {
+                            progress == null -> stringResource(R.string.lyrics_fetch_summary)
+                            progress.waiting -> stringResource(R.string.cover_fetch_waiting)
+                            progress.checking -> stringResource(R.string.lyrics_fetch_checking)
+                            progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
+                            else -> stringResource(R.string.lyrics_fetch_done, progress.found, progress.missing)
+                        },
+                        onClick = { viewModel.toggleFetch(DownloadKind.LYRICS) },
+                        modifier = Modifier.testTag("fetch_lyrics"),
+                    )
+                }
                 item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
                 items(FetchMode.entries) { mode ->
                     RadioRow(
@@ -451,9 +479,9 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                             progress.waiting -> stringResource(R.string.cover_fetch_waiting)
                             progress.checking -> stringResource(R.string.cover_fetch_checking)
                             progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
-                            else -> stringResource(R.string.cover_fetch_done, progress.found, progress.total)
+                            else -> stringResource(R.string.cover_fetch_done, progress.found, progress.missing)
                         },
-                        onClick = viewModel::toggleCoverFetch,
+                        onClick = { viewModel.toggleFetch(DownloadKind.COVERS) },
                         modifier = Modifier.testTag("fetch_covers"),
                     )
                 }

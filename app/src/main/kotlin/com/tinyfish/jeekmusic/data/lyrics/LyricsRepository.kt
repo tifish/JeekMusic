@@ -1,8 +1,7 @@
 package com.tinyfish.jeekmusic.data.lyrics
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import com.tinyfish.jeekmusic.data.db.LyricsCacheEntity
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
@@ -10,7 +9,6 @@ import com.tinyfish.jeekmusic.data.library.appDirectory
 import com.tinyfish.jeekmusic.data.library.AudioFileEditor
 import com.tinyfish.jeekmusic.data.library.create
 import com.tinyfish.jeekmusic.data.library.writeFile
-import com.tinyfish.jeekmusic.data.settings.FetchMode
 import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.library.delete
 import com.tinyfish.jeekmusic.data.library.listById
@@ -21,6 +19,7 @@ import com.kyant.taglib.TagLib
 import com.tinyfish.jeekmusic.data.db.FolderDao
 import com.tinyfish.jeekmusic.data.db.LyricsDao
 import com.tinyfish.jeekmusic.data.db.LyricsOffsetEntity
+import com.tinyfish.jeekmusic.data.db.TrackDao
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.library.DocumentTree
 import com.tinyfish.jeekmusic.data.scanner.CharsetDetector
@@ -29,6 +28,9 @@ import com.tinyfish.jeekmusic.data.scanner.MediaStoreSource
 import com.tinyfish.jeekmusic.data.scanner.TagReader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,7 +51,15 @@ class LyricsRepository @Inject constructor(
     private val settings: SettingsRepository,
     private val online: dagger.Lazy<OnlineLyricsClient>,
     private val editor: AudioFileEditor,
+    private val trackDao: TrackDao,
 ) {
+    private val _changes = MutableStateFlow(0)
+
+    /** 每保存一次歌词加一：后台获取的歌词保存后，播放页据此重新读取（需求 LY-8）。 */
+    val changes: StateFlow<Int> = _changes
+
+    private fun changed() = _changes.update { it + 1 }
+
     /** 按目录缓存子文件列表；写入 .lrc 后要使对应目录失效。 */
     private val directoryCache = LruCache<String, List<DocumentTree.Child>>(32)
 
@@ -129,7 +139,66 @@ class LyricsRepository @Inject constructor(
             deleteDownloaded(folder, t)
             count++
         }
+        if (count > 0) changed()
         count
+    }
+
+    /**
+     * 有没有歌词：先看曲库里记下的、目录列表和缓存；都没有时再读一次文件确认内嵌歌词——
+     * 以前本 App 写入的歌词没有更新 has_embedded_lyrics，扫描又因为修改时间、大小没变而跳过这些文件。
+     * 读到了就记下来，下次不用再读。
+     */
+    suspend fun hasLyrics(track: TrackEntity): Boolean = withContext(Dispatchers.IO) {
+        if (track.cueTrackNo == null && track.hasEmbeddedLyrics) return@withContext true
+        val folder = folderDao.byId(track.folderId)
+        if (folder != null && (findLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), track) != null || findLrc(folder, track.relativePath, track) != null)) {
+            return@withContext true
+        }
+        if (lyricsDao.cached(track.trackKey)?.content != null) return@withContext true
+        (track.cueTrackNo == null && embedded(track) != null).also { if (it) trackDao.setHasEmbeddedLyrics(track.fileKey) }
+    }
+
+    /** 7 天内在线查过而没有找到（需求 LY-8）。 */
+    suspend fun recentlyNotFound(track: TrackEntity): Boolean {
+        val cached = lyricsDao.cached(track.trackKey) ?: return false
+        return cached.content == null && System.currentTimeMillis() - cached.fetchedAt < NEGATIVE_CACHE_MS
+    }
+
+    /**
+     * 按设置的来源精确查询一首歌的歌词（只采用歌名、艺术家对得上，时长相差不到 5 秒的）。
+     * 没找到时记下来（7 天内自动获取不再查）并返回 null；网络出错时抛出异常，不算"没找到"。
+     */
+    suspend fun fetchOnline(track: TrackEntity): String? = withContext(Dispatchers.IO) {
+        val result = online.get().best(track.titleTag ?: track.title, track.artistDisplay, track.album, track.durationMs / 1000)
+        val text = result?.text?.takeIf { it.isNotBlank() }
+        if (text == null) lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, null, false, System.currentTimeMillis()))
+        text
+    }
+
+    /** 按现在的设置，这首歌的歌词会不会写进音乐文件（CUE 整轨的不会）。 */
+    suspend fun embedsInFile(track: TrackEntity): Boolean =
+        track.cueTrackNo == null && editor.canEdit() && settings.current().lyricsSaveLocation == LyricsSaveLocation.EMBED
+
+    /**
+     * 把歌词写进已经打开的音乐文件，供和封面一起写入时用（docs/design.md §7.4）：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。
+     * 成功后要调用 [onEmbedded]。
+     */
+    fun embedOperation(text: String): (ParcelFileDescriptor) -> Boolean = { pfd ->
+        val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap
+        if (map == null) {
+            false
+        } else {
+            TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
+            map["LYRICS"] = arrayOf(text.replace("\r\n", "\n"))
+            TagLib.savePropertyMap(pfd.dup().detachFd(), map)
+        }
+    }
+
+    /** 歌词经 [embedOperation] 写入文件后：记下文件里有歌词，删掉原来下载的，通知界面。 */
+    suspend fun onEmbedded(track: TrackEntity) = withContext(Dispatchers.IO) {
+        trackDao.setHasEmbeddedLyrics(track.fileKey)
+        folderDao.byId(track.folderId)?.let { deleteDownloaded(it, track) }
+        changed()
     }
 
     private fun embedded(track: TrackEntity): Lyrics? = runCatching {
@@ -144,54 +213,6 @@ class LyricsRepository @Inject constructor(
         ?.takeIf { it.isNotBlank() }
         ?.let { LrcParser.parse(it) }
         ?.takeIf { it.lines.isNotEmpty() }
-
-    /**
-     * 自动获取（需求 LY-8）：播放到没有歌词的歌时，如果打开了在线歌词和自动获取（仅 Wi-Fi 时要求当前是不计流量的网络）、
-     * 7 天内没有查过"未找到"，就精确查询 LRCLIB，找到就保存。
-     */
-    suspend fun autoFetch(track: TrackEntity): Lyrics? = withContext(Dispatchers.IO) {
-        val s = settings.current()
-        val allowed = when (s.lyricsFetchMode) {
-            FetchMode.MANUAL -> false
-            FetchMode.AUTO -> true
-            FetchMode.WIFI -> isUnmetered()
-        }
-        if (!s.onlineLyrics || !allowed) return@withContext null
-        val cached = lyricsDao.cached(track.trackKey)
-        if (cached != null && cached.content == null && System.currentTimeMillis() - cached.fetchedAt < NEGATIVE_CACHE_MS) {
-            return@withContext null
-        }
-        val artist = track.artistDisplay.ifEmpty { return@withContext null }
-        val result = runCatching { online.get().best(track.titleTag ?: track.title, artist, track.album, track.durationMs / 1000) }
-            .getOrElse { return@withContext null }
-        if (result?.text == null) {
-            lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, null, false, System.currentTimeMillis()))
-            return@withContext null
-        }
-        save(track, result.text!!)
-        LrcParser.parse(result.text!!)
-    }
-
-    /** 批量下载一首歌的结果。 */
-    enum class FetchOutcome { ALREADY_HAS, FOUND, NOT_FOUND, FAILED }
-
-    /**
-     * 批量下载（需求 LY-13）：已经有歌词的跳过；没有的按设置的来源精确查询，找到就保存。
-     * 是用户对某个列表明确要求的，所以不看"7 天内没找到"的记录；没有艺术家的歌只凭歌名容易配错，不查。
-     */
-    suspend fun fetchMissing(track: TrackEntity): FetchOutcome = withContext(Dispatchers.IO) {
-        if (load(track) != null) return@withContext FetchOutcome.ALREADY_HAS
-        val artist = track.artistDisplay.ifEmpty { return@withContext FetchOutcome.NOT_FOUND }
-        val result = runCatching { online.get().best(track.titleTag ?: track.title, artist, track.album, track.durationMs / 1000) }
-            .getOrElse { return@withContext FetchOutcome.FAILED }
-        val text = result?.text
-        if (text == null) {
-            lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, null, false, System.currentTimeMillis()))
-            return@withContext FetchOutcome.NOT_FOUND
-        }
-        save(track, text)
-        FetchOutcome.FOUND
-    }
 
     suspend fun lyricsSources(): List<OnlineSource> = online.get().enabledSources()
 
@@ -216,6 +237,7 @@ class LyricsRepository @Inject constructor(
                 LyricsSaveLocation.HIDDEN_FOLDER, LyricsSaveLocation.APP_CACHE -> null
             } ?: LyricsSaveLocation.HIDDEN_FOLDER.takeIf { mode != LyricsSaveLocation.APP_CACHE && writeHidden(folder, track, normalized) }
         }
+        changed()
         if (saved != null) return@withContext saved
         lyricsDao.cache(LyricsCacheEntity(track.trackKey, SOURCE, normalized, LrcParser.parse(normalized).synced, System.currentTimeMillis()))
         LyricsSaveLocation.APP_CACHE
@@ -231,12 +253,8 @@ class LyricsRepository @Inject constructor(
      * 写进歌词标签：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。
      * 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），改存到隐藏目录。
      */
-    private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean = editor.edit(folder, track) { pfd ->
-        val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap ?: return@edit false
-        TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
-        map["LYRICS"] = arrayOf(text)
-        TagLib.savePropertyMap(pfd.dup().detachFd(), map)
-    }
+    private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean =
+        editor.edit(folder, track, embedOperation(text)).also { if (it) trackDao.setHasEmbeddedLyrics(track.fileKey) }
 
     private fun writeLrc(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)
@@ -258,12 +276,6 @@ class LyricsRepository @Inject constructor(
     }
 
     suspend fun clearCache() = lyricsDao.clearCache()
-
-    private fun isUnmetered(): Boolean {
-        val cm = context.getSystemService(ConnectivityManager::class.java)
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-    }
 
     fun invalidateDirectory(folderId: Long, relativePath: String) {
         directoryCache.remove("$folderId:$relativePath")

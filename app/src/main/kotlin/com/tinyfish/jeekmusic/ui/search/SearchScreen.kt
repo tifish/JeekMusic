@@ -90,7 +90,7 @@ class SearchViewModel @Inject constructor(
                 null
             } else {
                 val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
-                // 歌曲结果也按"运动 / 安静"筛选（需求 M-6）
+                // 歌曲结果也按智能标签筛选（需求 M-6）
                 val allowed = tagFilters.allowedKeys.first()
                 val tracks = dao.tracks(pattern).filterByTags(allowed) { it.trackKey }
                 // 按全局排序（需求 U-8，默认按文件名，中文按拼音）。先排序再截取，否则截到的不是排在最前面的那些

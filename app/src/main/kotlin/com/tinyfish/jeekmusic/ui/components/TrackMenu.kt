@@ -149,7 +149,7 @@ class TrackMenuViewModel @Inject constructor(
 
     suspend fun tagInfo(track: TrackEntity): TagInfo = tags.info(track.trackKey)
 
-    /** 手动修正（需求 M-4）：[tag] 为 null 表示"都不是"。 */
+    /** 手动修正（需求 M-4）。每个维度总有一个标签，旧版本的"都不是"读成非运动 / 非古典。 */
     suspend fun setTag(track: TrackEntity, dimension: TagDimension, tag: Tag?) = tags.setManual(track.trackKey, dimension, tag)
 
     /** 恢复自动识别。 */
@@ -399,15 +399,6 @@ private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onD
                                 label = { Text(tagLabel(tag)) },
                             )
                         }
-                        // 人声 / 纯音乐、古典 / 非古典总有一个，只有氛围提供"都不是"
-                        if (dimension == TagDimension.MOOD) {
-                            FilterChip(
-                                colors = selectedChipColors(),
-                                selected = manual && current.tags[dimension] == null,
-                                onClick = { apply { viewModel.setTag(track, dimension, null) } },
-                                label = { Text(stringResource(R.string.tag_none)) },
-                            )
-                        }
                     }
                 }
             }
@@ -459,8 +450,8 @@ private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, on
                             "low %.0f%%".format(f.lowRatio * 100),
                         ).joinToString(" · ") + (
                             m?.let {
-                                "\nvocal %.2f · classical %.2f · sport %.2f · quiet %.2f · orchestra %.2f".format(
-                                    it.vocal, it.classical, TagClassifier.sportScore(it), TagClassifier.quietScore(it), it.orchestra,
+                                "\nvocal %.2f · classical %.2f · sport %.2f · orchestra %.2f".format(
+                                    it.vocal, it.classical, TagClassifier.sportScore(it), it.orchestra,
                                 )
                             } ?: ""
                         ),

@@ -1,4 +1,4 @@
-"""用人工标注（labels.tsv）评估智能标签的规则（曲风分古典 / 非古典），与 App 中的 AudioTagger / TagClassifier 保持一致（docs/design.md §6.6）。
+"""用人工标注（labels.tsv）评估智能标签的规则（曲风分古典 / 非古典，氛围分运动 / 非运动），与 App 中的 AudioTagger / TagClassifier 保持一致（docs/design.md §6.6）。
 
 用法：
     python tools/calibration/evaluate.py build/calibration16/scores.npz [--report]
@@ -36,7 +36,7 @@ CLASSICAL_TITLE = re.compile("|".join(f"(?:{p})" for p in [
 # 与 TagClassifier.kt 一致（灵敏度"标准"）
 VOCAL_THRESHOLD = -2.3
 CLASSICAL_THRESHOLD = -0.4
-SPORT_THRESHOLD, QUIET_THRESHOLD, ORCHESTRA_MAX = 3.25, 0.2, 0.1
+SPORT_THRESHOLD = 3.25
 
 
 def predict(frames, name=""):
@@ -45,14 +45,13 @@ def predict(frames, name=""):
     classical = np.log((m[CLASSICAL].sum() + 1e-3) / (m[POP].sum() + 1e-3))
     calm, energy, orchestra = m[CALM].sum(), m[ENERGY].sum(), m[ORCHESTRA]
     sport = np.log(energy + 0.003) - np.log(calm + 0.003)
-    quiet = np.log(calm + 0.01) - np.log(energy + 0.01)
     return {
         "voice": "V" if vocal >= VOCAL_THRESHOLD else "I",
         # 文件名是"艺术家 - 歌名"，App 里匹配的是歌名
         "genre": "C" if classical >= CLASSICAL_THRESHOLD or CLASSICAL_TITLE.search(name.split(" - ", 1)[-1]) else "N",
         "classical": classical,
-        "mood": "S" if sport >= SPORT_THRESHOLD else "Q" if quiet >= QUIET_THRESHOLD and orchestra <= ORCHESTRA_MAX else "-",
-        "scores": f"vocal={vocal:.2f} classical={classical:.2f} sport={sport:.2f} quiet={quiet:.2f} orchestra={orchestra:.3f}",
+        "mood": "S" if sport >= SPORT_THRESHOLD else "N",
+        "scores": f"vocal={vocal:.2f} classical={classical:.2f} sport={sport:.2f} orchestra={orchestra:.3f}",
     }
 
 
@@ -67,7 +66,9 @@ def main():
         if len(parts) == 4:
             # 曲风只分古典 / 非古典：标注里的流行（P）和都不是（-）都算非古典
             genre = {"C": "C", "P": "N", "-": "N"}.get(parts[2], parts[2])
-            labels[parts[0]] = dict(voice=parts[1], genre=genre, mood=parts[3])
+            # 氛围只分运动 / 非运动：标注里的安静（Q）和都不是（-）都算非运动
+            mood = {"S": "S", "Q": "N", "-": "N"}.get(parts[3], parts[3])
+            labels[parts[0]] = dict(voice=parts[1], genre=genre, mood=mood)
     classical = {}
     for line in open(os.path.join(os.path.dirname(__file__), "genre_labels.tsv"), encoding="utf-8"):
         if line.startswith("#") or line.startswith("name\t"):

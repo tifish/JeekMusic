@@ -83,7 +83,7 @@
     <string name="queue_count">%1$d / %2$d</string>
 
     <string name="tab_sport">运动</string>
-    <string name="tab_quiet">安静</string>
+    <string name="tag_non_sport">非运动</string>
     <string name="tag_vocal">人声</string>
     <string name="tag_instrumental">纯音乐</string>
     <string name="tag_classical">古典</string>
@@ -229,7 +229,7 @@
     <string name="settings_analysis_mode">分析时机</string>
     <string name="analysis_charging">仅充电时（推荐）</string>
     <string name="analysis_anytime">随时</string>
-    <string name="settings_sensitivity">运动 / 安静的识别灵敏度</string>
+    <string name="settings_sensitivity">运动的识别灵敏度</string>
     <string name="sensitivity_loose">宽松（歌更多）</string>
     <string name="sensitivity_normal">标准</string>
     <string name="sensitivity_strict">严格（歌更少）</string>

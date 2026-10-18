@@ -236,12 +236,12 @@ suspend fun LazyListState.scrollToCenter(index: Int, animate: Boolean = true) {
     if (animate) animateScrollBy(delta) else scrollBy(delta)
 }
 
-/** 智能标签的名称：运动 / 安静 / 人声 / 纯音乐 / 古典 / 流行（需求 M-1）。 */
+/** 智能标签的名称：运动 / 非运动 / 人声 / 纯音乐 / 古典 / 非古典（需求 M-1）。 */
 @Composable
 fun tagLabel(tag: Tag): String = stringResource(
     when (tag) {
         Tag.SPORT -> R.string.tab_sport
-        Tag.QUIET -> R.string.tab_quiet
+        Tag.NON_SPORT -> R.string.tag_non_sport
         Tag.VOCAL -> R.string.tag_vocal
         Tag.INSTRUMENTAL -> R.string.tag_instrumental
         Tag.CLASSICAL -> R.string.tag_classical
@@ -258,7 +258,7 @@ fun dimensionLabel(dimension: TagDimension): String = stringResource(
     },
 )
 
-/** 筛选的显示名称：选中的标签用"·"连接，比如"安静·纯音乐"；没有筛选时为"全部"。 */
+/** 筛选的显示名称：选中的标签用"·"连接，比如"非运动·纯音乐"；没有筛选时为"全部"。 */
 @Composable
 fun filterLabel(filter: TagFilter): String =
     if (!filter.isActive) stringResource(R.string.filter_all) else filter.active.map { tagLabel(it) }.joinToString("·")

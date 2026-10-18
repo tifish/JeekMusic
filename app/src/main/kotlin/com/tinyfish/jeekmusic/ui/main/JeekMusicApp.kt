@@ -324,7 +324,7 @@ private fun MainScreen(viewModel: MainViewModel) {
 }
 
 /**
- * 标题栏上的智能标签筛选（需求 M-6）：筛选中图标高亮并显示选中的标签（比如"安静·纯音乐"）。
+ * 标题栏上的智能标签筛选（需求 M-6）：筛选中图标高亮并显示选中的标签（比如"非运动·纯音乐"）。
  * 菜单分三组（氛围 / 人声 / 曲风），每组点一下选中、再点一下取消，可以组合；
  * 菜单里还显示未分析的歌曲数，可以立即分析。
  */
@@ -349,7 +349,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
             if (active) {
-                // 比如"安静·纯音乐·按歌名"
+                // 比如"非运动·纯音乐·按歌名"
                 val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.FILE_NAME })
                 Text(label.joinToString("·"), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
             }

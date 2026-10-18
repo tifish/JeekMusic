@@ -1,5 +1,5 @@
 # 智能标签校准集的人工标注（docs/design.md §6.6）。文件名与 build/library-sample 中的歌曲一致（不含扩展名）。
-# voice: V 人声 / I 纯音乐；genre: C 古典 / P 流行 / - 都不是（App 里只分古典 / 非古典，P 和 - 都算非古典）；mood: S 运动 / Q 安静 / - 都不是；? 表示拿不准，不参与评估。
+# voice: V 人声 / I 纯音乐；genre: C 古典 / P 流行 / - 都不是（App 里只分古典 / 非古典，P 和 - 都算非古典）；mood: S 运动 / Q 安静 / - 都不是（App 里只分运动 / 非运动，Q 和 - 都算非运动）；? 表示拿不准，不参与评估。
 # 运动 / 安静带有主观性：只把明显的标为 S / Q，介于中间的标为 -。
 name	voice	genre	mood
 André Kostelantez and His Orchestra,Jacques Offenbach - Can Can	I	C	-

@@ -10,7 +10,7 @@ enum class TagDimension { MOOD, VOICE, GENRE }
 
 enum class Tag(val dimension: TagDimension) {
     SPORT(TagDimension.MOOD),
-    QUIET(TagDimension.MOOD),
+    NON_SPORT(TagDimension.MOOD),
     VOCAL(TagDimension.VOICE),
     INSTRUMENTAL(TagDimension.VOICE),
     CLASSICAL(TagDimension.GENRE),
@@ -18,24 +18,27 @@ enum class Tag(val dimension: TagDimension) {
     ;
 
     companion object {
-        /** 旧版本曲风分"古典 / 流行"，保存的筛选和手动修正里可能还是 POP。 */
+        /** 旧版本曲风分"古典 / 流行"、氛围分"运动 / 安静"，保存的筛选和手动修正里可能还是 POP、QUIET。 */
         private const val LEGACY_POP = "POP"
+        private const val LEGACY_QUIET = "QUIET"
 
-        fun of(dimension: TagDimension, value: String?): Tag? =
-            if (dimension == TagDimension.GENRE && value == LEGACY_POP) NON_CLASSICAL
-            else entries.firstOrNull { it.dimension == dimension && it.name == value }
+        fun of(dimension: TagDimension, value: String?): Tag? = when {
+            dimension == TagDimension.GENRE && value == LEGACY_POP -> NON_CLASSICAL
+            dimension == TagDimension.MOOD && value == LEGACY_QUIET -> NON_SPORT
+            else -> entries.firstOrNull { it.dimension == dimension && it.name == value }
+        }
         fun of(dimension: TagDimension): List<Tag> = entries.filter { it.dimension == dimension }
     }
 }
 
 /**
- * 运动 / 安静的识别灵敏度（需求 M-8）。阈值越低，归入标签的歌越多。
+ * 运动的识别灵敏度（需求 M-8）。阈值越低，归入"运动"的歌越多。
  * [legacy] 是旧的规则分类器（还没用模型重新分析的歌）使用的阈值。
  */
-enum class Sensitivity(val sport: Double, val quiet: Double, val legacy: Double) {
-    LOOSE(2.75, 0.0, 0.50),
-    NORMAL(3.25, 0.2, 0.60),
-    STRICT(3.75, 0.5, 0.70),
+enum class Sensitivity(val sport: Double, val legacy: Double) {
+    LOOSE(2.75, 0.50),
+    NORMAL(3.25, 0.60),
+    STRICT(3.75, 0.70),
 }
 
 /** YAMNet 模型给出的几组得分（docs/design.md §6.3）。 */
@@ -48,13 +51,13 @@ data class ModelScores(
     val calm: Double,
     /** 动感类（Exciting、Dance、Drum……）的得分之和。 */
     val energy: Double,
-    /** Orchestra 的得分：大编制管弦乐段落通常不算"安静"。 */
+    /** Orchestra 的得分：以前用来排除大编制管弦乐段落（不算"安静"），现在没有用到，留着供校准分析。 */
     val orchestra: Double,
 )
 
 /**
  * 根据模型得分分类（docs/design.md §6.4）。阈值用 109 首真实歌曲的人工标注校准
- * （tools/calibration/，人声 106/106、古典 / 非古典 97/103、运动 / 安静 64/73），
+ * （tools/calibration/，人声 106/106、古典 / 非古典 97/103、运动 / 非运动 72/73），
  * 古典再用作者整个曲库（1551 首）按曲名粗标注检验：古典 / 非古典 95.2%。
  * 规则只依赖单首歌自己的得分，新增歌曲不会改变已有歌曲的标签。
  */
@@ -63,7 +66,6 @@ object TagClassifier {
     const val VOCAL_THRESHOLD = -2.3
     /** 古典曲风类和其他曲风类之比的阈值：在两个标注集上扫过 −1.5～0.3，−0.4 的准确率都最高。 */
     const val CLASSICAL_THRESHOLD = -0.4
-    const val ORCHESTRA_MAX = 0.1
 
     /** 从这个分析版本起 classical_score 只用曲风类（[AudioTagger]）；更早的结果在重新分析前沿用旧阈值。 */
     private const val GENRE_ONLY_VERSION = 4
@@ -85,11 +87,8 @@ object TagClassifier {
         )
     }
 
-    fun mood(m: ModelScores, sensitivity: Sensitivity): Tag? = when {
-        sportScore(m) >= sensitivity.sport -> Tag.SPORT
-        quietScore(m) >= sensitivity.quiet && m.orchestra <= ORCHESTRA_MAX -> Tag.QUIET
-        else -> null
-    }
+    /** 运动 / 非运动（需求 M-1）：和人声 / 纯音乐一样总有一个，慢歌、中速的歌、管弦乐等都算非运动。 */
+    fun mood(m: ModelScores, sensitivity: Sensitivity): Tag = if (sportScore(m) >= sensitivity.sport) Tag.SPORT else Tag.NON_SPORT
 
     fun voice(m: ModelScores): Tag = if (m.vocal >= VOCAL_THRESHOLD) Tag.VOCAL else Tag.INSTRUMENTAL
 
@@ -101,9 +100,6 @@ object TagClassifier {
 
     /** ln(动感 / 舒缓)。 */
     fun sportScore(m: ModelScores) = ln(m.energy + 0.003) - ln(m.calm + 0.003)
-
-    /** ln(舒缓 / 动感)。 */
-    fun quietScore(m: ModelScores) = ln(m.calm + 0.01) - ln(m.energy + 0.01)
 }
 
 fun TrackFeaturesEntity.modelScores(): ModelScores? {
@@ -120,21 +116,13 @@ fun TrackFeaturesEntity.toFeatures() = AudioFeatures(bpm, bpmConfidence, loudnes
 
 /**
  * 旧的规则分类器（v2，只看响度、低频、节奏等手工特征）：只用于还没用模型重新分析过的歌，
- * 保证升级后到重新分析完成之前"运动 / 安静"不会突然变空。
+ * 保证升级后到重新分析完成之前"运动"不会突然变空。
  */
 object LegacyMoodClassifier {
 
-    fun classify(features: AudioFeatures, sensitivity: Sensitivity): Tag? {
+    fun classify(features: AudioFeatures, sensitivity: Sensitivity): Tag {
         val sport = sportScore(features)
-        val quiet = quietScore(features)
-        val sportOk = sport != null && sport >= sensitivity.legacy
-        val quietOk = quiet != null && quiet >= sensitivity.legacy
-        return when {
-            sportOk && quietOk -> if (sport!! >= quiet!!) Tag.SPORT else Tag.QUIET
-            sportOk -> Tag.SPORT
-            quietOk -> Tag.QUIET
-            else -> null
-        }
+        return if (sport != null && sport >= sensitivity.legacy) Tag.SPORT else Tag.NON_SPORT
     }
 
     private fun sportScore(f: AudioFeatures): Double? {
@@ -144,13 +132,6 @@ object LegacyMoodClassifier {
             0.30 * norm(f.lowRatio, 0.2, 0.6) +
             0.20 * (1 - abs(log2(bpm / 130.0))).coerceIn(0.0, 1.0) +
             0.15 * norm(f.onsetRate, 2.5, 4.5)
-    }
-
-    private fun quietScore(f: AudioFeatures): Double? {
-        if (f.loudness > -14) return null
-        return 0.50 * norm(-f.loudness, 14.0, 26.0) +
-            0.25 * norm(-f.lowRatio, -0.35, -0.05) +
-            0.25 * norm(-f.centroidHz, -1600.0, -700.0)
     }
 
     private fun norm(value: Double, low: Double, high: Double) = ((value - low) / (high - low)).coerceIn(0.0, 1.0)

@@ -17,27 +17,31 @@ class TagClassifierTest {
     private val violinCover = ModelScores(vocal = -5.780, classical = -2.630, calm = 0.0042, energy = 0.0065, orchestra = 0.0026) // 小提琴翻奏流行歌
 
     @Test
-    fun `舞曲 → 运动，慢歌和慢板 → 安静`() {
+    fun `舞曲 → 运动，慢歌、慢板和管弦乐 → 非运动`() {
         assertEquals(Tag.SPORT, TagClassifier.mood(pokerFace, Sensitivity.NORMAL))
         assertEquals(Tag.SPORT, TagClassifier.mood(baby, Sensitivity.NORMAL))
-        assertEquals(Tag.QUIET, TagClassifier.mood(starFish, Sensitivity.NORMAL))
-        assertEquals(Tag.QUIET, TagClassifier.mood(nocturne, Sensitivity.NORMAL))
-        assertEquals(Tag.QUIET, TagClassifier.mood(gymnopedie, Sensitivity.NORMAL))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(starFish, Sensitivity.NORMAL))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(nocturne, Sensitivity.NORMAL))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(gymnopedie, Sensitivity.NORMAL))
+        // 以前大编制管弦乐的快板"都不是"，现在算非运动
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(hungarianDance, Sensitivity.NORMAL))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(jupiter, Sensitivity.NORMAL))
     }
 
     @Test
-    fun `大编制管弦乐的快板不算安静`() {
-        assertNull(TagClassifier.mood(hungarianDance, Sensitivity.NORMAL))
-        assertNull(TagClassifier.mood(jupiter, Sensitivity.NORMAL))
+    fun `灵敏度越严格，归入运动的歌越少`() {
+        // 动感 / 舒缓之比约 3.0（ln）：宽松档算运动，标准、严格档不算
+        val upbeat = ModelScores(vocal = 1.0, classical = -3.0, calm = 0.004, energy = 0.12, orchestra = 0.0)
+        assertEquals(Tag.SPORT, TagClassifier.mood(upbeat, Sensitivity.LOOSE))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(upbeat, Sensitivity.NORMAL))
+        assertEquals(Tag.NON_SPORT, TagClassifier.mood(upbeat, Sensitivity.STRICT))
+        assertEquals(Tag.SPORT, TagClassifier.mood(pokerFace, Sensitivity.STRICT))
     }
 
     @Test
-    fun `灵敏度越严格，归入标签的歌越少`() {
-        // 星鱼的"安静"得分约 1.4：严格档也算；轻柔但不明显的歌只有宽松档才算
-        val mild = ModelScores(vocal = 1.0, classical = -1.0, calm = 0.03, energy = 0.025, orchestra = 0.0)
-        assertEquals(Tag.QUIET, TagClassifier.mood(mild, Sensitivity.LOOSE))
-        assertNull(TagClassifier.mood(mild, Sensitivity.STRICT))
-        assertEquals(Tag.QUIET, TagClassifier.mood(starFish, Sensitivity.STRICT))
+    fun `旧版本保存的安静读成非运动`() {
+        assertEquals(Tag.NON_SPORT, Tag.of(TagDimension.MOOD, "QUIET"))
+        assertEquals(Tag.SPORT, Tag.of(TagDimension.MOOD, "SPORT"))
     }
 
     @Test
@@ -86,7 +90,7 @@ class TagClassifierTest {
     }
 
     @Test
-    fun `没有模型得分时只用旧规则判断运动和安静`() {
+    fun `没有模型得分时只用旧规则判断运动`() {
         val old = com.tinyfish.jeekmusic.data.db.TrackFeaturesEntity(
             trackKey = "k", signature = "s", analyzerVersion = 2, bpm = 118.0, bpmConfidence = 7.0, loudness = -7.9,
             loudnessRange = 5.0, onsetRate = 3.41, centroidHz = 1439.0, lowRatio = 0.51, analyzedAt = 0,

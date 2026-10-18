@@ -119,7 +119,7 @@ data class PinnedTabEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     /** FOLDERS | ARTISTS | PLAYLISTS | ARTIST | MOOD */
     val type: String,
-    /** ARTIST：artist.name_key；MOOD："SPORT" / "QUIET"；内置标签为空串。 */
+    /** ARTIST：artist.name_key；MOOD："SPORT" / "QUIET"（旧版本，现在只用于清理）；内置标签为空串。 */
     val ref: String = "",
     val position: Int,
 )

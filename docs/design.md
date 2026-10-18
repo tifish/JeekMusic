@@ -173,7 +173,7 @@ track_features    -- 音频分析结果（§6）
 tag_override      -- 手动修正（需求 M-4）
   track_key       TEXT
   dimension       TEXT           -- MOOD | VOICE | GENRE
-  value           TEXT?          -- SPORT / QUIET / VOCAL / INSTRUMENTAL / CLASSICAL / NON_CLASSICAL；NULL 表示"这个维度都不是"（只有氛围有）。旧版本的 POP 和曲风的 NULL 读成 NON_CLASSICAL
+  value           TEXT?          -- SPORT / NON_SPORT / VOCAL / INSTRUMENTAL / CLASSICAL / NON_CLASSICAL。旧版本的 QUIET 和氛围的 NULL 读成 NON_SPORT，POP 和曲风的 NULL 读成 NON_CLASSICAL
   PRIMARY KEY(track_key, dimension)
 
 track_tag         -- 物化结果 = 每个维度手动修正优先，否则取自动分类结果
@@ -578,7 +578,7 @@ AnalysisWorker（WorkManager，默认要求充电）
 |---|---|---|
 | `vocal_score` | ln(人声类之和 / 乐器类之和)。人声类：Singing、Choir、Rapping、Humming、Chant、Vocal music、A capella、Opera、Speech、Lullaby 等；乐器类：Musical instrument、Bowed string、Violin、Cello、Piano、Orchestra、Brass、Woodwind、Guitar 等 | 人声 / 纯音乐 |
 | `classical_score` | ln(古典曲风类之和 / 其他曲风类之和)。古典曲风类：Classical music、Opera；其他曲风类：AudioSet 里其余所有曲风（Pop、Rock、R&B、Jazz、Folk、Electronic、New-age、Music of Asia、Background / Theme / Soundtrack music、Video game、Wedding music 等，不含 Vocal music、Song、Lullaby）。只用曲风类，不用乐器类（见 §6.4） | 古典 / 流行 |
-| `calm_level` | Tender、Sad、Lullaby、New-age、Ambient、Background music 之和 | 安静 |
+| `calm_level` | Tender、Sad、Lullaby、New-age、Ambient、Background music 之和 | 运动得分的分母（越舒缓越不像运动） |
 | `energy_level` | Exciting、Happy、Dance、Electronic、Hip hop、Rock、Drum kit、Drum、Rapping、Disco、Pop、EDM 之和 | 运动 |
 | `orchestra_level` | Orchestra | 排除大编制管弦乐段落 |
 
@@ -592,32 +592,29 @@ AnalysisWorker（WorkManager，默认要求充电）
 曲风：classical_score ≥ -0.4 → 古典，否则非古典（总有一个）
       模型判为非古典、但歌名或专辑名命中 ClassicalTitles 的 → 古典（需求 M-10）
 氛围：sport = ln(energy + 0.003) - ln(calm + 0.003)
-      quiet = ln(calm + 0.01) - ln(energy + 0.01)
-      sport ≥ 3.25 → 运动
-      否则 quiet ≥ 0.2 且 orchestra ≤ 0.1 → 安静
-      否则都不是
-灵敏度（只影响氛围）：运动阈值 宽松 2.75 / 标准 3.25 / 严格 3.75；安静阈值 0.0 / 0.2 / 0.5
+      sport ≥ 3.25 → 运动，否则非运动（总有一个）
+灵敏度（只影响氛围）：运动阈值 宽松 2.75 / 标准 3.25 / 严格 3.75
 ```
 
 - 人声阈值有很大余量：校准集里纯音乐的 `vocal_score` 最高 −2.83，人声最低 −1.72，−2.3 取在中间。只用"真正的人声类"，不把流行曲风当作人声证据，否则纯音乐的电子 / 流行会被误判成人声
 - 曲风只比较曲风类，不把钢琴、弦乐、管弦乐等乐器当作古典的证据（v3 曾经这样做）：流行抒情歌的钢琴 / 弦乐编曲、流行歌的弦乐四重奏翻奏、电影配乐、新世纪钢琴曲的乐器得分和古典一样高，而 AudioSet 的流行类（Pop music 等）对这些歌几乎是 0，结果作者曲库 1596 首里有 750 首被判为古典，其中约 200 首判错。改为曲风类之比后，这些歌的 Background music、Soundtrack、New-age、Wedding music 等得分会把比值压下去
 - 曲风只分古典 / 非古典（以前是古典 / 流行 / 都不是，流行阈值 −1.5）：配乐、新世纪、爵士和流行都归非古典。在两个标注集上把阈值从 −1.5 扫到 0.3，−0.4 的准确率都最高（整个曲库 95.2%，校准集 97/103）
 - 仍然判不准的：管弦乐的电影配乐（《星球大战》）、弦乐四重奏翻奏的流行歌、周深的歌剧风格演唱会判为古典；Glenn Gould 等的巴赫键盘作品、跨界演奏（André Rieu 的《波莱罗》）判为非古典。可以在菜单里手动修正
-- 安静：激昂的古典（序曲、快板）和慢板在"舒缓 / 动感"上很接近（都没有鼓），区别在于前者 Orchestra 得分高、几乎没有 Tender / Sad；加上 `orchestra ≤ 0.1` 后排除了大部分
+- 氛围只分运动 / 非运动（以前是运动 / 安静 / 都不是，安静要求 quiet = ln(calm + 0.01) − ln(energy + 0.01) ≥ 0.2 且 orchestra ≤ 0.1）："安静"本来就主观，激昂的古典和慢板在"舒缓 / 动感"上又很接近，三分类只有 64/73；二分类只需要判断"适不适合运动"，在校准集上把运动阈值从 2.0 扫到 4.0，3.25 仍然最好（72/73，唯一判错的是 Ariana Grande 的 Problem，得分 3.04）。规则版本 `RULES_VERSION` 提到 4（3 被测试版本用过），升级后启动时重算一次标签，不需要重新分析
 - 规则只依赖单首歌自己的得分，不依赖整个曲库的分布，新增歌曲不会改变已有歌曲的标签
-- 还没用模型重新分析的歌（`analyzer_version` < 3，模型得分为 null）：氛围用旧的手工特征规则（`LegacyMoodClassifier`），人声和曲风为空。升级后在重新分析完成之前，"运动 / 安静"筛选不会突然变空
+- 还没用模型重新分析的歌（`analyzer_version` < 3，模型得分为 null）：氛围用旧的手工特征规则（`LegacyMoodClassifier`），人声和曲风为空。升级后在重新分析完成之前，"运动"筛选不会突然变空（旧规则只用运动得分，达不到阈值或没有节奏信息的都是非运动）
 - `analyzer_version` = 3 的歌（`classical_score` 还是把乐器类算作古典的旧算法）：在重新分析前曲风沿用旧阈值（≥ 0.5 古典，否则非古典），否则新阈值会把几乎所有纯音乐判成古典
 
 ### 6.5 数据（track_tag、tag_override）
 
-- `track_tag(track_key, dimension, value, source)`，主键 (track_key, dimension)，索引 (dimension, value)。dimension 为 MOOD / VOICE / GENRE，value 为 SPORT、QUIET、VOCAL、INSTRUMENTAL、CLASSICAL、POP，source 为 AUTO / MANUAL。筛选和计数都直接查这张表（§5.5）
+- `track_tag(track_key, dimension, value, source)`，主键 (track_key, dimension)，索引 (dimension, value)。dimension 为 MOOD / VOICE / GENRE，value 为 SPORT、NON_SPORT、VOCAL、INSTRUMENTAL、CLASSICAL、NON_CLASSICAL，source 为 AUTO / MANUAL。筛选和计数都直接查这张表（§5.5）
 - `tag_override(track_key, dimension, value)`：手动修正，value 为 null 表示"这个维度都不是"
 - 数据库 4 → 5（`MIGRATION_4_5`）：`track_features` 增加 5 个得分列；`track_mood` / `mood_override` 的数据迁移到新表（dimension = MOOD）后删除。`MigrationTest` 用 `app/schemas/` 中的 v4 结构建库、写入数据、迁移并由 Room 校验结构
 - 全部重算（`recomputeAll`）：1 万首规模下只要几十毫秒，所以分析结果、手动修正或灵敏度变化后直接全部重算
 
 ### 6.6 校准方法和结果
 
-校准集：作者曲库中挑出的 109 首（`tools/pick_library_sample.py`，流行、古典、民谣、配乐混合，周深的歌较多）。人工标注在 `tools/calibration/labels.tsv`：人声 / 纯音乐和古典 / 流行比较客观；运动 / 安静带主观性，只把明显的标为运动或安静，介于中间的标为"都不是"，拿不准的标为"?"不参与评估。
+校准集：作者曲库中挑出的 109 首（`tools/pick_library_sample.py`，流行、古典、民谣、配乐混合，周深的歌较多）。人工标注在 `tools/calibration/labels.tsv`：人声 / 纯音乐和古典 / 流行比较客观；运动 / 安静带主观性，只把明显的标为运动或安静，介于中间的标为"都不是"，拿不准的标为"?"不参与评估。App 现在只分运动 / 非运动，评估时安静和都不是都算非运动。
 
 ```
 tools/calibration-pcm.sh <音乐目录>          # ffmpeg 按与 App 相同的方式导出 16kHz PCM
@@ -642,11 +639,11 @@ python tools/calibration/evaluate.py build/library16/scores.npz
 | 古典 / 非古典（整个曲库 1551 首） | 古典 501 / 509，非古典误判 46 / 1042，准确 96.5%（只用模型：古典 480 / 509、误判 45 / 1042、95.2%；v3：古典 508 / 509，误判 207 / 1042，准确 86.6%） | 曲名补救后仍漏判的 8 首曲名里没有编号或曲式（Boléro、Wagner 的 Vorspiel、改编的《G 弦上的咏叹调》等）；新增的 1 首误判是现代人写的"Valse Sentimentale No. 2 In G Minor" |
 
 **曲名补救**（需求 M-10，`ClassicalTitles`）：模型只听声音，古典里的独奏、室内乐、歌剧选段等有时得分不够；而古典作品的名字很有特点。规则只收不容易误判的写法：作品编号；曲式词后面要跟编号、调性或作品号；速度词前面要有乐章号或分隔符；中文只收流行歌很少用的曲式词。匹配歌名和专辑名，不匹配文件名里的艺术家部分。注意整个曲库的标注本身就是按曲名粗标的，用它检验曲名规则会偏乐观，所以主要看误判（新增 1 首）；人工标注的校准集不受影响（多判对 2 首、没有误判）。`tools/calibration/evaluate.py` 用同样的规则。规则版本 `RULES_VERSION` 提到 2，升级后启动时重算一次标签，不需要重新分析
-| 运动 / 安静 | 64 / 73（v2 手工特征：42 / 73） | 几首木吉他抒情歌没判为安静；几首慢速的古典（艺术歌曲、长笛奏鸣曲）被判为安静 |
+| 运动 / 非运动 | 72 / 73（以前分运动 / 安静 / 都不是：64 / 73；v2 手工特征：42 / 73；标注的"安静"和"都不是"都算非运动） | Ariana Grande 的 Problem 动感得分 3.04，差一点没到运动 |
 
 对比过在 521 类分数上训练逻辑回归（留一法交叉验证）：人声 99%、古典 / 流行 97%，并不比上面的规则好，而规则更容易理解和调整，所以用规则。在整个曲库上（10 折交叉验证）逻辑回归的古典 / 非古典是 96.3%，曲风类之比的规则 95.2% 已经接近 YAMNet 平均分数能做到的上限；再把乐器类得分加权混进来、按帧取中位数等都没有明显提高。
 
-**模拟器与 PC 的一致性**：模拟器上用系统解码器的分析结果，和 PC 上用 ffmpeg 导出的结果对比：纯音乐 33 / 33、古典 41 / 41 首完全一致；人声和流行各少 1 首（那首 Ogg 系统解码器打不开）；运动 6 / 5、安静 36 / 40 首（几首歌的得分正好在阈值附近，两种解码器的细微差异会改变结果）。
+**模拟器与 PC 的一致性**：模拟器上用系统解码器的分析结果，和 PC 上用 ffmpeg 导出的结果对比：纯音乐 33 / 33、古典 41 / 41 首完全一致；人声和流行各少 1 首（那首 Ogg 系统解码器打不开）；运动 6 / 5 首（几首歌的得分正好在阈值附近，两种解码器的细微差异会改变结果）。
 
 **已知问题**：极少数文件系统的 `MediaExtractor` 无法识别（实测 1604 个文件中有 1 个 Ogg Vorbis），分析失败后标记为 `failed`，不再重试；ExoPlayer 有自己的解析器，播放不受影响；这类歌可以在菜单里手动修正标签。
 
@@ -1064,7 +1061,7 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 | 风险 | 影响 | 应对 |
 |---|---|---|
 | TagLib JNI 集成的复杂度和 APK 体积（每个 ABI 约 1–2MB） | M0 延期 | 先验证；可以只打包 arm64-v8a 和 armeabi-v7a；备选 jaudiotagger |
-| 规则识别运动 / 安静的准确率有限（比如节奏快但很轻的歌） | 标签不准 | 手动修正优先；灵敏度可调；调试页辅助校准；分类器可替换成 AI 模型 |
+| 规则识别运动的准确率有限（比如节奏快但很轻的歌） | 标签不准 | 手动修正优先；灵敏度可调；调试页辅助校准；分类器可替换成 AI 模型 |
 | 部分设备的 offload 实现有问题（卡顿、进度不准） | 熄屏播放异常 | 只在熄屏和后台时启用；设置里可以关闭；记录问题机型，必要时内置黑名单 |
 | 浮点输出在少数设备上不被支持 | 高位深音源退回 16-bit | ExoPlayer 会自动回退；在歌曲信息页显示实际的输出格式，方便排查 |
 | 启动目标在低端机上达不到 | 启动慢 | 先保证中端机达标；用 Macrobenchmark 找瓶颈；低端机目标放宽到 TTFD < 1.2s |

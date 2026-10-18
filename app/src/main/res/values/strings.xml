@@ -85,7 +85,7 @@
     <string name="queue_count">%1$d / %2$d</string>
 
     <string name="tab_sport">Workout</string>
-    <string name="tab_quiet">Calm</string>
+    <string name="tag_non_sport">Not workout</string>
     <string name="tag_vocal">Vocal</string>
     <string name="tag_instrumental">Instrumental</string>
     <string name="tag_classical">Classical</string>
@@ -236,7 +236,7 @@
     <string name="settings_analysis_mode">When to analyze</string>
     <string name="analysis_charging">Only while charging (recommended)</string>
     <string name="analysis_anytime">Any time</string>
-    <string name="settings_sensitivity">Workout / Calm sensitivity</string>
+    <string name="settings_sensitivity">Workout sensitivity</string>
     <string name="sensitivity_loose">Loose (more songs)</string>
     <string name="sensitivity_normal">Normal</string>
     <string name="sensitivity_strict">Strict (fewer songs)</string>

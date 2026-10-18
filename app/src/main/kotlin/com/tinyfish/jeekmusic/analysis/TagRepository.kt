@@ -74,7 +74,11 @@ class TagRepository @Inject constructor(
      * 手动修正的值。旧版本的曲风有"流行"（POP）和"都不是"（null），现在都算非古典。
      */
     private fun overrideTag(dimension: TagDimension, value: String?): Tag? =
-        Tag.of(dimension, value) ?: Tag.NON_CLASSICAL.takeIf { dimension == TagDimension.GENRE }
+        Tag.of(dimension, value) ?: when (dimension) {
+            TagDimension.GENRE -> Tag.NON_CLASSICAL
+            TagDimension.MOOD -> Tag.NON_SPORT
+            TagDimension.VOICE -> null
+        }
 
     /** 手动修正（需求 M-4）：[tag] 为 null 表示"这个维度的哪个标签都不是"（只有氛围可以）。 */
     suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) {
@@ -107,8 +111,8 @@ class TagRepository @Inject constructor(
          * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
         const val ANALYZER_VERSION = 4
-        /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典。 */
-        const val RULES_VERSION = 2
+        /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
+        const val RULES_VERSION = 4
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

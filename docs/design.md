@@ -1050,7 +1050,8 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 
 - 检查：`GET https://api.github.com/repos/tifish/JeekMusic/releases/latest`，从 `tag_name` 末尾的数字得到 versionCode，大于 `BuildConfig.VERSION_CODE` 即为新版本；取第一个 `.apk` 资源的下载地址、大小和 `digest`（SHA-256）
 - 时机：首帧之后的推迟任务最后再等 5 秒执行；开关打开、且距上次检查超过 24 小时才联网；网络错误静默忽略。设置里的"检查更新"忽略间隔和"跳过此版本"
-- 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）："更新 / 跳过此版本 / 以后再说"，下载时显示进度
+- 入口：设置页的第一项"检查更新"（显示版本号，检查中显示"正在检查…"，重复点击忽略）
+- 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）；"已是最新版本""检查更新失败"等全局提示（`MessageBus`）也在最外层的 `JeekMusicApp` 收集——以前只有主界面收集，设置、搜索等全屏页面打开时发出的提示都丢了。主界面的 Scaffold 用同一个 `SnackbarHostState` 显示在迷你播放条上方，其他页面在最外层显示。更新对话框："更新 / 跳过此版本 / 以后再说"，下载时显示进度
 - 下载：`HttpURLConnection`（GitHub 的下载地址会重定向到另一个 https 域名，默认跟随），写到 `cacheDir/updates/`，边下载边算 SHA-256，和 GitHub 给出的不一致时放弃
 - 安装：`PackageInstaller` 会话（`REQUEST_INSTALL_PACKAGES`），结果由 `InstallResultReceiver` 接收：`STATUS_PENDING_USER_ACTION` 时启动系统的确认界面（首次还会要求允许"安装未知应用"）；用户取消时回到"发现新版本"提示，失败时显示原因。签名不一致时系统会拒绝安装
 - 免确认：会话设置 `USER_ACTION_NOT_REQUIRED`，并声明 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`（普通权限）。第一次通过 App 内更新安装后，本 App 成为"安装来源"，之后的更新不再弹出系统确认；用 adb 或文件管理器安装的版本第一次更新仍需确认

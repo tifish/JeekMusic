@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.main
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
@@ -123,8 +125,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun JeekMusicApp(viewModel: MainViewModel) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    // 提示放在最外层收集：设置、搜索等页面发出的提示（比如"已是最新版本"）也要显示，
+    // 以前只在主界面收集，其他页面打开时的提示都丢了
+    val snackbar = remember { SnackbarHostState() }
+    val resources = LocalResources.current
+    LaunchedEffect(Unit) {
+        launch { viewModel.messages.collect { snackbar.showSnackbar(resources.getString(it.res, it.arg)) } }
+        launch { viewModel.playbackErrors.collect { snackbar.showSnackbar(resources.getString(R.string.playback_error, it)) } }
+    }
     JeekTheme(themeMode = themeMode) {
-        CompositionLocalProvider(LocalNavigator provides viewModel) {
+        CompositionLocalProvider(LocalNavigator provides viewModel, LocalSnackbar provides snackbar) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                 UpdatePrompt()
                 TrackMenuHost {
@@ -144,10 +154,19 @@ fun JeekMusicApp(viewModel: MainViewModel) {
                         },
                     )
                 }
+                // 主界面的 Scaffold 自己显示提示（在迷你播放条上方），其他全屏页面在这里显示
+                if (viewModel.topStack.lastOrNull() != TopRoute.Main) {
+                    Box(Modifier.fillMaxSize().navigationBarsPadding(), contentAlignment = Alignment.BottomCenter) {
+                        SnackbarHost(snackbar)
+                    }
+                }
             }
         }
     }
 }
+
+/** 全局提示（[JeekMusicApp] 里收集 [MainViewModel.messages]）。 */
+private val LocalSnackbar = staticCompositionLocalOf { SnackbarHostState() }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,17 +177,12 @@ private fun MainScreen(viewModel: MainViewModel) {
     val tabs by viewModel.tabs.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
-    val resources = LocalResources.current
+    val snackbar = LocalSnackbar.current
     var firstContentShown by remember { mutableStateOf(false) }
 
     // TTFD：首屏列表数据到达后上报（docs/design.md §9.2）
     ReportDrawnWhen { firstContentShown }
     LaunchedEffect(firstContentShown) { if (firstContentShown) viewModel.onFirstFrame() }
-    LaunchedEffect(Unit) {
-        launch { viewModel.messages.collect { snackbar.showSnackbar(resources.getString(it.res, it.arg)) } }
-        launch { viewModel.playbackErrors.collect { snackbar.showSnackbar(resources.getString(R.string.playback_error, it)) } }
-    }
 
     RestorePrompt()
     if (tabs.isEmpty()) return

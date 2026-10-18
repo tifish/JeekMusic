@@ -148,12 +148,23 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoUpdateCheck(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAutoUpdateCheck(enabled) }
 
+    private val _checkingUpdate = MutableStateFlow(false)
+    val checkingUpdate: StateFlow<Boolean> = _checkingUpdate
+
     /** 手动检查更新；有新版本时由最外层的更新提示接管（需求 U-6）。 */
-    fun checkUpdate() = viewModelScope.launch {
-        when (updater.checkNow()) {
-            CheckResult.UP_TO_DATE -> messages.post(UiMessage(R.string.update_up_to_date))
-            CheckResult.FAILED -> messages.post(UiMessage(R.string.update_check_failed))
-            CheckResult.UPDATE_AVAILABLE -> Unit
+    fun checkUpdate() {
+        if (_checkingUpdate.value) return
+        _checkingUpdate.value = true
+        viewModelScope.launch {
+            try {
+                when (updater.checkNow()) {
+                    CheckResult.UP_TO_DATE -> messages.post(UiMessage(R.string.update_up_to_date))
+                    CheckResult.FAILED -> messages.post(UiMessage(R.string.update_check_failed))
+                    CheckResult.UPDATE_AVAILABLE -> Unit
+                }
+            } finally {
+                _checkingUpdate.value = false
+            }
         }
     }
 
@@ -282,7 +293,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
         SubScreenHeader(title = stringResource(R.string.settings_title), onBack = onBack)
         val listState = rememberLazyListState()
+        val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
         LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true), state = listState) {
+            // 检查更新放在最前面，打开设置就能点到，不用滚到底（需求 U-6）
+            item {
+                SettingItem(
+                    title = stringResource(R.string.update_check_now),
+                    summary = if (checkingUpdate) stringResource(R.string.update_checking) else stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                    onClick = viewModel::checkUpdate,
+                    modifier = Modifier.testTag("check_update"),
+                )
+            }
             item { SectionHeader(stringResource(R.string.settings_library)) }
             items(folders, key = { it.folder.id }) { (folder, count) ->
                 Row(
@@ -611,14 +632,6 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
 
             item { SectionHeader(stringResource(R.string.settings_about)) }
-            item {
-                SettingItem(
-                    title = stringResource(R.string.update_check_now),
-                    summary = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
-                    onClick = viewModel::checkUpdate,
-                    modifier = Modifier.testTag("check_update"),
-                )
-            }
             item {
                 SwitchRow(
                     title = stringResource(R.string.update_auto_check),

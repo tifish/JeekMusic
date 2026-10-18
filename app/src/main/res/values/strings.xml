@@ -69,6 +69,7 @@
     <string name="update_auto_check">Check for updates automatically</string>
     <string name="update_auto_check_summary">At most once a day, from GitHub Releases</string>
     <string name="update_up_to_date">You have the latest version</string>
+    <string name="update_checking">Checking…</string>
     <string name="update_check_failed">Couldn’t check for updates</string>
     <string name="update_available_title">Version %s is available</string>
     <string name="update_current_version">Current version: %s</string>

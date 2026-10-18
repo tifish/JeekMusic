@@ -115,6 +115,8 @@
     <string name="menu_go_to_album">查看专辑</string>
     <string name="menu_open_folder">打开所在文件夹</string>
     <string name="menu_song_info">歌曲信息</string>
+    <string name="menu_move_file">移动到…</string>
+    <string name="menu_delete_file">删除（移到回收站）</string>
     <string name="menu_sleep_timer">睡眠定时</string>
     <string name="menu_pin_tab">固定到标签栏</string>
     <string name="menu_unpin_tab">从标签栏取消固定</string>

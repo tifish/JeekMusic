@@ -135,6 +135,65 @@ class FileOpsViewModel @Inject constructor(
     fun cueSkipped() = messages.post(UiMessage(R.string.files_cue_skipped))
 }
 
+/** 改名、移动、删除各自的待办；设置后由 [FileActionDialogs] 弹出对应的对话框（需求 F-10）。 */
+@Stable
+class FileActions {
+    var renaming by mutableStateOf<TrackEntity?>(null)
+    var moving by mutableStateOf<List<TrackEntity>?>(null)
+
+    // 有"所有文件访问权限"时系统不再弹确认，所以总是先由 App 确认一次
+    var trashing by mutableStateOf<List<TrackEntity>?>(null)
+}
+
+@Composable
+fun rememberFileActions(): FileActions = remember { FileActions() }
+
+/** [FileActions] 的对话框：改名、选择移动目标、删除确认和系统回收站请求。操作完成后调用 [onDone]。 */
+@Composable
+fun FileActionDialogs(actions: FileActions, onDone: () -> Unit = {}, viewModel: FileOpsViewModel = hiltViewModel()) {
+    val scope = rememberCoroutineScope()
+    var trashing by remember { mutableStateOf<List<TrackEntity>>(emptyList()) }
+    val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.onTrashed(trashing)
+            onDone()
+        }
+    }
+
+    actions.trashing?.let { chosen ->
+        AlertDialog(
+            onDismissRequest = { actions.trashing = null },
+            title = { Text(pluralStringResource(R.plurals.file_delete_title, chosen.size, chosen.size)) },
+            text = { Text(stringResource(R.string.file_delete_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        actions.trashing = null
+                        scope.launch {
+                            val sender = viewModel.trashRequest(chosen) ?: return@launch
+                            trashing = chosen
+                            trashLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                        }
+                    },
+                    modifier = Modifier.testTag("confirm_trash"),
+                ) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TextButton(onClick = { actions.trashing = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
+    actions.renaming?.let { track ->
+        RenameDialog(track, viewModel, onDismiss = { actions.renaming = null }, onDone = { actions.renaming = null; onDone() })
+    }
+    actions.moving?.let { chosen ->
+        MoveDialog(viewModel, onDismiss = { actions.moving = null }) { folder, relativePath ->
+            viewModel.move(chosen, folder, relativePath)
+            actions.moving = null
+            onDone()
+        }
+    }
+}
+
 /**
  * 多选时代替列表标题栏的操作栏（需求 F-10）：已选几首、改名（只选了一首时）、移动、删除（移到系统回收站），
  * "更多"里有全选，播放列表里还有"从列表移除"（[onRemoveFromPlaylist]）。返回键退出多选。
@@ -146,19 +205,8 @@ fun SelectionBar(
     onRemoveFromPlaylist: ((List<TrackEntity>) -> Unit)? = null,
     viewModel: FileOpsViewModel = hiltViewModel(),
 ) {
-    val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
-    var renaming by remember { mutableStateOf<TrackEntity?>(null) }
-    var moving by remember { mutableStateOf<List<TrackEntity>?>(null) }
-    var trashing by remember { mutableStateOf<List<TrackEntity>>(emptyList()) }
-    // 有"所有文件访问权限"时系统不再弹确认，所以总是先由 App 确认一次
-    var confirmTrash by remember { mutableStateOf<List<TrackEntity>?>(null) }
-    val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.onTrashed(trashing)
-            selection.clear()
-        }
-    }
+    val actions = rememberFileActions()
 
     BackHandler(enabled = selection.active) { selection.clear() }
 
@@ -179,15 +227,15 @@ fun SelectionBar(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        IconButton(onClick = { files().singleOrNull()?.let { renaming = it } }, enabled = selection.count == 1, modifier = Modifier.testTag("selection_rename")) {
+        IconButton(onClick = { files().singleOrNull()?.let { actions.renaming = it } }, enabled = selection.count == 1, modifier = Modifier.testTag("selection_rename")) {
             Icon(painterResource(R.drawable.ic_edit), contentDescription = stringResource(R.string.file_rename))
         }
-        IconButton(onClick = { files().takeIf { it.isNotEmpty() }?.let { moving = it } }, modifier = Modifier.testTag("selection_move")) {
+        IconButton(onClick = { files().takeIf { it.isNotEmpty() }?.let { actions.moving = it } }, modifier = Modifier.testTag("selection_move")) {
             Icon(painterResource(R.drawable.ic_drive_file_move), contentDescription = stringResource(R.string.file_move))
         }
         IconButton(
             onClick = {
-                files().takeIf { it.isNotEmpty() }?.let { confirmTrash = it }
+                files().takeIf { it.isNotEmpty() }?.let { actions.trashing = it }
             },
             modifier = Modifier.testTag("selection_delete"),
         ) {
@@ -211,38 +259,7 @@ fun SelectionBar(
         }
     }
 
-    confirmTrash?.let { chosen ->
-        AlertDialog(
-            onDismissRequest = { confirmTrash = null },
-            title = { Text(pluralStringResource(R.plurals.file_delete_title, chosen.size, chosen.size)) },
-            text = { Text(stringResource(R.string.file_delete_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmTrash = null
-                        scope.launch {
-                            val sender = viewModel.trashRequest(chosen) ?: return@launch
-                            trashing = chosen
-                            trashLauncher.launch(IntentSenderRequest.Builder(sender).build())
-                        }
-                    },
-                    modifier = Modifier.testTag("confirm_trash"),
-                ) { Text(stringResource(R.string.delete)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmTrash = null }) { Text(stringResource(R.string.cancel)) } },
-        )
-    }
-
-    renaming?.let { track ->
-        RenameDialog(track, viewModel, onDismiss = { renaming = null }, onDone = { renaming = null; selection.clear() })
-    }
-    moving?.let { chosen ->
-        MoveDialog(viewModel, onDismiss = { moving = null }) { folder, relativePath ->
-            viewModel.move(chosen, folder, relativePath)
-            moving = null
-            selection.clear()
-        }
-    }
+    FileActionDialogs(actions, onDone = selection::clear, viewModel = viewModel)
 }
 
 @Composable

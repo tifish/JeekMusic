@@ -227,6 +227,7 @@ fun TrackMenuHost(
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<MenuDialog?>(null) }
     var dialogTrack by remember { mutableStateOf<TrackEntity?>(null) }
+    val fileActions = rememberFileActions()
 
     CompositionLocalProvider(
         LocalTrackMenu provides { track: TrackEntity, onSelect: (() -> Unit)? -> viewModel.show(track, onSelect) },
@@ -281,6 +282,13 @@ fun TrackMenuHost(
                 MenuItem(R.drawable.ic_lyrics, R.string.menu_search_lyrics) { dialogTrack = current; dialog = MenuDialog.Lyrics; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_bolt, R.string.menu_edit_tags) { dialogTrack = current; dialog = MenuDialog.Tags; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
+                // CUE 整轨里的歌共用一个文件，不能单独做文件操作（需求 F-10）
+                if (current.cueTrackNo == null) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    MenuItem(R.drawable.ic_edit, R.string.file_rename) { fileActions.renaming = current; viewModel.dismiss() }
+                    MenuItem(R.drawable.ic_drive_file_move, R.string.menu_move_file) { fileActions.moving = listOf(current); viewModel.dismiss() }
+                    MenuItem(R.drawable.ic_delete, R.string.menu_delete_file) { fileActions.trashing = listOf(current); viewModel.dismiss() }
+                }
             }
         }
     }
@@ -312,6 +320,7 @@ fun TrackMenuHost(
         }
         null -> Unit
     }
+    FileActionDialogs(fileActions)
 }
 
 @Composable

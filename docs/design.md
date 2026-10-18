@@ -439,7 +439,7 @@ interface TagReader {
 
 ### 4.7 文件操作（FileOperations）
 
-需求 F-10。多选状态 `TrackSelection` 由每个列表页 `rememberTrackSelection()` 持有并传给 `TrackRow`；歌曲"更多"菜单（`TrackMenuHost`）收到的第二个参数不为 null 时显示"多选"，点了从这首歌开始选。多选时标题栏换成 `SelectionBar`，改名、移动、删除的对话框也在里面。
+需求 F-10。多选状态 `TrackSelection` 由每个列表页 `rememberTrackSelection()` 持有并传给 `TrackRow`；歌曲"更多"菜单（`TrackMenuHost`）收到的第二个参数不为 null 时显示"多选"，点了从这首歌开始选。多选时标题栏换成 `SelectionBar`。改名、移动、删除的对话框在 `FileActionDialogs` 里，由 `FileActions` 状态驱动，`SelectionBar` 和 `TrackMenuHost`（单首歌的"更多"菜单）各持有一份。
 
 - **操作前重新读取**：界面上的 `TrackEntity` 可能是旧的（比如搜索结果是按查询词一次查出来的），`FileOperations` 先按 id 从曲库重新读，按现在的位置操作。搜索结果也会在 `track` 表变化时（`SearchDao.trackChanges()`）重新查询
 - **删除**：`MediaStore.createTrashRequest` 把音乐文件（有"所有文件访问权限"时连同 `MediaStore.Files` 里同目录同名的 `.lrc`、图片）移到系统回收站，用 `StartIntentSenderForResult` 发起；系统可能弹确认（有"所有文件访问权限"时不弹，直接执行），所以 App 先自己确认一次。成功后从播放队列去掉这些歌并扫描，扫描时 MediaStore 已不返回回收站里的文件，曲库删除这些歌；播放列表条目按 PL-3 保留为不可用。隐藏目录里的歌词、封面不删，从回收站恢复后还能用

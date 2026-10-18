@@ -35,6 +35,24 @@ class OffloadController(private val context: Context, private val player: Player
         }
 
     private var screenOn = context.getSystemService(PowerManager::class.java).isInteractive
+
+    /** 播放出错后暂时不用 offload，到下一首再恢复（[suspendUntilNextItem]）。 */
+    private var suspendedUntilNextItem = false
+
+    /** 这次播放服务运行期间不再用 offload（[disableForSession]）。 */
+    private var disabledForSession = false
+
+    /** 出错后重试这首歌时调用：先用普通播放，下一首再按设置来（需求 P-14）。 */
+    fun suspendUntilNextItem() {
+        suspendedUntilNextItem = true
+        apply("error", atBoundary = true)
+    }
+
+    /** 发现 offload 下提前换歌（需求 P-14）：服务运行期间改用普通播放，重启后恢复。 */
+    fun disableForSession() {
+        disabledForSession = true
+        apply("early transition", atBoundary = true)
+    }
     private var appForeground = false
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -63,6 +81,7 @@ class OffloadController(private val context: Context, private val player: Player
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            suspendedUntilNextItem = false
             apply("next item", atBoundary = true)
         }
 
@@ -90,10 +109,11 @@ class OffloadController(private val context: Context, private val player: Player
 
     /** 按当前档位、屏幕和前后台状态，应该开启 offload 吗。 */
     private val wanted: Boolean
-        get() = when (mode) {
-            LowPowerMode.ALWAYS -> true
-            LowPowerMode.OFF -> false
-            LowPowerMode.BACKGROUND -> !screenOn || !appForeground
+        get() = when {
+            suspendedUntilNextItem || disabledForSession -> false
+            mode == LowPowerMode.ALWAYS -> true
+            mode == LowPowerMode.OFF -> false
+            else -> !screenOn || !appForeground
         }
 
     /** 当前是否请求了 offload（可能还在等待合适的时机切换），供歌曲信息页显示。 */

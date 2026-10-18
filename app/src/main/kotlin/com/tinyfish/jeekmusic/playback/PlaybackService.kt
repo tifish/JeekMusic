@@ -2,6 +2,7 @@ package com.tinyfish.jeekmusic.playback
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -50,6 +51,12 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var sleepTimer: SleepTimer
     private lateinit var offload: OffloadController
+    private lateinit var playbackLog: PlaybackLog
+    private lateinit var diagnostics: PlaybackDiagnostics
+
+    /** 上一次出错的歌和时间：同一首歌短时间内再出错才跳到下一首（需求 P-14）。 */
+    private var lastErrorIndex = -1
+    private var lastErrorAt = 0L
 
     /** 用户已经设置过队列时，不再用恢复的队列覆盖。 */
     private var queueTouched = false
@@ -72,6 +79,8 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         offload = OffloadController(this, player).also { it.start() }
+        playbackLog = PlaybackLog(this)
+        diagnostics = PlaybackDiagnostics(player, offload, playbackLog).also { it.start() }
         scope.launch { settings.settings.collect { offload.mode = it.lowPowerMode } }
 
         player.addListener(PersistenceListener(player))
@@ -104,6 +113,7 @@ class PlaybackService : MediaLibraryService() {
         savePositionBlocking()
         sleepTimer.release()
         offload.stop()
+        diagnostics.stop()
         scope.cancel()
         session?.run {
             player.release()
@@ -210,9 +220,27 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        /** 某个文件无法播放时自动跳到下一首，并通知界面（需求 §4.2 健壮性）。 */
+        /**
+         * 出错时（需求 P-14）：先从出错的位置重试这首歌，并暂时不用 offload——低功耗播放的音频输出偶尔会出错，
+         * 以前一出错就跳到下一首，听起来就是"歌没放完就换了"。同一首歌 30 秒内再出错（文件坏了、格式不支持等）
+         * 才跳到下一首，并通知界面（需求 §4.2 健壮性）。
+         */
         override fun onPlayerError(error: PlaybackException) {
             val title = player.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
+            val index = player.currentMediaItemIndex
+            val position = player.currentPosition
+            val now = android.os.SystemClock.elapsedRealtime()
+            val repeated = index == lastErrorIndex && now - lastErrorAt < ERROR_RETRY_WINDOW_MS
+            lastErrorIndex = index
+            lastErrorAt = now
+            playbackLog.add("error ${error.errorCodeName}: $title at ${position / 1000}s, offload=${diagnostics.offloaded}, ${if (repeated) "skip" else "retry"}")
+            if (!repeated && index != C.INDEX_UNSET) {
+                offload.suspendUntilNextItem()
+                player.seekTo(index, position)
+                player.prepare()
+                player.play()
+                return
+            }
             session?.broadcastCustomCommand(
                 SessionCommand(PlaybackCommands.EVENT_PLAYBACK_ERROR, Bundle.EMPTY),
                 Bundle().apply { putString(PlaybackCommands.EXTRA_TITLE, title) },
@@ -333,3 +361,6 @@ object PlaybackCommands {
 
 /** 换歌后等这么久再获取封面和歌词：快速连续切歌时只查最后停下的那首。 */
 private const val FETCH_DELAY_MS = 2_000L
+
+/** 同一首歌在这段时间内第二次出错才跳到下一首。 */
+private const val ERROR_RETRY_WINDOW_MS = 30_000L

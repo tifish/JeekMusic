@@ -697,6 +697,8 @@ ExoPlayer.Builder(context, renderersFactory)
 - 开启方式：`TrackSelectionParameters.audioOffloadPreferences` 设为 `AUDIO_OFFLOAD_MODE_ENABLED`，并要求支持无缝播放（`setIsGaplessSupportRequired(true)`），保证歌曲之间不会因为 offload 而出现间隙
 - OffloadController 监听 `ProcessLifecycleOwner`（前台 / 后台）和屏幕开关（`ACTION_SCREEN_ON/OFF`），按档位切换 offload 偏好
 - **不在歌曲中间切换**（需求 P-12）：改 offload 偏好会让 ExoPlayer 重新选择轨道、重建 AudioTrack（普通 ↔ offload），正在出声时能听到一下中断（模拟器不支持 offload，不会重建，只有真机能听到）。所以正在播放时只记下要切换，等到 `onIsPlayingChanged(false)`（暂停、停止）、`onPositionDiscontinuity(SEEK)`（拖动进度、切歌）或 `onMediaItemTransition`（自动播放到下一首）时再应用。自动换歌时切换，下一首开头可能多一点点停顿；连续的现场专辑等对此敏感的，可以把低功耗播放设为"始终使用"或"关闭"，就完全不切换
+- **提前换歌**（需求 P-14）：有的设备上 offload 时 DSP 报告的播放头比实际出声超前，播放器以为放完了就换歌，最后几秒被截掉；这时播放器的进度也是"放完了"，从进度上看不出来。`PlaybackDiagnostics` 按真实时间核对：记下起点（这首开始、拖动、换队列时的位置），累计 `isPlaying` 期间的 `elapsedRealtime`，在 `DISCONTINUITY_REASON_AUTO_TRANSITION` 时和这首的时长（`Timeline.Window.durationMs`，CUE 是截取后的长度）比较，差 3 秒以上记为 EARLY；当时实际在用 offload（`ExoPlayer.AudioOffloadListener.onOffloadedPlayback`）就 `disableForSession()`，服务重启前都用普通播放
+- **播放日志**（`PlaybackLog`）：换歌（正常 / 提前）、出错（错误码、重试还是跳过）、offload 实际开关都追加到外部私有目录的 `playback-log.txt`（超过 256KB 保留后一半），用 `adb pull /sdcard/Android/data/com.tinyfish.jeekmusic/files/playback-log.txt` 取出
 - 歌曲信息页显示的是已经生效的偏好，切换在等待时显示的仍是原来的状态
 - 设备或格式不支持 offload 时，ExoPlayer 会自动走普通播放路径
 - 音质：无损格式在 DSP 上的解码同样是比特精确的；有损格式由标准解码器解码，结果与软件解码等价
@@ -717,7 +719,7 @@ class PlaybackService : MediaLibraryService() {
 - 通知栏使用 Media3 的 `DefaultMediaNotificationProvider`，零额外代码
 - **随机播放开关**（需求 P-13）：自定义命令 `TOGGLE_SHUFFLE` 开放给本 App 和通知栏控制器（`isMediaNotificationController`）；通知栏控制器连接时用 `setMediaButtonPreferences` 放一个 `CommandButton`（`ICON_SHUFFLE_ON` / `ICON_SHUFFLE_OFF`，`SLOT_OVERFLOW`），系统媒体控件把它显示在"下一首"旁边，锁屏跟着通知栏的平台会话。`onShuffleModeEnabledChanged` 时换成对应状态的按钮，所以 App 里切换随机播放，通知栏也跟着变
 - `onTaskRemoved` 时如果没有在播放就 `stopSelf()`；暂停一段时间后，服务退出前台并允许系统回收
-- 播放出错（`onPlayerError`）时跳到下一首，并通过自定义事件通知 UI 弹出提示
+- 播放出错（`onPlayerError`，需求 P-14）：先 `seekTo(出错的位置)` + `prepare()` 重试这首歌，并让 `OffloadController.suspendUntilNextItem()` 暂时关掉 offload；同一首歌 30 秒内第二次出错才跳到下一首，并通过自定义事件通知 UI 弹出提示
 
 **"下一首"始终可用（需求 P-11）**：交给 `MediaLibrarySession` 的不是 ExoPlayer 本身，而是包了一层 `NextAlwaysPlayer`（`ForwardingPlayer`）：
 - 队列不为空时 `getAvailableCommands()` / `isCommandAvailable()` 总是包含 `COMMAND_SEEK_TO_NEXT(_MEDIA_ITEM)`，所以系统媒体控件（通知、锁屏）总显示"下一首"

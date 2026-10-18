@@ -299,6 +299,9 @@ class LyricsRepository @Inject constructor(
 
     suspend fun clearCache() = lyricsDao.clearCache()
 
+    /** 文件改名、移动后目录列表都作废。 */
+    fun invalidateAllDirectories() = directoryCache.evictAll()
+
     fun invalidateDirectory(folderId: Long, relativePath: String) {
         directoryCache.remove("$folderId:$relativePath")
     }

@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -106,18 +107,34 @@ fun TrackRow(
     subtitle: String = trackSubtitle(track),
     showArtwork: Boolean = true,
     leading: (@Composable () -> Unit)? = null,
+    selection: TrackSelection? = LocalTrackSelection.current,
 ) {
     val highlight = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     val openMenu = LocalTrackMenu.current
+    // 多选时（需求 F-10）点击和长按都是选中 / 取消；平时长按打开"更多"菜单，菜单里的"多选"从这首歌开始
+    val selecting = selection?.active == true
+    val selected = selection?.isSelected(track.id) == true
     Row(
         modifier
             .fillMaxWidth()
-            // 正在播放的歌整行加底色，一眼就能找到（需求 U-11）
-            .background(if (isCurrent) currentRowColor() else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = { openMenu(track) })
+            // 正在播放的歌整行加底色，一眼就能找到（需求 U-11）；选中的用另一种底色
+            .background(
+                when {
+                    selected -> MaterialTheme.colorScheme.secondaryContainer
+                    isCurrent -> currentRowColor()
+                    else -> Color.Transparent
+                },
+            )
+            .combinedClickable(
+                onClick = { if (selecting) selection.toggle(track) else onClick() },
+                onLongClick = { if (selecting) selection.toggle(track) else openMenu(track, selection?.let { s -> { s.start(track) } }) },
+            )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting) {
+            Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+        }
         when {
             leading != null -> leading()
             showArtwork -> Box {

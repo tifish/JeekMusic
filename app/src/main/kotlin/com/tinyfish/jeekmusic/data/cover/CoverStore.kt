@@ -149,6 +149,9 @@ class CoverStore @Inject constructor(
         return tree.read(folder, best.documentId)
     }
 
+    /** 文件改名、移动后（[com.tinyfish.jeekmusic.data.library.FileOperations]）目录列表都作废。 */
+    fun invalidateListings() = listings.evictAll()
+
     private fun listing(folder: LibraryFolderEntity, relativePath: String): List<DocumentTree.Child> {
         val key = "${folder.id}:$relativePath"
         return listings.get(key) ?: tree.list(folder, relativePath).also { listings.put(key, it) }

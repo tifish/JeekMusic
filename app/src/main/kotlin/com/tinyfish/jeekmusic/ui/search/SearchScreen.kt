@@ -1,10 +1,13 @@
 package com.tinyfish.jeekmusic.ui.search
 
+import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.SongSorter
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.filter.filterByTags
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -80,6 +83,8 @@ class SearchViewModel @Inject constructor(
         .debounce(200)
         .map { it.trim() }
         .distinctUntilChanged()
+        // 曲库变了（扫描、文件改名 / 移动 / 删除）也重新查询
+        .combine(dao.trackChanges()) { q, _ -> q }
         .mapLatest { q ->
             if (q.isEmpty()) {
                 null
@@ -114,6 +119,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
     val navigator = LocalNavigator.current
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
+    val selection = rememberTrackSelection()
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -140,6 +146,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             )
         }
         val data = results ?: return@Column
+        if (selection.active) SelectionBar(selection, tracks = { data.tracks })
         if (data.artists.isEmpty() && data.tracks.isEmpty()) {
             CenteredMessage(stringResource(R.string.search_no_results))
             return@Column
@@ -162,7 +169,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             if (data.tracks.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.search_songs)) }
                 itemsIndexed(data.tracks, key = { _, t -> "t:" + t.id }) { index, track ->
-                    TrackRow(track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(data.tracks, index) })
+                    TrackRow(track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(data.tracks, index) }, selection = selection)
                 }
             }
         }

@@ -216,6 +216,13 @@ class PlayerConnection @Inject constructor(
 
     fun removeQueueItem(index: Int) = withController { removeMediaItem(index) }
 
+    /** 从队列里去掉这些歌（文件被删除后，需求 F-10）。 */
+    fun removeTracks(trackIds: Set<Long>) = withController {
+        for (i in mediaItemCount - 1 downTo 0) {
+            if (MediaItemMapper.trackId(getMediaItemAt(i).mediaId) in trackIds) removeMediaItem(i)
+        }
+    }
+
     fun moveQueueItem(from: Int, to: Int) = withController { moveMediaItem(from, to) }
 
     private fun <T> withController(block: MediaController.() -> T) {

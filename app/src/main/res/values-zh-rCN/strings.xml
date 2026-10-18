@@ -352,4 +352,31 @@
     <string name="list_download_background">后台运行</string>
     <string name="list_download_stop">停止</string>
     <string name="now_playing_mark">正在播放</string>
+    <string name="menu_select">多选</string>
+    <string name="selection_exit">退出多选</string>
+    <plurals name="selection_count">
+        <item quantity="other">已选择 %1$d 首</item>
+    </plurals>
+    <string name="selection_all">全选</string>
+    <string name="selection_remove_from_playlist">从播放列表移除</string>
+    <string name="file_rename">改名</string>
+    <string name="file_rename_hint">同名的 .lrc、图片一起改名；修改时间不变</string>
+    <string name="file_name_invalid">文件名不能为空，不能以 . 开头，也不能包含 \\ / : * ? \" &lt; &gt; |</string>
+    <string name="file_name_exists">已有同名文件</string>
+    <string name="file_rename_failed">改名失败</string>
+    <string name="file_renamed">已改名</string>
+    <string name="file_move">移动</string>
+    <string name="file_move_to">移动到</string>
+    <string name="file_move_choose_folder">选择音乐文件夹</string>
+    <string name="file_move_here">移到这里</string>
+    <string name="file_new_folder">新建文件夹</string>
+    <string name="files_moved">已移动 %1$s 首</string>
+    <string name="files_moved_partly">已移动 %1$s 首；其余的目标位置有同名文件或移动失败</string>
+    <string name="file_delete">删除文件（移到回收站）</string>
+    <string name="files_trashed">已把 %1$s 首移到回收站，30 天内可以在系统的回收站里恢复</string>
+    <string name="files_cue_skipped">CUE 整轨里的歌共用一个文件，不能单独操作，已跳过</string>
+    <plurals name="file_delete_title">
+        <item quantity="other">把 %1$d 首歌移到回收站？</item>
+    </plurals>
+    <string name="file_delete_message">音乐文件会移到系统的回收站，30 天内可以恢复；有“所有文件访问权限”时，同名的 .lrc、图片也一起移过去。播放列表里的条目保留，显示为不可用。</string>
 </resources>

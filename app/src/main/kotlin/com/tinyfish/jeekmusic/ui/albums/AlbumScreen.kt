@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.albums
 
+import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import androidx.compose.foundation.layout.Box
@@ -100,9 +102,10 @@ fun AlbumScreen(
     val info by viewModel.info.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val selection = rememberTrackSelection()
 
     Column(Modifier.fillMaxSize()) {
-        SubScreenHeader(
+        if (selection.active) SelectionBar(selection, tracks = { viewModel.tracks.value.orEmpty() }) else SubScreenHeader(
             title = info?.name.orEmpty(),
             onBack = onBack,
             actions = { ListDownloadButton(tracks = { viewModel.tracks.value.orEmpty() }) },
@@ -156,6 +159,7 @@ fun AlbumScreen(
                             track = track,
                             isCurrent = track.id == currentTrackId,
                             onClick = { viewModel.play(index) },
+                            selection = selection,
                             subtitle = track.artistDisplay.ifEmpty { stringResource(R.string.unknown_artist) },
                             leading = {
                                 Text(

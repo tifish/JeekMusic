@@ -437,6 +437,18 @@ interface TagReader {
 | 封面 | 整轨文件的内嵌封面，或目录里的封面图片 |
 | 歌词 | 按 CUE-7 的文件名规则查找和保存 |
 
+### 4.7 文件操作（FileOperations）
+
+需求 F-10。多选状态 `TrackSelection` 由每个列表页 `rememberTrackSelection()` 持有并传给 `TrackRow`；歌曲"更多"菜单（`TrackMenuHost`）收到的第二个参数不为 null 时显示"多选"，点了从这首歌开始选。多选时标题栏换成 `SelectionBar`，改名、移动、删除的对话框也在里面。
+
+- **操作前重新读取**：界面上的 `TrackEntity` 可能是旧的（比如搜索结果是按查询词一次查出来的），`FileOperations` 先按 id 从曲库重新读，按现在的位置操作。搜索结果也会在 `track` 表变化时（`SearchDao.trackChanges()`）重新查询
+- **删除**：`MediaStore.createTrashRequest` 把音乐文件（有"所有文件访问权限"时连同 `MediaStore.Files` 里同目录同名的 `.lrc`、图片）移到系统回收站，用 `StartIntentSenderForResult` 发起；系统可能弹确认（有"所有文件访问权限"时不弹，直接执行），所以 App 先自己确认一次。成功后从播放队列去掉这些歌并扫描，扫描时 MediaStore 已不返回回收站里的文件，曲库删除这些歌；播放列表条目按 PL-3 保留为不可用。隐藏目录里的歌词、封面不删，从回收站恢复后还能用
+- **改名**：`DocumentsContract.renameDocument`；同目录里以"原文件名."开头的 `.lrc`、图片（`sidecars`）和隐藏目录里的 `<原文件名>.lrc` 一起改名；目标名已存在（不区分大小写）时不改
+- **移动**：`DocumentsContract.moveDocument`，源和目标各用自己音乐文件夹的树 URI；同名 `.lrc`、图片一起移。移到另一个音乐文件夹时，隐藏目录里的歌词读出写到目标的隐藏目录再删掉原来的，专辑封面（`CoverStore.hiddenNames`）在目标没有时复制一份（同专辑的其他歌可能还在原处）。目标已有同名文件的跳过
+- **稳定键迁移**：`track_key = file_key = "卷:相对路径文件名"`，改名、移动后变了。`FileMoveDao.move` 在一个事务里把 `track` 这一行就地换成新的位置（id 不变，`date_modified` 置 -1 让下次扫描重新读标签——标题可能来自文件名），再把 `playlist_item`、`queue_item`、`lyrics_offset`、`lyrics_cache`、`track_features`、`tag_override`、`track_tag` 的键换掉（有唯一约束的用 `UPDATE OR REPLACE`）。重命名不改修改时间和大小，分析结果的签名仍然有效，不会重新分析。之后清掉 `CoverStore`、`LyricsRepository` 的目录列表缓存并扫描；扫描按新的 file_key 找到这一行，重新读标签后就地更新
+- 重命名和移动在文件系统里都是 rename，MediaStore 的 `_id` 不变，正在播放的歌不受影响
+- CUE 虚拟歌曲共用整轨文件，不参与文件操作，跳过并提示
+
 ## 5. 浏览视图实现
 
 ### 5.1 标签栏（TabRepository）

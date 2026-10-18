@@ -84,8 +84,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 打开某首歌的"更多"菜单（需求 U-2）。 */
-val LocalTrackMenu = staticCompositionLocalOf<(TrackEntity) -> Unit> { {} }
+/**
+ * 打开某首歌的"更多"菜单（需求 U-2）。第二个参数不为 null 时菜单里有"多选"，点了调用它（需求 F-10）。
+ */
+val LocalTrackMenu = staticCompositionLocalOf<(TrackEntity, (() -> Unit)?) -> Unit> { { _, _ -> } }
 
 /** 按歌曲 id 打开"更多"菜单（播放页使用）。 */
 val LocalTrackMenuById = staticCompositionLocalOf<(Long) -> Unit> { {} }
@@ -156,11 +158,16 @@ class TrackMenuViewModel @Inject constructor(
     private val _track = MutableStateFlow<TrackEntity?>(null)
     val track = _track.asStateFlow()
 
-    fun show(track: TrackEntity) {
+    /** 菜单里"多选"要做的事；打开菜单的列表不支持多选时为 null。 */
+    var onSelect: (() -> Unit)? = null
+        private set
+
+    fun show(track: TrackEntity, onSelect: (() -> Unit)? = null) {
+        this.onSelect = onSelect
         _track.value = track
     }
 
-    fun showById(trackId: Long) = viewModelScope.launch { trackDao.byId(trackId)?.let(::show) }
+    fun showById(trackId: Long) = viewModelScope.launch { trackDao.byId(trackId)?.let { show(it) } }
 
     fun dismiss() {
         _track.value = null
@@ -222,7 +229,7 @@ fun TrackMenuHost(
     var dialogTrack by remember { mutableStateOf<TrackEntity?>(null) }
 
     CompositionLocalProvider(
-        LocalTrackMenu provides viewModel::show,
+        LocalTrackMenu provides { track: TrackEntity, onSelect: (() -> Unit)? -> viewModel.show(track, onSelect) },
         LocalTrackMenuById provides { id: Long -> viewModel.showById(id) },
     ) { content() }
 
@@ -238,6 +245,9 @@ fun TrackMenuHost(
                 Text(current.title, Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(trackSubtitle(current), Modifier.padding(horizontal = 24.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                viewModel.onSelect?.let { select ->
+                    MenuItem(R.drawable.ic_checklist, R.string.menu_select) { viewModel.dismiss(); select() }
+                }
                 MenuItem(R.drawable.ic_queue_play_next, R.string.menu_play_next) { viewModel.playNext(current); viewModel.dismiss() }
                 MenuItem(R.drawable.ic_queue, R.string.menu_add_to_queue) { viewModel.addToQueue(current); viewModel.dismiss() }
                 MenuItem(R.drawable.ic_playlist_add, R.string.menu_add_to_playlist) {

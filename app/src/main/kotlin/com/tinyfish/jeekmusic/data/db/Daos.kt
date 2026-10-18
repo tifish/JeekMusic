@@ -6,6 +6,7 @@ import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -278,6 +279,10 @@ interface QueueDao {
 
 @Dao
 interface SearchDao {
+    /** 曲库每次变化都会发出（Room 的 Flow 在表失效时重新查询）：搜索结果据此刷新，文件改名、移动、删除后不显示旧的。 */
+    @Query("SELECT COUNT(*) FROM track")
+    fun trackChanges(): Flow<Int>
+
     /**
      * 匹配的全部歌曲，不排序也不限制条数：SQL 排不了拼音（COLLATE NOCASE 对中文是按 Unicode 码位），
      * 由调用方在内存里按拼音排好再截取（docs/design.md §5.6）。
@@ -407,3 +412,50 @@ interface TagDao {
 
 /** 歌曲的歌名和专辑名，见 [TagDao.titles]。 */
 data class TrackTitle(val trackKey: String, val title: String, val album: String?)
+
+/**
+ * 改名、移动音乐文件后，把它的稳定键（track_key = file_key = "卷:相对路径文件名"）换成新的（需求 F-10，docs/design.md §4.7）。
+ * 播放列表、续播队列、标签、分析结果、歌词偏移和缓存都按 track_key 引用，一起换掉，这些记录才不会丢。
+ */
+@Dao
+interface FileMoveDao {
+    /** 曲库里的这首歌就地换成新位置，id 不变；date_modified 置 -1 让下次扫描重新读标签（标题可能来自文件名）。 */
+    @Query(
+        "UPDATE track SET track_key = :newKey, file_key = :newKey, folder_id = :folderId, relative_path = :relativePath, " +
+            "file_name = :fileName, date_modified = -1 WHERE track_key = :oldKey",
+    )
+    suspend fun moveTrack(oldKey: String, newKey: String, folderId: Long, relativePath: String, fileName: String)
+
+    @Query("UPDATE playlist_item SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun movePlaylistItems(oldKey: String, newKey: String)
+
+    @Query("UPDATE queue_item SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveQueueItems(oldKey: String, newKey: String)
+
+    @Query("UPDATE OR REPLACE lyrics_offset SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveLyricsOffset(oldKey: String, newKey: String)
+
+    @Query("UPDATE OR REPLACE lyrics_cache SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveLyricsCache(oldKey: String, newKey: String)
+
+    @Query("UPDATE OR REPLACE track_features SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveFeatures(oldKey: String, newKey: String)
+
+    @Query("UPDATE OR REPLACE tag_override SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveTagOverrides(oldKey: String, newKey: String)
+
+    @Query("UPDATE OR REPLACE track_tag SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveTags(oldKey: String, newKey: String)
+
+    @Transaction
+    suspend fun move(oldKey: String, newKey: String, folderId: Long, relativePath: String, fileName: String) {
+        moveTrack(oldKey, newKey, folderId, relativePath, fileName)
+        movePlaylistItems(oldKey, newKey)
+        moveQueueItems(oldKey, newKey)
+        moveLyricsOffset(oldKey, newKey)
+        moveLyricsCache(oldKey, newKey)
+        moveFeatures(oldKey, newKey)
+        moveTagOverrides(oldKey, newKey)
+        moveTags(oldKey, newKey)
+    }
+}

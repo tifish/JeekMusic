@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.folders
 
+import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListDownloadMenuItems
 import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
@@ -202,6 +204,7 @@ fun FolderScreen(
     val content by viewModel.content.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
+    val selection = rememberTrackSelection()
     val loaded = content != null
     LaunchedEffect(loaded) { if (loaded) onLoaded() }
 
@@ -209,7 +212,7 @@ fun FolderScreen(
     Column(Modifier.fillMaxSize()) {
         // 歌曲数包括子文件夹里的，和上一级列表里显示的一致；筛选时只算符合筛选的（需求 F-9）
         val total = content?.let { data -> data.tracks.size + data.folders.sumOf { it.trackCount } }
-        SubScreenHeader(
+        if (selection.active) SelectionBar(selection, tracks = { content?.tracks.orEmpty() }) else SubScreenHeader(
             title = route.title,
             subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
@@ -258,7 +261,7 @@ fun FolderScreen(
                 )
             }
             itemsIndexed(data.tracks, key = { _, t -> t.id }, contentType = { _, _ -> "track" }) { index, track ->
-                TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(index) })
+                TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(index) }, selection = selection)
             }
         }
         LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))

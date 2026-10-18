@@ -359,4 +359,33 @@
     <string name="list_download_background">Run in background</string>
     <string name="list_download_stop">Stop</string>
     <string name="now_playing_mark">Now playing</string>
+    <string name="menu_select">Select</string>
+    <string name="selection_exit">Exit selection</string>
+    <plurals name="selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <string name="selection_all">Select all</string>
+    <string name="selection_remove_from_playlist">Remove from playlist</string>
+    <string name="file_rename">Rename</string>
+    <string name="file_rename_hint">The .lrc and image files with the same name are renamed too. The modified time is kept</string>
+    <string name="file_name_invalid">The name can’t be empty, start with a dot, or contain \\ / : * ? \" &lt; &gt; |</string>
+    <string name="file_name_exists">A file with this name already exists</string>
+    <string name="file_rename_failed">Couldn’t rename the file</string>
+    <string name="file_renamed">Renamed</string>
+    <string name="file_move">Move</string>
+    <string name="file_move_to">Move to</string>
+    <string name="file_move_choose_folder">Choose a music folder</string>
+    <string name="file_move_here">Move here</string>
+    <string name="file_new_folder">New folder</string>
+    <string name="files_moved">Moved %1$s song(s)</string>
+    <string name="files_moved_partly">Moved %1$s song(s). The rest already exist at the destination or couldn’t be moved</string>
+    <string name="file_delete">Delete files (move to trash)</string>
+    <string name="files_trashed">Moved %1$s song(s) to the trash. They can be restored from the system trash within 30 days</string>
+    <string name="files_cue_skipped">Songs inside a CUE image share one file and can’t be handled separately, so they were skipped</string>
+    <plurals name="file_delete_title">
+        <item quantity="one">Move %1$d song to the trash?</item>
+        <item quantity="other">Move %1$d songs to the trash?</item>
+    </plurals>
+    <string name="file_delete_message">The music files go to the system trash and can be restored within 30 days. With “All files access”, the .lrc and image files with the same name go too. Playlist entries are kept and shown as unavailable.</string>
 </resources>

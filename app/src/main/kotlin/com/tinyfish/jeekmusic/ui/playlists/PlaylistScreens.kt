@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.ui.playlists
 
+import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.SelectionBar
+import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.ui.components.ListDownloadMenuItems
 import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
@@ -209,6 +212,12 @@ class PlaylistDetailViewModel @AssistedInject constructor(
 
     fun remove(entry: PlaylistEntry) = viewModelScope.launch { repository.removeItem(playlistId, entry.item.id) }
 
+    /** 多选后"从播放列表移除"（需求 F-10）：去掉这些歌的所有条目，不动文件。 */
+    fun removeTracks(tracks: List<TrackEntity>) = viewModelScope.launch {
+        val ids = tracks.map { it.id }.toSet()
+        entries.value.orEmpty().filter { it.track?.id in ids }.forEach { repository.removeItem(playlistId, it.item.id) }
+    }
+
     fun reorder(itemIds: List<Long>) = viewModelScope.launch { repository.reorder(playlistId, itemIds) }
 
     fun rename(name: String) = viewModelScope.launch { repository.rename(playlistId, name) }
@@ -230,13 +239,20 @@ fun PlaylistDetailScreen(
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
+    val selection = rememberTrackSelection()
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     val download = rememberListDownload(tracks = { viewModel.entries.value.orEmpty().mapNotNull { it.track } })
     val exportM3u = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/x-mpegurl")) { uri -> if (uri != null) viewModel.export(uri) }
 
     Column(Modifier.fillMaxSize()) {
-        SubScreenHeader(
+        if (selection.active) {
+            SelectionBar(
+                selection,
+                tracks = { viewModel.entries.value.orEmpty().mapNotNull { it.track } },
+                onRemoveFromPlaylist = viewModel::removeTracks,
+            )
+        } else SubScreenHeader(
             title = playlist?.name.orEmpty(),
             subtitle = entries?.let { songCount(it.size) },
             onBack = onBack,
@@ -280,7 +296,7 @@ fun PlaylistDetailScreen(
                             }
                             Box(Modifier.weight(1f)) {
                                 if (track != null) {
-                                    TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(entry) })
+                                    TrackRow(track = track, isCurrent = track.id == currentTrackId, onClick = { viewModel.play(entry) }, selection = selection)
                                 } else {
                                     // 文件暂时不可用：保留条目，灰色显示（需求 PL-3）
                                     Column(Modifier.fillMaxWidth().alpha(0.5f).padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -289,8 +305,11 @@ fun PlaylistDetailScreen(
                                     }
                                 }
                             }
-                            IconButton(onClick = { viewModel.remove(entry) }) {
-                                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_remove))
+                            // 多选时用操作栏里的"从播放列表移除"
+                            if (!selection.active) {
+                                IconButton(onClick = { viewModel.remove(entry) }) {
+                                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_remove))
+                                }
                             }
                         }
                     }

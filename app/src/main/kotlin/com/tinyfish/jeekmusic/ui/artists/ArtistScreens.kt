@@ -1,5 +1,7 @@
 package com.tinyfish.jeekmusic.ui.artists
 
+import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
+import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListDownloadButton
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
@@ -342,11 +344,14 @@ fun ArtistDetailScreen(
         }
     }
 
+    val selection = rememberTrackSelection()
     Column(Modifier.fillMaxSize()) {
         val name = artist?.let { artistName(it) }.orEmpty()
         // 筛选时显示符合筛选的歌曲数
         val subtitle = tracks?.size?.let { songCount(it) } ?: artist?.let { songCount(it.trackCount) }
-        if (route.isTabRoot) {
+        if (selection.active) {
+            SelectionBar(selection, tracks = { viewModel.tracks.value.orEmpty() })
+        } else if (route.isTabRoot) {
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(name, style = MaterialTheme.typography.titleLarge)
@@ -374,6 +379,7 @@ fun ArtistDetailScreen(
                         track = track,
                         isCurrent = track.id == currentTrackId,
                         onClick = { viewModel.play(index) },
+                        selection = selection,
                     )
                 }
             }

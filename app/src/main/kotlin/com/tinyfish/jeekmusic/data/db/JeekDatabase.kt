@@ -40,6 +40,7 @@ abstract class JeekDatabase : RoomDatabase() {
     abstract fun searchDao(): SearchDao
     abstract fun lyricsDao(): LyricsDao
     abstract fun tagDao(): TagDao
+    abstract fun fileMoveDao(): FileMoveDao
 }
 
 @Module
@@ -82,4 +83,7 @@ object DatabaseModule {
 
     @Provides
     fun tagDao(db: JeekDatabase) = db.tagDao()
+
+    @Provides
+    fun fileMoveDao(db: JeekDatabase) = db.fileMoveDao()
 }

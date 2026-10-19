@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏、锁屏上"顺序播放"的图标（需求 P-13）：两支箭头平行向前，和随机播放的交叉箭头对照 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,6h11.5v2H4zM15,3.5L20.5,7 15,10.5zM4,16h11.5v2H4zM15,13.5L20.5,17 15,20.5z" />
+</vector>

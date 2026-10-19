@@ -215,13 +215,13 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
-     * 通知栏、锁屏上的随机播放开关（需求 P-13）：图标表示当前状态，点一下切换。
-     * 关闭时和其他按钮一样（Media3 自带的关闭图标是灰的，像不能点），开启时图标下面多一个圆点。
+     * 通知栏、锁屏上的随机播放开关（需求 P-13）：图标表示当前的播放模式，点一下切换。
+     * 系统把图标染成单色，只能靠形状区分：随机播放是交叉箭头，顺序播放是平行箭头（Media3 自带的关闭图标是灰的，像不能点）。
      */
     @OptIn(UnstableApi::class)
     private fun shuffleButton(enabled: Boolean): CommandButton =
         CommandButton.Builder(if (enabled) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF)
-            .setCustomIconResId(if (enabled) R.drawable.ic_shuffle_on_dot else R.drawable.ic_shuffle)
+            .setCustomIconResId(if (enabled) R.drawable.ic_shuffle else R.drawable.ic_sequential)
             .setDisplayName(getString(if (enabled) R.string.shuffle_on else R.string.shuffle_off))
             .setSessionCommand(SessionCommand(PlaybackCommands.TOGGLE_SHUFFLE, Bundle.EMPTY))
             .setSlots(CommandButton.SLOT_OVERFLOW)

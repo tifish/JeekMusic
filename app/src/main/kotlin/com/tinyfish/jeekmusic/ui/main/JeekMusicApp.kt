@@ -3,6 +3,9 @@ package com.tinyfish.jeekmusic.ui.main
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.Layout
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import com.tinyfish.jeekmusic.ui.components.selectedChipColors
@@ -228,28 +231,28 @@ private fun MainScreen(viewModel: MainViewModel) {
                         )
                     },
                     actions = {
-                        TagFilterButton(viewModel)
-                        // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
-                        ToggleIconButton(
-                            checked = playerState.shuffle,
-                            onClick = playerViewModel::toggleShuffleAndAnnounce,
-                            icon = R.drawable.ic_shuffle,
-                            contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
-                            modifier = Modifier.testTag("top_shuffle"),
-                        )
-                        SleepTimerCountdown(playerState.sleepTimer)
-                        ToggleIconButton(
-                            checked = playerState.sleepTimer.active,
-                            onClick = { showSleepTimer = true },
-                            icon = R.drawable.ic_bedtime,
-                            contentDescription = stringResource(R.string.menu_sleep_timer),
-                            modifier = Modifier.testTag("top_sleep_timer"),
-                        )
-                        IconButton(onClick = { viewModel.open(TopRoute.Search) }, modifier = Modifier.testTag("open_search")) {
-                            Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
-                        }
-                        IconButton(onClick = { viewModel.open(TopRoute.Settings) }, modifier = Modifier.testTag("open_settings")) {
-                            Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
+                        // 按钮排紧一点（40dp 一个）；筛选按钮最后量，只用剩下的宽度，标签太长就截断，
+                        // 不把右边的按钮挤出屏幕（需求 U-7）
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+                            TopBarActions(filter = { TagFilterButton(viewModel) }) {
+                                // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
+                                ToggleIconButton(
+                                    checked = playerState.shuffle,
+                                    onClick = playerViewModel::toggleShuffleAndAnnounce,
+                                    icon = R.drawable.ic_shuffle,
+                                    contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
+                                    modifier = Modifier.testTag("top_shuffle"),
+                                )
+                                SleepTimerCountdown(playerState.sleepTimer)
+                                ToggleIconButton(
+                                    checked = playerState.sleepTimer.active,
+                                    onClick = { showSleepTimer = true },
+                                    icon = R.drawable.ic_bedtime,
+                                    contentDescription = stringResource(R.string.menu_sleep_timer),
+                                    modifier = Modifier.testTag("top_sleep_timer"),
+                                )
+                                TopBarMoreMenu(viewModel)
+                            }
                         }
                     },
                 )
@@ -340,6 +343,54 @@ private fun MainScreen(viewModel: MainViewModel) {
 }
 
 /**
+ * 标题栏右侧的按钮：先量 [buttons]，[filter] 只能用剩下的宽度，所以筛选标签再长也不会把按钮挤出屏幕。
+ */
+@Composable
+private fun TopBarActions(filter: @Composable () -> Unit, buttons: @Composable () -> Unit) {
+    Layout(contents = listOf(filter, buttons)) { (filterMeasurables, buttonMeasurables), constraints ->
+        val loose = constraints.copy(minWidth = 0)
+        val buttonPlaceables = buttonMeasurables.map { it.measure(loose) }
+        val buttonsWidth = buttonPlaceables.sumOf { it.width }
+        val filterConstraints = loose.copy(maxWidth = (loose.maxWidth - buttonsWidth).coerceAtLeast(0))
+        val filterPlaceables = filterMeasurables.map { it.measure(filterConstraints) }
+        val all = filterPlaceables + buttonPlaceables
+        val height = all.maxOfOrNull { it.height } ?: 0
+        layout(all.sumOf { it.width }.coerceAtMost(loose.maxWidth), height) {
+            var x = 0
+            all.forEach {
+                it.placeRelative(x, (height - it.height) / 2)
+                x += it.width
+            }
+        }
+    }
+}
+
+/** 标题栏最右侧的"更多"菜单：搜索、设置。 */
+@Composable
+private fun TopBarMoreMenu(viewModel: MainViewModel) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.testTag("top_more")) {
+            Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_search)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
+                onClick = { open = false; viewModel.open(TopRoute.Search) },
+                modifier = Modifier.testTag("open_search"),
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_settings)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
+                onClick = { open = false; viewModel.open(TopRoute.Settings) },
+                modifier = Modifier.testTag("open_settings"),
+            )
+        }
+    }
+}
+
+/**
  * 标题栏上的智能标签筛选（需求 M-6）：筛选中图标高亮并显示选中的标签（比如"非运动·纯音乐"）。
  * 菜单分三组（氛围 / 人声 / 曲风），每组点一下选中、再点一下取消，可以组合；
  * 菜单里还显示未分析的歌曲数，可以立即分析。
@@ -360,14 +411,21 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                 .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable { open = true }
                 .testTag("top_filter")
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
             if (active) {
-                // 比如"非运动·纯音乐·按歌名"
+                // 比如"非运动·纯音乐·按歌名"；放不下时末尾显示省略号
                 val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.FILE_NAME })
-                Text(label.joinToString("·"), Modifier.padding(start = 2.dp), style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+                Text(
+                    label.joinToString("·"),
+                    Modifier.padding(start = 2.dp).weight(1f, fill = false),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

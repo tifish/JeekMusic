@@ -7,8 +7,6 @@ namespace JeekMusic.Core.Tests.Text;
 /// <summary>shared/testcases 里文本相关的用例：自然排序、排序键、拼音、繁简、编码。</summary>
 public class TextSharedTests
 {
-    static TextSharedTests() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
     [Fact]
     public void NaturalOrder()
     {
@@ -59,7 +57,8 @@ public class TextSharedTests
     }
 
     /// <summary>Java 的字符集名 → .NET 的编码（UTF-16LE / UTF-16BE 在 .NET 里叫法不同）。</summary>
-    internal static Encoding Enc(string name) => name.ToUpperInvariant() switch
+    /// 测试代码自己不注册代码页：先触发 Core 的 Encodings（由它注册），这样 Core 漏了注册时测试会失败。
+    internal static Encoding Enc(string name) => (Encodings.Gbk is not null ? name : name).ToUpperInvariant() switch
     {
         "UTF-16LE" => new UnicodeEncoding(bigEndian: false, byteOrderMark: false),
         "UTF-16BE" => new UnicodeEncoding(bigEndian: true, byteOrderMark: false),

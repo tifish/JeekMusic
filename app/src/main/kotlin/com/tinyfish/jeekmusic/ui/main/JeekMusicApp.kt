@@ -4,8 +4,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.layout.Layout
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import com.tinyfish.jeekmusic.ui.components.selectedChipColors
@@ -22,8 +28,6 @@ import com.tinyfish.jeekmusic.analysis.TagDimension
 import com.tinyfish.jeekmusic.ui.components.dimensionLabel
 import com.tinyfish.jeekmusic.ui.components.filterLabel
 import com.tinyfish.jeekmusic.ui.components.tagLabel
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -75,7 +79,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -216,46 +219,37 @@ private fun MainScreen(viewModel: MainViewModel) {
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    // 右侧按钮多（筛选中、睡眠定时中、系统字体大）时，标题保持一行，放不下就缩小字号；
-                    // 缩到最小还放不下就不显示，不显示半截的"JeekM…"
-                    title = {
-                        var titleFits by remember { mutableStateOf(true) }
-                        Text(
-                            stringResource(R.string.app_name),
-                            Modifier.graphicsLayer { alpha = if (titleFits) 1f else 0f },
-                            maxLines = 1,
-                            softWrap = false,
-                            autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.titleLarge.fontSize),
-                            onTextLayout = { titleFits = !it.hasVisualOverflow },
-                        )
-                    },
-                    actions = {
-                        // 按钮排紧一点（40dp 一个）；筛选按钮最后量，只用剩下的宽度，标签太长就截断，
-                        // 不把右边的按钮挤出屏幕（需求 U-7）
-                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
-                            TopBarActions(filter = { TagFilterButton(viewModel) }) {
-                                // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
-                                ToggleIconButton(
-                                    checked = playerState.shuffle,
-                                    onClick = playerViewModel::toggleShuffleAndAnnounce,
-                                    icon = R.drawable.ic_shuffle,
-                                    contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
-                                    modifier = Modifier.testTag("top_shuffle"),
-                                )
-                                SleepTimerCountdown(playerState.sleepTimer)
-                                ToggleIconButton(
-                                    checked = playerState.sleepTimer.active,
-                                    onClick = { showSleepTimer = true },
-                                    icon = R.drawable.ic_bedtime,
-                                    contentDescription = stringResource(R.string.menu_sleep_timer),
-                                    modifier = Modifier.testTag("top_sleep_timer"),
-                                )
-                                TopBarMoreMenu(viewModel)
-                            }
+                MainTopBar(
+                    filter = { TagFilterButton(viewModel) },
+                    countdown = { SleepTimerCountdown(playerState.sleepTimer, Modifier.padding(horizontal = 2.dp)) },
+                ) { buttonSize, collapsed ->
+                    val buttonModifier = Modifier.size(buttonSize.coerceAtMost(40.dp))
+                    // 随机 / 顺序切换和睡眠定时，在列表界面直接可用（需求 P-5、P-8）
+                    ToggleIconButton(
+                        checked = playerState.shuffle,
+                        onClick = playerViewModel::toggleShuffleAndAnnounce,
+                        icon = R.drawable.ic_shuffle,
+                        contentDescription = stringResource(if (playerState.shuffle) R.string.mode_shuffle else R.string.mode_sequential),
+                        modifier = buttonModifier.testTag("top_shuffle"),
+                    )
+                    ToggleIconButton(
+                        checked = playerState.sleepTimer.active,
+                        onClick = { showSleepTimer = true },
+                        icon = R.drawable.ic_bedtime,
+                        contentDescription = stringResource(R.string.menu_sleep_timer),
+                        modifier = buttonModifier.testTag("top_sleep_timer"),
+                    )
+                    if (collapsed) {
+                        TopBarMoreMenu(viewModel, buttonModifier)
+                    } else {
+                        IconButton(onClick = { viewModel.open(TopRoute.Search) }, modifier = buttonModifier.testTag("open_search")) {
+                            Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
                         }
-                    },
-                )
+                        IconButton(onClick = { viewModel.open(TopRoute.Settings) }, modifier = buttonModifier.testTag("open_settings")) {
+                            Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.action_settings))
+                        }
+                    }
+                }
             },
             bottomBar = { MiniPlayer(playerViewModel, onExpand = { viewModel.nowPlayingOpen = true }) },
             snackbarHost = { SnackbarHost(snackbar) },
@@ -342,24 +336,67 @@ private fun MainScreen(viewModel: MainViewModel) {
     if (showSleepTimer) SleepTimerDialog(playerViewModel, playerState.sleepTimer, onDismiss = { showSleepTimer = false })
 }
 
+/** 标题栏按钮的大小，放不下时依次缩小：先缩小按钮间距（点击区域），再缩小按钮本身。 */
+private val TopBarButtonSizes = listOf(48.dp, 44.dp, 40.dp, 36.dp, 32.dp)
+
+/** 筛选按钮只剩图标时的宽度（[TagFilterButton] 左右各 8dp 内边距加 24dp 图标）。 */
+private val FilterIconWidth = 40.dp
+
+private enum class TopBarSlot { Filter, Countdown, Buttons }
+
 /**
- * 标题栏右侧的按钮：先量 [buttons]，[filter] 只能用剩下的宽度，所以筛选标签再长也不会把按钮挤出屏幕。
+ * 标题栏（需求 U-7）：不显示应用名，整行留给按钮。左边是 [filter]，右边是 [buttons]，睡眠定时的 [countdown] 夹在第一、二个按钮之间。
+ * 放不下时依次让步：缩小按钮（[TopBarButtonSizes]）→ 筛选标签截断到两三个字 → 筛选只留图标 → 不显示睡眠定时倒计时，
+ * 都不行才 `collapsed`，把搜索、设置收进"更多"菜单，再按同样的顺序让步一遍。
+ * 筛选按钮只用剩下的宽度，标签太长就截断，任何时候都不把右边的按钮挤出屏幕。
  */
 @Composable
-private fun TopBarActions(filter: @Composable () -> Unit, buttons: @Composable () -> Unit) {
-    Layout(contents = listOf(filter, buttons)) { (filterMeasurables, buttonMeasurables), constraints ->
-        val loose = constraints.copy(minWidth = 0)
-        val buttonPlaceables = buttonMeasurables.map { it.measure(loose) }
-        val buttonsWidth = buttonPlaceables.sumOf { it.width }
-        val filterConstraints = loose.copy(maxWidth = (loose.maxWidth - buttonsWidth).coerceAtLeast(0))
-        val filterPlaceables = filterMeasurables.map { it.measure(filterConstraints) }
-        val all = filterPlaceables + buttonPlaceables
-        val height = all.maxOfOrNull { it.height } ?: 0
-        layout(all.sumOf { it.width }.coerceAtMost(loose.maxWidth), height) {
-            var x = 0
-            all.forEach {
-                it.placeRelative(x, (height - it.height) / 2)
-                x += it.width
+private fun MainTopBar(
+    filter: @Composable () -> Unit,
+    countdown: @Composable () -> Unit,
+    buttons: @Composable (buttonSize: Dp, collapsed: Boolean) -> Unit,
+) {
+    val labelSize = MaterialTheme.typography.labelMedium.fontSize
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        SubcomposeLayout(
+            Modifier
+                .windowInsetsPadding(TopAppBarDefaults.windowInsets)
+                .fillMaxWidth()
+                .height(64.dp)
+                .padding(horizontal = 4.dp),
+        ) { constraints ->
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val filterMeasurables = subcompose(TopBarSlot.Filter, filter)
+            val countdownPlaceables = subcompose(TopBarSlot.Countdown, countdown).map { it.measure(Constraints()) }
+            val countdownWidth = countdownPlaceables.sumOf { it.width }
+            val filterFull = filterMeasurables.sumOf { it.maxIntrinsicWidth(height) }
+            val filterIcon = filterFull.coerceAtMost(FilterIconWidth.roundToPx())
+            // 筛选图标加上标签的头两三个字
+            val filterShort = filterFull.coerceAtMost(filterIcon + (labelSize * 3).roundToPx())
+            // 依次让步：筛选按钮的宽度、是否显示倒计时；每一步里按钮从大到小试
+            val steps = listOf(filterFull to countdownWidth, filterShort to countdownWidth, filterIcon to countdownWidth, filterIcon to 0)
+            val (buttonSize, collapsed, showCountdown) = listOf(false, true).firstNotNullOfOrNull { collapsed ->
+                val count = if (collapsed) 3 else 4
+                steps.firstNotNullOfOrNull { (filterWidth, countdown) ->
+                    TopBarButtonSizes.firstOrNull { filterWidth + countdown + count * it.roundToPx() <= width }
+                        ?.let { Triple(it, collapsed, countdown > 0) }
+                }
+            } ?: Triple(TopBarButtonSizes.last(), true, false)
+            val buttonPlaceables = subcompose(TopBarSlot.Buttons) {
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides buttonSize) { buttons(buttonSize, collapsed) }
+            }.map { it.measure(Constraints()) }
+            val shownCountdown = if (showCountdown) countdownPlaceables else emptyList()
+            val rightWidth = buttonPlaceables.sumOf { it.width } + shownCountdown.sumOf { it.width }
+            val filterPlaceables = filterMeasurables.map { it.measure(Constraints(maxWidth = (width - rightWidth).coerceAtLeast(filterIcon), maxHeight = height)) }
+            layout(width, height) {
+                filterPlaceables.forEach { it.placeRelative(0, (height - it.height) / 2) }
+                var x = width - rightWidth
+                val right = buttonPlaceables.take(1) + shownCountdown + buttonPlaceables.drop(1)
+                right.forEach {
+                    it.placeRelative(x, (height - it.height) / 2)
+                    x += it.width
+                }
             }
         }
     }
@@ -367,10 +404,10 @@ private fun TopBarActions(filter: @Composable () -> Unit, buttons: @Composable (
 
 /** 标题栏最右侧的"更多"菜单：搜索、设置。 */
 @Composable
-private fun TopBarMoreMenu(viewModel: MainViewModel) {
+private fun TopBarMoreMenu(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }, modifier = Modifier.testTag("top_more")) {
+        IconButton(onClick = { open = true }, modifier = modifier.testTag("top_more")) {
             Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -416,11 +453,19 @@ private fun TagFilterButton(viewModel: MainViewModel) {
         ) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
             if (active) {
-                // 比如"非运动·纯音乐·按歌名"；放不下时末尾显示省略号
+                // 比如"非运动·纯音乐·按歌名"；放不下时末尾显示省略号，连一个字都放不下就只显示图标
                 val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.FILE_NAME })
+                val minLabelWidth = MaterialTheme.typography.labelMedium.fontSize * 2
                 Text(
                     label.joinToString("·"),
-                    Modifier.padding(start = 2.dp).weight(1f, fill = false),
+                    Modifier
+                        .weight(1f, fill = false)
+                        .layout { measurable, constraints ->
+                            if (constraints.maxWidth < minLabelWidth.roundToPx()) return@layout layout(0, 0) {}
+                            val placeable = measurable.measure(constraints)
+                            layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+                        }
+                        .padding(start = 2.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = color,
                     maxLines = 1,

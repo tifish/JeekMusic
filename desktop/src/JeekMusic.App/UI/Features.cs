@@ -15,6 +15,7 @@ public static class Features
     public static readonly List<IFeature> All =
     [
         // 每个功能一行
+        new Update.UpdateFeature(),
     ];
 
     public static void StartAll(AppServices app, Shell shell)

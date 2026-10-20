@@ -1,0 +1,110 @@
+name: Desktop
+
+# 桌面端（desktop/，Windows）。每次推送到 main 且改动了 desktop/ 或 shared/：单元测试、Native AOT 发布、打包 zip，
+# 发布到 GitHub Releases（标签 desktop-v1.0.<Git 提交数>）。桌面端的程序内更新从这里下载新版本（desktop/docs/design.md §15）。
+# **不能成为 latest**：移动端的应用内更新取的是 releases/latest（mobile/docs/design.md §13.2）。
+# Pull Request 只构建和测试，不发布。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "!desktop/docs/**"
+      - "!desktop/**.md"
+      - "!desktop/spike/**"
+      - "!desktop/spike-audio/**"
+      - "shared/**"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    paths: ["desktop/**", "shared/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch: # 在 Actions 页面手动运行（也会发布）
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # 版本号 = Git 提交数，需要完整历史
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        run: |
+          count=$(git rev-list --count HEAD)
+          echo "VERSION=1.0.$count" >> "$GITHUB_ENV"
+
+      # 正式发布用自己编的 LGPL 音频专用 libmpv（libmpv.yml 编译，desktop/docs/design.md §15.3）；
+      # 还没有时退回 shinchiro 的现成版本（GPL），并在更新说明里注明
+      - name: libmpv
+        run: |
+          if grep -q -- "--lgpl" desktop/tools/get-libmpv.sh && bash desktop/tools/get-libmpv.sh --lgpl; then
+            echo "LIBMPV=LGPL" >> "$GITHUB_ENV"
+          else
+            bash desktop/tools/get-libmpv.sh
+            echo "LIBMPV=GPL" >> "$GITHUB_ENV"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Test
+        run: dotnet test desktop/JeekMusic.slnx -c Release
+
+      - name: Publish (Native AOT)
+        run: |
+          # ILCompiler 链接时要用 vswhere 找 MSVC
+          export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
+          dotnet publish desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 \
+            -p:JeekVersion=$VERSION -o publish/JeekMusic
+          rm -f publish/JeekMusic/*.pdb
+          ls -la publish/JeekMusic
+
+      - name: Package
+        run: |
+          cp LICENSE publish/JeekMusic/LICENSE.txt
+          cd publish
+          7z a -tzip "../JeekMusic-desktop-$VERSION-win-x64.zip" JeekMusic > /dev/null
+          cd ..
+          ls -la *.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: JeekMusic-desktop
+          path: JeekMusic-desktop-*.zip
+
+      - name: Release notes
+        if: env.PUBLISH == 'true'
+        run: |
+          # 上一个桌面端版本之后改动了 desktop/ 或 shared/ 的提交标题
+          last=$(git describe --tags --abbrev=0 --match 'desktop-v*' HEAD 2>/dev/null || true)
+          if [ -n "$last" ]; then range="$last..HEAD"; else range="-20"; fi
+          git log --no-merges --pretty='- %s' $range -- desktop shared > release-notes.md
+          if [ "$LIBMPV" = "GPL" ]; then
+            printf '\n> 这个版本附带的 libmpv 是 shinchiro/mpv-winbuild-cmake 的现成版本（GPL，源码见 https://github.com/shinchiro/mpv-winbuild-cmake ）。\n' >> release-notes.md
+          fi
+
+      - uses: softprops/action-gh-release@v3
+        if: env.PUBLISH == 'true'
+        with:
+          tag_name: desktop-v${{ env.VERSION }}
+          name: JeekMusic 桌面端 ${{ env.VERSION }}
+          body_path: release-notes.md
+          files: JeekMusic-desktop-${{ env.VERSION }}-win-x64.zip
+          make_latest: false

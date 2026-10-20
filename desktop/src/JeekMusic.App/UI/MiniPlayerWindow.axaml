@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:JeekMusic.UI.ViewModels"
+        xmlns:ui="using:JeekMusic.UI"
+        x:Class="JeekMusic.UI.MiniPlayerWindow"
+        x:DataType="vm:PlayerViewModel"
+        Title="JeekMusic" Width="360" Height="112" CanResize="False"
+        ExtendClientAreaToDecorationsHint="True"
+        TransparencyLevelHint="Mica" Background="Transparent"
+        Icon="avares://JeekMusic/Assets/JeekMusic.ico">
+    <!-- 迷你播放器（需求 PC-4）：编译绑定，兼容 Native AOT -->
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,Auto" Margin="10,10,10,4">
+        <Border Grid.RowSpan="2" Width="64" Height="64" CornerRadius="4" ClipToBounds="True"
+                Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+            <Panel>
+                <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="24" HorizontalAlignment="Center" Opacity="0.5" />
+                <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+            </Panel>
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,4,0">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Artist}" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis" />
+            <ProgressBar Height="3" MinHeight="3" Margin="0,6,0,0" Maximum="{Binding DurationSeconds}" Value="{Binding PositionSeconds}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
+            <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" ToolTip.Tip="上一首" />
+            <Button Classes="icon" FontSize="20" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" ToolTip.Tip="播放 / 暂停" />
+            <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" ToolTip.Tip="下一首" />
+            <ToggleButton x:Name="PinButton" Classes="icon" Content="{x:Static ui:Icons.Pin}" ToolTip.Tip="总在最前" />
+            <Button x:Name="RestoreButton" Classes="icon" Content="{x:Static ui:Icons.Expand}" ToolTip.Tip="回到主窗口" />
+        </StackPanel>
+    </Grid>
+</Window>

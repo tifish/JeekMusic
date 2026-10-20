@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- JeekMusic 桌面端：界面、数据库、扫描、播放、系统集成（docs/design.md §2） -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <AssemblyName>JeekMusic</AssemblyName>
+    <RootNamespace>JeekMusic</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\JeekMusic.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- 版本号 = Git 提交数，由 CI 通过 -p:JeekVersion=1.0.N 传入 -->
+    <JeekVersion Condition="'$(JeekVersion)' == ''">1.0.0</JeekVersion>
+    <Version>$(JeekVersion)</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DataGrid 按属性名反射取值，ATL 用反射注册格式：保留这些程序集的类型 -->
+    <TrimmerRootAssembly Include="JeekMusic" />
+    <TrimmerRootAssembly Include="Avalonia.Controls.DataGrid" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 开发阶段用 tools/get-libmpv.sh 下载的现成 libmpv（docs/design.md §15.3） -->
+    <None Include="..\..\native\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\..\native\libmpv-2.dll')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="z440.atl.core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JeekMusic.Core\JeekMusic.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="JeekMusic.App.Tests" />
+  </ItemGroup>
+</Project>

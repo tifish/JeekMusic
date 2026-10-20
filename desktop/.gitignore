@@ -4,3 +4,4 @@ publish/
 *.user
 spike-audio/native/
 spike-audio/testdata/
+native/

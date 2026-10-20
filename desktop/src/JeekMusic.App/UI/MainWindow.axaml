@@ -1,0 +1,6 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="JeekMusic.UI.MainWindow"
+        Title="JeekMusic" Width="1200" Height="760" Icon="avares://JeekMusic/Assets/JeekMusic.ico">
+    <TextBlock Text="JeekMusic" HorizontalAlignment="Center" VerticalAlignment="Center" />
+</Window>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 与平台无关的规则和模型：从移动端（Kotlin）移植，和移动端共用 shared/testcases/ 的测试用例 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 拼音、繁简对照表（shared/pinyin/，由 ICU4J 生成），编进程序集 -->
+    <EmbeddedResource Include="..\..\..\shared\pinyin\*.tsv" LogicalName="%(Filename)%(Extension)" Condition="Exists('..\..\..\shared\pinyin')" />
+  </ItemGroup>
+</Project>

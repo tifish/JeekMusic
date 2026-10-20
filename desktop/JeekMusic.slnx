@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JeekMusic.Core/JeekMusic.Core.csproj" />
+    <Project Path="src/JeekMusic.App/JeekMusic.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JeekMusic.Core.Tests/JeekMusic.Core.Tests.csproj" />
+    <Project Path="tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj" />
+  </Folder>
+</Solution>

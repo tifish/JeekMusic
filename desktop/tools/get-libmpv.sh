@@ -2,7 +2,7 @@
 # 下载 shinchiro/mpv-winbuild-cmake 最新的 libmpv（x86_64 通用版，不要求 AVX2），只取出 libmpv-2.dll 放到 native/。
 # 压缩包解到单独的临时目录，用完删除。需要 curl、python、7z。
 set -euo pipefail
-here="$(cd "$(dirname "$0")" && pwd)"
+here="$(cd "$(dirname "$0")/.." && pwd)"
 url=$(curl -fsSL https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest | python -c "
 import json, re, sys
 for a in json.load(sys.stdin)['assets']:

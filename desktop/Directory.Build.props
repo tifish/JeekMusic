@@ -1,0 +1,11 @@
+<Project>
+  <!-- 正式工程（src/、tests/）的公共设置；spike/、spike-audio/ 不受影响（它们有自己的设置） -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('\src\')) Or $(MSBuildProjectDirectory.Contains('\tests\'))">
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

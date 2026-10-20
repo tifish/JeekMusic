@@ -1,40 +1,33 @@
 package com.tinyfish.jeekmusic.data.scanner
 
+import com.tinyfish.jeekmusic.SharedCases
+import com.tinyfish.jeekmusic.cases
+import com.tinyfish.jeekmusic.description
+import com.tinyfish.jeekmusic.flag
+import com.tinyfish.jeekmusic.str
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+/** 用例在 shared/testcases/album-keys.json（两端共用；desktopOnly 的用例只在桌面端跑）。 */
 class AlbumKeysTest {
 
-    private val volume = "external_primary"
+    private fun key(o: JSONObject) = AlbumKeys.of(o.str("album"), o.str("albumArtist"), o.getString("volume"), o.getString("dir"))
 
     @Test
-    fun `没有专辑名时为空`() {
-        assertNull(AlbumKeys.of(null, "A", volume, "Music/"))
-        assertNull(AlbumKeys.of("  ", "A", volume, "Music/"))
-    }
-
-    @Test
-    fun `有专辑艺术家时跨目录合并`() {
-        val a = AlbumKeys.of("叶惠美", "周杰伦", volume, "Music/a/")
-        val b = AlbumKeys.of("叶惠美 ", "周杰伦", volume, "Music/b/")
-        assertEquals(a, b)
-    }
-
-    @Test
-    fun `没有专辑艺术家时按目录区分同名专辑`() {
-        val a = AlbumKeys.of("Greatest Hits", null, volume, "Music/Queen/")
-        val b = AlbumKeys.of("Greatest Hits", null, volume, "Music/ABBA/")
-        assertNotEquals(a, b)
-    }
-
-    @Test
-    fun `碟片目录取上一级`() {
-        val cd1 = AlbumKeys.of("Live", null, volume, "Music/Live/CD1/")
-        val cd2 = AlbumKeys.of("Live", null, volume, "Music/Live/Disc 2/")
-        assertEquals(cd1, cd2)
-        assertEquals("Music/Live/", AlbumKeys.albumDirectory("Music/Live/CD1/"))
-        assertEquals("Music/CDs/", AlbumKeys.albumDirectory("Music/CDs/"))
+    fun albumKeys() {
+        val file = SharedCases.load("album-keys.json")
+        for (c in file.cases("nullKeys")) assertNull(c.description(), key(c))
+        for (c in file.cases("pairs").filterNot { it.flag("desktopOnly") }) {
+            val a = key(c.getJSONObject("a"))
+            val b = key(c.getJSONObject("b"))
+            assertNotNull(c.description(), a)
+            assertEquals(c.description(), c.getBoolean("same"), a == b)
+        }
+        for (c in file.cases("albumDirectory").filterNot { it.flag("desktopOnly") }) {
+            assertEquals(c.description(), c.getString("expected"), AlbumKeys.albumDirectory(c.getString("input")))
+        }
     }
 }

@@ -1,84 +1,45 @@
 package com.tinyfish.jeekmusic.data.scanner
 
+import com.tinyfish.jeekmusic.SharedCases
+import com.tinyfish.jeekmusic.cases
+import com.tinyfish.jeekmusic.description
+import com.tinyfish.jeekmusic.objects
+import com.tinyfish.jeekmusic.str
+import com.tinyfish.jeekmusic.text
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.charset.Charset
 
+/** 用例在 shared/testcases/cue-parser.json（两端共用）。 */
 class CueParserTest {
 
-    private val sample = """
-        REM GENRE Pop
-        REM DATE 2003
-        PERFORMER "周杰伦"
-        TITLE "叶惠美"
-        FILE "叶惠美.wav" WAVE
-          TRACK 01 AUDIO
-            TITLE "以父之名"
-            INDEX 01 00:00:00
-          TRACK 02 AUDIO
-            TITLE "懦夫"
-            PERFORMER "周杰伦 feat. 费玉清"
-            INDEX 00 05:41:20
-            INDEX 01 05:42:37
-          TRACK 03 AUDIO
-            TITLE "晴天"
-            INDEX 01 09:58:00
-    """.trimIndent()
-
     @Test
-    fun `解析专辑信息和音轨`() {
-        val sheet = CueParser.parse(sample)
-        assertEquals("叶惠美", sheet.title)
-        assertEquals("周杰伦", sheet.performer)
-        assertEquals(2003, sheet.year)
-        assertEquals("Pop", sheet.genre)
-        val file = sheet.files.single()
-        assertEquals("叶惠美.wav", file.name)
-        assertEquals(listOf(1, 2, 3), file.tracks.map { it.number })
-        assertEquals(listOf("以父之名", "懦夫", "晴天"), file.tracks.map { it.title })
-        // 缺省继承顶层 PERFORMER
-        assertEquals(listOf("周杰伦", "周杰伦 feat. 费玉清", "周杰伦"), file.tracks.map { it.performer })
+    fun parse() {
+        for (c in SharedCases.load("cue-parser.json").cases()) {
+            val text = c.str("encoding")?.let { CharsetDetector.decode(c.text().toByteArray(Charset.forName(it))) } ?: c.text()
+            val sheet = CueParser.parse(text)
+            val e = c.getJSONObject("expected")
+            val d = c.description()
+            if (e.has("title")) assertEquals(d, e.str("title"), sheet.title)
+            if (e.has("performer")) assertEquals(d, e.str("performer"), sheet.performer)
+            if (e.has("year")) assertEquals(d, if (e.isNull("year")) null else e.getInt("year"), sheet.year)
+            if (e.has("genre")) assertEquals(d, e.str("genre"), sheet.genre)
+            if (e.has("isPerTrack")) assertEquals(d, e.getBoolean("isPerTrack"), sheet.isPerTrack)
+            if (e.has("files")) {
+                val expected = e.getJSONArray("files").objects().map { f ->
+                    CueFile(f.getString("name"), f.getJSONArray("tracks").objects().map {
+                        CueTrack(it.getInt("number"), it.str("title"), it.str("performer"), it.getLong("startMs"))
+                    })
+                }
+                assertEquals(d, expected, sheet.files)
+            }
+        }
     }
 
     @Test
-    fun `使用 INDEX 01 作为起点，帧按每秒 75 帧换算`() {
-        val tracks = CueParser.parse(sample).files.single().tracks
-        assertEquals(0L, tracks[0].startMs)
-        assertEquals(5 * 60_000L + 42_000 + 37 * 1000 / 75, tracks[1].startMs)
-        assertEquals(9 * 60_000L + 58_000, tracks[2].startMs)
-    }
-
-    @Test
-    fun `分轨 CUE`() {
-        val cue = """
-            FILE "01.flac" WAVE
-              TRACK 01 AUDIO
-                INDEX 01 00:00:00
-            FILE "02.flac" WAVE
-              TRACK 02 AUDIO
-                INDEX 01 00:00:00
-        """.trimIndent()
-        assertTrue(CueParser.parse(cue).isPerTrack)
-        assertFalse(CueParser.parse(sample).isPerTrack)
-    }
-
-    @Test
-    fun `文件名不带引号`() {
-        assertEquals("album.flac", CueParser.parse("FILE album.flac WAVE").files.single().name)
-    }
-
-    @Test
-    fun `GBK 编码的 CUE 自动识别`() {
-        val bytes = sample.toByteArray(Charset.forName("GBK"))
-        assertEquals("叶惠美", CueParser.parse(CharsetDetector.decode(bytes)).title)
-    }
-
-    @Test
-    fun `编码识别：BOM、UTF-8、Big5`() {
-        assertEquals("晴天", CharsetDetector.decode(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "晴天".toByteArray()))
-        assertEquals("晴天", CharsetDetector.decode("晴天".toByteArray()))
-        assertEquals("張學友", CharsetDetector.decode("張學友".toByteArray(Charset.forName("Big5"))))
+    fun parseTime() {
+        for (c in SharedCases.load("cue-parser.json").cases("parseTime")) {
+            assertEquals(c.description(), if (c.isNull("expected")) null else c.getLong("expected"), CueParser.parseTime(c.getString("input")))
+        }
     }
 }

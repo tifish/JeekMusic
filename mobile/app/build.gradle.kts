@@ -83,6 +83,15 @@ android {
         // 模型文件不压缩，才能直接内存映射给 LiteRT（docs/design.md §6.3）
         noCompress += "tflite"
     }
+
+    // 单元测试读两端共用的测试用例（仓库根目录的 shared/testcases/，desktop/docs/design.md §3）
+    testOptions {
+        unitTests.all {
+            val testcases = rootProject.file("../shared/testcases")
+            it.systemProperty("jeek.testcases", testcases.absolutePath)
+            it.inputs.dir(testcases)
+        }
+    }
 }
 
 room {
@@ -128,6 +137,10 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // 读 shared/testcases 的 JSON（android.jar 里的 org.json 在单元测试中只是空壳）
+    testImplementation(libs.org.json)
+    // 拼音、繁简的共用用例：JVM 上没有 android.icu，用同源的 ICU4J（版本同 Android 16 的 ICU）
+    testImplementation(libs.icu4j)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)

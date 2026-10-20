@@ -26,6 +26,8 @@ benchmark = "1.5.0"
 uiautomator = "2.4.0"
 androidxJunit = "1.3.0"
 junit = "4.13.2"
+orgJson = "20250517"
+icu4j = "76.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -68,6 +70,8 @@ taglib = { module = "io.github.kyant0:taglib", version.ref = "taglib" }
 litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
 kotlinx-serialization-bom = { module = "org.jetbrains.kotlinx:kotlinx-serialization-bom", version.ref = "serialization" }
 junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
+icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

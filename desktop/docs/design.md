@@ -84,10 +84,12 @@ shared/                        （仓库根目录）两端共用
 
 | 内容 | 位置 | 说明 |
 |---|---|---|
-| 规则的测试用例 | `shared/testcases/*.json` | 艺术家拆分、文件名推断、GBK 修复、CUE 解析、LRC 解析、排序键、自然排序、分类规则（给定模型得分 → 标签）、曲名补救。每条是"输入 → 期望输出"。D1 先把移动端现有的单元测试用例导出成 JSON，移动端的 JUnit 也改为读这些文件，之后两端只维护一份 |
-| 拼音表 | `shared/pinyin/` | §6.4 |
+| 规则的测试用例 | `shared/testcases/*.json` | 自然排序、排序键和字母索引、拼音、繁简、乱码修复和编码识别、艺术家拆分、文件名推断、专辑键、CUE、LRC、目录树、m3u、备份引用、在线结果匹配、曲名补救、智能标签分类，共 16 个文件，覆盖移动端原有单元测试的全部断言（说明见 `shared/testcases/README.md`）。移动端的 JUnit（`SharedCases.kt`，路径由 `testOptions` 的系统属性 `jeek.testcases` 传入，用 org.json 解析）和桌面端的 xUnit（`SharedCases.cs`）都读这些文件，之后两端只维护一份。`desktopOnly` 的用例（反斜杠路径）只在桌面端跑 |
+| 拼音、繁简表 | `shared/pinyin/` | §6.4 |
 | 同步文件格式 | §11 | 两端都按这里实现，格式变化要同时改两端 |
-| YAMNet 类别和分类阈值 | `shared/testcases/classifier.json` 里的阈值，和移动端的 `TagClassifier` 一致 | 模型文件各端放自己的格式（tflite / onnx） |
+| YAMNet 类别和分类阈值 | `tag-classifier.json` 的用例；类别分组在 Core 的 `YamnetScores`（移植移动端 `AudioTagger.scores`） | 模型文件各端放自己的格式（tflite / onnx） |
+
+**正则的差别**：移动端在手机上运行时 `java.util.regex` 由 ICU 实现，`\s`、`\d`、`\b` 按 Unicode 匹配，和 .NET 的默认行为一致，所以移植时原样保留这些写法；但移动端在 JVM 上跑单元测试时 `\s`、`\d` 只匹配 ASCII，共用用例不依赖这个差别（不放全角空格、全角数字这类输入）。
 
 CI：`mobile.yml` 和 `desktop.yml` 的触发路径都加上 `shared/**`，改了共用用例两端都要跑测试。
 
@@ -244,13 +246,27 @@ MainWindow（Mica，标题栏扩展到客户区）
 - 拖放：从表格拖出时数据是 `track_key` 列表（同时提供文件路径，拖到资源管理器就是复制文件）；播放列表视图里可以拖动调整顺序（DataGrid 不自带行拖动，自己处理指针事件，显示插入线）
 - 右键菜单：内容同移动端 U-2；作用于所有选中的行
 
-### 6.4 拼音
+### 6.4 拼音和繁简
 
-移动端的排序键和拼音首字母搜索用 Android 自带的 ICU Han-Latin 转写（`SortKeys.kt`、`ChineseText.kt`）。.NET 没有转写功能，Windows 自带的 `icu.dll` 不一定带转写规则的数据。为了让两端的排序完全一致：
+移动端的排序键、拼音首字母搜索用 Android ICU 的 `Transliterator("Han-Latin; Latin-ASCII")`（`SortKeys.kt`），在线结果比较用 `Traditional-Simplified` / `Simplified-Traditional`（`ChineseText.kt`）。.NET 没有转写功能，所以在 Core 里复现（`Text/Pinyin.cs`、`Text/ChineseText.cs`），需要的表由 `shared/pinyin/Generate.java` 用 ICU4J 76.1（和 Android 16 的 ICU 同版本）导出，`shared/pinyin/generate.sh` 下载 jar 并运行。生成时会核对 ICU 规则的结构，升级 ICU 版本后规则变了会直接报错。
 
-- **方案**：用 ICU4J（和 Android 同源的 ICU 数据）对所有 CJK 统一汉字（基本区 + 扩展 A）逐字转写，生成 `shared/pinyin/han-latin.tsv`（"字 → 拼音"，约 2.7 万行，压缩后约 150KB），桌面端编译进程序。生成脚本放在 `shared/pinyin/`
-- Han-Latin 基本是逐字转写；如果有多字规则（词组），逐字表会和 Android 有差异。D1 用整个曲库的歌名、艺术家、文件名对比两端的排序键，有差异的再补规则
-- 排序键的其他部分（去掉声调、数字按数值、大小写）移植 `SortKeys` 的代码，用共用用例测试
+**ICU 的拼音转写实际是这几轮**（从 ICU 的规则源码 `toRules()` 读出来的）：
+
+1. `Han-Spacedhan` 前两轮：对 CJK 标点、表意文字、汉字做 NFKC，然后**全角转半角**（对整个字符串，片假名也会转成半角片假名，"シャルル" → "ｼｬﾙﾙ"）。逐字查表 `spacedhan-pre.tsv`（1455 条）
+2. `Han-Spacedhan` 第三轮：19 条中文标点映射（`。` → `.`、`、` → `,`、`「` → `‘`、`《` → `«`、`々` → `⓶` 等，`spacedhan-punct.tsv`），和两条插空格的规则：
+   - 前一个字符是汉字、句读标点（`. , : ; ? !` 及全角形式）或收尾括号、引号，**后一个是字母（汉字也算字母）**时插入空格
+   - 前面是字母（可以跟附加符号），**后一个是汉字或开括号、开引号**时插入空格
+   同一轮里标点映射排在前面：字符有映射时直接替换，不在它前面插空格（所以 "a《b》" 不插空格）；判断时前文看已经输出的结果，后文看原字符。所以 "周杰伦" → "zhou jie lun"，"周杰伦Jay" → "zhou jie lun Jay"，"1周" → "1zhou"，"晴天.mp3" → "qing tian. mp3"，"G.E.M." → "G. E. M."（**西文里的点号后面也会插空格**，排序键就是这样，两端一致）
+3. `Han-Latin`：4 条多音字上下文规则（"藏文" zàng、"重庆" chóng、"沈阳" shěn、"秘鲁" bì，`han-latin-context.tsv`），然后逐字查带声调的拼音（`han-latin.tsv`，44437 个字，含扩展 B 等补充平面）
+4. `Latin-ASCII`：只处理拉丁、通用、继承文字（`sets.tsv` 的 `LatinAsciiFilter`，其余字符原样保留并把文本分段）：NFD，去掉紧跟在拉丁字母或数字后的非间距附加符号，NFC，再逐字查表（`latin-ascii.tsv`，846 条：ō → o、ß → ss、Æ → AE、« → <<、© → (C) 等）
+
+判断"字母""附加符号""表意文字"等用的字符集合也从 ICU 导出（`sets.tsv`），不依赖 .NET 自己的 Unicode 数据版本。另有 `Han` 集合（文字属性），代替移动端的 `Character.UnicodeScript.HAN`（`CharsetFixer`、`CoverMatcher.hasCjk`）。
+
+**繁简**：`traditional-simplified.tsv`（4177 条）、`simplified-traditional.tsv`（3845 条）按 ICU 的规则顺序列出词组和单字，少数带上下文（数字后面的"只"转"隻"、"周"后面跟数字转"週"等 7 条）。匹配同 ICU：在每个位置按顺序尝试以这个字开头的规则，第一条原文、前文、后文都对得上的生效。移动端的 `toSimplified` 在没有汉字（按 UTF-16 码元判断）时直接返回原文，桌面端照搬，所以只含扩展区汉字的文本不转换。
+
+**验证**：语料是作者曲库（`D:\Mobile\Song`，1609 个文件）的文件名、目录名、歌名、艺术家、专辑共 6646 条，加上 11 万条随机混排串（汉字含扩展区和兼容区、假名和半角片假名、谚文、带附加符号的拉丁字母、分解形式的组合符号、全角字符、中英文标点、各种空白、多音字和繁简词组）。在共 117011 条上，C# 的结果和 ICU4J **完全一致**（拼音、繁转简、简转繁都是 0 条差异）。代表性的 442 条进了 `shared/testcases/pinyin.json`、`chinese-text.json`（`shared/pinyin/build-testcases.py` 生成），两端测试都跑；完整语料不进仓库，桌面端的 `PinyinCorpusTests` 在设置了环境变量 `JEEK_PINYIN_CORPUS` 时对比。
+
+**体积和耗时**：表一共约 600KB（嵌入 Core 程序集），第一次使用时加载：拼音表约 25ms、繁简表约 10ms（JIT 版）；转写一次约 10 微秒。排序键还是在扫描时算好存进数据库（§4），启动时不用加载表。
 
 ### 6.5 智能标签筛选、搜索、专辑页
 

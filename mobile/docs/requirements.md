@@ -15,7 +15,7 @@ JeekMusic 是一个 **Android 端本地音乐播放器**，开源，以作者自
 
 - 在线音乐平台、自建服务器（Navidrome / Jellyfin / WebDAV / SMB）等远程来源
 - 修改音频文件的标签（应用内的智能标签只保存在 App 数据里，不写进文件）。唯一的例外是用户在设置里选择把在线封面写入音乐文件（C-3）
-- iOS / 桌面端
+- iOS。桌面端是另一个独立的 App，放在仓库的 `desktop/` 目录，不在本文档范围内
 - 音效类功能：均衡器、可视化频谱、动态模糊背景等（会增加耗电或改变音质）
 
 ## 2. 目标用户与使用场景
@@ -333,6 +333,8 @@ JeekMusic 是一个 **Android 端本地音乐播放器**，开源，以作者自
 | 代码仓库 | GitHub 公开仓库 [tifish/JeekMusic](https://github.com/tifish/JeekMusic) |
 
 ## 7. 开发与测试环境
+
+仓库分为移动端（`mobile/`，本文档描述的 Android App）和桌面端（`desktop/`）。移动端是独立的 Gradle 工程：本文档和 `design.md` 中的路径（`app/`、`tools/`、`fastlane/`、`gradle/` 等）都相对于 `mobile/`，构建命令也在 `mobile/` 下执行。
 
 | 项 | 情况 |
 |---|---|

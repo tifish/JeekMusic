@@ -1051,7 +1051,8 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 - Version Catalog 统一管理依赖版本；开启 R8 full mode 和资源压缩
 - 版本号：`versionCode` = Git 提交数（`git rev-list --count HEAD`），`versionName` = `1.0.<提交数>`；没有 Git 时为 1
 - 签名：本地从 `keystore.properties` 读取，CI 从环境变量（GitHub Secrets）读取，都没有时退回 debug 签名（PR 构建）。**本地和 CI 必须使用同一个签名文件**，App 内更新才能覆盖安装；签名文件和密码丢失后，已安装的 App 无法再升级，必须备份
-- 发布：每次推送到 main（只改文档的除外），`.github/workflows/ci.yml` 跑 lint 和单元测试，构建签名的 release APK，以标签 `v1.0.<提交数>` 发布到 GitHub Releases，更新说明是上个版本之后的提交标题
+- 仓库结构：Android 工程在仓库的 `mobile/` 目录（本文档中的路径都相对于它），桌面端在 `desktop/`，两端各自构建和发布
+- 发布：每次推送到 main 且改动了 `mobile/`（只改文档、`fastlane/` 的除外），`.github/workflows/mobile.yml` 在 `mobile/` 下跑 lint 和单元测试，构建签名的 release APK，以标签 `v1.0.<提交数>` 发布到 GitHub Releases，更新说明是上个版本之后改动了 `mobile/` 的提交标题。提交数按整个仓库计算，桌面端的提交也会让版本号增加，不影响版本比较
 - F-Droid：`fastlane/metadata/android/{en-US,zh-CN}/` 中有标题、简介、更新说明和截图（`tools/store-screenshots.sh` 截取）
 - 多语言：`androidResources.generateLocaleConfig = true`，Android 13+ 可以在系统设置里单独设置 App 语言
 - GitHub Actions：PR 时只跑 `lint` + `testDebugUnitTest` + `assembleRelease`（debug 签名），不发布。Baseline Profile 在本地生成后提交到仓库
@@ -1061,6 +1062,7 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 ### 13.2 App 内自动更新（AppUpdater）
 
 - 检查：`GET https://api.github.com/repos/tifish/JeekMusic/releases/latest`，从 `tag_name` 末尾的数字得到 versionCode，大于 `BuildConfig.VERSION_CODE` 即为新版本；取第一个 `.apk` 资源的下载地址、大小和 `digest`（SHA-256）
+- **与桌面端共用 Releases**：桌面端以后发布时不能成为 latest（`make_latest: false`，用自己的标签前缀），否则这里会拿到没有 `.apk` 的版本。如果桌面端需要成为 latest，这里要改成列出 releases 后按 `v1.0.` 前缀筛选
 - 时机：首帧之后的推迟任务最后再等 5 秒执行；开关打开、且距上次检查超过 24 小时才联网；网络错误静默忽略。设置里的"检查更新"忽略间隔和"跳过此版本"
 - 入口：设置页的第一项"检查更新"（显示版本号，检查中显示"正在检查…"，重复点击忽略）
 - 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）；"已是最新版本""检查更新失败"等全局提示（`MessageBus`）也在最外层的 `JeekMusicApp` 收集——以前只有主界面收集，设置、搜索等全屏页面打开时发出的提示都丢了。主界面的 Scaffold 用同一个 `SnackbarHostState` 显示在迷你播放条上方，其他页面在最外层显示。更新对话框："更新 / 跳过此版本 / 以后再说"，下载时显示进度

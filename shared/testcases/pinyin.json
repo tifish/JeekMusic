@@ -1,0 +1,2215 @@
+{
+ "description": "拼音转写：结果应该和 ICU 的 \"Han-Latin; Latin-ASCII\" 完全一致（由 shared/pinyin/build-testcases.py 生成，不要手改）",
+ "cases": [
+  {
+   "description": "手造用例",
+   "input": "周杰伦",
+   "expected": "zhou jie lun"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦Jay",
+   "expected": "zhou jie lun Jay"
+  },
+  {
+   "description": "手造用例",
+   "input": "Jay周杰伦",
+   "expected": "Jay zhou jie lun"
+  },
+  {
+   "description": "手造用例",
+   "input": "周 杰伦",
+   "expected": "zhou jie lun"
+  },
+  {
+   "description": "手造用例",
+   "input": "  周杰伦",
+   "expected": "  zhou jie lun"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦123",
+   "expected": "zhou jie lun123"
+  },
+  {
+   "description": "手造用例",
+   "input": "1周",
+   "expected": "1zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "（周）",
+   "expected": "(zhou)"
+  },
+  {
+   "description": "手造用例",
+   "input": "(周)",
+   "expected": "(zhou)"
+  },
+  {
+   "description": "手造用例",
+   "input": "周,杰",
+   "expected": "zhou, jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周，杰",
+   "expected": "zhou, jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周。杰",
+   "expected": "zhou. jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周、杰",
+   "expected": "zhou, jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "重庆",
+   "expected": "chong qing"
+  },
+  {
+   "description": "手造用例",
+   "input": "重 庆",
+   "expected": "chong qing"
+  },
+  {
+   "description": "手造用例",
+   "input": "重庆森林",
+   "expected": "chong qing sen lin"
+  },
+  {
+   "description": "手造用例",
+   "input": "藏文",
+   "expected": "zang wen"
+  },
+  {
+   "description": "手造用例",
+   "input": "沈阳",
+   "expected": "shen yang"
+  },
+  {
+   "description": "手造用例",
+   "input": "秘鲁",
+   "expected": "bi lu"
+  },
+  {
+   "description": "手造用例",
+   "input": "银行",
+   "expected": "yin xing"
+  },
+  {
+   "description": "手造用例",
+   "input": "长大",
+   "expected": "zhang da"
+  },
+  {
+   "description": "手造用例",
+   "input": "长城",
+   "expected": "zhang cheng"
+  },
+  {
+   "description": "手造用例",
+   "input": "音乐",
+   "expected": "yin le"
+  },
+  {
+   "description": "手造用例",
+   "input": "快乐",
+   "expected": "kuai le"
+  },
+  {
+   "description": "手造用例",
+   "input": "单于",
+   "expected": "dan yu"
+  },
+  {
+   "description": "手造用例",
+   "input": "曾经",
+   "expected": "ceng jing"
+  },
+  {
+   "description": "手造用例",
+   "input": "西安",
+   "expected": "xi an"
+  },
+  {
+   "description": "手造用例",
+   "input": "天安门",
+   "expected": "tian an men"
+  },
+  {
+   "description": "手造用例",
+   "input": "女儿",
+   "expected": "nu er"
+  },
+  {
+   "description": "手造用例",
+   "input": "G.E.M. 邓紫棋",
+   "expected": "G. E. M. deng zi qi"
+  },
+  {
+   "description": "手造用例",
+   "input": "邓紫棋 G.E.M.",
+   "expected": "deng zi qi G. E. M."
+  },
+  {
+   "description": "手造用例",
+   "input": "陈奕迅 feat. 王菲",
+   "expected": "chen yi xun feat. wang fei"
+  },
+  {
+   "description": "手造用例",
+   "input": "Simon & Garfunkel",
+   "expected": "Simon & Garfunkel"
+  },
+  {
+   "description": "手造用例",
+   "input": "AC/DC",
+   "expected": "AC/DC"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天.mp3",
+   "expected": "qing tian. mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦 - 晴天.mp3",
+   "expected": "zhou jie lun - qing tian. mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "01. 周杰伦 - 晴天.flac",
+   "expected": "01. zhou jie lun - qing tian. flac"
+  },
+  {
+   "description": "手造用例",
+   "input": "Queen.mp3",
+   "expected": "Queen. mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "Mr.Big",
+   "expected": "Mr. Big"
+  },
+  {
+   "description": "手造用例",
+   "input": "Beyoncé",
+   "expected": "Beyonce"
+  },
+  {
+   "description": "手造用例",
+   "input": "Motörhead",
+   "expected": "Motorhead"
+  },
+  {
+   "description": "手造用例",
+   "input": "Café del Mar",
+   "expected": "Cafe del Mar"
+  },
+  {
+   "description": "手造用例",
+   "input": "Björk",
+   "expected": "Bjork"
+  },
+  {
+   "description": "手造用例",
+   "input": "Mötley Crüe",
+   "expected": "Motley Crue"
+  },
+  {
+   "description": "手造用例",
+   "input": "Sigur Rós",
+   "expected": "Sigur Ros"
+  },
+  {
+   "description": "手造用例",
+   "input": "Déjà vu",
+   "expected": "Deja vu"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ærø",
+   "expected": "AEro"
+  },
+  {
+   "description": "手造用例",
+   "input": "Straße",
+   "expected": "Strasse"
+  },
+  {
+   "description": "手造用例",
+   "input": "ﬁnal",
+   "expected": "final"
+  },
+  {
+   "description": "手造用例",
+   "input": "Œuvre",
+   "expected": "OEuvre"
+  },
+  {
+   "description": "手造用例",
+   "input": "Đorđe",
+   "expected": "Dorde"
+  },
+  {
+   "description": "手造用例",
+   "input": "Łódź",
+   "expected": "Lodz"
+  },
+  {
+   "description": "手造用例",
+   "input": "é",
+   "expected": "e"
+  },
+  {
+   "description": "手造用例",
+   "input": "Café",
+   "expected": "Cafe"
+  },
+  {
+   "description": "手造用例",
+   "input": "１２３",
+   "expected": "123"
+  },
+  {
+   "description": "手造用例",
+   "input": "ＡＢＣ",
+   "expected": "ABC"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ａ周",
+   "expected": "A zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "シャルル",
+   "expected": "シャルル"
+  },
+  {
+   "description": "手造用例",
+   "input": "ガイ",
+   "expected": "ガイ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ｶﾞｲ",
+   "expected": "ｶﾞｲ"
+  },
+  {
+   "description": "手造用例",
+   "input": "夜に駆ける",
+   "expected": "ye に qu ける"
+  },
+  {
+   "description": "手造用例",
+   "input": "千本桜",
+   "expected": "qian ben ying"
+  },
+  {
+   "description": "手造用例",
+   "input": "残酷な天使のテーゼ",
+   "expected": "can ku な tian shi のテーゼ"
+  },
+  {
+   "description": "手造用例",
+   "input": "米津玄師",
+   "expected": "mi jin xuan shi"
+  },
+  {
+   "description": "手造用例",
+   "input": "の周",
+   "expected": "の zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周の",
+   "expected": "zhou の"
+  },
+  {
+   "description": "手造用例",
+   "input": "한국어",
+   "expected": "한국어"
+  },
+  {
+   "description": "手造用例",
+   "input": "방탄소년단",
+   "expected": "방탄소년단"
+  },
+  {
+   "description": "手造用例",
+   "input": "BTS (방탄소년단)",
+   "expected": "BTS (방탄소년단)"
+  },
+  {
+   "description": "手造用例",
+   "input": "IU (아이유)",
+   "expected": "IU (아이유)"
+  },
+  {
+   "description": "手造用例",
+   "input": "《晴天》",
+   "expected": "<<qing tian>>"
+  },
+  {
+   "description": "手造用例",
+   "input": "「晴天」",
+   "expected": "'qing tian'"
+  },
+  {
+   "description": "手造用例",
+   "input": "『晴天』",
+   "expected": "\"qing tian\""
+  },
+  {
+   "description": "手造用例",
+   "input": "〈晴天〉",
+   "expected": "<qing tian>"
+  },
+  {
+   "description": "手造用例",
+   "input": "周《晴天》",
+   "expected": "zhou<<qing tian>>"
+  },
+  {
+   "description": "手造用例",
+   "input": "a《b》",
+   "expected": "a<<b>>"
+  },
+  {
+   "description": "手造用例",
+   "input": "a「b」",
+   "expected": "a'b'"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天～",
+   "expected": "qing tian~"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天〜",
+   "expected": "qing tian~"
+  },
+  {
+   "description": "手造用例",
+   "input": "々",
+   "expected": "⓶"
+  },
+  {
+   "description": "手造用例",
+   "input": "时々",
+   "expected": "shi⓶"
+  },
+  {
+   "description": "手造用例",
+   "input": "佐々木",
+   "expected": "zuo⓶mu"
+  },
+  {
+   "description": "手造用例",
+   "input": "〇",
+   "expected": "ling"
+  },
+  {
+   "description": "手造用例",
+   "input": "〇〇七",
+   "expected": "lingling qi"
+  },
+  {
+   "description": "手造用例",
+   "input": "ⅠⅡⅢ",
+   "expected": "IIIIII"
+  },
+  {
+   "description": "手造用例",
+   "input": "①②",
+   "expected": "①②"
+  },
+  {
+   "description": "手造用例",
+   "input": "㈱",
+   "expected": "(zhu)"
+  },
+  {
+   "description": "手造用例",
+   "input": "㍻",
+   "expected": "ping cheng"
+  },
+  {
+   "description": "手造用例",
+   "input": "½",
+   "expected": " 1/2"
+  },
+  {
+   "description": "手造用例",
+   "input": "™",
+   "expected": "™"
+  },
+  {
+   "description": "手造用例",
+   "input": "©2024",
+   "expected": "(C)2024"
+  },
+  {
+   "description": "手造用例",
+   "input": "«Bohemian»",
+   "expected": "<<Bohemian>>"
+  },
+  {
+   "description": "手造用例",
+   "input": "‹a›",
+   "expected": "<a>"
+  },
+  {
+   "description": "手造用例",
+   "input": "“周”",
+   "expected": "\"zhou\""
+  },
+  {
+   "description": "手造用例",
+   "input": "\"周\"",
+   "expected": "\"zhou\""
+  },
+  {
+   "description": "手造用例",
+   "input": "'周'",
+   "expected": "'zhou'"
+  },
+  {
+   "description": "手造用例",
+   "input": "周'",
+   "expected": "zhou'"
+  },
+  {
+   "description": "手造用例",
+   "input": "周-杰",
+   "expected": "zhou-jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周—杰",
+   "expected": "zhou-jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周_杰",
+   "expected": "zhou_jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周/杰",
+   "expected": "zhou/jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周\\杰",
+   "expected": "zhou\\jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周&杰",
+   "expected": "zhou&jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周+杰",
+   "expected": "zhou+jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周|杰",
+   "expected": "zhou|jie"
+  },
+  {
+   "description": "手造用例",
+   "input": "周#1",
+   "expected": "zhou#1"
+  },
+  {
+   "description": "手造用例",
+   "input": "#周",
+   "expected": "#zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周!",
+   "expected": "zhou!"
+  },
+  {
+   "description": "手造用例",
+   "input": "周?a",
+   "expected": "zhou? a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周:a",
+   "expected": "zhou: a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周;a",
+   "expected": "zhou; a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周)a",
+   "expected": "zhou) a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周]a",
+   "expected": "zhou] a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周}a",
+   "expected": "zhou} a"
+  },
+  {
+   "description": "手造用例",
+   "input": "a(周",
+   "expected": "a (zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "a[周",
+   "expected": "a [zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "a{周",
+   "expected": "a {zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周",
+   "expected": "zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周\ta",
+   "expected": "zhou\ta"
+  },
+  {
+   "description": "手造用例",
+   "input": "周 a",
+   "expected": "zhou a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周　a",
+   "expected": "zhou a"
+  },
+  {
+   "description": "手造用例",
+   "input": "😀周",
+   "expected": "😀zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周😀",
+   "expected": "zhou😀"
+  },
+  {
+   "description": "手造用例",
+   "input": "𠀀",
+   "expected": "he"
+  },
+  {
+   "description": "手造用例",
+   "input": "𡑍",
+   "expected": "lao"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ⅷ",
+   "expected": "VIII"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǅ",
+   "expected": "Dz"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǈ",
+   "expected": "Lj"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǋ",
+   "expected": "Nj"
+  },
+  {
+   "description": "手造用例",
+   "input": "ß周",
+   "expected": "ss zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周ß",
+   "expected": "zhou ss"
+  },
+  {
+   "description": "手造用例",
+   "input": "αβγ周",
+   "expected": "αβγ zhou"
+  },
+  {
+   "description": "手造用例",
+   "input": "周αβγ",
+   "expected": "zhou αβγ"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ελληνικά",
+   "expected": "Ελληνικά"
+  },
+  {
+   "description": "手造用例",
+   "input": "Русский",
+   "expected": "Русский"
+  },
+  {
+   "description": "手造用例",
+   "input": "עברית",
+   "expected": "עברית"
+  },
+  {
+   "description": "手造用例",
+   "input": "العربية",
+   "expected": "العربية"
+  },
+  {
+   "description": "手造用例",
+   "input": "हिन्दी",
+   "expected": "हिन्दी"
+  },
+  {
+   "description": "手造用例",
+   "input": "ไทย",
+   "expected": "ไทย"
+  },
+  {
+   "description": "手造用例",
+   "input": "Tiếng Việt",
+   "expected": "Tieng Viet"
+  },
+  {
+   "description": "手造用例",
+   "input": "Nguyễn",
+   "expected": "Nguyen"
+  },
+  {
+   "description": "手造用例",
+   "input": "Hà Nội",
+   "expected": "Ha Noi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "う〇Jᄎ扣毜饏",
+   "expected": "う ling Jᄎ kou hao dan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k殡 じ『ﾂク憈Ｂ*",
+   "expected": "k bin じ\"ﾂク qu B*"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䣭. 、",
+   "expected": "tai. ,"
+  },
+  {
+   "description": "语料抽样",
+   "input": "繇役嘯泾な",
+   "expected": "yao yi xiao jing な"
+  },
+  {
+   "description": "语料抽样",
+   "input": ">氮",
+   "expected": ">dan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "G壾得Ŭ͋",
+   "expected": "G mang de U"
+  },
+  {
+   "description": "语料抽样",
+   "input": "念",
+   "expected": "nian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "忮m",
+   "expected": "zhi m"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ok",
+   "expected": "Ok"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ペΣ",
+   "expected": "ペΣ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "汈【걌",
+   "expected": "diao 【걌"
+  },
+  {
+   "description": "语料抽样",
+   "input": "B葴걑ｐĂと 1「秘鲁~廓",
+   "expected": "B zhen 걑pAと 1'bi lu~kuo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "墾翄齄",
+   "expected": "ken chi zha"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ĵ餑",
+   "expected": "j bo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "6걼",
+   "expected": "6걼"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Loud",
+   "expected": "Loud"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周傩a",
+   "expected": "zhou nuo a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "创",
+   "expected": "chuang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Fﬂ銥ｹき",
+   "expected": "Ffl yi ｹき"
+  },
+  {
+   "description": "语料抽样",
+   "input": "̻塇9O鬒",
+   "expected": "̻xuan9O zhen"
+  },
+  {
+   "description": "语料抽样",
+   "input": "M㪥ḵ）﻿）​〇",
+   "expected": "M zha k)﻿)​ling"
+  },
+  {
+   "description": "语料抽样",
+   "input": "搪閥穣̔䆔",
+   "expected": "tang fa rang chong"
+  },
+  {
+   "description": "语料抽样",
+   "input": "单于篪マ艣亩αﾏﾉ搵鲬",
+   "expected": "dan yu chi マ lu mu αﾏﾉ wen yong"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Celine Dion",
+   "expected": "Celine Dion"
+  },
+  {
+   "description": "语料抽样",
+   "input": "視　갶诀’",
+   "expected": "shi 갶 jue'"
+  },
+  {
+   "description": "语料抽样",
+   "input": "来自天堂的魔鬼",
+   "expected": "lai zi tian tang de mo gui"
+  },
+  {
+   "description": "语料抽样",
+   "input": "[ﾅ鍺蘥]久病不癒勒音乐",
+   "expected": "[ﾅ zhe yue] jiu bing bu yu lei yin le"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ŕ",
+   "expected": "R"
+  },
+  {
+   "description": "语料抽样",
+   "input": "祅\t",
+   "expected": "yao\t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "硓磢m",
+   "expected": "lao chuang m"
+  },
+  {
+   "description": "语料抽样",
+   "input": "汘",
+   "expected": "qian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "D.　ĵ濳抈仺㵞o",
+   "expected": "D. j qian yue cang chou o"
+  },
+  {
+   "description": "语料抽样",
+   "input": "檫谏ĸ砼 »",
+   "expected": "cha jian q tong >>"
+  },
+  {
+   "description": "语料抽样",
+   "input": "沈阳皛Aぜ单于鵁质Ö澹㪕",
+   "expected": "shen yang xiao Aぜ dan yu jiao zhi O dan diao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䬆oỼL ͑",
+   "expected": "li oVL ͑"
+  },
+  {
+   "description": "语料抽样",
+   "input": "?箇厨갫",
+   "expected": "? ge chu 갫"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ŏﾆ갎䂥각갺〜𠄉育｀策畫ŕ",
+   "expected": "Oﾆ갎 min 각갺~dong yu`ce hua r"
+  },
+  {
+   "description": "语料抽样",
+   "input": "=Бi 塢͑",
+   "expected": "=Бi wu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "方腊ヌ^ョ遷だ각Ṽ曾经͟䰥ﾄ",
+   "expected": "fang la ヌ^ョ qian だ각V ceng jing huo ﾄ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｐ脈呏",
+   "expected": "p mai sheng"
+  },
+  {
+   "description": "语料抽样",
+   "input": "`R蟕ᄂ眳专著卷纸㐝",
+   "expected": "`R zui ᄂ ming zhuan zhu juan zhi 㐝"
+  },
+  {
+   "description": "语料抽样",
+   "input": "​а』",
+   "expected": "​а\""
+  },
+  {
+   "description": "语料抽样",
+   "input": "剘\tウ瞻",
+   "expected": "qi\tウ zhan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "gトέ鉱",
+   "expected": "gトέ kuang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "慘䎋韫g̖V％だ庄B",
+   "expected": "can kao yun gV%だ zhuang B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "XĦ峚てm膟",
+   "expected": "XH mi てm lu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "械Æ 劍ｽく锥n惱軜燀",
+   "expected": "xie AE jian ｽく zhui n nao na chan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "々걋银行ロ걑6ᄍSͧÄ褮瘟",
+   "expected": "⓶걋 yin xing ロ걑6ᄍSA ying wen"
+  },
+  {
+   "description": "语料抽样",
+   "input": "曆̲沈阳P",
+   "expected": "li shen yang P"
+  },
+  {
+   "description": "语料抽样",
+   "input": "걽橳繄вﾗＸ4㗆撫卹裿",
+   "expected": "걽 sheng yi вﾗX4ge fu xu yi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "虒瘏墻涘h",
+   "expected": "si tu qiang si h"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 2篓u槒",
+   "expected": " 2lou u xu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "S3グ4さœ躒壼鱀酁",
+   "expected": "S3グ4さoe li kun ji chan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "毬花",
+   "expected": "qiu hua"
+  },
+  {
+   "description": "语料抽样",
+   "input": "棂、yð鸩Ｄ单于々",
+   "expected": "ling, yd zhen D dan yu⓶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "竺忨礬.",
+   "expected": "zhu wan fan."
+  },
+  {
+   "description": "语料抽样",
+   "input": "­嬱갟g毢揫ﬂ ",
+   "expected": "-qian 갟g sai jiu fl "
+  },
+  {
+   "description": "语料抽样",
+   "input": "ヰ ",
+   "expected": "ヰ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "Prelude e-moll, Op.28, Nr,4",
+   "expected": "Prelude e-moll, Op.28, Nr,4"
+  },
+  {
+   "description": "语料抽样",
+   "input": "挦鷲",
+   "expected": "xian jiu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蹋柲帮̩γcC重庆齧重 庆",
+   "expected": "ta bi bangγcC chong qing nie chong qing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Demons",
+   "expected": "Demons"
+  },
+  {
+   "description": "语料抽样",
+   "input": "杅撅Gそヒ걒J蘃B",
+   "expected": "yu jue Gそヒ걒J rui B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Chris Brown,Jordin Sparks - No Air.mp3",
+   "expected": "Chris Brown, Jordin Sparks - No Air. mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "痰倿",
+   "expected": "tan ning"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ă蚎B",
+   "expected": "a yue B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喅 埣",
+   "expected": "yu sui"
+  },
+  {
+   "description": "语料抽样",
+   "input": "藏文𠃺K〉ﾕ갩》＄漝",
+   "expected": "zang wen jiu K> ﾕ갩>>$xi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "弔慰",
+   "expected": "diao wei"
+  },
+  {
+   "description": "语料抽样",
+   "input": "参巀单于",
+   "expected": "can jie dan yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鬱悶",
+   "expected": "yu men"
+  },
+  {
+   "description": "语料抽样",
+   "input": "》䙛X䌳登䞊",
+   "expected": ">> guan X shi deng xun"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周膿a",
+   "expected": "zhou nong a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "沈阳盐",
+   "expected": "shen yang yan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周深 - 耀眼的我们.ogg",
+   "expected": "zhou shen - yao yan de wo men. ogg"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ヌ茖·躲`鸵铎ユ",
+   "expected": "ヌ ge·duo`tuo duo ユ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "　Zｰ 潴̞&艹痪",
+   "expected": " Zｰ zhu&cao huan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ͤ潓鳏ぷ건­}駠",
+   "expected": "ͤhui guan ぷ건-} liu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "齟",
+   "expected": "ju"
+  },
+  {
+   "description": "语料抽样",
+   "input": "~ά",
+   "expected": "~ά"
+  },
+  {
+   "description": "语料抽样",
+   "input": "謕鯼さい",
+   "expected": "ti zong さい"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鯥Hý",
+   "expected": "lu Hy"
+  },
+  {
+   "description": "语料抽样",
+   "input": "͍だ",
+   "expected": "͍だ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "K(걥肕緗鑰曾经ḀᄒZ塞禲",
+   "expected": "K (걥 ren xiang yao ceng jing AᄒZ sai li"
+  },
+  {
+   "description": "语料抽样",
+   "input": "槓",
+   "expected": "gang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "　 蕘",
+   "expected": "  rao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嵨]〃S\tб",
+   "expected": "wu]〃S\tб"
+  },
+  {
+   "description": "语料抽样",
+   "input": "唑曾经㾾㶏›…戥Ļ㐅",
+   "expected": "zuo ceng jing xian yin>...deng L wu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾎ银行䗋ｩ鶬Ĭ+醓㛱д唸",
+   "expected": "ﾎ yin xing mou ｩ cang I+tan wei д nian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ゆ诏#ケ垵岡/",
+   "expected": "ゆ zhao#ケ an gang/"
+  },
+  {
+   "description": "语料抽样",
+   "input": "重庆ｴ隳ź:P",
+   "expected": "chong qing ｴ hui z: P"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周檁a",
+   "expected": "zhou lin a"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 虧翵ｪｧ",
+   "expected": " kui hou ｪｧ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "狖鹑 û〉【裚气",
+   "expected": "you chun u>【ji qi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "H:䟸游伴",
+   "expected": "H: kui you ban"
+  },
+  {
+   "description": "语料抽样",
+   "input": "X「!+ｵ狖𠂋",
+   "expected": "X'!+ｵ you 𠂋"
+  },
+  {
+   "description": "语料抽样",
+   "input": "姗｛鯫＾?α",
+   "expected": "shan {zou^? α"
+  },
+  {
+   "description": "语料抽样",
+   "input": "刘至佳",
+   "expected": "liu zhi jia"
+  },
+  {
+   "description": "语料抽样",
+   "input": "t̯・㨉Ŧ䉚．",
+   "expected": "t‧min T meng."
+  },
+  {
+   "description": "语料抽样",
+   "input": "雺重庆",
+   "expected": "wu chong qing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "め瀟!",
+   "expected": "め xiao!"
+  },
+  {
+   "description": "语料抽样",
+   "input": "lẂﾅT+〆ŋł潊S걭愨",
+   "expected": "lWﾅT+〆 nl xu S걭 que"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鲺a",
+   "expected": "zhou shi a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "包幹",
+   "expected": "bao gan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "7華̨〉}",
+   "expected": "7hua>}"
+  },
+  {
+   "description": "语料抽样",
+   "input": "苁Ｕ",
+   "expected": "cong U"
+  },
+  {
+   "description": "语料抽样",
+   "input": "I綟闤グt猕檉＝。",
+   "expected": "I li huan グt mi cheng=."
+  },
+  {
+   "description": "语料抽样",
+   "input": "類U-🎵隘 U2䰑頩",
+   "expected": "lei U-🎵ai U2䰑 ping"
+  },
+  {
+   "description": "语料抽样",
+   "input": "昚砍ｧ\t蕻%",
+   "expected": "shen kan ｧ\thong%"
+  },
+  {
+   "description": "语料抽样",
+   "input": "楚鸇v偞闖笁",
+   "expected": "chu zhan v xie chuang zhu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鸟›v",
+   "expected": "niao> v"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾐvﬁ』",
+   "expected": "ﾐvfi\""
+  },
+  {
+   "description": "语料抽样",
+   "input": "魯 疴丩ͅv】㲛̮ή愈",
+   "expected": "lu ke jiuv】 zhiή yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "》9ē閬９重 庆",
+   "expected": ">>9e lang9chong qing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ほ呡顭岸铑ｻD胆",
+   "expected": "ほ wen meng an lao ｻD dan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "註",
+   "expected": "zhu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ウ3曾经🎵攕齧ᄑ Ｖ>þw",
+   "expected": "ウ3ceng jing🎵xian nie ᄑ V>thw"
+  },
+  {
+   "description": "语料抽样",
+   "input": "溝h謈ð",
+   "expected": "gou h po d"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喜ͭ䵚獍褘",
+   "expected": "xi tao jing hui"
+  },
+  {
+   "description": "语料抽样",
+   "input": "歿",
+   "expected": "mo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "갃䍀嘄〃例＇ĵᄑ埸͛",
+   "expected": "갃 lan jiao〃li'jᄑ yi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周爲a",
+   "expected": "zhou wei a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Fun./Janelle Monáe",
+   "expected": "Fun./Janelle Monae"
+  },
+  {
+   "description": "语料抽样",
+   "input": "－æ̃よn齰艦飧W",
+   "expected": "-aeよn ze jian sun W"
+  },
+  {
+   "description": "语料抽样",
+   "input": "N锅ﾜ",
+   "expected": "N guo ﾜ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ᄒ諞畢̜’エ淺\t갽ヶ ",
+   "expected": "ᄒ pian bi' エ qian\t갽ヶ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "周蹺a",
+   "expected": "zhou qiao a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "誙Ｍ걕霴̔ ",
+   "expected": "keng M걕 dai "
+  },
+  {
+   "description": "语料抽样",
+   "input": "膚屉「電陴＜幌zY　塘丘",
+   "expected": "fu ti'dian pi<huang zY tang qiu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "East of Eden",
+   "expected": "East of Eden"
+  },
+  {
+   "description": "语料抽样",
+   "input": "CŁNn竩ゐ鿫sｵ",
+   "expected": "CLNn yi ゐ ao sｵ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鈺",
+   "expected": "yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "讴鮅x篷ｬ姮3 茪孯",
+   "expected": "ou bi x peng ｬ heng3 guang qian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "〆Ｉ걲",
+   "expected": "〆 I걲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "絙U>赖駲【kß鷥:",
+   "expected": "huan U>lai zhou 【kss si:"
+  },
+  {
+   "description": "语料抽样",
+   "input": "櫰›̖̅鈈",
+   "expected": "huai>̖̅bu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蘊ヵ：<̎　Ł朇蒶",
+   "expected": "yun ヵ:<̎ L pi fen"
+  },
+  {
+   "description": "语料抽样",
+   "input": "領ı\tðḊ",
+   "expected": "ling i\tdD"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周損a",
+   "expected": "zhou sun a"
+  },
+  {
+   "description": "语料抽样",
+   "input": " aFŴ㓪几ヮ",
+   "expected": " aFW lang ji ヮ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "辊",
+   "expected": "gun"
+  },
+  {
+   "description": "语料抽样",
+   "input": "㺆貘G夷…衛",
+   "expected": "㺆 mo G yi...wei"
+  },
+  {
+   "description": "语料抽样",
+   "input": "𠃿枡­ŉ濖걟",
+   "expected": "𠃿 sheng-'n shu 걟"
+  },
+  {
+   "description": "语料抽样",
+   "input": "苡暛",
+   "expected": "yi suo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "を",
+   "expected": "を"
+  },
+  {
+   "description": "语料抽样",
+   "input": ".music_folder_player",
+   "expected": ". music_folder_player"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周細緻a",
+   "expected": "zhou xi zhi a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "シ硠😀惪中驱（",
+   "expected": "シ lang😀de zhong qu ("
+  },
+  {
+   "description": "语料抽样",
+   "input": "vq薥嚡",
+   "expected": "vq shu hai"
+  },
+  {
+   "description": "语料抽样",
+   "input": "獭",
+   "expected": "ta"
+  },
+  {
+   "description": "语料抽样",
+   "input": "W蛈ｌ秘鲁ﾍ廁ち",
+   "expected": "W tie l bi lu ﾍ ce ち"
+  },
+  {
+   "description": "语料抽样",
+   "input": "咛",
+   "expected": "ning"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Carly Rae Jepsen - Call Me Maybe",
+   "expected": "Carly Rae Jepsen - Call Me Maybe"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ń㮝×谷苗\t",
+   "expected": "n he*gu miao\t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "餘裕",
+   "expected": "yu yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 牒͡勊̌e鯆蚸1",
+   "expected": " die kee pu li1"
+  },
+  {
+   "description": "语料抽样",
+   "input": "]M G鋐6ュ藏文嘂ả",
+   "expected": "] M G hong6ュ zang wen jiao a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鏨",
+   "expected": "zan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "͡)k\t曾经ﾄẅ轤·寶裡寶氣",
+   "expected": "͡) k\tceng jing ﾄw lu·bao li bao qi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䱑ᄉ#걬ト禍敵H́",
+   "expected": "xue ᄉ#걬ト huo di H"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䓨㙚",
+   "expected": "ying xing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾃ翬炑",
+   "expected": "ﾃ hui mu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喋객聖^餪ゎ͊綆",
+   "expected": "die 객 sheng^nuan ゎ͊ geng"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ju…ナł>",
+   "expected": "Ju...ナl>"
+  },
+  {
+   "description": "语料抽样",
+   "input": "u·重 庆(﻿08",
+   "expected": "u·chong qing (﻿08"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周欲火a",
+   "expected": "zhou yu huo a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "乌兰巴托的夜",
+   "expected": "wu lan ba tuo de ye"
+  },
+  {
+   "description": "语料抽样",
+   "input": "掦ę P4걻Ġ+幱",
+   "expected": "ti e P4걻G+lan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ẏI韊»琠,廼ͥ",
+   "expected": "yI lan>> tian, nai"
+  },
+  {
+   "description": "语料抽样",
+   "input": "😀８卅敧aX－ﾓệŤ㰏",
+   "expected": "😀8sa ji aX-ﾓeT 㰏"
+  },
+  {
+   "description": "语料抽样",
+   "input": "b银行里里外外挛0Ｌん箭",
+   "expected": "b yin xing li li wai wai luan0Lん jian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "綾t㻛媰έ",
+   "expected": "ling t 㻛 chu έ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "员",
+   "expected": "yuan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｭ〜r沈阳ぷ哐鋚银行Yè",
+   "expected": "ｭ~r shen yang ぷ kuang tiao yin xing Ye"
+  },
+  {
+   "description": "语料抽样",
+   "input": "揯～攏æ 畉Nヸ",
+   "expected": "gen~long ae fu Nヸ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ẘｏŖC搪",
+   "expected": "woRC tang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "賀",
+   "expected": "he"
+  },
+  {
+   "description": "语料抽样",
+   "input": "兽欲",
+   "expected": "shou yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ッy秘鲁じ}〆レ",
+   "expected": "ッy bi lu じ} 〆 レ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "虾廵梳】",
+   "expected": "xia xun shu】"
+  },
+  {
+   "description": "语料抽样",
+   "input": "𠀼鍉馁h屛」",
+   "expected": "qian di nei h ping'"
+  },
+  {
+   "description": "语料抽样",
+   "input": "㠽A牺ｩｇ2o嫃び珵ώ",
+   "expected": "tong A xi ｩg2o zhen び cheng ώ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "̆鈵 ",
+   "expected": "̆bing "
+  },
+  {
+   "description": "语料抽样",
+   "input": "k秘鲁发廊Ģ걕腝洖 8鍵じ䰋",
+   "expected": "k bi lu fa lang G걕 ni wu 8jian じ man"
+  },
+  {
+   "description": "语料抽样",
+   "input": "K~認Þ",
+   "expected": "K~ren TH"
+  },
+  {
+   "description": "语料抽样",
+   "input": "{懿へ彂鬒睭鐾",
+   "expected": "{yi へ fa zhen zhou bei"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k｀骮Aぃᄋk：",
+   "expected": "k`yi Aぃᄋk:"
+  },
+  {
+   "description": "语料抽样",
+   "input": "̍・おO ｊ恴悻４〃« ",
+   "expected": "̍‧おO j de xing4〃<< "
+  },
+  {
+   "description": "语料抽样",
+   "input": "耇 鉞ッ\tØ与氳 ",
+   "expected": "gou yue ッ\tO yu yun "
+  },
+  {
+   "description": "语料抽样",
+   "input": "̕Tﾔ锣ẄG",
+   "expected": "̕Tﾔ luo WG"
+  },
+  {
+   "description": "语料抽样",
+   "input": "&%魠𠇂B",
+   "expected": "&%tuo 𠇂 B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周飯a",
+   "expected": "zhou fan a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﬁH　遲。拉鍊ゑ̹g镦Z",
+   "expected": "fiH chi. la lian ゑ̹g dun Z"
+  },
+  {
+   "description": "语料抽样",
+   "input": "浊",
+   "expected": "zhuo"
+  },
+  {
+   "description": "语料抽样",
+   "input": " Ả幰」Ö",
+   "expected": " A xian' O"
+  },
+  {
+   "description": "语料抽样",
+   "input": "дo聥šｱt͙㳁)#",
+   "expected": "дo ju sｱt ze)#"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ỗﾛr磲「̥갞ヸﾄ",
+   "expected": "oﾛr qu'̥갞ヸﾄ"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 虃‘鶾创.薀5ぜ",
+   "expected": " jian 'han chuang. yun5ぜ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "hṟPｅŷ鏤まί걋ể",
+   "expected": "hrPey lou まί걋e"
+  },
+  {
+   "description": "语料抽样",
+   "input": "剉砦",
+   "expected": "cuo zhai"
+  },
+  {
+   "description": "语料抽样",
+   "input": "徐佳莹 - 失落沙洲.mp3",
+   "expected": "xu jia ying - shi luo sha zhou. mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ユ͢磐бĊ걛单于鄉愿跏дᄁ",
+   "expected": "ユ͢ pan бC걛 dan yu xiang yuan jia дᄁ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "猕",
+   "expected": "mi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "枕藉",
+   "expected": "zhen ji"
+  },
+  {
+   "description": "语料抽样",
+   "input": "』陃ď9",
+   "expected": "\" bing d9"
+  },
+  {
+   "description": "语料抽样",
+   "input": "\t͝㤝枧鳬ŷく詩",
+   "expected": "\t͝chong jian fu yく shi"
+  },
+  {
+   "description": "语料抽样",
+   "input": "裹",
+   "expected": "guo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｔĺ衝검͛5氛《姶",
+   "expected": "tl chong 검͛5fen<<e"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嫷耝",
+   "expected": "tuo qu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "畲ẜΑャ",
+   "expected": "she sΑャ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "编发",
+   "expected": "bian fa"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蔝갗藏文鐾重庆 礱̯ヶS",
+   "expected": "mi 갗 zang wen bei chong qing longヶS"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鑃wÃ𩽾穎ų",
+   "expected": "diao wA an ying u"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Au5 - Blossom (Original Mix).mp3",
+   "expected": "Au5 - Blossom (Original Mix). mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周獅a",
+   "expected": "zhou shi a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾂPボᄒa冚t",
+   "expected": "ﾂPボᄒa kan t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鯯氈イ开+͜滵婂求籤",
+   "expected": "zhi zhan イ kai+͜mi mian qiu qian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾌ䎁",
+   "expected": "ﾌ hu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "藛籩ｌ敒邜狵v矫蚑蘿🎵汕",
+   "expected": "xie bian l shen xi mang v jiao qi luo🎵shan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "갊筠",
+   "expected": "갊 yun"
+  },
+  {
+   "description": "语料抽样",
+   "input": "晴小瑶",
+   "expected": "qing xiao yao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䙺轄を𠅵9",
+   "expected": "lian xia を 𠅵9"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䱴ų颖萯",
+   "expected": "geng u ying fu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䵫ぃ重 庆‹、”",
+   "expected": "xun ぃ chong qing <,\""
+  },
+  {
+   "description": "语料抽样",
+   "input": "䡄ẍ矝",
+   "expected": "䡄 x jin"
+  },
+  {
+   "description": "语料抽样",
+   "input": "San Fermin",
+   "expected": "San Fermin"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周門裡a",
+   "expected": "zhou men li a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "秘鲁撍ềẌ{aFll颩",
+   "expected": "bi lu zan eX {aFll biao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "东xえą館",
+   "expected": "dong xえa guan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Dancing",
+   "expected": "Dancing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "À  騐．禐Ž|莡",
+   "expected": "A  yan. yuan Z|cuo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "E＄贼约객坱",
+   "expected": "E$zei yue 객 yang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ėﾉ浨　鶏つ；Ẉ갰莢J𬍛",
+   "expected": "eﾉ lan ji つ; W갰 jia J li"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周宪a",
+   "expected": "zhou xian a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "r罂7̎ヤæ《s廚",
+   "expected": "r ying7ヤae<<s chu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "T縤曾经",
+   "expected": "T su ceng jing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ほŶ輅聀にK",
+   "expected": "ほY lu zhi にK"
+  },
+  {
+   "description": "语料抽样",
+   "input": "灭",
+   "expected": "mie"
+  },
+  {
+   "description": "语料抽样",
+   "input": "András Schiff",
+   "expected": "Andras Schiff"
+  },
+  {
+   "description": "语料抽样",
+   "input": "R滪ｎっͣv《",
+   "expected": "R yu nっͣv<<"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 1捅6ᄃ䫤ẍαå煂啢A",
+   "expected": " 1tong6ᄃ ming xαa he liang A"
+  },
+  {
+   "description": "语料抽样",
+   "input": "林海 - 琵琶语",
+   "expected": "lin hai - pi pa yu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k；ﾝ😀喯}",
+   "expected": "k; ﾝ😀pen}"
+  },
+  {
+   "description": "语料抽样",
+   "input": "怜ﾟｫ?獲䰤",
+   "expected": "lian ﾟｫ? huo dong"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Rudolf Serkin",
+   "expected": "Rudolf Serkin"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ビ毫镢揵嗩z　'襠A",
+   "expected": "ビ hao jue qian suo z 'dang A"
+  },
+  {
+   "description": "语料抽样",
+   "input": "瑗 Sう笭",
+   "expected": "yuan Sう ling"
+  },
+  {
+   "description": "语料抽样",
+   "input": "0ḛ长大ど鬓慩资陧臥þ",
+   "expected": "0e zhang da ど bin lian zi nie wo th"
+  },
+  {
+   "description": "语料抽样",
+   "input": "G.E.M.邓紫棋 - 句号.mp3",
+   "expected": "G. E. M. deng zi qi - ju hao. mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾌ",
+   "expected": "ﾌ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ē#签条",
+   "expected": "e#qian tiao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "瑲ä々䄴ﾝ轸",
+   "expected": "qiang a⓶䄴 ﾝ zhen"
+  },
+  {
+   "description": "语料抽样",
+   "input": "・檙",
+   "expected": "‧cheng"
+  },
+  {
+   "description": "语料抽样",
+   "input": "jw窏‘̛驗虌　遥ｪ菷",
+   "expected": "jw wu '̛yan bie yao ｪ zhou"
+  },
+  {
+   "description": "语料抽样",
+   "input": "秘鲁社騳つ縴OX",
+   "expected": "bi lu she du つ qian OX"
+  },
+  {
+   "description": "语料抽样",
+   "input": "έ旌る綉厐ホL鰒曾经Ĭ",
+   "expected": "έ jing る tou pang ホL fu ceng jing I"
+  },
+  {
+   "description": "语料抽样",
+   "input": "んğ͇%惬Z",
+   "expected": "んg%qie Z"
+  },
+  {
+   "description": "语料抽样",
+   "input": "烝nｼ",
+   "expected": "zheng nｼ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "フゖ걂Ｎ脌N갍趶げ",
+   "expected": "フゖ걂N nin N갍 ku げ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周躍a",
+   "expected": "zhou yue a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "[͍̆C裆櫐걐ｭÞ͔掳",
+   "expected": "[͍̆C dang lei 걐ｭTH lu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Waltz No. 19 in A minor, op. posth.",
+   "expected": "Waltz No. 19 in A minor, op. posth."
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ｂ娞œ肬ħ",
+   "expected": "B nei oe you h"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鰊a",
+   "expected": "zhou lian a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周芦a",
+   "expected": "zhou lu a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周铮a",
+   "expected": "zhou zheng a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周頤a",
+   "expected": "zhou yi a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "〉Ṛ)猻^^x",
+   "expected": "> R) sun^^x"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Lorin Maazel",
+   "expected": "Lorin Maazel"
+  },
+  {
+   "description": "语料抽样",
+   "input": "g【幾ì",
+   "expected": "g 【ji i"
+  },
+  {
+   "description": "语料抽样",
+   "input": "R㠩ｬ庈ŖG軲",
+   "expected": "R 㠩 ｬ qin RG gu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "长大槵重 庆峐重 庆ヰō",
+   "expected": "zhang da huan chong qing gai chong qing ヰo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ゃ懙犬",
+   "expected": "ゃ yu quan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鑬\t걷̶）茐鮀ﾙB【栯讚",
+   "expected": "jian\t걷̶) cong tuo ﾙB 【you zan"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ᄃ欑蜚４蛎ｅ铙",
+   "expected": "ᄃ cuan fei4li e nao"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鍾愛a",
+   "expected": "zhou zhong ai a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "荒リ閙 鋲酚𠄗ύ」",
+   "expected": "huang リ nao bing fen 𠄗 ύ'"
+  },
+  {
+   "description": "语料抽样",
+   "input": "襯贳,ｸ>眨狱　／頦鉽þ",
+   "expected": "chen shi, ｸ>zha yu /hai shi th"
+  },
+  {
+   "description": "语料抽样",
+   "input": "rz藏文H͑ャ嶕5",
+   "expected": "rz zang wen Hャ jiao5"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嬸",
+   "expected": "shen"
+  },
+  {
+   "description": "语料抽样",
+   "input": ".淒莣Ｉx臭沈阳",
+   "expected": ". qi wang Ix chou shen yang"
+  },
+  {
+   "description": "语料抽样",
+   "input": "þｌ",
+   "expected": "thl"
+  },
+  {
+   "description": "语料抽样",
+   "input": "幀",
+   "expected": "zheng"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ネぞØャ",
+   "expected": "ネぞOャ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "h者愈凄淙羅",
+   "expected": "h zhe yu qi cong luo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "裡快äLþギ\t㦏",
+   "expected": "li kuai aLthギ\tsun"
+  },
+  {
+   "description": "语料抽样",
+   "input": "我们好像在哪见过",
+   "expected": "wo men hao xiang zai na jian guo"
+  },
+  {
+   "description": "语料抽样",
+   "input": "1606111_163283",
+   "expected": "1606111_163283"
+  },
+  {
+   "description": "语料抽样",
+   "input": "霿",
+   "expected": "meng"
+  },
+  {
+   "description": "语料抽样",
+   "input": "帱",
+   "expected": "chou"
+  },
+  {
+   "description": "语料抽样",
+   "input": "›3ıÒカ颃慠前か雮离煨",
+   "expected": ">3iOカ hang ao qian か mu li wei"
+  },
+  {
+   "description": "语料抽样",
+   "input": "籁　鐓㗹りē傷䛴ᄐk",
+   "expected": "lai dui 㗹 りe shang ji ᄐk"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｫ燵​в閞ͤ",
+   "expected": "ｫ da​в bian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "M珝ᄀ斔殩遷　咴㸨Ā恽",
+   "expected": "M xu ᄀ yu cuan qian hui jiu A yun"
+  },
+  {
+   "description": "语料抽样",
+   "input": "詮嫻舘惤",
+   "expected": "quan xian guan jian"
+  },
+  {
+   "description": "语料抽样",
+   "input": "；ÖR簅枷・",
+   "expected": "; OR chan jia‧"
+  },
+  {
+   "description": "语料抽样",
+   "input": "в̩萖<惡カ淃E!",
+   "expected": "в̩ wan<e カ juan E!"
+  },
+  {
+   "description": "语料抽样",
+   "input": "宣佈",
+   "expected": "xuan bu"
+  },
+  {
+   "description": "语料抽样",
+   "input": "マČ頇",
+   "expected": "マC han"
+  },
+  {
+   "description": "语料抽样",
+   "input": "u恊\"鈤誘i屮】Ｅ걦",
+   "expected": "u xie\"ri you i che】 E걦"
+  }
+ ]
+}

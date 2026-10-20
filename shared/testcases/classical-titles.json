@@ -1,0 +1,37 @@
+{
+  "description": "用曲名补救古典（需求 M-10）。matches：歌名（和专辑名）里有古典作品的标志；notMatches：中文流行歌常用的曲式词、单独的速度词或曲式词都不算",
+  "matches": [
+    { "description": "作品号和编号", "title": "Nocturne op. 9 no 2 Eb min" },
+    { "description": "BWV 和调性", "title": "Orchestral Suite No. 3 in D major, BWV 1068" },
+    { "description": "乐章的速度标记", "title": "Symphony No. 101 in D 'Clock'： II.      Andante" },
+    { "description": "BWV 加点", "title": "Concerto No.3 in G major BWV.1048：1. (ohne Satzbezeichnung)" },
+    { "description": "钢琴协奏曲", "title": "Piano Concerto No. 2 in C minor, Op. 18： I. Moderato" },
+    { "description": "艺术歌曲的作品号", "title": "Guten Abend, gut' Nacht, Op. 49, No. 4" },
+    { "description": "D 编号", "title": "Lieder：Heidenröslein D257" },
+    { "description": "K. 编号和乐章", "title": "Mozart： Piano Concerto No.23 in A, K.488 - 2. Adagio" },
+    { "description": "RV 编号", "title": "Violin Concerto in F Minor, RV 297 \"L'inverno\"" },
+    { "description": "奏鸣曲和乐章", "title": "Reinecke Sonata Op. 167 'Undine' 1. Allegro" },
+    { "description": "中文作品号", "title": "帕格尼尼主题狂想曲·作品43号" },
+    { "description": "中文交响曲", "title": "贝多芬第九交响曲" },
+    { "description": "中文前奏曲", "title": "G大调第一大提琴组曲：前奏曲" },
+    { "description": "专辑名也算", "title": "Clarinet Sonata", "album": "Brahms Sonatas Op.120" }
+  ],
+  "notMatches": [
+    { "description": "中文流行歌", "title": "夜曲" },
+    { "description": "中文流行歌", "title": "月半小夜曲" },
+    { "description": "中文流行歌", "title": "刻奇主义变奏曲" },
+    { "description": "中文流行歌", "title": "狂想曲" },
+    { "description": "中文流行歌", "title": "序曲" },
+    { "description": "中文流行歌", "title": "爱的圆舞曲" },
+    { "description": "中文流行歌", "title": "七里香" },
+    { "description": "单独的速度词", "title": "Presto" },
+    { "description": "单独的曲式词", "title": "Symphony" },
+    { "description": "流行歌", "title": "Baby" },
+    { "description": "罗马数字的 Part II", "title": "Love The Way You Lie (Part II)" },
+    { "description": "Boléro 不带编号", "title": "Boléro" },
+    { "description": "K 开头的中文", "title": "K歌之王" },
+    { "description": "流行歌", "title": "Open Arms" },
+    { "description": "Mass 不带编号", "title": "Mass Effect" },
+    { "description": "没有歌名", "title": null }
+  ]
+}

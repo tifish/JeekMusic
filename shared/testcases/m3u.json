@@ -1,0 +1,36 @@
+{
+  "description": "m3u 读写（需求 PL-4）。format：entries（path、durationSec、title）导出的文本；parse：input（lines 按 \\n 连接）解析出的各条目路径段；storagePath：移动端卷名 + 相对路径 + 文件名 → 挂载路径",
+  "format": [
+    { "description": "导出扩展 m3u", "entries": [ { "path": "/storage/emulated/0/Music/a.mp3", "durationSec": 215, "title": "周杰伦 - 晴天" } ],
+      "expected": "#EXTM3U\n#EXTINF:215,周杰伦 - 晴天\n/storage/emulated/0/Music/a.mp3\n" },
+    { "description": "标题里的换行换成空格", "entries": [ { "path": "a.mp3", "durationSec": 1, "title": "a\nb" } ],
+      "expected": "#EXTM3U\n#EXTINF:1,a b\na.mp3\n" },
+    { "description": "空列表", "entries": [], "expected": "#EXTM3U\n" }
+  ],
+  "parse": [
+    {
+      "description": "各种路径写法：绝对路径、相对路径、Windows 路径（去掉盘符）、file:// 和 URL 编码",
+      "lines": [
+        "#EXTM3U",
+        "#EXTINF:215,周杰伦 - 晴天",
+        "/storage/emulated/0/Music/周杰伦/晴天.mp3",
+        "..\\Music\\许巍\\曾经的你.flac",
+        "D:\\Music\\Queen\\Bohemian Rhapsody.mp3",
+        "file:///sdcard/Music/a%20b.mp3",
+        "relative/song.ogg"
+      ],
+      "expected": [
+        ["storage", "emulated", "0", "Music", "周杰伦", "晴天.mp3"],
+        ["Music", "许巍", "曾经的你.flac"],
+        ["Music", "Queen", "Bohemian Rhapsody.mp3"],
+        ["sdcard", "Music", "a b.mp3"],
+        ["relative", "song.ogg"]
+      ]
+    },
+    { "description": "BOM 和空行", "lines": [ "\uFEFF#EXTM3U", "", "  a.mp3  " ], "expected": [ ["a.mp3"] ] }
+  ],
+  "storagePath": [
+    { "description": "内部存储", "volume": "external_primary", "relativePath": "Music/", "fileName": "a.mp3", "expected": "/storage/emulated/0/Music/a.mp3" },
+    { "description": "SD 卡的卷名转大写", "volume": "1a2b-3c4d", "relativePath": "Music/", "fileName": "a.mp3", "expected": "/storage/1A2B-3C4D/Music/a.mp3" }
+  ]
+}

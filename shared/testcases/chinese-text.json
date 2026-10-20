@@ -1,0 +1,2657 @@
+{
+ "description": "繁简转换：simplified 是 ICU \"Traditional-Simplified\" 的结果，traditional 是 \"Simplified-Traditional\" 的结果（由 shared/pinyin/build-testcases.py 生成，不要手改）。移动端的 toSimplified 在没有汉字（按 UTF-16 码元判断）时直接返回原文，测试时先判断",
+ "cases": [
+  {
+   "description": "手造用例",
+   "input": "周杰伦",
+   "simplified": "周杰伦",
+   "traditional": "周傑倫"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦Jay",
+   "simplified": "周杰伦Jay",
+   "traditional": "周傑倫Jay"
+  },
+  {
+   "description": "手造用例",
+   "input": "Jay周杰伦",
+   "simplified": "Jay周杰伦",
+   "traditional": "Jay周傑倫"
+  },
+  {
+   "description": "手造用例",
+   "input": "周 杰伦",
+   "simplified": "周 杰伦",
+   "traditional": "周 傑倫"
+  },
+  {
+   "description": "手造用例",
+   "input": "  周杰伦",
+   "simplified": "  周杰伦",
+   "traditional": "  周傑倫"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦123",
+   "simplified": "周杰伦123",
+   "traditional": "周傑倫123"
+  },
+  {
+   "description": "手造用例",
+   "input": "1周",
+   "simplified": "1周",
+   "traditional": "1周"
+  },
+  {
+   "description": "手造用例",
+   "input": "（周）",
+   "simplified": "（周）",
+   "traditional": "（周）"
+  },
+  {
+   "description": "手造用例",
+   "input": "(周)",
+   "simplified": "(周)",
+   "traditional": "(周)"
+  },
+  {
+   "description": "手造用例",
+   "input": "周,杰",
+   "simplified": "周,杰",
+   "traditional": "周,傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周，杰",
+   "simplified": "周，杰",
+   "traditional": "周，傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周。杰",
+   "simplified": "周。杰",
+   "traditional": "周。傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周、杰",
+   "simplified": "周、杰",
+   "traditional": "周、傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "重庆",
+   "simplified": "重庆",
+   "traditional": "重慶"
+  },
+  {
+   "description": "手造用例",
+   "input": "重 庆",
+   "simplified": "重 庆",
+   "traditional": "重 慶"
+  },
+  {
+   "description": "手造用例",
+   "input": "重庆森林",
+   "simplified": "重庆森林",
+   "traditional": "重慶森林"
+  },
+  {
+   "description": "手造用例",
+   "input": "藏文",
+   "simplified": "藏文",
+   "traditional": "藏文"
+  },
+  {
+   "description": "手造用例",
+   "input": "沈阳",
+   "simplified": "沈阳",
+   "traditional": "瀋陽"
+  },
+  {
+   "description": "手造用例",
+   "input": "秘鲁",
+   "simplified": "秘鲁",
+   "traditional": "秘魯"
+  },
+  {
+   "description": "手造用例",
+   "input": "银行",
+   "simplified": "银行",
+   "traditional": "銀行"
+  },
+  {
+   "description": "手造用例",
+   "input": "长大",
+   "simplified": "长大",
+   "traditional": "長大"
+  },
+  {
+   "description": "手造用例",
+   "input": "长城",
+   "simplified": "长城",
+   "traditional": "長城"
+  },
+  {
+   "description": "手造用例",
+   "input": "音乐",
+   "simplified": "音乐",
+   "traditional": "音樂"
+  },
+  {
+   "description": "手造用例",
+   "input": "快乐",
+   "simplified": "快乐",
+   "traditional": "快樂"
+  },
+  {
+   "description": "手造用例",
+   "input": "单于",
+   "simplified": "单于",
+   "traditional": "單于"
+  },
+  {
+   "description": "手造用例",
+   "input": "曾经",
+   "simplified": "曾经",
+   "traditional": "曾經"
+  },
+  {
+   "description": "手造用例",
+   "input": "西安",
+   "simplified": "西安",
+   "traditional": "西安"
+  },
+  {
+   "description": "手造用例",
+   "input": "天安门",
+   "simplified": "天安门",
+   "traditional": "天安門"
+  },
+  {
+   "description": "手造用例",
+   "input": "女儿",
+   "simplified": "女儿",
+   "traditional": "女兒"
+  },
+  {
+   "description": "手造用例",
+   "input": "G.E.M. 邓紫棋",
+   "simplified": "G.E.M. 邓紫棋",
+   "traditional": "G.E.M. 鄧紫棋"
+  },
+  {
+   "description": "手造用例",
+   "input": "邓紫棋 G.E.M.",
+   "simplified": "邓紫棋 G.E.M.",
+   "traditional": "鄧紫棋 G.E.M."
+  },
+  {
+   "description": "手造用例",
+   "input": "陈奕迅 feat. 王菲",
+   "simplified": "陈奕迅 feat. 王菲",
+   "traditional": "陳奕迅 feat. 王菲"
+  },
+  {
+   "description": "手造用例",
+   "input": "Simon & Garfunkel",
+   "simplified": "Simon & Garfunkel",
+   "traditional": "Simon & Garfunkel"
+  },
+  {
+   "description": "手造用例",
+   "input": "AC/DC",
+   "simplified": "AC/DC",
+   "traditional": "AC/DC"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天.mp3",
+   "simplified": "晴天.mp3",
+   "traditional": "晴天.mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "周杰伦 - 晴天.mp3",
+   "simplified": "周杰伦 - 晴天.mp3",
+   "traditional": "周傑倫 - 晴天.mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "01. 周杰伦 - 晴天.flac",
+   "simplified": "01. 周杰伦 - 晴天.flac",
+   "traditional": "01. 周傑倫 - 晴天.flac"
+  },
+  {
+   "description": "手造用例",
+   "input": "Queen.mp3",
+   "simplified": "Queen.mp3",
+   "traditional": "Queen.mp3"
+  },
+  {
+   "description": "手造用例",
+   "input": "Mr.Big",
+   "simplified": "Mr.Big",
+   "traditional": "Mr.Big"
+  },
+  {
+   "description": "手造用例",
+   "input": "Beyoncé",
+   "simplified": "Beyoncé",
+   "traditional": "Beyoncé"
+  },
+  {
+   "description": "手造用例",
+   "input": "Motörhead",
+   "simplified": "Motörhead",
+   "traditional": "Motörhead"
+  },
+  {
+   "description": "手造用例",
+   "input": "Café del Mar",
+   "simplified": "Café del Mar",
+   "traditional": "Café del Mar"
+  },
+  {
+   "description": "手造用例",
+   "input": "Björk",
+   "simplified": "Björk",
+   "traditional": "Björk"
+  },
+  {
+   "description": "手造用例",
+   "input": "Mötley Crüe",
+   "simplified": "Mötley Crüe",
+   "traditional": "Mötley Crüe"
+  },
+  {
+   "description": "手造用例",
+   "input": "Sigur Rós",
+   "simplified": "Sigur Rós",
+   "traditional": "Sigur Rós"
+  },
+  {
+   "description": "手造用例",
+   "input": "Déjà vu",
+   "simplified": "Déjà vu",
+   "traditional": "Déjà vu"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ærø",
+   "simplified": "Ærø",
+   "traditional": "Ærø"
+  },
+  {
+   "description": "手造用例",
+   "input": "Straße",
+   "simplified": "Straße",
+   "traditional": "Straße"
+  },
+  {
+   "description": "手造用例",
+   "input": "ﬁnal",
+   "simplified": "ﬁnal",
+   "traditional": "ﬁnal"
+  },
+  {
+   "description": "手造用例",
+   "input": "Œuvre",
+   "simplified": "Œuvre",
+   "traditional": "Œuvre"
+  },
+  {
+   "description": "手造用例",
+   "input": "Đorđe",
+   "simplified": "Đorđe",
+   "traditional": "Đorđe"
+  },
+  {
+   "description": "手造用例",
+   "input": "Łódź",
+   "simplified": "Łódź",
+   "traditional": "Łódź"
+  },
+  {
+   "description": "手造用例",
+   "input": "é",
+   "simplified": "é",
+   "traditional": "é"
+  },
+  {
+   "description": "手造用例",
+   "input": "Café",
+   "simplified": "Café",
+   "traditional": "Café"
+  },
+  {
+   "description": "手造用例",
+   "input": "１２３",
+   "simplified": "１２３",
+   "traditional": "１２３"
+  },
+  {
+   "description": "手造用例",
+   "input": "ＡＢＣ",
+   "simplified": "ＡＢＣ",
+   "traditional": "ＡＢＣ"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ａ周",
+   "simplified": "Ａ周",
+   "traditional": "Ａ周"
+  },
+  {
+   "description": "手造用例",
+   "input": "シャルル",
+   "simplified": "シャルル",
+   "traditional": "シャルル"
+  },
+  {
+   "description": "手造用例",
+   "input": "ガイ",
+   "simplified": "ガイ",
+   "traditional": "ガイ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ｶﾞｲ",
+   "simplified": "ｶﾞｲ",
+   "traditional": "ｶﾞｲ"
+  },
+  {
+   "description": "手造用例",
+   "input": "夜に駆ける",
+   "simplified": "夜に駆ける",
+   "traditional": "夜に駆ける"
+  },
+  {
+   "description": "手造用例",
+   "input": "千本桜",
+   "simplified": "千本桜",
+   "traditional": "千本桜"
+  },
+  {
+   "description": "手造用例",
+   "input": "残酷な天使のテーゼ",
+   "simplified": "残酷な天使のテーゼ",
+   "traditional": "殘酷な天使のテーゼ"
+  },
+  {
+   "description": "手造用例",
+   "input": "米津玄師",
+   "simplified": "米津玄师",
+   "traditional": "米津玄師"
+  },
+  {
+   "description": "手造用例",
+   "input": "の周",
+   "simplified": "の周",
+   "traditional": "の周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周の",
+   "simplified": "周の",
+   "traditional": "周の"
+  },
+  {
+   "description": "手造用例",
+   "input": "한국어",
+   "simplified": "한국어",
+   "traditional": "한국어"
+  },
+  {
+   "description": "手造用例",
+   "input": "방탄소년단",
+   "simplified": "방탄소년단",
+   "traditional": "방탄소년단"
+  },
+  {
+   "description": "手造用例",
+   "input": "BTS (방탄소년단)",
+   "simplified": "BTS (방탄소년단)",
+   "traditional": "BTS (방탄소년단)"
+  },
+  {
+   "description": "手造用例",
+   "input": "IU (아이유)",
+   "simplified": "IU (아이유)",
+   "traditional": "IU (아이유)"
+  },
+  {
+   "description": "手造用例",
+   "input": "《晴天》",
+   "simplified": "《晴天》",
+   "traditional": "《晴天》"
+  },
+  {
+   "description": "手造用例",
+   "input": "「晴天」",
+   "simplified": "「晴天」",
+   "traditional": "「晴天」"
+  },
+  {
+   "description": "手造用例",
+   "input": "『晴天』",
+   "simplified": "『晴天』",
+   "traditional": "『晴天』"
+  },
+  {
+   "description": "手造用例",
+   "input": "〈晴天〉",
+   "simplified": "〈晴天〉",
+   "traditional": "〈晴天〉"
+  },
+  {
+   "description": "手造用例",
+   "input": "周《晴天》",
+   "simplified": "周《晴天》",
+   "traditional": "周《晴天》"
+  },
+  {
+   "description": "手造用例",
+   "input": "a《b》",
+   "simplified": "a《b》",
+   "traditional": "a《b》"
+  },
+  {
+   "description": "手造用例",
+   "input": "a「b」",
+   "simplified": "a「b」",
+   "traditional": "a「b」"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天～",
+   "simplified": "晴天～",
+   "traditional": "晴天～"
+  },
+  {
+   "description": "手造用例",
+   "input": "晴天〜",
+   "simplified": "晴天〜",
+   "traditional": "晴天〜"
+  },
+  {
+   "description": "手造用例",
+   "input": "々",
+   "simplified": "々",
+   "traditional": "々"
+  },
+  {
+   "description": "手造用例",
+   "input": "时々",
+   "simplified": "时々",
+   "traditional": "時々"
+  },
+  {
+   "description": "手造用例",
+   "input": "佐々木",
+   "simplified": "佐々木",
+   "traditional": "佐々木"
+  },
+  {
+   "description": "手造用例",
+   "input": "〇",
+   "simplified": "〇",
+   "traditional": "〇"
+  },
+  {
+   "description": "手造用例",
+   "input": "〇〇七",
+   "simplified": "〇〇七",
+   "traditional": "〇〇七"
+  },
+  {
+   "description": "手造用例",
+   "input": "ⅠⅡⅢ",
+   "simplified": "ⅠⅡⅢ",
+   "traditional": "ⅠⅡⅢ"
+  },
+  {
+   "description": "手造用例",
+   "input": "①②",
+   "simplified": "①②",
+   "traditional": "①②"
+  },
+  {
+   "description": "手造用例",
+   "input": "㈱",
+   "simplified": "㈱",
+   "traditional": "㈱"
+  },
+  {
+   "description": "手造用例",
+   "input": "㍻",
+   "simplified": "㍻",
+   "traditional": "㍻"
+  },
+  {
+   "description": "手造用例",
+   "input": "½",
+   "simplified": "½",
+   "traditional": "½"
+  },
+  {
+   "description": "手造用例",
+   "input": "™",
+   "simplified": "™",
+   "traditional": "™"
+  },
+  {
+   "description": "手造用例",
+   "input": "©2024",
+   "simplified": "©2024",
+   "traditional": "©2024"
+  },
+  {
+   "description": "手造用例",
+   "input": "«Bohemian»",
+   "simplified": "«Bohemian»",
+   "traditional": "«Bohemian»"
+  },
+  {
+   "description": "手造用例",
+   "input": "‹a›",
+   "simplified": "‹a›",
+   "traditional": "‹a›"
+  },
+  {
+   "description": "手造用例",
+   "input": "“周”",
+   "simplified": "“周”",
+   "traditional": "“周”"
+  },
+  {
+   "description": "手造用例",
+   "input": "\"周\"",
+   "simplified": "\"周\"",
+   "traditional": "\"周\""
+  },
+  {
+   "description": "手造用例",
+   "input": "'周'",
+   "simplified": "'周'",
+   "traditional": "'周'"
+  },
+  {
+   "description": "手造用例",
+   "input": "周'",
+   "simplified": "周'",
+   "traditional": "周'"
+  },
+  {
+   "description": "手造用例",
+   "input": "周-杰",
+   "simplified": "周-杰",
+   "traditional": "周-傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周—杰",
+   "simplified": "周—杰",
+   "traditional": "周—傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周_杰",
+   "simplified": "周_杰",
+   "traditional": "周_傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周/杰",
+   "simplified": "周/杰",
+   "traditional": "周/傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周\\杰",
+   "simplified": "周\\杰",
+   "traditional": "周\\傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周&杰",
+   "simplified": "周&杰",
+   "traditional": "周&傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周+杰",
+   "simplified": "周+杰",
+   "traditional": "周+傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周|杰",
+   "simplified": "周|杰",
+   "traditional": "周|傑"
+  },
+  {
+   "description": "手造用例",
+   "input": "周#1",
+   "simplified": "周#1",
+   "traditional": "周#1"
+  },
+  {
+   "description": "手造用例",
+   "input": "#周",
+   "simplified": "#周",
+   "traditional": "#周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周!",
+   "simplified": "周!",
+   "traditional": "周!"
+  },
+  {
+   "description": "手造用例",
+   "input": "周?a",
+   "simplified": "周?a",
+   "traditional": "周?a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周:a",
+   "simplified": "周:a",
+   "traditional": "周:a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周;a",
+   "simplified": "周;a",
+   "traditional": "周;a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周)a",
+   "simplified": "周)a",
+   "traditional": "周)a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周]a",
+   "simplified": "周]a",
+   "traditional": "周]a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周}a",
+   "simplified": "周}a",
+   "traditional": "周}a"
+  },
+  {
+   "description": "手造用例",
+   "input": "a(周",
+   "simplified": "a(周",
+   "traditional": "a(周"
+  },
+  {
+   "description": "手造用例",
+   "input": "a[周",
+   "simplified": "a[周",
+   "traditional": "a[周"
+  },
+  {
+   "description": "手造用例",
+   "input": "a{周",
+   "simplified": "a{周",
+   "traditional": "a{周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周",
+   "simplified": "周",
+   "traditional": "周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周\ta",
+   "simplified": "周\ta",
+   "traditional": "周\ta"
+  },
+  {
+   "description": "手造用例",
+   "input": "周 a",
+   "simplified": "周 a",
+   "traditional": "周 a"
+  },
+  {
+   "description": "手造用例",
+   "input": "周　a",
+   "simplified": "周　a",
+   "traditional": "周　a"
+  },
+  {
+   "description": "手造用例",
+   "input": "😀周",
+   "simplified": "😀周",
+   "traditional": "😀周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周😀",
+   "simplified": "周😀",
+   "traditional": "周😀"
+  },
+  {
+   "description": "手造用例",
+   "input": "𠀀",
+   "simplified": "𠀀",
+   "traditional": "𠀀"
+  },
+  {
+   "description": "手造用例",
+   "input": "𡑍",
+   "simplified": "𫭼",
+   "traditional": "𡑍"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ⅷ",
+   "simplified": "Ⅷ",
+   "traditional": "Ⅷ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǅ",
+   "simplified": "ǅ",
+   "traditional": "ǅ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǈ",
+   "simplified": "ǈ",
+   "traditional": "ǈ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ǋ",
+   "simplified": "ǋ",
+   "traditional": "ǋ"
+  },
+  {
+   "description": "手造用例",
+   "input": "ß周",
+   "simplified": "ß周",
+   "traditional": "ß周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周ß",
+   "simplified": "周ß",
+   "traditional": "周ß"
+  },
+  {
+   "description": "手造用例",
+   "input": "αβγ周",
+   "simplified": "αβγ周",
+   "traditional": "αβγ周"
+  },
+  {
+   "description": "手造用例",
+   "input": "周αβγ",
+   "simplified": "周αβγ",
+   "traditional": "周αβγ"
+  },
+  {
+   "description": "手造用例",
+   "input": "Ελληνικά",
+   "simplified": "Ελληνικά",
+   "traditional": "Ελληνικά"
+  },
+  {
+   "description": "手造用例",
+   "input": "Русский",
+   "simplified": "Русский",
+   "traditional": "Русский"
+  },
+  {
+   "description": "手造用例",
+   "input": "עברית",
+   "simplified": "עברית",
+   "traditional": "עברית"
+  },
+  {
+   "description": "手造用例",
+   "input": "العربية",
+   "simplified": "العربية",
+   "traditional": "العربية"
+  },
+  {
+   "description": "手造用例",
+   "input": "हिन्दी",
+   "simplified": "हिन्दी",
+   "traditional": "हिन्दी"
+  },
+  {
+   "description": "手造用例",
+   "input": "ไทย",
+   "simplified": "ไทย",
+   "traditional": "ไทย"
+  },
+  {
+   "description": "手造用例",
+   "input": "Tiếng Việt",
+   "simplified": "Tiếng Việt",
+   "traditional": "Tiếng Việt"
+  },
+  {
+   "description": "手造用例",
+   "input": "Nguyễn",
+   "simplified": "Nguyễn",
+   "traditional": "Nguyễn"
+  },
+  {
+   "description": "手造用例",
+   "input": "Hà Nội",
+   "simplified": "Hà Nội",
+   "traditional": "Hà Nội"
+  },
+  {
+   "description": "语料抽样",
+   "input": "う〇Jᄎ扣毜饏",
+   "simplified": "う〇Jᄎ扣毜饏",
+   "traditional": "う〇Jᄎ扣毜饏"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k殡 じ『ﾂク憈Ｂ*",
+   "simplified": "k殡 じ『ﾂク憈Ｂ*",
+   "traditional": "k殯 じ『ﾂク憈Ｂ*"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䣭. 、",
+   "simplified": "䣭. 、",
+   "traditional": "䣭. 、"
+  },
+  {
+   "description": "语料抽样",
+   "input": "繇役嘯泾な",
+   "simplified": "徭役啸泾な",
+   "traditional": "繇役嘯涇な"
+  },
+  {
+   "description": "语料抽样",
+   "input": ">氮",
+   "simplified": ">氮",
+   "traditional": ">氮"
+  },
+  {
+   "description": "语料抽样",
+   "input": "G壾得Ŭ͋",
+   "simplified": "G壾得Ŭ͋",
+   "traditional": "G壾得Ŭ͋"
+  },
+  {
+   "description": "语料抽样",
+   "input": "念",
+   "simplified": "念",
+   "traditional": "念"
+  },
+  {
+   "description": "语料抽样",
+   "input": "忮m",
+   "simplified": "忮m",
+   "traditional": "忮m"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ok",
+   "simplified": "Ok",
+   "traditional": "Ok"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ペΣ",
+   "simplified": "ペΣ",
+   "traditional": "ペΣ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "汈【걌",
+   "simplified": "汈【걌",
+   "traditional": "汈【걌"
+  },
+  {
+   "description": "语料抽样",
+   "input": "B葴걑ｐĂと 1「秘鲁~廓",
+   "simplified": "B葴걑ｐĂと 1「秘鲁~廓",
+   "traditional": "B葴걑ｐĂと 1「秘魯~廓"
+  },
+  {
+   "description": "语料抽样",
+   "input": "墾翄齄",
+   "simplified": "垦翄齄",
+   "traditional": "墾翄齄"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ĵ餑",
+   "simplified": "ĵ饽",
+   "traditional": "ĵ餑"
+  },
+  {
+   "description": "语料抽样",
+   "input": "6걼",
+   "simplified": "6걼",
+   "traditional": "6걼"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Loud",
+   "simplified": "Loud",
+   "traditional": "Loud"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周傩a",
+   "simplified": "周傩a",
+   "traditional": "周儺a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "创",
+   "simplified": "创",
+   "traditional": "創"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Fﬂ銥ｹき",
+   "simplified": "Fﬂ铱ｹき",
+   "traditional": "Fﬂ銥ｹき"
+  },
+  {
+   "description": "语料抽样",
+   "input": "̻塇9O鬒",
+   "simplified": "̻塇9O鬒",
+   "traditional": "̻塇9O鬒"
+  },
+  {
+   "description": "语料抽样",
+   "input": "M㪥ḵ）﻿）​〇",
+   "simplified": "M㪥ḵ）﻿）​〇",
+   "traditional": "M㪥ḵ）﻿）​〇"
+  },
+  {
+   "description": "语料抽样",
+   "input": "搪閥穣̔䆔",
+   "simplified": "搪阀穣̔䆔",
+   "traditional": "搪閥穣̔䆔"
+  },
+  {
+   "description": "语料抽样",
+   "input": "单于篪マ艣亩αﾏﾉ搵鲬",
+   "simplified": "单于篪マ艣亩αﾏﾉ揾鲬",
+   "traditional": "單于篪マ艣畝αﾏﾉ搵鯒"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Celine Dion",
+   "simplified": "Celine Dion",
+   "traditional": "Celine Dion"
+  },
+  {
+   "description": "语料抽样",
+   "input": "視　갶诀’",
+   "simplified": "視　갶诀’",
+   "traditional": "視　갶訣’"
+  },
+  {
+   "description": "语料抽样",
+   "input": "来自天堂的魔鬼",
+   "simplified": "来自天堂的魔鬼",
+   "traditional": "來自天堂的魔鬼"
+  },
+  {
+   "description": "语料抽样",
+   "input": "[ﾅ鍺蘥]久病不癒勒音乐",
+   "simplified": "[ﾅ锗蘥]久病不愈勒音乐",
+   "traditional": "[ﾅ鍺蘥]久病不癒勒音樂"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ŕ",
+   "simplified": "Ŕ",
+   "traditional": "Ŕ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "祅\t",
+   "simplified": "祅\t",
+   "traditional": "祅\t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "硓磢m",
+   "simplified": "硓磢m",
+   "traditional": "硓磢m"
+  },
+  {
+   "description": "语料抽样",
+   "input": "汘",
+   "simplified": "汘",
+   "traditional": "汘"
+  },
+  {
+   "description": "语料抽样",
+   "input": "D.　ĵ濳抈仺㵞o",
+   "simplified": "D.　ĵ濳抈仺㵞o",
+   "traditional": "D.　ĵ濳抈仺㵞o"
+  },
+  {
+   "description": "语料抽样",
+   "input": "檫谏ĸ砼 »",
+   "simplified": "檫谏ĸ砼 »",
+   "traditional": "檫諫ĸ砼 »"
+  },
+  {
+   "description": "语料抽样",
+   "input": "沈阳皛Aぜ单于鵁质Ö澹㪕",
+   "simplified": "沈阳皛Aぜ单于䴔质Ö澹㪕",
+   "traditional": "瀋陽皛Aぜ單于鵁質Ö澹㪕"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䬆oỼL ͑",
+   "simplified": "䬆oỼL ͑",
+   "traditional": "䬆oỼL ͑"
+  },
+  {
+   "description": "语料抽样",
+   "input": "?箇厨갫",
+   "simplified": "?个厨갫",
+   "traditional": "?箇廚갫"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ŏﾆ갎䂥각갺〜𠄉育｀策畫ŕ",
+   "simplified": "Ŏﾆ갎䂥각갺〜𠄉育｀策划ŕ",
+   "traditional": "Ŏﾆ갎䂥각갺〜𠄉育｀策畫ŕ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "=Бi 塢͑",
+   "simplified": "=Бi 坞͑",
+   "traditional": "=Бi 塢͑"
+  },
+  {
+   "description": "语料抽样",
+   "input": "方腊ヌ^ョ遷だ각Ṽ曾经͟䰥ﾄ",
+   "simplified": "方腊ヌ^ョ迁だ각Ṽ曾经͟䰥ﾄ",
+   "traditional": "方腊ヌ^ョ遷だ각Ṽ曾經͟䰥ﾄ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｐ脈呏",
+   "simplified": "ｐ脉呏",
+   "traditional": "ｐ脈呏"
+  },
+  {
+   "description": "语料抽样",
+   "input": "`R蟕ᄂ眳专著卷纸㐝",
+   "simplified": "`R蟕ᄂ眳专着卷纸㐝",
+   "traditional": "`R蟕ᄂ眳專著捲紙㐝"
+  },
+  {
+   "description": "语料抽样",
+   "input": "​а』",
+   "simplified": "​а』",
+   "traditional": "​а』"
+  },
+  {
+   "description": "语料抽样",
+   "input": "剘\tウ瞻",
+   "simplified": "剘\tウ瞻",
+   "traditional": "剘\tウ瞻"
+  },
+  {
+   "description": "语料抽样",
+   "input": "gトέ鉱",
+   "simplified": "gトέ鉱",
+   "traditional": "gトέ鉱"
+  },
+  {
+   "description": "语料抽样",
+   "input": "慘䎋韫g̖V％だ庄B",
+   "simplified": "惨䎋韫g̖V％だ庄B",
+   "traditional": "慘䎋韞g̖V％だ莊B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "XĦ峚てm膟",
+   "simplified": "XĦ峚てm膟",
+   "traditional": "XĦ峚てm膟"
+  },
+  {
+   "description": "语料抽样",
+   "input": "械Æ 劍ｽく锥n惱軜燀",
+   "simplified": "械Æ 剑ｽく锥n恼軜𬊤",
+   "traditional": "械Æ 劍ｽく錐n惱軜燀"
+  },
+  {
+   "description": "语料抽样",
+   "input": "々걋银行ロ걑6ᄍSͧÄ褮瘟",
+   "simplified": "々걋银行ロ걑6ᄍSͧÄ褮瘟",
+   "traditional": "々걋銀行ロ걑6ᄍSͧÄ褮瘟"
+  },
+  {
+   "description": "语料抽样",
+   "input": "曆̲沈阳P",
+   "simplified": "历̲沈阳P",
+   "traditional": "曆̲瀋陽P"
+  },
+  {
+   "description": "语料抽样",
+   "input": "걽橳繄вﾗＸ4㗆撫卹裿",
+   "simplified": "걽橳繄вﾗＸ4㗆抚恤裿",
+   "traditional": "걽橳繄вﾗＸ4㗆撫卹裿"
+  },
+  {
+   "description": "语料抽样",
+   "input": "虒瘏墻涘h",
+   "simplified": "虒瘏墙涘h",
+   "traditional": "虒瘏墻涘h"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 2篓u槒",
+   "simplified": " 2篓u槒",
+   "traditional": " 2簍u槒"
+  },
+  {
+   "description": "语料抽样",
+   "input": "S3グ4さœ躒壼鱀酁",
+   "simplified": "S3グ4さœ跞壸𬶨酁",
+   "traditional": "S3グ4さœ躒壼鱀酁"
+  },
+  {
+   "description": "语料抽样",
+   "input": "毬花",
+   "simplified": "球花",
+   "traditional": "毬花"
+  },
+  {
+   "description": "语料抽样",
+   "input": "棂、yð鸩Ｄ单于々",
+   "simplified": "棂、yð鸩Ｄ单于々",
+   "traditional": "櫺、yð鴆Ｄ單于々"
+  },
+  {
+   "description": "语料抽样",
+   "input": "竺忨礬.",
+   "simplified": "竺忨矾.",
+   "traditional": "竺忨礬."
+  },
+  {
+   "description": "语料抽样",
+   "input": "­嬱갟g毢揫ﬂ ",
+   "simplified": "­嬱갟g毢揫ﬂ ",
+   "traditional": "­嬱갟g毢揫ﬂ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "ヰ ",
+   "simplified": "ヰ ",
+   "traditional": "ヰ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "Prelude e-moll, Op.28, Nr,4",
+   "simplified": "Prelude e-moll, Op.28, Nr,4",
+   "traditional": "Prelude e-moll, Op.28, Nr,4"
+  },
+  {
+   "description": "语料抽样",
+   "input": "挦鷲",
+   "simplified": "挦鹫",
+   "traditional": "撏鷲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蹋柲帮̩γcC重庆齧重 庆",
+   "simplified": "蹋柲帮̩γcC重庆啮重 庆",
+   "traditional": "蹋柲幫̩γcC重慶齧重 慶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Demons",
+   "simplified": "Demons",
+   "traditional": "Demons"
+  },
+  {
+   "description": "语料抽样",
+   "input": "杅撅Gそヒ걒J蘃B",
+   "simplified": "杅撅Gそヒ걒J蘃B",
+   "traditional": "杅撅Gそヒ걒J蘃B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Chris Brown,Jordin Sparks - No Air.mp3",
+   "simplified": "Chris Brown,Jordin Sparks - No Air.mp3",
+   "traditional": "Chris Brown,Jordin Sparks - No Air.mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "痰倿",
+   "simplified": "痰倿",
+   "traditional": "痰倿"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ă蚎B",
+   "simplified": "ă蚎B",
+   "traditional": "ă蚎B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喅 埣",
+   "simplified": "喅 埣",
+   "traditional": "喅 埣"
+  },
+  {
+   "description": "语料抽样",
+   "input": "藏文𠃺K〉ﾕ갩》＄漝",
+   "simplified": "藏文𠃺K〉ﾕ갩》＄漝",
+   "traditional": "藏文𠃺K〉ﾕ갩》＄漝"
+  },
+  {
+   "description": "语料抽样",
+   "input": "弔慰",
+   "simplified": "吊慰",
+   "traditional": "弔慰"
+  },
+  {
+   "description": "语料抽样",
+   "input": "参巀单于",
+   "simplified": "参巀单于",
+   "traditional": "參巀單于"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鬱悶",
+   "simplified": "郁闷",
+   "traditional": "鬱悶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "》䙛X䌳登䞊",
+   "simplified": "》䙛X䌳登䞊",
+   "traditional": "》䙛X䌳登䞊"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周膿a",
+   "simplified": "周脓a",
+   "traditional": "周膿a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "沈阳盐",
+   "simplified": "沈阳盐",
+   "traditional": "瀋陽鹽"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周深 - 耀眼的我们.ogg",
+   "simplified": "周深 - 耀眼的我们.ogg",
+   "traditional": "周深 - 耀眼的我們.ogg"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ヌ茖·躲`鸵铎ユ",
+   "simplified": "ヌ茖·躲`鸵铎ユ",
+   "traditional": "ヌ茖·躲`鴕鐸ユ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "　Zｰ 潴̞&艹痪",
+   "simplified": "　Zｰ 潴̞&艹痪",
+   "traditional": "　Zｰ 瀦̞&艹瘓"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ͤ潓鳏ぷ건­}駠",
+   "simplified": "ͤ潓鳏ぷ건­}駠",
+   "traditional": "ͤ潓鰥ぷ건­}駠"
+  },
+  {
+   "description": "语料抽样",
+   "input": "齟",
+   "simplified": "龃",
+   "traditional": "齟"
+  },
+  {
+   "description": "语料抽样",
+   "input": "~ά",
+   "simplified": "~ά",
+   "traditional": "~ά"
+  },
+  {
+   "description": "语料抽样",
+   "input": "謕鯼さい",
+   "simplified": "謕鯼さい",
+   "traditional": "謕鯼さい"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鯥Hý",
+   "simplified": "鯥Hý",
+   "traditional": "鯥Hý"
+  },
+  {
+   "description": "语料抽样",
+   "input": "͍だ",
+   "simplified": "͍だ",
+   "traditional": "͍だ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "K(걥肕緗鑰曾经ḀᄒZ塞禲",
+   "simplified": "K(걥肕缃钥曾经ḀᄒZ塞禲",
+   "traditional": "K(걥肕緗鑰曾經ḀᄒZ塞禲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "槓",
+   "simplified": "杠",
+   "traditional": "槓"
+  },
+  {
+   "description": "语料抽样",
+   "input": "　 蕘",
+   "simplified": "　 荛",
+   "traditional": "　 蕘"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嵨]〃S\tб",
+   "simplified": "嵨]〃S\tб",
+   "traditional": "嵨]〃S\tб"
+  },
+  {
+   "description": "语料抽样",
+   "input": "唑曾经㾾㶏›…戥Ļ㐅",
+   "simplified": "唑曾经㾾㶏›…戥Ļ㐅",
+   "traditional": "唑曾經㾾㶏›…戥Ļ㐅"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾎ银行䗋ｩ鶬Ĭ+醓㛱д唸",
+   "simplified": "ﾎ银行䗋ｩ鸧Ĭ+醓㛱д念",
+   "traditional": "ﾎ銀行䗋ｩ鶬Ĭ+醓㛱д唸"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ゆ诏#ケ垵岡/",
+   "simplified": "ゆ诏#ケ埯冈/",
+   "traditional": "ゆ詔#ケ垵岡/"
+  },
+  {
+   "description": "语料抽样",
+   "input": "重庆ｴ隳ź:P",
+   "simplified": "重庆ｴ隳ź:P",
+   "traditional": "重慶ｴ隳ź:P"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周檁a",
+   "simplified": "周檩a",
+   "traditional": "周檁a"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 虧翵ｪｧ",
+   "simplified": " 亏翵ｪｧ",
+   "traditional": " 虧翵ｪｧ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "狖鹑 û〉【裚气",
+   "simplified": "狖鹑 û〉【裚气",
+   "traditional": "狖鶉 û〉【裚氣"
+  },
+  {
+   "description": "语料抽样",
+   "input": "H:䟸游伴",
+   "simplified": "H:䟸游伴",
+   "traditional": "H:䟸遊伴"
+  },
+  {
+   "description": "语料抽样",
+   "input": "X「!+ｵ狖𠂋",
+   "simplified": "X「!+ｵ狖𠂋",
+   "traditional": "X「!+ｵ狖𠂋"
+  },
+  {
+   "description": "语料抽样",
+   "input": "姗｛鯫＾?α",
+   "simplified": "姗｛鲰＾?α",
+   "traditional": "姍｛鯫＾?α"
+  },
+  {
+   "description": "语料抽样",
+   "input": "刘至佳",
+   "simplified": "刘至佳",
+   "traditional": "劉至佳"
+  },
+  {
+   "description": "语料抽样",
+   "input": "t̯・㨉Ŧ䉚．",
+   "simplified": "t̯・㨉Ŧ䉚．",
+   "traditional": "t̯・㨉Ŧ䉚．"
+  },
+  {
+   "description": "语料抽样",
+   "input": "雺重庆",
+   "simplified": "雺重庆",
+   "traditional": "雺重慶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "め瀟!",
+   "simplified": "め潇!",
+   "traditional": "め瀟!"
+  },
+  {
+   "description": "语料抽样",
+   "input": "lẂﾅT+〆ŋł潊S걭愨",
+   "simplified": "lẂﾅT+〆ŋł潊S걭悫",
+   "traditional": "lẂﾅT+〆ŋł潊S걭愨"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鲺a",
+   "simplified": "周鲺a",
+   "traditional": "周鯴a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "包幹",
+   "simplified": "包干",
+   "traditional": "包幹"
+  },
+  {
+   "description": "语料抽样",
+   "input": "7華̨〉}",
+   "simplified": "7華̨〉}",
+   "traditional": "7華̨〉}"
+  },
+  {
+   "description": "语料抽样",
+   "input": "苁Ｕ",
+   "simplified": "苁Ｕ",
+   "traditional": "蓯Ｕ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "I綟闤グt猕檉＝。",
+   "simplified": "I綟阛グt猕柽＝。",
+   "traditional": "I綟闤グt獼檉＝。"
+  },
+  {
+   "description": "语料抽样",
+   "input": "類U-🎵隘 U2䰑頩",
+   "simplified": "类U-🎵隘 U2䰑頩",
+   "traditional": "類U-🎵隘 U2䰑頩"
+  },
+  {
+   "description": "语料抽样",
+   "input": "昚砍ｧ\t蕻%",
+   "simplified": "昚砍ｧ\t蕻%",
+   "traditional": "昚砍ｧ\t蕻%"
+  },
+  {
+   "description": "语料抽样",
+   "input": "楚鸇v偞闖笁",
+   "simplified": "楚鹯v偞闯笁",
+   "traditional": "楚鸇v偞闖笁"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鸟›v",
+   "simplified": "鸟›v",
+   "traditional": "鳥›v"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾐvﬁ』",
+   "simplified": "ﾐvﬁ』",
+   "traditional": "ﾐvﬁ』"
+  },
+  {
+   "description": "语料抽样",
+   "input": "魯 疴丩ͅv】㲛̮ή愈",
+   "simplified": "魯 疴丩ͅv】㲛̮ή愈",
+   "traditional": "魯 痾丩ͅv】㲛̮ή愈"
+  },
+  {
+   "description": "语料抽样",
+   "input": "》9ē閬９重 庆",
+   "simplified": "》9ē阆９重 庆",
+   "traditional": "》9ē閬９重 慶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ほ呡顭岸铑ｻD胆",
+   "simplified": "ほ呡顭岸铑ｻD胆",
+   "traditional": "ほ呡顭岸銠ｻD膽"
+  },
+  {
+   "description": "语料抽样",
+   "input": "註",
+   "simplified": "注",
+   "traditional": "註"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ウ3曾经🎵攕齧ᄑ Ｖ>þw",
+   "simplified": "ウ3曾经🎵攕啮ᄑ Ｖ>þw",
+   "traditional": "ウ3曾經🎵攕齧ᄑ Ｖ>þw"
+  },
+  {
+   "description": "语料抽样",
+   "input": "溝h謈ð",
+   "simplified": "沟h謈ð",
+   "traditional": "溝h謈ð"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喜ͭ䵚獍褘",
+   "simplified": "喜ͭ䵚獍袆",
+   "traditional": "喜ͭ䵚獍褘"
+  },
+  {
+   "description": "语料抽样",
+   "input": "歿",
+   "simplified": "殁",
+   "traditional": "歿"
+  },
+  {
+   "description": "语料抽样",
+   "input": "갃䍀嘄〃例＇ĵᄑ埸͛",
+   "simplified": "갃䍀嘄〃例＇ĵᄑ埸͛",
+   "traditional": "갃繿嘄〃例＇ĵᄑ埸͛"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周爲a",
+   "simplified": "周为a",
+   "traditional": "周爲a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Fun./Janelle Monáe",
+   "simplified": "Fun./Janelle Monáe",
+   "traditional": "Fun./Janelle Monáe"
+  },
+  {
+   "description": "语料抽样",
+   "input": "－æ̃よn齰艦飧W",
+   "simplified": "－æ̃よn齰舰飧W",
+   "traditional": "－æ̃よn齰艦飧W"
+  },
+  {
+   "description": "语料抽样",
+   "input": "N锅ﾜ",
+   "simplified": "N锅ﾜ",
+   "traditional": "N鍋ﾜ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ᄒ諞畢̜’エ淺\t갽ヶ ",
+   "simplified": "ᄒ谝毕̜’エ浅\t갽ヶ ",
+   "traditional": "ᄒ諞畢̜’エ淺\t갽ヶ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "周蹺a",
+   "simplified": "周跷a",
+   "traditional": "周蹺a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "誙Ｍ걕霴̔ ",
+   "simplified": "誙Ｍ걕霴̔ ",
+   "traditional": "誙Ｍ걕霴̔ "
+  },
+  {
+   "description": "语料抽样",
+   "input": "膚屉「電陴＜幌zY　塘丘",
+   "simplified": "肤屉「电陴＜幌zY　塘丘",
+   "traditional": "膚屜「電陴＜幌zY　塘丘"
+  },
+  {
+   "description": "语料抽样",
+   "input": "East of Eden",
+   "simplified": "East of Eden",
+   "traditional": "East of Eden"
+  },
+  {
+   "description": "语料抽样",
+   "input": "CŁNn竩ゐ鿫sｵ",
+   "simplified": "CŁNn竩ゐ鿫sｵ",
+   "traditional": "CŁNn竩ゐ鿫sｵ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鈺",
+   "simplified": "钰",
+   "traditional": "鈺"
+  },
+  {
+   "description": "语料抽样",
+   "input": "讴鮅x篷ｬ姮3 茪孯",
+   "simplified": "讴鮅x篷ｬ姮3 茪孯",
+   "traditional": "謳鮅x篷ｬ姮3 茪孯"
+  },
+  {
+   "description": "语料抽样",
+   "input": "〆Ｉ걲",
+   "simplified": "〆Ｉ걲",
+   "traditional": "〆Ｉ걲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "絙U>赖駲【kß鷥:",
+   "simplified": "絙U>赖駲【kß鸶:",
+   "traditional": "絙U>賴駲【kß鷥:"
+  },
+  {
+   "description": "语料抽样",
+   "input": "櫰›̖̅鈈",
+   "simplified": "櫰›̖̅钚",
+   "traditional": "櫰›̖̅鈈"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蘊ヵ：<̎　Ł朇蒶",
+   "simplified": "蕴ヵ：<̎　Ł朇蒶",
+   "traditional": "蘊ヵ：<̎　Ł朇蒶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "領ı\tðḊ",
+   "simplified": "領ı\tðḊ",
+   "traditional": "領ı\tðḊ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周損a",
+   "simplified": "周损a",
+   "traditional": "周損a"
+  },
+  {
+   "description": "语料抽样",
+   "input": " aFŴ㓪几ヮ",
+   "simplified": " aFŴ㓪几ヮ",
+   "traditional": " aFŴ㓪幾ヮ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "辊",
+   "simplified": "辊",
+   "traditional": "輥"
+  },
+  {
+   "description": "语料抽样",
+   "input": "㺆貘G夷…衛",
+   "simplified": "㺆貘G夷…卫",
+   "traditional": "㺆貘G夷…衛"
+  },
+  {
+   "description": "语料抽样",
+   "input": "𠃿枡­ŉ濖걟",
+   "simplified": "𠃿枡­ŉ濖걟",
+   "traditional": "𠃿枡­ŉ濖걟"
+  },
+  {
+   "description": "语料抽样",
+   "input": "苡暛",
+   "simplified": "苡暛",
+   "traditional": "苡暛"
+  },
+  {
+   "description": "语料抽样",
+   "input": "を",
+   "simplified": "を",
+   "traditional": "を"
+  },
+  {
+   "description": "语料抽样",
+   "input": ".music_folder_player",
+   "simplified": ".music_folder_player",
+   "traditional": ".music_folder_player"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周細緻a",
+   "simplified": "周细致a",
+   "traditional": "周細緻a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "シ硠😀惪中驱（",
+   "simplified": "シ硠😀惪中驱（",
+   "traditional": "シ硠😀惪中驅（"
+  },
+  {
+   "description": "语料抽样",
+   "input": "vq薥嚡",
+   "simplified": "vq薥嚡",
+   "traditional": "vq薥嚡"
+  },
+  {
+   "description": "语料抽样",
+   "input": "獭",
+   "simplified": "獭",
+   "traditional": "獺"
+  },
+  {
+   "description": "语料抽样",
+   "input": "W蛈ｌ秘鲁ﾍ廁ち",
+   "simplified": "W蛈ｌ秘鲁ﾍ厕ち",
+   "traditional": "W蛈ｌ秘魯ﾍ廁ち"
+  },
+  {
+   "description": "语料抽样",
+   "input": "咛",
+   "simplified": "咛",
+   "traditional": "嚀"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Carly Rae Jepsen - Call Me Maybe",
+   "simplified": "Carly Rae Jepsen - Call Me Maybe",
+   "traditional": "Carly Rae Jepsen - Call Me Maybe"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ń㮝×谷苗\t",
+   "simplified": "ń㮝×谷苗\t",
+   "traditional": "ń㮝×穀苗\t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "餘裕",
+   "simplified": "余裕",
+   "traditional": "餘裕"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 牒͡勊̌e鯆蚸1",
+   "simplified": " 牒͡勊̌e鯆蚸1",
+   "traditional": " 牒͡勊̌e鯆蚸1"
+  },
+  {
+   "description": "语料抽样",
+   "input": "]M G鋐6ュ藏文嘂ả",
+   "simplified": "]M G𬭎6ュ藏文嘂ả",
+   "traditional": "]M G鋐6ュ藏文嘂ả"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鏨",
+   "simplified": "錾",
+   "traditional": "鏨"
+  },
+  {
+   "description": "语料抽样",
+   "input": "͡)k\t曾经ﾄẅ轤·寶裡寶氣",
+   "simplified": "͡)k\t曾经ﾄẅ轳·宝里宝气",
+   "traditional": "͡)k\t曾經ﾄẅ轤·寶裡寶氣"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䱑ᄉ#걬ト禍敵H́",
+   "simplified": "䱑ᄉ#걬ト祸敌H́",
+   "traditional": "䱑ᄉ#걬ト禍敵H́"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䓨㙚",
+   "simplified": "䓨㙚",
+   "traditional": "罃㙚"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾃ翬炑",
+   "simplified": "ﾃ翚炑",
+   "traditional": "ﾃ翬炑"
+  },
+  {
+   "description": "语料抽样",
+   "input": "喋객聖^餪ゎ͊綆",
+   "simplified": "喋객圣^餪ゎ͊绠",
+   "traditional": "喋객聖^餪ゎ͊綆"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ju…ナł>",
+   "simplified": "Ju…ナł>",
+   "traditional": "Ju…ナł>"
+  },
+  {
+   "description": "语料抽样",
+   "input": "u·重 庆(﻿08",
+   "simplified": "u·重 庆(﻿08",
+   "traditional": "u·重 慶(﻿08"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周欲火a",
+   "simplified": "周欲火a",
+   "traditional": "周慾火a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "乌兰巴托的夜",
+   "simplified": "乌兰巴托的夜",
+   "traditional": "烏蘭巴托的夜"
+  },
+  {
+   "description": "语料抽样",
+   "input": "掦ę P4걻Ġ+幱",
+   "simplified": "掦ę P4걻Ġ+幱",
+   "traditional": "掦ę P4걻Ġ+幱"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ẏI韊»琠,廼ͥ",
+   "simplified": "ẏI韊»琠,廼ͥ",
+   "traditional": "ẏI韊»琠,廼ͥ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "😀８卅敧aX－ﾓệŤ㰏",
+   "simplified": "😀８卅敧aX－ﾓệŤ㰏",
+   "traditional": "😀８卅敧aX－ﾓệŤ㰏"
+  },
+  {
+   "description": "语料抽样",
+   "input": "b银行里里外外挛0Ｌん箭",
+   "simplified": "b银行里里外外挛0Ｌん箭",
+   "traditional": "b銀行裡裡外外攣0Ｌん箭"
+  },
+  {
+   "description": "语料抽样",
+   "input": "綾t㻛媰έ",
+   "simplified": "綾t㻛媰έ",
+   "traditional": "綾t㻛媰έ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "员",
+   "simplified": "员",
+   "traditional": "員"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｭ〜r沈阳ぷ哐鋚银行Yè",
+   "simplified": "ｭ〜r沈阳ぷ哐鋚银行Yè",
+   "traditional": "ｭ〜r瀋陽ぷ哐鋚銀行Yè"
+  },
+  {
+   "description": "语料抽样",
+   "input": "揯～攏æ 畉Nヸ",
+   "simplified": "揯～拢æ 畉Nヸ",
+   "traditional": "揯～攏æ 畉Nヸ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ẘｏŖC搪",
+   "simplified": "ẘｏŖC搪",
+   "traditional": "ẘｏŖC搪"
+  },
+  {
+   "description": "语料抽样",
+   "input": "賀",
+   "simplified": "贺",
+   "traditional": "賀"
+  },
+  {
+   "description": "语料抽样",
+   "input": "兽欲",
+   "simplified": "兽欲",
+   "traditional": "獸慾"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ッy秘鲁じ}〆レ",
+   "simplified": "ッy秘鲁じ}〆レ",
+   "traditional": "ッy秘魯じ}〆レ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "虾廵梳】",
+   "simplified": "虾廵梳】",
+   "traditional": "蝦廵梳】"
+  },
+  {
+   "description": "语料抽样",
+   "input": "𠀼鍉馁h屛」",
+   "simplified": "𠀼鍉馁h屛」",
+   "traditional": "𠀼鍉餒h屛」"
+  },
+  {
+   "description": "语料抽样",
+   "input": "㠽A牺ｩｇ2o嫃び珵ώ",
+   "simplified": "㠽A牺ｩｇ2o嫃び珵ώ",
+   "traditional": "㠽A犧ｩｇ2o嫃び珵ώ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "̆鈵 ",
+   "simplified": "̆鈵 ",
+   "traditional": "̆鈵 "
+  },
+  {
+   "description": "语料抽样",
+   "input": "k秘鲁发廊Ģ걕腝洖 8鍵じ䰋",
+   "simplified": "k秘鲁发廊Ģ걕腝洖 8键じ䰋",
+   "traditional": "k秘魯髮廊Ģ걕腝洖 8鍵じ䰋"
+  },
+  {
+   "description": "语料抽样",
+   "input": "K~認Þ",
+   "simplified": "K~认Þ",
+   "traditional": "K~認Þ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "{懿へ彂鬒睭鐾",
+   "simplified": "{懿へ彂鬒睭鐾",
+   "traditional": "{懿へ彂鬒睭鐾"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k｀骮Aぃᄋk：",
+   "simplified": "k｀骮Aぃᄋk：",
+   "traditional": "k｀骮Aぃᄋk："
+  },
+  {
+   "description": "语料抽样",
+   "input": "̍・おO ｊ恴悻４〃« ",
+   "simplified": "̍・おO ｊ恴悻４〃« ",
+   "traditional": "̍・おO ｊ恴悻４〃« "
+  },
+  {
+   "description": "语料抽样",
+   "input": "耇 鉞ッ\tØ与氳 ",
+   "simplified": "耇 钺ッ\tØ与氲 ",
+   "traditional": "耇 鉞ッ\tØ與氳 "
+  },
+  {
+   "description": "语料抽样",
+   "input": "̕Tﾔ锣ẄG",
+   "simplified": "̕Tﾔ锣ẄG",
+   "traditional": "̕Tﾔ鑼ẄG"
+  },
+  {
+   "description": "语料抽样",
+   "input": "&%魠𠇂B",
+   "simplified": "&%魠𠇂B",
+   "traditional": "&%魠𠇂B"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周飯a",
+   "simplified": "周饭a",
+   "traditional": "周飯a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﬁH　遲。拉鍊ゑ̹g镦Z",
+   "simplified": "ﬁH　遲。拉链ゑ̹g镦Z",
+   "traditional": "ﬁH　遲。拉鍊ゑ̹g鐓Z"
+  },
+  {
+   "description": "语料抽样",
+   "input": "浊",
+   "simplified": "浊",
+   "traditional": "濁"
+  },
+  {
+   "description": "语料抽样",
+   "input": " Ả幰」Ö",
+   "simplified": " Ả幰」Ö",
+   "traditional": " Ả幰」Ö"
+  },
+  {
+   "description": "语料抽样",
+   "input": "дo聥šｱt͙㳁)#",
+   "simplified": "дo聥šｱt͙㳁)#",
+   "traditional": "дo聥šｱt͙㳁)#"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ỗﾛr磲「̥갞ヸﾄ",
+   "simplified": "ỗﾛr磲「̥갞ヸﾄ",
+   "traditional": "ỗﾛr磲「̥갞ヸﾄ"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 虃‘鶾创.薀5ぜ",
+   "simplified": " 虃‘鶾创.蕰5ぜ",
+   "traditional": " 虃‘鶾創.薀5ぜ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "hṟPｅŷ鏤まί걋ể",
+   "simplified": "hṟPｅŷ镂まί걋ể",
+   "traditional": "hṟPｅŷ鏤まί걋ể"
+  },
+  {
+   "description": "语料抽样",
+   "input": "剉砦",
+   "simplified": "剉砦",
+   "traditional": "剉砦"
+  },
+  {
+   "description": "语料抽样",
+   "input": "徐佳莹 - 失落沙洲.mp3",
+   "simplified": "徐佳莹 - 失落沙洲.mp3",
+   "traditional": "徐佳瑩 - 失落沙洲.mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ユ͢磐бĊ걛单于鄉愿跏дᄁ",
+   "simplified": "ユ͢磐бĊ걛单于乡愿跏дᄁ",
+   "traditional": "ユ͢磐бĊ걛單于鄉願跏дᄁ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "猕",
+   "simplified": "猕",
+   "traditional": "獼"
+  },
+  {
+   "description": "语料抽样",
+   "input": "枕藉",
+   "simplified": "枕藉",
+   "traditional": "枕藉"
+  },
+  {
+   "description": "语料抽样",
+   "input": "』陃ď9",
+   "simplified": "』陃ď9",
+   "traditional": "』陃ď9"
+  },
+  {
+   "description": "语料抽样",
+   "input": "\t͝㤝枧鳬ŷく詩",
+   "simplified": "\t͝㤝枧凫ŷく诗",
+   "traditional": "\t͝㤝梘鳬ŷく詩"
+  },
+  {
+   "description": "语料抽样",
+   "input": "裹",
+   "simplified": "裹",
+   "traditional": "裹"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｔĺ衝검͛5氛《姶",
+   "simplified": "ｔĺ冲검͛5氛《姶",
+   "traditional": "ｔĺ衝검͛5氛《姶"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嫷耝",
+   "simplified": "嫷耝",
+   "traditional": "嫷耝"
+  },
+  {
+   "description": "语料抽样",
+   "input": "畲ẜΑャ",
+   "simplified": "畲ẜΑャ",
+   "traditional": "畲ẜΑャ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "编发",
+   "simplified": "编发",
+   "traditional": "編髮"
+  },
+  {
+   "description": "语料抽样",
+   "input": "蔝갗藏文鐾重庆 礱̯ヶS",
+   "simplified": "蔝갗藏文鐾重庆 砻̯ヶS",
+   "traditional": "蔝갗藏文鐾重慶 礱̯ヶS"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鑃wÃ𩽾穎ų",
+   "simplified": "鑃wÃ𩽾颖ų",
+   "traditional": "鑃wÃ鮟穎ų"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Au5 - Blossom (Original Mix).mp3",
+   "simplified": "Au5 - Blossom (Original Mix).mp3",
+   "traditional": "Au5 - Blossom (Original Mix).mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周獅a",
+   "simplified": "周狮a",
+   "traditional": "周獅a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾂPボᄒa冚t",
+   "simplified": "ﾂPボᄒa冚t",
+   "traditional": "ﾂPボᄒa冚t"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鯯氈イ开+͜滵婂求籤",
+   "simplified": "鯯毡イ开+͜滵婂求签",
+   "traditional": "鯯氈イ開+͜滵婂求籤"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾌ䎁",
+   "simplified": "ﾌ䎁",
+   "traditional": "ﾌ䎁"
+  },
+  {
+   "description": "语料抽样",
+   "input": "藛籩ｌ敒邜狵v矫蚑蘿🎵汕",
+   "simplified": "藛笾ｌ敒邜狵v矫蚑蘿🎵汕",
+   "traditional": "藛籩ｌ敒邜狵v矯蚑蘿🎵汕"
+  },
+  {
+   "description": "语料抽样",
+   "input": "갊筠",
+   "simplified": "갊筠",
+   "traditional": "갊筠"
+  },
+  {
+   "description": "语料抽样",
+   "input": "晴小瑶",
+   "simplified": "晴小瑶",
+   "traditional": "晴小瑤"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䙺轄を𠅵9",
+   "simplified": "䙺辖を𠅵9",
+   "traditional": "䙺轄を𠅵9"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䱴ų颖萯",
+   "simplified": "䱴ų颖萯",
+   "traditional": "䱴ų穎萯"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䵫ぃ重 庆‹、”",
+   "simplified": "䵫ぃ重 庆‹、”",
+   "traditional": "䵫ぃ重 慶‹、”"
+  },
+  {
+   "description": "语料抽样",
+   "input": "䡄ẍ矝",
+   "simplified": "䡄ẍ矝",
+   "traditional": "䡄ẍ矝"
+  },
+  {
+   "description": "语料抽样",
+   "input": "San Fermin",
+   "simplified": "San Fermin",
+   "traditional": "San Fermin"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周門裡a",
+   "simplified": "周门里a",
+   "traditional": "周門裡a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "秘鲁撍ềẌ{aFll颩",
+   "simplified": "秘鲁撍ềẌ{aFll颩",
+   "traditional": "秘魯撍ềẌ{aFll颩"
+  },
+  {
+   "description": "语料抽样",
+   "input": "东xえą館",
+   "simplified": "东xえą馆",
+   "traditional": "東xえą館"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Dancing",
+   "simplified": "Dancing",
+   "traditional": "Dancing"
+  },
+  {
+   "description": "语料抽样",
+   "input": "À  騐．禐Ž|莡",
+   "simplified": "À  騐．禐Ž|莡",
+   "traditional": "À  騐．禐Ž|莡"
+  },
+  {
+   "description": "语料抽样",
+   "input": "E＄贼约객坱",
+   "simplified": "E＄贼约객坱",
+   "traditional": "E＄賊約객坱"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ėﾉ浨　鶏つ；Ẉ갰莢J𬍛",
+   "simplified": "ėﾉ浨　鶏つ；Ẉ갰荚J𬍛",
+   "traditional": "ėﾉ浨　鶏つ；Ẉ갰莢J瓅"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周宪a",
+   "simplified": "周宪a",
+   "traditional": "周憲a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "r罂7̎ヤæ《s廚",
+   "simplified": "r罂7̎ヤæ《s厨",
+   "traditional": "r罌7̎ヤæ《s廚"
+  },
+  {
+   "description": "语料抽样",
+   "input": "T縤曾经",
+   "simplified": "T縤曾经",
+   "traditional": "T縤曾經"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ほŶ輅聀にK",
+   "simplified": "ほŶ辂聀にK",
+   "traditional": "ほŶ輅聀にK"
+  },
+  {
+   "description": "语料抽样",
+   "input": "灭",
+   "simplified": "灭",
+   "traditional": "滅"
+  },
+  {
+   "description": "语料抽样",
+   "input": "András Schiff",
+   "simplified": "András Schiff",
+   "traditional": "András Schiff"
+  },
+  {
+   "description": "语料抽样",
+   "input": "R滪ｎっͣv《",
+   "simplified": "R滪ｎっͣv《",
+   "traditional": "R澦ｎっͣv《"
+  },
+  {
+   "description": "语料抽样",
+   "input": " 1捅6ᄃ䫤ẍαå煂啢A",
+   "simplified": " 1捅6ᄃ䫤ẍαå煂唡A",
+   "traditional": " 1捅6ᄃ䫤ẍαå煂啢A"
+  },
+  {
+   "description": "语料抽样",
+   "input": "林海 - 琵琶语",
+   "simplified": "林海 - 琵琶语",
+   "traditional": "林海 - 琵琶語"
+  },
+  {
+   "description": "语料抽样",
+   "input": "k；ﾝ😀喯}",
+   "simplified": "k；ﾝ😀喯}",
+   "traditional": "k；ﾝ😀喯}"
+  },
+  {
+   "description": "语料抽样",
+   "input": "怜ﾟｫ?獲䰤",
+   "simplified": "怜ﾟｫ?获䰤",
+   "traditional": "憐ﾟｫ?獲䰤"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Rudolf Serkin",
+   "simplified": "Rudolf Serkin",
+   "traditional": "Rudolf Serkin"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ビ毫镢揵嗩z　'襠A",
+   "simplified": "ビ毫镢揵唢z　'裆A",
+   "traditional": "ビ毫鐝揵嗩z　'襠A"
+  },
+  {
+   "description": "语料抽样",
+   "input": "瑗 Sう笭",
+   "simplified": "瑗 Sう笭",
+   "traditional": "瑗 Sう笭"
+  },
+  {
+   "description": "语料抽样",
+   "input": "0ḛ长大ど鬓慩资陧臥þ",
+   "simplified": "0ḛ长大ど鬓慩资陧卧þ",
+   "traditional": "0ḛ長大ど鬢慩資隉臥þ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "G.E.M.邓紫棋 - 句号.mp3",
+   "simplified": "G.E.M.邓紫棋 - 句号.mp3",
+   "traditional": "G.E.M.鄧紫棋 - 句號.mp3"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ﾌ",
+   "simplified": "ﾌ",
+   "traditional": "ﾌ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ē#签条",
+   "simplified": "ē#签条",
+   "traditional": "ē#籤條"
+  },
+  {
+   "description": "语料抽样",
+   "input": "瑲ä々䄴ﾝ轸",
+   "simplified": "玱ä々䄴ﾝ轸",
+   "traditional": "瑲ä々䄴ﾝ軫"
+  },
+  {
+   "description": "语料抽样",
+   "input": "・檙",
+   "simplified": "・檙",
+   "traditional": "・檙"
+  },
+  {
+   "description": "语料抽样",
+   "input": "jw窏‘̛驗虌　遥ｪ菷",
+   "simplified": "jw窏‘̛验虌　遥ｪ菷",
+   "traditional": "jw窏‘̛驗虌　遙ｪ菷"
+  },
+  {
+   "description": "语料抽样",
+   "input": "秘鲁社騳つ縴OX",
+   "simplified": "秘鲁社騳つ纤OX",
+   "traditional": "秘魯社騳つ縴OX"
+  },
+  {
+   "description": "语料抽样",
+   "input": "έ旌る綉厐ホL鰒曾经Ĭ",
+   "simplified": "έ旌る绣厐ホL鳆曾经Ĭ",
+   "traditional": "έ旌る綉龎ホL鰒曾經Ĭ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "んğ͇%惬Z",
+   "simplified": "んğ͇%惬Z",
+   "traditional": "んğ͇%愜Z"
+  },
+  {
+   "description": "语料抽样",
+   "input": "烝nｼ",
+   "simplified": "烝nｼ",
+   "traditional": "烝nｼ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "フゖ걂Ｎ脌N갍趶げ",
+   "simplified": "フゖ걂Ｎ脌N갍趶げ",
+   "traditional": "フゖ걂Ｎ脌N갍趶げ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周躍a",
+   "simplified": "周跃a",
+   "traditional": "周躍a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "[͍̆C裆櫐걐ｭÞ͔掳",
+   "simplified": "[͍̆C裆櫐걐ｭÞ͔掳",
+   "traditional": "[͍̆C襠櫐걐ｭÞ͔擄"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Waltz No. 19 in A minor, op. posth.",
+   "simplified": "Waltz No. 19 in A minor, op. posth.",
+   "traditional": "Waltz No. 19 in A minor, op. posth."
+  },
+  {
+   "description": "语料抽样",
+   "input": "Ｂ娞œ肬ħ",
+   "simplified": "Ｂ娞œ肬ħ",
+   "traditional": "Ｂ娞œ肬ħ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鰊a",
+   "simplified": "周𬶠a",
+   "traditional": "周鰊a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周芦a",
+   "simplified": "周芦a",
+   "traditional": "周蘆a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周铮a",
+   "simplified": "周铮a",
+   "traditional": "周錚a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周頤a",
+   "simplified": "周颐a",
+   "traditional": "周頤a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "〉Ṛ)猻^^x",
+   "simplified": "〉Ṛ)狲^^x",
+   "traditional": "〉Ṛ)猻^^x"
+  },
+  {
+   "description": "语料抽样",
+   "input": "Lorin Maazel",
+   "simplified": "Lorin Maazel",
+   "traditional": "Lorin Maazel"
+  },
+  {
+   "description": "语料抽样",
+   "input": "g【幾ì",
+   "simplified": "g【几ì",
+   "traditional": "g【幾ì"
+  },
+  {
+   "description": "语料抽样",
+   "input": "R㠩ｬ庈ŖG軲",
+   "simplified": "R㠩ｬ庈ŖG轱",
+   "traditional": "R㠩ｬ庈ŖG軲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "长大槵重 庆峐重 庆ヰō",
+   "simplified": "长大槵重 庆峐重 庆ヰō",
+   "traditional": "長大槵重 慶峐重 慶ヰō"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ゃ懙犬",
+   "simplified": "ゃ懙犬",
+   "traditional": "ゃ懙犬"
+  },
+  {
+   "description": "语料抽样",
+   "input": "鑬\t걷̶）茐鮀ﾙB【栯讚",
+   "simplified": "鑬\t걷̶）茐𬶍ﾙB【栯赞",
+   "traditional": "鑬\t걷̶）茐鮀ﾙB【栯讚"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ᄃ欑蜚４蛎ｅ铙",
+   "simplified": "ᄃ欑蜚４蛎ｅ铙",
+   "traditional": "ᄃ欑蜚４蠣ｅ鐃"
+  },
+  {
+   "description": "语料抽样",
+   "input": "周鍾愛a",
+   "simplified": "周钟爱a",
+   "traditional": "周鍾愛a"
+  },
+  {
+   "description": "语料抽样",
+   "input": "荒リ閙 鋲酚𠄗ύ」",
+   "simplified": "荒リ閙 鋲酚𠄗ύ」",
+   "traditional": "荒リ閙 鋲酚𠄗ύ」"
+  },
+  {
+   "description": "语料抽样",
+   "input": "襯贳,ｸ>眨狱　／頦鉽þ",
+   "simplified": "衬贳,ｸ>眨狱　／颏鉽þ",
+   "traditional": "襯貰,ｸ>眨獄　／頦鉽þ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "rz藏文H͑ャ嶕5",
+   "simplified": "rz藏文H͑ャ嶕5",
+   "traditional": "rz藏文H͑ャ嶕5"
+  },
+  {
+   "description": "语料抽样",
+   "input": "嬸",
+   "simplified": "婶",
+   "traditional": "嬸"
+  },
+  {
+   "description": "语料抽样",
+   "input": ".淒莣Ｉx臭沈阳",
+   "simplified": ".凄莣Ｉx臭沈阳",
+   "traditional": ".淒莣Ｉx臭瀋陽"
+  },
+  {
+   "description": "语料抽样",
+   "input": "þｌ",
+   "simplified": "þｌ",
+   "traditional": "þｌ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "幀",
+   "simplified": "帧",
+   "traditional": "幀"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ネぞØャ",
+   "simplified": "ネぞØャ",
+   "traditional": "ネぞØャ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "h者愈凄淙羅",
+   "simplified": "h者愈凄淙羅",
+   "traditional": "h者愈淒淙羅"
+  },
+  {
+   "description": "语料抽样",
+   "input": "裡快äLþギ\t㦏",
+   "simplified": "里快äLþギ\t㦏",
+   "traditional": "裡快äLþギ\t㦏"
+  },
+  {
+   "description": "语料抽样",
+   "input": "我们好像在哪见过",
+   "simplified": "我们好像在哪见过",
+   "traditional": "我們好像在哪見過"
+  },
+  {
+   "description": "语料抽样",
+   "input": "1606111_163283",
+   "simplified": "1606111_163283",
+   "traditional": "1606111_163283"
+  },
+  {
+   "description": "语料抽样",
+   "input": "霿",
+   "simplified": "霿",
+   "traditional": "霿"
+  },
+  {
+   "description": "语料抽样",
+   "input": "帱",
+   "simplified": "帱",
+   "traditional": "幬"
+  },
+  {
+   "description": "语料抽样",
+   "input": "›3ıÒカ颃慠前か雮离煨",
+   "simplified": "›3ıÒカ颃慠前か雮离煨",
+   "traditional": "›3ıÒカ頏慠前か雮離煨"
+  },
+  {
+   "description": "语料抽样",
+   "input": "籁　鐓㗹りē傷䛴ᄐk",
+   "simplified": "籁　镦㗹りē伤䛴ᄐk",
+   "traditional": "籟　鐓㗹りē傷䛴ᄐk"
+  },
+  {
+   "description": "语料抽样",
+   "input": "ｫ燵​в閞ͤ",
+   "simplified": "ｫ燵​в閞ͤ",
+   "traditional": "ｫ燵​в閞ͤ"
+  },
+  {
+   "description": "语料抽样",
+   "input": "M珝ᄀ斔殩遷　咴㸨Ā恽",
+   "simplified": "M珝ᄀ斔殩迁　咴㸨Ā恽",
+   "traditional": "M珝ᄀ斔殩遷　咴㸨Ā惲"
+  },
+  {
+   "description": "语料抽样",
+   "input": "詮嫻舘惤",
+   "simplified": "诠娴舘惤",
+   "traditional": "詮嫻舘惤"
+  },
+  {
+   "description": "语料抽样",
+   "input": "；ÖR簅枷・",
+   "simplified": "；ÖR簅枷・",
+   "traditional": "；ÖR簅枷・"
+  },
+  {
+   "description": "语料抽样",
+   "input": "в̩萖<惡カ淃E!",
+   "simplified": "в̩萖<惡カ淃E!",
+   "traditional": "в̩萖<惡カ淃E!"
+  },
+  {
+   "description": "语料抽样",
+   "input": "宣佈",
+   "simplified": "宣布",
+   "traditional": "宣佈"
+  },
+  {
+   "description": "语料抽样",
+   "input": "マČ頇",
+   "simplified": "マČ顸",
+   "traditional": "マČ頇"
+  },
+  {
+   "description": "语料抽样",
+   "input": "u恊\"鈤誘i屮】Ｅ걦",
+   "simplified": "u恊\"鈤诱i屮】Ｅ걦",
+   "traditional": "u恊\"鈤誘i屮】Ｅ걦"
+  }
+ ]
+}

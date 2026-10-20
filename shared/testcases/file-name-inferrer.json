@@ -1,0 +1,20 @@
+{
+  "description": "从文件名推断艺术家和标题（需求 A-9）。format 是 ARTIST_TITLE 或 TITLE_ARTIST；expected 为 null 表示推断不出",
+  "cases": [
+    { "description": "艺术家 - 标题", "input": "周杰伦 - 晴天.mp3", "format": "ARTIST_TITLE", "expected": { "artist": "周杰伦", "title": "晴天" } },
+    { "description": "艺术家里有逗号（拆分交给 ArtistSplitter）", "input": "Panta.Q,周深 - 对不起.lrc", "format": "ARTIST_TITLE", "expected": { "artist": "Panta.Q,周深", "title": "对不起" } },
+    { "description": "去掉开头的音轨号（点）", "input": "01. Queen - Bohemian Rhapsody.flac", "format": "ARTIST_TITLE", "expected": { "artist": "Queen", "title": "Bohemian Rhapsody" } },
+    { "description": "去掉开头的音轨号（连字符）", "input": "01 - Queen - Bohemian Rhapsody.flac", "format": "ARTIST_TITLE", "expected": { "artist": "Queen", "title": "Bohemian Rhapsody" } },
+    { "description": "只有音轨号和标题时推断失败", "input": "03 - 晴天.mp3", "format": "ARTIST_TITLE", "expected": null },
+    { "description": "四位数字不当作音轨号", "input": "1999 - Prince.mp3", "format": "ARTIST_TITLE", "expected": { "artist": "1999", "title": "Prince" } },
+    { "description": "连字符两侧没有空格时不拆", "input": "Jay-Z.mp3", "format": "ARTIST_TITLE", "expected": null },
+    { "description": "名字里的连字符", "input": "Jay-Z - Empire State of Mind.mp3", "format": "ARTIST_TITLE", "expected": { "artist": "Jay-Z", "title": "Empire State of Mind" } },
+    { "description": "破折号", "input": "许巍—曾经的你.mp3", "format": "ARTIST_TITLE", "expected": { "artist": "许巍", "title": "曾经的你" } },
+    { "description": "全角连字符", "input": "许巍－曾经的你.mp3", "format": "ARTIST_TITLE", "expected": { "artist": "许巍", "title": "曾经的你" } },
+    { "description": "标题中还有分隔符时只按第一个拆", "input": "Accardo - Vivaldi - The Four Seasons.flac", "format": "ARTIST_TITLE", "expected": { "artist": "Accardo", "title": "Vivaldi - The Four Seasons" } },
+    { "description": "标题 - 艺术家格式", "input": "晴天 - 周杰伦.mp3", "format": "TITLE_ARTIST", "expected": { "artist": "周杰伦", "title": "晴天" } },
+    { "description": "没有分隔符时推断失败", "input": "50c01294df9d48902639978235.mp3", "format": "ARTIST_TITLE", "expected": null },
+    { "description": "分隔符左边为空", "input": " - 晴天.mp3", "format": "ARTIST_TITLE", "expected": null },
+    { "description": "没有扩展名", "input": "周杰伦 - 晴天", "format": "ARTIST_TITLE", "expected": { "artist": "周杰伦", "title": "晴天" } }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "description": "LRC 解析（需求 LY-1 ~ LY-5）。input 是歌词文本（lines 按 \\n 连接），expected 是 synced 和全部 lines（timeMs、text、translation，translation 为 null 表示没有）。currentIndex：lines 是各行的时间，求进度 positionMs 时应高亮的行",
+  "cases": [
+    {
+      "description": "基本格式和元信息",
+      "lines": [ "[ti:晴天]", "[ar:周杰伦]", "[00:01.50]故事的小黄花", "[00:05.123]从出生那年就飘着", "[00:09]童年的荡秋千" ],
+      "expected": { "synced": true, "lines": [
+        { "timeMs": 1500, "text": "故事的小黄花", "translation": null },
+        { "timeMs": 5123, "text": "从出生那年就飘着", "translation": null },
+        { "timeMs": 9000, "text": "童年的荡秋千", "translation": null }
+      ] }
+    },
+    {
+      "description": "一行多个时间戳",
+      "lines": [ "[00:10.00][01:30.00]副歌", "[00:20.00]主歌" ],
+      "expected": { "synced": true, "lines": [
+        { "timeMs": 10000, "text": "副歌", "translation": null },
+        { "timeMs": 20000, "text": "主歌", "translation": null },
+        { "timeMs": 90000, "text": "副歌", "translation": null }
+      ] }
+    },
+    {
+      "description": "同一时间戳的两行合并为原文和翻译",
+      "lines": [ "[00:01.00]Hello", "[00:01.00]你好", "[00:02.00]World" ],
+      "expected": { "synced": true, "lines": [
+        { "timeMs": 1000, "text": "Hello", "translation": "你好" },
+        { "timeMs": 2000, "text": "World", "translation": null }
+      ] }
+    },
+    {
+      "description": "三行同一时间戳：其余两行用 / 连接，空行不算",
+      "lines": [ "[00:01.00]Hello", "[00:01.00]", "[00:01.00]你好", "[00:01.00]こんにちは" ],
+      "expected": { "synced": true, "lines": [ { "timeMs": 1000, "text": "Hello", "translation": "你好 / こんにちは" } ] }
+    },
+    {
+      "description": "offset 为正时歌词提前，不小于 0",
+      "lines": [ "[offset:+500]", "[00:02.00]a", "[00:00.20]b" ],
+      "expected": { "synced": true, "lines": [
+        { "timeMs": 0, "text": "b", "translation": null },
+        { "timeMs": 1500, "text": "a", "translation": null }
+      ] }
+    },
+    {
+      "description": "offset 为负时歌词推后",
+      "lines": [ "[offset:-300]", "[00:01.00]a" ],
+      "expected": { "synced": true, "lines": [ { "timeMs": 1300, "text": "a", "translation": null } ] }
+    },
+    {
+      "description": "逐字歌词去掉逐字时间",
+      "lines": [ "[00:01.00]<00:01.00>故<00:01.50>事<00:02.00>的" ],
+      "expected": { "synced": true, "lines": [ { "timeMs": 1000, "text": "故事的", "translation": null } ] }
+    },
+    {
+      "description": "没有时间戳时是纯文本歌词，去掉首尾空行",
+      "lines": [ "", "第一行", "", "第二行", "" ],
+      "expected": { "synced": false, "lines": [
+        { "timeMs": 0, "text": "第一行", "translation": null },
+        { "timeMs": 0, "text": "", "translation": null },
+        { "timeMs": 0, "text": "第二行", "translation": null }
+      ] }
+    },
+    {
+      "description": "BOM、首尾空白、冒号分隔的一位小数、三位小数",
+      "lines": [ "﻿[00:01:5]  a  ", "[00:02.123]b" ],
+      "expected": { "synced": true, "lines": [
+        { "timeMs": 1500, "text": "a", "translation": null },
+        { "timeMs": 2123, "text": "b", "translation": null }
+      ] }
+    }
+  ],
+  "currentIndex": [
+    { "description": "还没到第一行", "lines": [1000, 2000, 3000], "positionMs": 500, "expected": -1 },
+    { "description": "正好在第一行", "lines": [1000, 2000, 3000], "positionMs": 1000, "expected": 0 },
+    { "description": "第二行和第三行之间", "lines": [1000, 2000, 3000], "positionMs": 2999, "expected": 1 },
+    { "description": "最后一行之后", "lines": [1000, 2000, 3000], "positionMs": 99000, "expected": 2 },
+    { "description": "没有歌词", "lines": [], "positionMs": 0, "expected": -1 }
+  ]
+}

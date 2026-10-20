@@ -1,0 +1,39 @@
+{
+  "description": "在线结果匹配（需求 C-3、LY-8）。fold 是测试用的繁简对照（单字），代替真实的繁转简；titleMatches / artistMatches：expected 和 actual 是否算对上；primaryArtist：搜索用的第一位艺术家；hasCjk：是否含有汉字",
+  "fold": { "陳": "陈", "紅": "红", "灣": "湾" },
+  "titleMatches": [
+    { "description": "完全相同", "expected": "Poker Face", "actual": "Poker Face", "result": true },
+    { "description": "忽略大小写和括号里的附注", "expected": "Poker Face", "actual": "poker face (Live)", "result": true },
+    { "description": "忽略 \" - Remastered\" 之类的后缀", "expected": "Love Story", "actual": "Love Story - Remastered 2019", "result": true },
+    { "description": "去掉自己的 feat. 附注", "expected": "Problem (feat. Iggy Azalea)", "actual": "Problem", "result": true },
+    { "description": "繁简", "expected": "月牙湾", "actual": "月牙灣", "result": true },
+    { "description": "繁简和全角括号", "expected": "红豆", "actual": "紅豆（Live）", "result": true },
+    { "description": "全角字母", "expected": "ABC", "actual": "ＡＢＣ", "result": true },
+    { "description": "不做前缀匹配", "expected": "Baby", "actual": "Baby Shark", "result": false },
+    { "description": "中文也不做前缀匹配", "expected": "小雨", "actual": "小雨天", "result": false },
+    { "description": "不同的歌", "expected": "Yesterday", "actual": "Today", "result": false },
+    { "description": "只有括号时用整个标题比较", "expected": "(Live)", "actual": "(live)", "result": true },
+    { "description": "空的", "expected": "", "actual": "Today", "result": false }
+  ],
+  "artistMatches": [
+    { "description": "任意一位艺术家对上", "expected": "Ariana Grande,Iggy Azalea", "actual": "Ariana Grande", "result": true },
+    { "description": "& 两侧的空白", "expected": "Jason Mraz&Colbie Caillat", "actual": "Jason Mraz & Colbie Caillat", "result": true },
+    { "description": "繁简", "expected": "陈奕迅", "actual": "陳奕迅", "result": true },
+    { "description": "忽略标点", "expected": "F.I.R", "actual": "F.I.R.", "result": true },
+    { "description": "结果的艺术家里包含", "expected": "Bruno Mars", "actual": "B.o.B feat. Bruno Mars", "result": true },
+    { "description": "不同的艺术家", "expected": "Taylor Swift", "actual": "Pinkfong", "result": false },
+    { "description": "空的", "expected": "", "actual": "Taylor Swift", "result": false }
+  ],
+  "primaryArtist": [
+    { "description": "逗号", "input": "Justin Bieber,卢达克里斯", "expected": "Justin Bieber" },
+    { "description": "全角斜杠", "input": "Jean-Bernard Pommier／Hallé Orchestra／Lawrence Foster", "expected": "Jean-Bernard Pommier" },
+    { "description": "只有一位", "input": "黄龄", "expected": "黄龄" },
+    { "description": "feat.", "input": "A feat. B", "expected": "A" }
+  ],
+  "hasCjk": [
+    { "description": "中英混排", "input": "F.I.R 月牙湾", "expected": true },
+    { "description": "纯英文", "input": "Lady Gaga Poker Face", "expected": false },
+    { "description": "日文假名不算", "input": "シャルル", "expected": false },
+    { "description": "日文汉字算", "input": "米津玄師", "expected": true }
+  ]
+}

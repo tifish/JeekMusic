@@ -1,0 +1,11 @@
+{
+  "description": "自然排序（需求 F-4）：input 排序后应该等于 expected",
+  "cases": [
+    { "description": "数字按数值排序，数值相同时前导零少的在前", "input": ["10.mp3", "2.mp3", "1.mp3", "02.mp3"], "expected": ["1.mp3", "2.mp3", "02.mp3", "10.mp3"] },
+    { "description": "忽略大小写", "input": ["b.mp3", "A.mp3", "c.mp3"], "expected": ["A.mp3", "b.mp3", "c.mp3"] },
+    { "description": "混合文本和数字", "input": ["Track 10", "Track 9", "Track 1a", "Track 1"], "expected": ["Track 1", "Track 1a", "Track 9", "Track 10"] },
+    { "description": "很长的数字不会溢出", "input": ["a99999999999999999999", "a100000000000000000000", "a9"], "expected": ["a9", "a99999999999999999999", "a100000000000000000000"] },
+    { "description": "大小写不同的同名按字符码排，结果稳定", "input": ["abc", "ABC", "Abc"], "expected": ["ABC", "Abc", "abc"] },
+    { "description": "拼音排序键（已经转写过的）", "input": ["zhou jie lun", "chen yi xun", "a-lin", "deng zi qi"], "expected": ["a-lin", "chen yi xun", "deng zi qi", "zhou jie lun"] }
+  ]
+}

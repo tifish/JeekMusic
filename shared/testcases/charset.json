@@ -1,0 +1,32 @@
+{
+  "description": "乱码修复和编码识别。fix：mojibake 不为 null 时，输入是把 text 按 mojibake 编码成字节、再按 Latin-1 解码得到的字符串（模拟标签库读出的乱码）；为 null 时输入就是 text。forced 是强制指定的编码（null 为自动）；expected 为 null 表示原样返回输入。detect：bytes 是 text 按 charset 编码的字节，前面加上十六进制的 prefix（BOM），期望解码出 expected",
+  "fix": [
+    { "description": "GB2312 乱码被修复", "text": "荣耀", "mojibake": "GB2312", "forced": null, "expected": "荣耀" },
+    { "description": "GBK 乱码被修复", "text": "周杰伦", "mojibake": "GBK", "forced": null, "expected": "周杰伦" },
+    { "description": "中英混排的 GBK 乱码被修复", "text": "G.E.M. 邓紫棋", "mojibake": "GBK", "forced": null, "expected": "G.E.M. 邓紫棋" },
+    { "description": "正确的 Unicode 原样保留", "text": "周杰伦", "mojibake": null, "forced": null, "expected": "周杰伦" },
+    { "description": "含 Latin-1 以外字符的原样保留", "text": "Ünïcödé 中文", "mojibake": null, "forced": null, "expected": "Ünïcödé 中文" },
+    { "description": "纯 ASCII 原样保留", "text": "Queen", "mojibake": null, "forced": null, "expected": "Queen" },
+    { "description": "空串", "text": "", "mojibake": null, "forced": null, "expected": "" },
+    { "description": "带重音符号的西文不被误判", "text": "Motörhead", "mojibake": null, "forced": null, "expected": "Motörhead" },
+    { "description": "带重音符号的西文不被误判", "text": "Beyoncé", "mojibake": null, "forced": null, "expected": "Beyoncé" },
+    { "description": "带重音符号的西文不被误判", "text": "Café del Mar", "mojibake": null, "forced": null, "expected": "Café del Mar" },
+    { "description": "带重音符号的西文不被误判", "text": "Björk", "mojibake": null, "forced": null, "expected": "Björk" },
+    { "description": "带重音符号的西文不被误判", "text": "Mötley Crüe", "mojibake": null, "forced": null, "expected": "Mötley Crüe" },
+    { "description": "带重音符号的西文不被误判", "text": "Sigur Rós", "mojibake": null, "forced": null, "expected": "Sigur Rós" },
+    { "description": "带重音符号的西文不被误判", "text": "Déjà vu", "mojibake": null, "forced": null, "expected": "Déjà vu" },
+    { "description": "强制指定 Big5", "text": "張學友", "mojibake": "Big5", "forced": "Big5", "expected": "張學友" },
+    { "description": "强制解码失败时原样保留（GBK 字节不是合法的 UTF-8）", "text": "荣耀", "mojibake": "GB2312", "forced": "UTF-8", "expected": null }
+  ],
+  "fixAll": [
+    { "description": "多值逐个修复", "values": [ { "text": "周杰伦", "mojibake": "GBK" }, { "text": "Queen", "mojibake": null } ], "expected": ["周杰伦", "Queen"] }
+  ],
+  "detect": [
+    { "description": "UTF-8 BOM", "text": "晴天", "charset": "UTF-8", "prefix": "EFBBBF", "expected": "晴天" },
+    { "description": "没有 BOM 的 UTF-8", "text": "晴天", "charset": "UTF-8", "prefix": "", "expected": "晴天" },
+    { "description": "UTF-16LE BOM", "text": "晴天", "charset": "UTF-16LE", "prefix": "FFFE", "expected": "晴天" },
+    { "description": "UTF-16BE BOM", "text": "晴天", "charset": "UTF-16BE", "prefix": "FEFF", "expected": "晴天" },
+    { "description": "GBK", "text": "叶惠美 周杰伦", "charset": "GBK", "prefix": "", "expected": "叶惠美 周杰伦" },
+    { "description": "Big5", "text": "張學友", "charset": "Big5", "prefix": "", "expected": "張學友" }
+  ]
+}

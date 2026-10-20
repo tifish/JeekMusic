@@ -1,0 +1,73 @@
+{
+  "description": "CUE 解析（需求 CUE-3、CUE-8）。input 是 CUE 文本（lines 按 \\n 连接）；encoding 不为 null 时先把文本按这个编码转成字节，再用 CharsetDetector 解码后解析（需求 CUE-4）。expected 里只写出要检查的字段：title、performer、year、genre、isPerTrack、files（每个文件的 name 和 tracks：number、title、performer、startMs）",
+  "cases": [
+    {
+      "description": "专辑信息、音轨、缺省继承顶层 PERFORMER、INDEX 01 作为起点（每秒 75 帧），忽略 INDEX 00",
+      "lines": [
+        "REM GENRE Pop",
+        "REM DATE 2003",
+        "PERFORMER \"周杰伦\"",
+        "TITLE \"叶惠美\"",
+        "FILE \"叶惠美.wav\" WAVE",
+        "  TRACK 01 AUDIO",
+        "    TITLE \"以父之名\"",
+        "    INDEX 01 00:00:00",
+        "  TRACK 02 AUDIO",
+        "    TITLE \"懦夫\"",
+        "    PERFORMER \"周杰伦 feat. 费玉清\"",
+        "    INDEX 00 05:41:20",
+        "    INDEX 01 05:42:37",
+        "  TRACK 03 AUDIO",
+        "    TITLE \"晴天\"",
+        "    INDEX 01 09:58:00"
+      ],
+      "encoding": null,
+      "expected": {
+        "title": "叶惠美", "performer": "周杰伦", "year": 2003, "genre": "Pop", "isPerTrack": false,
+        "files": [ { "name": "叶惠美.wav", "tracks": [
+          { "number": 1, "title": "以父之名", "performer": "周杰伦", "startMs": 0 },
+          { "number": 2, "title": "懦夫", "performer": "周杰伦 feat. 费玉清", "startMs": 342493 },
+          { "number": 3, "title": "晴天", "performer": "周杰伦", "startMs": 598000 }
+        ] } ]
+      }
+    },
+    {
+      "description": "GBK 编码的 CUE 自动识别",
+      "lines": [ "PERFORMER \"周杰伦\"", "TITLE \"叶惠美\"", "FILE \"叶惠美.wav\" WAVE", "  TRACK 01 AUDIO", "    TITLE \"以父之名\"", "    INDEX 01 00:00:00" ],
+      "encoding": "GBK",
+      "expected": { "title": "叶惠美", "performer": "周杰伦" }
+    },
+    {
+      "description": "分轨 CUE：每个文件只有一首",
+      "lines": [ "FILE \"01.flac\" WAVE", "  TRACK 01 AUDIO", "    INDEX 01 00:00:00", "FILE \"02.flac\" WAVE", "  TRACK 02 AUDIO", "    INDEX 01 00:00:00" ],
+      "encoding": null,
+      "expected": { "isPerTrack": true }
+    },
+    {
+      "description": "文件名不带引号",
+      "lines": [ "FILE album.flac WAVE" ],
+      "encoding": null,
+      "expected": { "files": [ { "name": "album.flac", "tracks": [] } ] }
+    },
+    {
+      "description": "没有 INDEX 01 的音轨被忽略；没有标题时为 null；命令不区分大小写；Windows 换行",
+      "lines": [ "title \"Album\"\r", "file \"a.flac\" wave\r", "  track 01 audio\r", "    index 01 00:01:00\r", "  TRACK 02 AUDIO\r", "    INDEX 00 01:00:00\r" ],
+      "encoding": null,
+      "expected": {
+        "title": "Album", "performer": null, "year": null, "genre": null,
+        "files": [ { "name": "a.flac", "tracks": [ { "number": 1, "title": null, "performer": null, "startMs": 1000 } ] } ]
+      }
+    },
+    {
+      "description": "REM DATE 里取四位数字",
+      "lines": [ "REM DATE \"2004-08-03\"", "REM GENRE \"Classical\"" ],
+      "encoding": null,
+      "expected": { "year": 2004, "genre": "Classical", "files": [] }
+    }
+  ],
+  "parseTime": [
+    { "description": "帧按每秒 75 帧换算（取整）", "input": "05:42:37", "expected": 342493 },
+    { "description": "超过 99 分钟", "input": "120:00:00", "expected": 7200000 },
+    { "description": "格式不对", "input": "5:42", "expected": null }
+  ]
+}

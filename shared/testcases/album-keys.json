@@ -1,0 +1,31 @@
+{
+  "description": "专辑归属键（需求 AL-4）。key：album / albumArtist / volume / dir 算出的键；null 表示没有专辑；same / different 是成对的用例，比较两个键是否相同。albumDirectory：碟片目录取上一级。desktopOnly 为 true 的用例只在桌面端跑（移动端的路径只用 /）",
+  "nullKeys": [
+    { "description": "没有专辑名", "album": null, "albumArtist": "A", "volume": "external_primary", "dir": "Music/" },
+    { "description": "专辑名全是空白", "album": "  ", "albumArtist": "A", "volume": "external_primary", "dir": "Music/" }
+  ],
+  "pairs": [
+    { "description": "有专辑艺术家时跨目录合并（忽略首尾空白）", "same": true,
+      "a": { "album": "叶惠美", "albumArtist": "周杰伦", "volume": "external_primary", "dir": "Music/a/" },
+      "b": { "album": "叶惠美 ", "albumArtist": "周杰伦", "volume": "external_primary", "dir": "Music/b/" } },
+    { "description": "专辑名忽略大小写", "same": true,
+      "a": { "album": "Greatest Hits", "albumArtist": "Queen", "volume": "v", "dir": "Music/a/" },
+      "b": { "album": "greatest hits", "albumArtist": "QUEEN", "volume": "v", "dir": "Music/b/" } },
+    { "description": "没有专辑艺术家时按目录区分同名专辑", "same": false,
+      "a": { "album": "Greatest Hits", "albumArtist": null, "volume": "external_primary", "dir": "Music/Queen/" },
+      "b": { "album": "Greatest Hits", "albumArtist": null, "volume": "external_primary", "dir": "Music/ABBA/" } },
+    { "description": "碟片目录取上一级", "same": true,
+      "a": { "album": "Live", "albumArtist": null, "volume": "external_primary", "dir": "Music/Live/CD1/" },
+      "b": { "album": "Live", "albumArtist": null, "volume": "external_primary", "dir": "Music/Live/Disc 2/" } },
+    { "description": "桌面端的反斜杠目录：碟片目录取上一级", "same": true, "desktopOnly": true,
+      "a": { "album": "Live", "albumArtist": null, "volume": "v", "dir": "Music\\Live\\CD1\\" },
+      "b": { "album": "Live", "albumArtist": null, "volume": "v", "dir": "Music\\Live\\disk 3\\" } }
+  ],
+  "albumDirectory": [
+    { "description": "CD1 取上一级", "input": "Music/Live/CD1/", "expected": "Music/Live/" },
+    { "description": "不是碟片目录", "input": "Music/CDs/", "expected": "Music/CDs/" },
+    { "description": "Disc 2", "input": "Music/Live/Disc 2/", "expected": "Music/Live/" },
+    { "description": "只有一级的碟片目录不变", "input": "CD1/", "expected": "CD1/" },
+    { "description": "反斜杠分隔", "input": "Music\\Live\\CD1\\", "expected": "Music\\Live\\" }
+  ]
+}

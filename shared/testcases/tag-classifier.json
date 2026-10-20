@@ -1,0 +1,81 @@
+{
+  "description": "智能标签分类（需求 M-1、M-8、M-10）。scores 是校准曲库里真实歌曲的 YAMNet 得分（mobile/tools/calibration/）；mood / voice / genre 是单个维度的判断；classify 是完整的分类（features 的模型得分为 null 表示还没用模型分析过，expected 里 null 表示这个维度没有结果）；tagOf 是存储名 → 标签（兼容旧值）",
+  "scores": {
+    "pokerFace": { "vocal": 2.164, "classical": -5.564, "calm": 0.0005, "energy": 0.1898, "orchestra": 0.0 },
+    "baby": { "vocal": 3.530, "classical": -5.373, "calm": 0.0013, "energy": 0.1592, "orchestra": 0.0 },
+    "starFish": { "vocal": 0.563, "classical": -3.074, "calm": 0.0940, "energy": 0.0208, "orchestra": 0.0023 },
+    "nocturne": { "vocal": -3.824, "classical": 0.969, "calm": 0.0444, "energy": 0.0008, "orchestra": 0.0 },
+    "gymnopedie": { "vocal": -4.975, "classical": 0.742, "calm": 0.0224, "energy": 0.0001, "orchestra": 0.0626 },
+    "hungarianDance": { "vocal": -3.195, "classical": 2.290, "calm": 0.0031, "energy": 0.0016, "orchestra": 0.2530 },
+    "jupiter": { "vocal": -4.195, "classical": 0.468, "calm": 0.0085, "energy": 0.0039, "orchestra": 0.1634 },
+    "violinCover": { "vocal": -5.780, "classical": -2.630, "calm": 0.0042, "energy": 0.0065, "orchestra": 0.0026 },
+    "upbeat": { "vocal": 1.0, "classical": -3.0, "calm": 0.004, "energy": 0.12, "orchestra": 0.0 },
+    "jazz": { "vocal": -3.0, "classical": -1.0, "calm": 0.01, "energy": 0.01, "orchestra": 0.0 },
+    "pianPianXiHuanNi": { "vocal": -1.30, "classical": -2.918, "calm": 0.05, "energy": 0.0, "orchestra": 0.0 }
+  },
+  "mood": [
+    { "description": "舞曲 → 运动", "scores": "pokerFace", "sensitivity": "NORMAL", "expected": "SPORT" },
+    { "description": "舞曲 → 运动", "scores": "baby", "sensitivity": "NORMAL", "expected": "SPORT" },
+    { "description": "慢歌 → 非运动（周深 - 星鱼）", "scores": "starFish", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "肖邦夜曲 → 非运动", "scores": "nocturne", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "慢板 → 非运动", "scores": "gymnopedie", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "大编制管弦乐的快板以前\"都不是\"，现在算非运动", "scores": "hungarianDance", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "管弦乐 → 非运动", "scores": "jupiter", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "动感 / 舒缓之比约 3.0：宽松档算运动", "scores": "upbeat", "sensitivity": "LOOSE", "expected": "SPORT" },
+    { "description": "动感 / 舒缓之比约 3.0：标准档不算", "scores": "upbeat", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
+    { "description": "动感 / 舒缓之比约 3.0：严格档不算", "scores": "upbeat", "sensitivity": "STRICT", "expected": "NON_SPORT" },
+    { "description": "舞曲在严格档也是运动", "scores": "pokerFace", "sensitivity": "STRICT", "expected": "SPORT" }
+  ],
+  "voice": [
+    { "description": "人声", "scores": "pokerFace", "expected": "VOCAL" },
+    { "description": "人声", "scores": "starFish", "expected": "VOCAL" },
+    { "description": "纯音乐", "scores": "nocturne", "expected": "INSTRUMENTAL" },
+    { "description": "小提琴翻奏流行歌", "scores": "violinCover", "expected": "INSTRUMENTAL" }
+  ],
+  "genre": [
+    { "description": "流行", "scores": "pokerFace", "expected": "NON_CLASSICAL" },
+    { "description": "流行", "scores": "starFish", "expected": "NON_CLASSICAL" },
+    { "description": "肖邦夜曲", "scores": "nocturne", "expected": "CLASSICAL" },
+    { "description": "管弦乐", "scores": "jupiter", "expected": "CLASSICAL" },
+    { "description": "爵士、配乐等以前\"都不是\"的，现在算非古典", "scores": "jazz", "expected": "NON_CLASSICAL" },
+    { "description": "小提琴翻奏流行歌不算古典", "scores": "violinCover", "expected": "NON_CLASSICAL" },
+    { "description": "区瑞强 - 偏偏喜欢你：旧算法（钢琴、弦乐也算古典）得分 0.82，被判为古典", "scores": "pianPianXiHuanNi", "expected": "NON_CLASSICAL" }
+  ],
+  "classify": [
+    { "description": "v3 的得分 0.0 在旧阈值下是非古典", "sensitivity": "NORMAL", "classicalTitle": false,
+      "features": { "analyzerVersion": 3, "bpm": null, "bpmConfidence": 0.0, "loudness": -20.0, "loudnessRange": 5.0, "onsetRate": 1.0, "centroidHz": 1000.0, "lowRatio": 0.3,
+                    "vocalScore": -4.0, "classicalScore": 0.0, "calmLevel": 0.01, "energyLevel": 0.01, "orchestraLevel": 0.0 },
+      "expected": { "MOOD": "NON_SPORT", "VOICE": "INSTRUMENTAL", "GENRE": "NON_CLASSICAL" } },
+    { "description": "v4 的得分 0.0 在新阈值下是古典", "sensitivity": "NORMAL", "classicalTitle": false,
+      "features": { "analyzerVersion": 4, "bpm": null, "bpmConfidence": 0.0, "loudness": -20.0, "loudnessRange": 5.0, "onsetRate": 1.0, "centroidHz": 1000.0, "lowRatio": 0.3,
+                    "vocalScore": -4.0, "classicalScore": 0.0, "calmLevel": 0.01, "energyLevel": 0.01, "orchestraLevel": 0.0 },
+      "expected": { "MOOD": "NON_SPORT", "VOICE": "INSTRUMENTAL", "GENRE": "CLASSICAL" } },
+    { "description": "模型判为非古典", "sensitivity": "NORMAL", "classicalTitle": false,
+      "features": { "analyzerVersion": 4, "bpm": null, "bpmConfidence": 0.0, "loudness": -20.0, "loudnessRange": 5.0, "onsetRate": 1.0, "centroidHz": 1000.0, "lowRatio": 0.3,
+                    "vocalScore": -4.0, "classicalScore": -2.0, "calmLevel": 0.01, "energyLevel": 0.01, "orchestraLevel": 0.0 },
+      "expected": { "MOOD": "NON_SPORT", "VOICE": "INSTRUMENTAL", "GENRE": "NON_CLASSICAL" } },
+    { "description": "曲名补救：模型判为非古典，曲名有古典标志时算古典", "sensitivity": "NORMAL", "classicalTitle": true,
+      "features": { "analyzerVersion": 4, "bpm": null, "bpmConfidence": 0.0, "loudness": -20.0, "loudnessRange": 5.0, "onsetRate": 1.0, "centroidHz": 1000.0, "lowRatio": 0.3,
+                    "vocalScore": -4.0, "classicalScore": -2.0, "calmLevel": 0.01, "energyLevel": 0.01, "orchestraLevel": 0.0 },
+      "expected": { "MOOD": "NON_SPORT", "VOICE": "INSTRUMENTAL", "GENRE": "CLASSICAL" } },
+    { "description": "没有模型得分时只用旧规则判断运动", "sensitivity": "NORMAL", "classicalTitle": false,
+      "features": { "analyzerVersion": 2, "bpm": 118.0, "bpmConfidence": 7.0, "loudness": -7.9, "loudnessRange": 5.0, "onsetRate": 3.41, "centroidHz": 1439.0, "lowRatio": 0.51,
+                    "vocalScore": null, "classicalScore": null, "calmLevel": null, "energyLevel": null, "orchestraLevel": null },
+      "expected": { "MOOD": "SPORT", "VOICE": null, "GENRE": null } },
+    { "description": "没有模型得分、曲名有古典标志：只能判断出古典", "sensitivity": "NORMAL", "classicalTitle": true,
+      "features": { "analyzerVersion": 2, "bpm": 80.0, "bpmConfidence": 7.0, "loudness": -20.0, "loudnessRange": 5.0, "onsetRate": 1.0, "centroidHz": 1000.0, "lowRatio": 0.3,
+                    "vocalScore": null, "classicalScore": null, "calmLevel": null, "energyLevel": null, "orchestraLevel": null },
+      "expected": { "MOOD": "NON_SPORT", "VOICE": null, "GENRE": "CLASSICAL" } }
+  ],
+  "tagOf": [
+    { "description": "旧版本保存的安静读成非运动", "dimension": "MOOD", "value": "QUIET", "expected": "NON_SPORT" },
+    { "description": "运动", "dimension": "MOOD", "value": "SPORT", "expected": "SPORT" },
+    { "description": "旧版本保存的流行读成非古典", "dimension": "GENRE", "value": "POP", "expected": "NON_CLASSICAL" },
+    { "description": "古典", "dimension": "GENRE", "value": "CLASSICAL", "expected": "CLASSICAL" },
+    { "description": "POP 不属于氛围", "dimension": "MOOD", "value": "POP", "expected": null },
+    { "description": "不属于这个维度", "dimension": "VOICE", "value": "SPORT", "expected": null }
+  ],
+  "tagsOfDimension": [
+    { "description": "曲风的所有标签", "dimension": "GENRE", "expected": ["CLASSICAL", "NON_CLASSICAL"] }
+  ]
+}

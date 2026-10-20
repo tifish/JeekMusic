@@ -1,0 +1,26 @@
+{
+  "description": "子文件夹折叠（需求 F-1 ~ F-3）。counts 是各目录（以 / 结尾）直接含有的歌曲数；children(path) 返回直接子文件夹（name、relativePath、trackCount，歌曲数包含更深的层级），按名字自然排序（不转拼音）",
+  "counts": [
+    ["Music/", 3],
+    ["Music/Pop/", 5],
+    ["Music/Pop/2004/", 2],
+    ["Music/Classical/Bach/", 4],
+    ["Music/10 Live/", 1],
+    ["Music/9 Live/", 1]
+  ],
+  "cases": [
+    { "description": "直接子文件夹，歌曲数包含更深的层级", "path": "Music/", "expected": [
+      { "name": "9 Live", "relativePath": "Music/9 Live/", "trackCount": 1 },
+      { "name": "10 Live", "relativePath": "Music/10 Live/", "trackCount": 1 },
+      { "name": "Classical", "relativePath": "Music/Classical/", "trackCount": 4 },
+      { "name": "Pop", "relativePath": "Music/Pop/", "trackCount": 7 }
+    ] },
+    { "description": "只有更深层有歌曲的中间目录也会出现", "path": "Music/Classical/", "expected": [
+      { "name": "Bach", "relativePath": "Music/Classical/Bach/", "trackCount": 4 }
+    ] },
+    { "description": "没有子文件夹", "path": "Music/Pop/2004/", "expected": [] },
+    { "description": "根目录", "path": "", "expected": [
+      { "name": "Music", "relativePath": "Music/", "trackCount": 16 }
+    ] }
+  ]
+}

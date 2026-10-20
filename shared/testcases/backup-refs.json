@@ -1,0 +1,18 @@
+{
+  "description": "备份 / 同步的歌曲引用（需求 B-2、B-3、SY-6）。refOf：track_key（\"卷:路径\"）相对于所属音乐文件夹（roots，取最深的）的路径，null 表示不属于任何音乐文件夹；match：本设备的 refs（相对引用 → track_key）里找 ref，先完全匹配、再唯一的后缀匹配",
+  "refOf": [
+    { "description": "相对于所属音乐文件夹的路径", "roots": [ ["external_primary", "Music/"], ["1a2b-3c4d", "Songs/Classic/"] ], "trackKey": "external_primary:Music/周杰伦/晴天.mp3", "expected": "周杰伦/晴天.mp3" },
+    { "description": "CUE 虚拟歌曲带音轨号", "roots": [ ["external_primary", "Music/"], ["1a2b-3c4d", "Songs/Classic/"] ], "trackKey": "1a2b-3c4d:Songs/Classic/Live.flac#03", "expected": "Live.flac#03" },
+    { "description": "不属于任何音乐文件夹", "roots": [ ["external_primary", "Music/"], ["1a2b-3c4d", "Songs/Classic/"] ], "trackKey": "external_primary:Download/a.mp3", "expected": null },
+    { "description": "没有卷名", "roots": [ ["external_primary", "Music/"] ], "trackKey": "no-colon", "expected": null },
+    { "description": "嵌套时取最深的根", "roots": [ ["v", "Music/"], ["v", "Music/Pop/"] ], "trackKey": "v:Music/Pop/a.mp3", "expected": "a.mp3" }
+  ],
+  "match": [
+    { "description": "完全匹配优先", "refs": { "周杰伦/晴天.mp3": "k1", "Other/晴天.mp3": "k2" }, "ref": "周杰伦/晴天.mp3", "expected": "k1" },
+    { "description": "层级不同时按后缀匹配：新设备上把整个 Music 拷进了 Backup/Music", "refs": { "Music/周杰伦/晴天.mp3": "k1", "Music/许巍/曾经的你.mp3": "k2" }, "ref": "周杰伦/晴天.mp3", "expected": "k1" },
+    { "description": "只有文件名也能唯一匹配", "refs": { "Music/周杰伦/晴天.mp3": "k1", "Music/许巍/曾经的你.mp3": "k2" }, "ref": "曾经的你.mp3", "expected": "k2" },
+    { "description": "同名文件有歧义时取后缀最长的唯一一个", "refs": { "A/Live/01.mp3": "k1", "B/Studio/01.mp3": "k2" }, "ref": "Live/01.mp3", "expected": "k1" },
+    { "description": "后缀一样长时放弃", "refs": { "A/Live/01.mp3": "k1", "B/Studio/01.mp3": "k2" }, "ref": "C/01.mp3", "expected": null },
+    { "description": "没有同名文件", "refs": { "A/Live/01.mp3": "k1" }, "ref": "没有这个.mp3", "expected": null }
+  ]
+}

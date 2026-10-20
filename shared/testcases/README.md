@@ -1,0 +1,28 @@
+# 两端共用的规则测试用例
+
+移动端（`mobile/app/src/test/`，JUnit）和桌面端（`desktop/tests/JeekMusic.Core.Tests/`，xUnit）的单元测试都读这里的 JSON，
+保证两端的曲库规则结果一致（`desktop/docs/design.md` §3）。改规则时先改这里的用例，两端的测试都要通过。
+
+每个文件是 `{ "description": "...", "cases": [ ... ] }`，每条用例都有 `description`，其余字段的含义见各文件开头的 `description`。
+
+| 文件 | 规则 | 移动端 | 桌面端 |
+|---|---|---|---|
+| `natural-order.json` | 自然排序 | `NaturalOrderComparator` | `NaturalOrderComparer` |
+| `sort-keys.json` | 字母索引 | `SortKeys.indexLetter` | `SortKeys.IndexLetter` |
+| `pinyin.json` | 拼音转写（ICU "Han-Latin; Latin-ASCII" 的结果） | ICU4J（测试依赖） | `Pinyin.Transliterate` |
+| `chinese-text.json` | 繁简转换（ICU 的结果） | ICU4J（测试依赖） | `ChineseText` |
+| `charset.json` | 乱码修复、文本编码识别 | `CharsetFixer`、`CharsetDetector` | 同名 |
+| `artist-splitter.json` | 艺术家拆分 | `ArtistSplitter` | 同名 |
+| `file-name-inferrer.json` | 从文件名推断艺术家 | `FileNameInferrer` | 同名 |
+| `album-keys.json` | 专辑归属键 | `AlbumKeys` | 同名 |
+| `cue-parser.json` | CUE 解析 | `CueParser` | 同名 |
+| `lrc-parser.json` | LRC 解析 | `LrcParser` | 同名 |
+| `folder-tree.json` | 子文件夹折叠 | `FolderTree` | 同名 |
+| `m3u.json` | m3u 读写 | `M3u` | 同名 |
+| `backup-refs.json` | 备份 / 同步的歌曲引用 | `BackupRefs` | 同名 |
+| `cover-matcher.json` | 在线结果匹配 | `CoverMatcher` | 同名 |
+| `classical-titles.json` | 曲名补救古典 | `ClassicalTitles` | 同名 |
+| `tag-classifier.json` | 智能标签分类 | `TagClassifier` | 同名 |
+
+`pinyin.json`、`chinese-text.json` 的期望值由 `shared/pinyin/generate.sh expect` 用 ICU4J 生成。
+更大的对比语料（真实曲库的文件名、标签和随机混排串，约 12 万条）不进仓库，桌面端通过环境变量 `JEEK_PINYIN_CORPUS` 指定后由 `PinyinCorpusTests` 对比。

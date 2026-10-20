@@ -1,0 +1,33 @@
+{
+  "description": "艺术家拆分（需求 A-2 ~ A-5）。values 是标签的各个值（多值标签有多个）；extraSeparators 加到默认分隔符上，separators 不为 null 时代替默认分隔符；exceptions 为 null 时用默认的例外名单",
+  "split": [
+    { "description": "默认按斜杠拆分（网易云的写法）", "values": ["薛之谦/张靓颖"], "expected": ["薛之谦", "张靓颖"] },
+    { "description": "三位艺术家", "values": ["张惠妹/艾怡良/徐佳莹"], "expected": ["张惠妹", "艾怡良", "徐佳莹"] },
+    { "description": "西文名字", "values": ["Herbert von Karajan/Wiener Philharmoniker"], "expected": ["Herbert von Karajan", "Wiener Philharmoniker"] },
+    { "description": "分号", "values": ["A; B"], "expected": ["A", "B"] },
+    { "description": "顿号", "values": ["周杰伦、费玉清"], "expected": ["周杰伦", "费玉清"] },
+    { "description": "feat.", "values": ["Rihanna feat. Eminem"], "expected": ["Rihanna", "Eminem"] },
+    { "description": "ft 不带点", "values": ["Rihanna ft Eminem"], "expected": ["Rihanna", "Eminem"] },
+    { "description": "大写 FEAT.", "values": ["Rihanna FEAT. Eminem"], "expected": ["Rihanna", "Eminem"] },
+    { "description": "括号里的 feat.", "values": ["A (feat. B)"], "expected": ["A", "B"] },
+    { "description": "featuring", "values": ["A featuring B"], "expected": ["A", "B"] },
+    { "description": "词语分隔符不会拆开单词内部", "values": ["Fitz and the Tantrums"], "expected": ["Fitz and the Tantrums"] },
+    { "description": "词语分隔符不会拆开单词内部", "values": ["Lefty"], "expected": ["Lefty"] },
+    { "description": "默认不按 & 拆分", "values": ["小娟&山谷里的居民"], "expected": ["小娟&山谷里的居民"] },
+    { "description": "默认不按逗号拆分", "values": ["Crosby, Stills"], "expected": ["Crosby, Stills"] },
+    { "description": "启用 & 后拆分", "values": ["杨宗纬&李泉"], "extraSeparators": ["&"], "expected": ["杨宗纬", "李泉"] },
+    { "description": "例外名单不拆", "values": ["AC/DC"], "expected": ["AC/DC"] },
+    { "description": "启用 & 时例外名单也不拆", "values": ["Simon & Garfunkel"], "extraSeparators": ["&"], "expected": ["Simon & Garfunkel"] },
+    { "description": "例外名单里的名字和其他艺术家连在一起", "values": ["AC/DC/Queen"], "expected": ["AC/DC", "Queen"] },
+    { "description": "例外名单忽略大小写", "values": ["ac/dc/Queen"], "expected": ["ac/dc", "Queen"] },
+    { "description": "多值标签逐个拆分并去重（忽略大小写）", "values": ["A/B", "b", "C"], "expected": ["A", "B", "C"] },
+    { "description": "忽略空白和空段", "values": [" A // B "], "expected": ["A", "B"] },
+    { "description": "全是空白", "values": ["  "], "expected": [] },
+    { "description": "启用 x 后两侧有空白才拆", "values": ["DAOKO x 米津玄師", "Max"], "extraSeparators": ["x"], "expected": ["DAOKO", "米津玄師", "Max"] },
+    { "description": "不启用任何分隔符", "values": ["A/B"], "separators": [], "expected": ["A/B"] }
+  ],
+  "nameKey": [
+    { "description": "忽略大小写和多余空白", "input": "  The   Beatles ", "expected": "the beatles" },
+    { "description": "中文原样", "input": "周杰伦", "expected": "周杰伦" }
+  ]
+}

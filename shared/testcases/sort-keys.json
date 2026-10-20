@@ -1,0 +1,87 @@
+{
+  "description": "排序键和字母索引（需求 A-1）。indexLetter：input 是原文，用不转写的 sortKey（只小写、合并空白）后取字母；sortKey：用拼音转写",
+  "indexLetter": [
+    {
+      "description": "拼音首字母",
+      "input": "zhou jie lun",
+      "expected": "Z"
+    },
+    {
+      "description": "数字开头归到 #",
+      "input": "1999",
+      "expected": "#"
+    },
+    {
+      "description": "空串归到 #",
+      "input": "",
+      "expected": "#"
+    },
+    {
+      "description": "大写字母",
+      "input": "Queen",
+      "expected": "Q"
+    },
+    {
+      "description": "符号开头归到 #",
+      "input": "(Live)",
+      "expected": "#"
+    }
+  ],
+  "sortKey": [
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "周杰伦",
+      "expected": "zhou jie lun"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "  The   Beatles ",
+      "expected": "the beatles"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "G.E.M. 邓紫棋",
+      "expected": "g. e. m. deng zi qi"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "Beyoncé",
+      "expected": "beyonce"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "晴天.mp3",
+      "expected": "qing tian. mp3"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "重庆森林",
+      "expected": "chong qing sen lin"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "陈奕迅 feat. 王菲",
+      "expected": "chen yi xun feat. wang fei"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "01. 周杰伦 - 晴天.flac",
+      "expected": "01. zhou jie lun - qing tian. flac"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "米津玄師",
+      "expected": "mi jin xuan shi"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "IU (아이유)",
+      "expected": "iu (아이유)"
+    },
+    {
+      "description": "ICU 转写后小写、合并空白",
+      "input": "Ærø",
+      "expected": "aero"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# 由 shared/pinyin/Generate.java 用 ICU4J 76.1.0.0 生成，不要手改。Han-Latin 的上下文规则：字	后面的字（中间可以有一个空格）	结果；优先于逐字映射
+藏	文	zàng
+重	庆	chóng
+沈	阳	shěn
+秘	鲁	bì

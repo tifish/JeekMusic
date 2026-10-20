@@ -92,6 +92,7 @@ public sealed class PlaylistService(LibraryService library)
         var before = items.Take(target).Where((_, i) => !set.Contains(i)).Count();
         var rest = items.Where((_, i) => !set.Contains(i)).ToList();
         rest.InsertRange(Math.Clamp(before, 0, rest.Count), moving);
+        if (rest.SequenceEqual(items)) return;
         _db.SetPlaylistItems(id, rest);
         Invalidate(id);
     }

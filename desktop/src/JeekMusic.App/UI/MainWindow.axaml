@@ -30,7 +30,10 @@
 
         <!-- 主区：导航栏 | 艺术家栏 | 内容 | 歌词面板 -->
         <Grid Grid.Row="1" x:Name="MainArea" ColumnDefinitions="230,Auto,Auto,*,Auto,Auto">
-            <TreeView x:Name="NavTree" Grid.Column="0" ItemsSource="{Binding Nav}" SelectedItem="{Binding SelectedNav}" Margin="4,0,0,0">
+            <DockPanel Grid.Column="0" x:Name="NavPanel">
+            <Button DockPanel.Dock="Top" x:Name="NavCollapse" Classes="icon" Content="{x:Static ui:Icons.NavPane}" HorizontalAlignment="Left" Margin="8,0,0,2"
+                    ToolTip.Tip="折叠 / 展开导航栏" />
+            <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" SelectedItem="{Binding SelectedNav}" Margin="4,0,0,0">
                 <TreeView.Styles>
                     <Style Selector="TreeViewItem" x:DataType="vm:NavNode">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -39,14 +42,15 @@
                 <TreeView.ItemTemplate>
                     <TreeDataTemplate x:DataType="vm:NavNode" ItemsSource="{Binding Children}">
                         <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent">
-                            <TextBlock Classes="glyph" Text="{Binding Icon}" FontSize="14" Margin="0,0,10,0" />
-                            <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="{Binding CountText}" Classes="secondary" FontSize="11" Margin="8,0,4,0" VerticalAlignment="Center" />
+                            <TextBlock Classes="glyph" Text="{Binding Icon}" FontSize="14" Margin="0,0,10,0" ToolTip.Tip="{Binding Title}" />
+                            <TextBlock Grid.Column="1" Classes="navtitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Classes="secondary navtitle" Text="{Binding CountText}" FontSize="11" Margin="8,0,4,0" VerticalAlignment="Center" />
                         </Grid>
                     </TreeDataTemplate>
                 </TreeView.ItemTemplate>
             </TreeView>
-            <GridSplitter Grid.Column="1" Width="4" Background="Transparent" ResizeDirection="Columns" />
+            </DockPanel>
+            <GridSplitter Grid.Column="1" x:Name="NavSplitter" Width="4" Background="Transparent" ResizeDirection="Columns" />
 
             <!-- 艺术家栏：只在选中"艺术家"时出现（需求 W-4） -->
             <Grid Grid.Column="2" Width="230" IsVisible="{Binding ShowArtistPane}" ColumnDefinitions="*,Auto">

@@ -61,6 +61,7 @@ public partial class MainWindow : Window
         };
 
         InitExtras();
+        InitNav();
         KeyDown += OnWindowKeyDown;
         AddHandler(PointerPressedEvent, OnMouseButtons, RoutingStrategies.Tunnel);
         PropertyChanged += (_, e) =>

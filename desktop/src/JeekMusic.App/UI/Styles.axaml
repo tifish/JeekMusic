@@ -57,6 +57,13 @@
         <Setter Property="Opacity" Value="0.45" />
     </Style>
 
+    <!-- 导航栏：折叠成只有图标的窄条（需求 W-2） -->
+    <Style Selector="TreeView.collapsed TextBlock.navtitle">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="TreeViewItem.droptarget">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark2}" />
+    </Style>
     <!-- 导航栏 -->
     <Style Selector="TreeViewItem">
         <Setter Property="MinHeight" Value="34" />

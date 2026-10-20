@@ -26,6 +26,6 @@
     { "description": "不是碟片目录", "input": "Music/CDs/", "expected": "Music/CDs/" },
     { "description": "Disc 2", "input": "Music/Live/Disc 2/", "expected": "Music/Live/" },
     { "description": "只有一级的碟片目录不变", "input": "CD1/", "expected": "CD1/" },
-    { "description": "反斜杠分隔", "input": "Music\\Live\\CD1\\", "expected": "Music\\Live\\" }
+    { "description": "反斜杠分隔", "input": "Music\\Live\\CD1\\", "expected": "Music\\Live\\", "desktopOnly": true }
   ]
 }

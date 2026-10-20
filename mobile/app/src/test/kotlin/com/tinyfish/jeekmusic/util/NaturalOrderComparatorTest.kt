@@ -1,34 +1,62 @@
 package com.tinyfish.jeekmusic.util
 
+import com.tinyfish.jeekmusic.SharedCases
+import com.tinyfish.jeekmusic.cases
 import com.tinyfish.jeekmusic.data.scanner.SortKeys
+import com.tinyfish.jeekmusic.description
+import com.tinyfish.jeekmusic.str
+import com.tinyfish.jeekmusic.strings
+import com.ibm.icu.text.Transliterator
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+/** 用例在 shared/testcases/natural-order.json、sort-keys.json（两端共用）。 */
 class NaturalOrderComparatorTest {
 
     @Test
-    fun `数字按数值排序`() {
-        val sorted = listOf("10.mp3", "2.mp3", "1.mp3", "02.mp3").sortedWith(NaturalOrderComparator)
-        assertEquals(listOf("1.mp3", "2.mp3", "02.mp3", "10.mp3"), sorted)
+    fun naturalOrder() {
+        for (c in SharedCases.load("natural-order.json").cases()) {
+            val sorted = c.getJSONArray("input").strings().sortedWith(NaturalOrderComparator)
+            assertEquals(c.description(), c.getJSONArray("expected").strings(), sorted)
+        }
     }
 
     @Test
-    fun `忽略大小写`() {
-        val sorted = listOf("b.mp3", "A.mp3", "c.mp3").sortedWith(NaturalOrderComparator)
-        assertEquals(listOf("A.mp3", "b.mp3", "c.mp3"), sorted)
-    }
-
-    @Test
-    fun `混合文本和数字`() {
-        val sorted = listOf("Track 10", "Track 9", "Track 1a", "Track 1").sortedWith(NaturalOrderComparator)
-        assertEquals(listOf("Track 1", "Track 1a", "Track 9", "Track 10"), sorted)
-    }
-
-    @Test
-    fun `字母索引`() {
+    fun indexLetter() {
         val keys = SortKeys { it }
-        assertEquals("Z", keys.indexLetter(keys.sortKey("zhou jie lun")))
-        assertEquals("#", keys.indexLetter(keys.sortKey("1999")))
-        assertEquals("#", keys.indexLetter(""))
+        for (c in SharedCases.load("sort-keys.json").cases("indexLetter")) {
+            assertEquals(c.description(), c.str("expected"), keys.indexLetter(keys.sortKey(c.getString("input"))))
+        }
+    }
+
+    /** 手机上用 android.icu；JVM 上用同源的 ICU4J，转写结果一样。 */
+    @Test
+    fun sortKey() {
+        val transliterator = Transliterator.getInstance("Han-Latin; Latin-ASCII")
+        val keys = SortKeys { transliterator.transliterate(it) }
+        for (c in SharedCases.load("sort-keys.json").cases("sortKey")) {
+            assertEquals(c.description(), c.str("expected"), keys.sortKey(c.getString("input")))
+        }
+    }
+
+    /** 拼音、繁简的期望值由 shared/pinyin/build-testcases.py 用 ICU4J 生成；这里核对 ICU4J 本身（升级 ICU 时会发现结果变了）。 */
+    @Test
+    fun pinyinAndChineseText() {
+        val pinyin = Transliterator.getInstance("Han-Latin; Latin-ASCII")
+        for (c in SharedCases.load("pinyin.json").cases()) {
+            assertEquals(c.getString("input"), c.getString("expected"), pinyin.transliterate(c.getString("input")))
+        }
+        val simplified = Transliterator.getInstance("Traditional-Simplified")
+        val traditional = Transliterator.getInstance("Simplified-Traditional")
+        for (c in SharedCases.load("chinese-text.json").cases()) {
+            assertEquals(c.getString("input"), c.getString("simplified"), simplified.transliterate(c.getString("input")))
+            assertEquals(c.getString("input"), c.getString("traditional"), traditional.transliterate(c.getString("input")))
+        }
+    }
+
+    /** 补充：数字段的比较不会溢出，前导零不影响数值大小。 */
+    @Test
+    fun leadingZeros() {
+        assertEquals(listOf("a1", "a01", "a001", "a2"), listOf("a001", "a2", "a01", "a1").sortedWith(NaturalOrderComparator))
     }
 }

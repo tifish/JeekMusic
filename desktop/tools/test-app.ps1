@@ -1,11 +1,11 @@
-# 在作者的电脑上跑桌面端，不打扰正在用电脑的人（memory: no-focus-steal；tech-spike.md"用法"一节）：
+﻿# 在作者的电脑上跑桌面端，不打扰正在用电脑的人（memory: no-focus-steal；tech-spike.md"用法"一节）：
 #   - 用 --background 启动：窗口不激活、不进任务栏、放到所有窗口后面
 #   - CreateNoWindow，不弹控制台
 #   - PrintWindow 截图（窗口在别的窗口后面也能截）
 #   - 全程检查前台窗口是不是被测试程序抢走了
 #
 # 用法：
-#   pwsh tools/test-app.ps1 -Seconds 15 -Shot app.png -Args 'D:\Mobile\Song'
+#   pwsh tools/test-app.ps1 -Seconds 15 -Shot app.png -AppArgs 'D:\Mobile\Song'
 #   pwsh tools/test-app.ps1 -Fresh -Seconds 20        # 用全新的数据目录
 param(
     [string]$Exe = "$PSScriptRoot\..\src\JeekMusic.App\bin\Debug\net10.0-windows10.0.19041.0\JeekMusic.exe",
@@ -13,10 +13,11 @@ param(
     [switch]$Fresh,
     [int]$Seconds = 10,
     [string]$Shot,
-    [string[]]$Args = @(),
+    [string[]]$AppArgs = @(),
     [int]$LogLines = 15,
     [switch]$KeepRunning
 )
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 if ($Fresh) { Remove-Item -Recurse -Force $Data -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force $Data | Out-Null
 Add-Type -AssemblyName System.Drawing
@@ -48,7 +49,7 @@ $psi = New-Object System.Diagnostics.ProcessStartInfo (Resolve-Path $Exe)
 $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
 $psi.Environment["JEEKMUSIC_DATA"] = $Data
 $psi.ArgumentList.Add('--background')
-foreach ($a in $Args) { $psi.ArgumentList.Add($a) }
+foreach ($a in $AppArgs) { $psi.ArgumentList.Add($a) }
 $p = [System.Diagnostics.Process]::Start($psi)
 $stole = 0; $samples = 0
 $deadline = (Get-Date).AddSeconds($Seconds)

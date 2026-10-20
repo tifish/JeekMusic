@@ -14,9 +14,10 @@ on:
       - "!mobile/docs/**"
       - "!mobile/**.md"
       - "!mobile/fastlane/**"
+      - "shared/testcases/**"
       - ".github/workflows/mobile.yml"
   pull_request:
-    paths: ["mobile/**", ".github/workflows/mobile.yml"]
+    paths: ["mobile/**", "shared/testcases/**", ".github/workflows/mobile.yml"]
   workflow_dispatch: # 在 Actions 页面手动运行（也会发布）
 
 concurrency:
@@ -46,6 +47,16 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@v6
+
+      # 只改了测试（含 shared/testcases）时只跑测试、不发布：APK 内容没变
+      - name: Check app changes
+        if: env.PUBLISH == 'true'
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
+          if [ -n "$last" ] && [ -z "$(git diff --name-only "$last" HEAD -- . ':!docs' ':!fastlane' ':!app/src/test' ':!**.md')" ]; then
+            echo "自 $last 以来 App 没有变化，不发布"
+            echo "PUBLISH=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Decode keystore
         if: env.PUBLISH == 'true'

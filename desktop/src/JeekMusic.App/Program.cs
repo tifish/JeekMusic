@@ -13,6 +13,8 @@ static class Program
     public static int Main(string[] args)
     {
         Args = args;
+        // GBK / Big5 / Shift-JIS（乱码修复、.lrc / .cue 编码识别）
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         // 自动更新：新版本以这个参数启动，把自己复制到程序目录（设计 §15.2）
         if (args.Length >= 3 && args[0] == "--apply-update") return Update.Updater.ApplyUpdate(args[1], args[2]);
 

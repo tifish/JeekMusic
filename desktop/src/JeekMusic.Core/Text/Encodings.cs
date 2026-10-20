@@ -5,7 +5,11 @@ namespace JeekMusic.Core.Text;
 /// <summary>严格解码用的编码（遇到非法字节抛异常）；GBK、Big5 需要 CodePagesEncodingProvider。</summary>
 public static class Encodings
 {
-    static Encodings() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    // 注意：静态属性的初始化器比静态构造函数的函数体先执行，所以不能在静态构造里注册（GetEncoding(936) 会先抛
+    // NotSupportedException）；在 Strict 里、取代码页之前注册。RegisterProvider 重复调用没有副作用。
+
+    /// <summary>注册 GBK、Big5、Shift-JIS 等代码页（.NET 默认只有 UTF-8、UTF-16、Latin-1 等）。用到这些编码之前调用。</summary>
+    public static void EnsureCodePages() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     /// <summary>GBK（Windows 代码页 936）。</summary>
     public static Encoding Gbk { get; } = Strict(936);
@@ -18,8 +22,11 @@ public static class Encodings
 
     public static Encoding Utf8 { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
-    private static Encoding Strict(int codePage) =>
-        Encoding.GetEncoding(codePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+    private static Encoding Strict(int codePage)
+    {
+        EnsureCodePages();
+        return Encoding.GetEncoding(codePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+    }
 
     /// <summary>按名字取严格解码的编码（设置里保存的旧标签编码："GBK"、"Big5"、"Shift_JIS"、"UTF-8"）；不认识时返回 null。</summary>
     public static Encoding? ByName(string? name) => name?.ToUpperInvariant() switch
@@ -141,7 +148,7 @@ public static class CharsetFixer
     private static Encoding Strict(Encoding encoding)
     {
         if (encoding.DecoderFallback is DecoderExceptionFallback) return encoding;
-        _ = Encodings.Gbk; // 确保 CodePagesEncodingProvider 已注册
+        Encodings.EnsureCodePages();
         return Encoding.GetEncoding(encoding.CodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
     }
 }

@@ -40,3 +40,30 @@ big = draw(256)
 big.save(out / "JeekMusic.png")
 big.save(out / "JeekMusic.ico", sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48), (64, 64), (128, 128), (256, 256)])
 print("written", out)
+
+
+# ── 任务栏缩略图按钮（上一首 / 播放 / 暂停 / 下一首），白色图形，透明底 ──
+def glyph(kind: str, size: int = 64) -> Image.Image:
+    s = 512
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    w = (255, 255, 255, 255)
+    if kind == "play":
+        d.polygon([(150, 100), (150, 412), (410, 256)], fill=w)
+    elif kind == "pause":
+        d.rounded_rectangle([140, 100, 225, 412], radius=24, fill=w)
+        d.rounded_rectangle([287, 100, 372, 412], radius=24, fill=w)
+    elif kind == "next":
+        d.polygon([(110, 110), (110, 402), (330, 256)], fill=w)
+        d.rounded_rectangle([340, 110, 400, 402], radius=18, fill=w)
+    elif kind == "previous":
+        d.polygon([(402, 110), (402, 402), (182, 256)], fill=w)
+        d.rounded_rectangle([112, 110, 172, 402], radius=18, fill=w)
+    return img.resize((size, size), Image.LANCZOS)
+
+
+tb = out / "Taskbar"
+tb.mkdir(exist_ok=True)
+for kind in ["play", "pause", "next", "previous"]:
+    glyph(kind).save(tb / f"{kind}.png")
+print("taskbar glyphs written")

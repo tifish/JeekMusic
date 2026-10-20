@@ -112,6 +112,36 @@ public sealed partial class LibraryDb
         }
     }
 
+    /// <summary>某个音乐文件夹里记录的 .cue 文件 → (修改时间, 大小)。</summary>
+    public Dictionary<string, (long mtime, long size)> SideFiles(long folderId)
+    {
+        lock (Gate)
+        {
+            using var cmd = Command("SELECT rel_path, mtime, size FROM side_file WHERE folder_id = $f");
+            cmd.Parameters.AddWithValue("$f", folderId);
+            using var r = cmd.ExecuteReader();
+            var map = new Dictionary<string, (long, long)>(StringComparer.OrdinalIgnoreCase);
+            while (r.Read()) map[r.GetString(0)] = (r.GetInt64(1), r.GetInt64(2));
+            return map;
+        }
+    }
+
+    public void SetSideFile(SqliteTransaction tx, long folderId, string relPath, long mtime, long size) =>
+        Exec("INSERT OR REPLACE INTO side_file(folder_id, rel_path, mtime, size) VALUES($f, $p, $m, $s)", tx, ("$f", folderId), ("$p", relPath), ("$m", mtime), ("$s", size));
+
+    public void DeleteSideFile(SqliteTransaction tx, long folderId, string relPath) =>
+        Exec("DELETE FROM side_file WHERE folder_id = $f AND rel_path = $p", tx, ("$f", folderId), ("$p", relPath));
+
+    /// <summary>重建曲库（需求 L-6）：清空这个音乐文件夹的歌曲和 .cue 记录，之后全量解析。</summary>
+    public void ClearFolder(long folderId)
+    {
+        lock (Gate)
+        {
+            Exec("DELETE FROM track WHERE folder_id = $f", null, ("$f", folderId));
+            Exec("DELETE FROM side_file WHERE folder_id = $f", null, ("$f", folderId));
+        }
+    }
+
     /// <summary>某个文件现有的歌曲 id（普通歌曲一条，CUE 整轨多条）：重新解析时沿用 id，播放队列等不受影响。</summary>
     public Dictionary<string, long> ExistingIds(SqliteTransaction tx, long folderId, string dir, string fileName)
     {

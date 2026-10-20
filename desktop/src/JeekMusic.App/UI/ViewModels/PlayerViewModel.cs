@@ -1,0 +1,216 @@
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using JeekMusic.Core.Queue;
+using JeekMusic.Library;
+using JeekMusic.Playback;
+using JeekMusic.Settings;
+
+namespace JeekMusic.UI.ViewModels;
+
+/// <summary>
+/// 播放栏、迷你播放器、歌词面板共用的播放状态（需求 W-5、PC-4）。
+/// 进度每 250ms 读一次，只在播放中并且有可见的进度显示时（<see cref="ProgressVisible"/>）；窗口不可见时不刷新（设计 §13）。
+/// </summary>
+public sealed partial class PlayerViewModel : ObservableObject
+{
+    readonly PlayerService _player;
+    readonly SleepTimer _sleep;
+    readonly SettingsStore _settings;
+    readonly DispatcherTimer _progress;
+    bool _progressVisible = true;
+    bool _userSeeking;
+
+    public PlayerViewModel(PlayerService player, SleepTimer sleep, SettingsStore settings)
+    {
+        _player = player;
+        _sleep = sleep;
+        _settings = settings;
+        _progress = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => UpdatePosition());
+        player.StateChanged += OnState;
+        player.TrackChanged += _ => OnTrack();
+        player.Seeked += UpdatePosition;
+        player.OutputChanged += () => OnPropertyChanged(nameof(FormatText));
+        sleep.Changed += () => { OnPropertyChanged(nameof(SleepActive)); OnPropertyChanged(nameof(SleepText)); };
+        _volume = settings.Current.Volume;
+        _muted = settings.Current.Muted;
+        OnTrack();
+        OnState();
+    }
+
+    public PlayerService Service => _player;
+
+    public Track? Track => _player.CurrentTrack;
+    public bool HasTrack => Track is not null;
+    public string Title => Track?.Title ?? "JeekMusic";
+    public string Artist => Track is { } t ? Text.Artist(t) : "";
+    public string Album => Track?.Album ?? "";
+    public string ArtistAlbum => Track is { } t ? (t.Album is { Length: > 0 } a ? $"{Text.Artist(t)} — {a}" : Text.Artist(t)) : "";
+
+    [ObservableProperty] private Bitmap? _cover;
+
+    public bool IsPlaying => _player.IsPlaying;
+    public string PlayIcon => IsPlaying ? Icons.Pause : Icons.Play;
+    public string PlayTip => IsPlaying ? "暂停（空格）" : "播放（空格）";
+
+    public bool Shuffle => _player.Queue.Shuffle;
+    public RepeatMode Repeat => _player.Queue.Repeat;
+    public string RepeatIcon => Repeat == RepeatMode.One ? Icons.RepeatOne : Icons.RepeatAll;
+    public bool RepeatOn => Repeat != RepeatMode.Off;
+    public string RepeatTip => Repeat switch { RepeatMode.All => "列表循环", RepeatMode.One => "单曲循环", _ => "不循环" };
+
+    [ObservableProperty] private double _positionSeconds;
+    [ObservableProperty] private double _durationSeconds = 1;
+    [ObservableProperty] private string _positionText = "0:00";
+    [ObservableProperty] private string _durationText = "0:00";
+
+    public bool SleepActive => _sleep.Active;
+    public string SleepText => _sleep.Remaining is { } r ? Text.Duration(r) : _sleep.SongsLeft > 0 ? $"{_sleep.SongsLeft} 首" : "";
+
+    /// <summary>播放栏显示的格式，如"FLAC 24/96 → 96kHz 独占"（需求 O-3）。</summary>
+    public string FormatText
+    {
+        get
+        {
+            var f = _player.Format;
+            if (Track is null || f.DeviceRate is null) return Track?.FormatLabel ?? "";
+            var device = $"{f.DeviceRate / 1000.0:0.#}kHz";
+            var mode = _player.Exclusive ? "独占" : "共享";
+            return f.Resampled ? $"{Track.FormatLabel} → {device} {mode}（已重采样）" : $"{Track.FormatLabel} → {device} {mode}";
+        }
+    }
+
+    // ── 音量（需求 O-4）──
+
+    private double _volume;
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            if (!SetProperty(ref _volume, Math.Clamp(value, 0, 100))) return;
+            _player.SetVolume(_volume, Muted);
+            _settings.Current.Volume = _volume;
+            _settings.Save("playback");
+            OnPropertyChanged(nameof(VolumeIcon));
+        }
+    }
+
+    private bool _muted;
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            if (!SetProperty(ref _muted, value)) return;
+            _player.SetVolume(Volume, _muted);
+            _settings.Current.Muted = _muted;
+            _settings.Save("playback");
+            OnPropertyChanged(nameof(VolumeIcon));
+        }
+    }
+
+    public string VolumeIcon => Muted ? Icons.Mute : Volume < 1 ? Icons.Volume0 : Icons.Volume;
+    public bool VolumeAvailable => _player.VolumeAvailable;
+
+    // ── 命令 ──
+
+    [RelayCommand] void PlayPause() => _player.PlayPause();
+    [RelayCommand] void Next() => _player.Next();
+    [RelayCommand] void Previous() => _player.Previous();
+    [RelayCommand] void ToggleMute() => Muted = !Muted;
+
+    [RelayCommand]
+    void ToggleShuffle()
+    {
+        _player.SetShuffle(!_player.Queue.Shuffle);
+        OnPropertyChanged(nameof(Shuffle));
+    }
+
+    [RelayCommand]
+    void CycleRepeat()
+    {
+        _player.SetRepeat(Repeat switch { RepeatMode.Off => RepeatMode.All, RepeatMode.All => RepeatMode.One, _ => RepeatMode.Off });
+    }
+
+    /// <summary>进度条：拖动中不随播放更新，松手时跳转（同移动端 T-7 的做法）。</summary>
+    public void BeginSeek() => _userSeeking = true;
+
+    public void EndSeek(double seconds)
+    {
+        _userSeeking = false;
+        _player.Seek(TimeSpan.FromSeconds(seconds));
+        PositionSeconds = seconds;
+        PositionText = Text.Duration(TimeSpan.FromSeconds(seconds));
+    }
+
+    public void SeekTo(double seconds) => EndSeek(seconds);
+
+    // ── 刷新 ──
+
+    /// <summary>进度显示是否可见（主窗口和迷你播放器都不可见时为 false，停止刷新）。</summary>
+    public bool ProgressVisible
+    {
+        get => _progressVisible;
+        set
+        {
+            _progressVisible = value;
+            UpdateTimer();
+            if (value) UpdatePosition();
+        }
+    }
+
+    void UpdateTimer()
+    {
+        var run = _progressVisible && _player.IsPlaying;
+        if (run && !_progress.IsEnabled) _progress.Start();
+        else if (!run && _progress.IsEnabled) _progress.Stop();
+    }
+
+    void OnState()
+    {
+        OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(PlayIcon));
+        OnPropertyChanged(nameof(PlayTip));
+        OnPropertyChanged(nameof(Shuffle));
+        OnPropertyChanged(nameof(Repeat));
+        OnPropertyChanged(nameof(RepeatIcon));
+        OnPropertyChanged(nameof(RepeatOn));
+        OnPropertyChanged(nameof(RepeatTip));
+        OnPropertyChanged(nameof(VolumeAvailable));
+        UpdateTimer();
+        UpdatePosition();
+    }
+
+    void OnTrack()
+    {
+        OnPropertyChanged(nameof(Track));
+        OnPropertyChanged(nameof(HasTrack));
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Artist));
+        OnPropertyChanged(nameof(Album));
+        OnPropertyChanged(nameof(ArtistAlbum));
+        OnPropertyChanged(nameof(FormatText));
+        var duration = _player.Duration.TotalSeconds;
+        DurationSeconds = Math.Max(duration, 0.001);
+        DurationText = Text.Duration(_player.Duration);
+        UpdatePosition();
+        TrackChanged?.Invoke(Track);
+    }
+
+    /// <summary>换歌（封面、歌词跟着换）。</summary>
+    public event Action<Track?>? TrackChanged;
+
+    void UpdatePosition()
+    {
+        if (_userSeeking) return;
+        var p = _player.Position;
+        PositionSeconds = Math.Min(p.TotalSeconds, DurationSeconds);
+        PositionText = Text.Duration(p);
+        PositionUpdated?.Invoke(p);
+    }
+
+    /// <summary>进度更新了（歌词面板跟随用）。</summary>
+    public event Action<TimeSpan>? PositionUpdated;
+}

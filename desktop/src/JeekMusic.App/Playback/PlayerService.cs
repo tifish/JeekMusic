@@ -40,6 +40,8 @@ public sealed class PlayerService : IDisposable
     public PlayQueue Queue { get; } = new();
 
     public Track? CurrentTrack { get; private set; }
+
+    public string? TrackKeyOf(long id) => _tracks.ById(id)?.TrackKey;
     public bool IsPlaying { get; private set; }
     /// <summary>mpv 还没加载任何歌（启动时、队列为空）。</summary>
     public bool IsIdle { get; private set; } = true;

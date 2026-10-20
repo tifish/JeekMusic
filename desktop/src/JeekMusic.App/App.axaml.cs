@@ -11,7 +11,12 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) desktop.MainWindow = new MainWindow();
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            var services = new AppServices { Instance = Program.Instance, Args = Program.Args };
+            var shell = new Shell(services, desktop);
+            shell.Start();
+        }
         base.OnFrameworkInitializationCompleted();
     }
 }

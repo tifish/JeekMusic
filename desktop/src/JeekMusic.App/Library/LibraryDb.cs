@@ -57,6 +57,12 @@ public sealed partial class LibraryDb : IDisposable
             sort_title TEXT NOT NULL, sort_file TEXT NOT NULL, sort_artist TEXT NOT NULL
         );
         CREATE INDEX track_folder ON track(folder_id, dir);
+        -- .cue 文件的状态：.cue 改了，同目录的整轨文件要重新解析（增量扫描用）
+        CREATE TABLE side_file (
+            folder_id INTEGER NOT NULL REFERENCES library_folder(id) ON DELETE CASCADE,
+            rel_path TEXT NOT NULL COLLATE NOCASE, mtime INTEGER NOT NULL, size INTEGER NOT NULL,
+            PRIMARY KEY(folder_id, rel_path)
+        );
         CREATE INDEX track_album ON track(album_key);
 
         CREATE TABLE track_features (

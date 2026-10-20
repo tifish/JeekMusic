@@ -5,7 +5,7 @@
 #   - 全程检查前台窗口是不是被测试程序抢走了
 #
 # 用法：
-#   pwsh tools/test-app.ps1 -Seconds 15 -Shot app.png -AppArgs 'D:\Mobile\Song'
+#   pwsh tools/test-app.ps1 -Seconds 15 -Shot app.png -AppArgs 'D:\Mobile\Song;--autoplay'
 #   pwsh tools/test-app.ps1 -Fresh -Seconds 20        # 用全新的数据目录
 param(
     [string]$Exe = "$PSScriptRoot\..\src\JeekMusic.App\bin\Debug\net10.0-windows10.0.19041.0\JeekMusic.exe",
@@ -13,7 +13,8 @@ param(
     [switch]$Fresh,
     [int]$Seconds = 10,
     [string]$Shot,
-    [string[]]$AppArgs = @(),
+    # 传给程序的参数，用分号分隔（pwsh -File 不能传数组）
+    [string]$AppArgs = "",
     [int]$LogLines = 15,
     [switch]$KeepRunning
 )
@@ -49,7 +50,7 @@ $psi = New-Object System.Diagnostics.ProcessStartInfo (Resolve-Path $Exe)
 $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
 $psi.Environment["JEEKMUSIC_DATA"] = $Data
 $psi.ArgumentList.Add('--background')
-foreach ($a in $AppArgs) { $psi.ArgumentList.Add($a) }
+foreach ($a in ($AppArgs -split ';' | Where-Object { $_ })) { $psi.ArgumentList.Add($a) }
 $p = [System.Diagnostics.Process]::Start($psi)
 $stole = 0; $samples = 0
 $deadline = (Get-Date).AddSeconds($Seconds)

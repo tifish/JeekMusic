@@ -30,7 +30,7 @@ public sealed class AppServices : IDisposable
     public SingleInstance? Instance { get; init; }
 
     /// <summary>启动参数：--tray 表示开机启动时直接隐藏到托盘；其余是要打开的文件。</summary>
-    public IReadOnlyList<string> Args { get; init; } = [];
+    public IReadOnlyList<string> Args { get; set; } = [];
 
     public AppServices()
     {

@@ -32,7 +32,7 @@ public sealed class SleepTimer
     public SleepTimer(PlayerService player)
     {
         _player = player;
-        _tick = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Tick());
+        _tick = UiTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, () => Tick());
         player.TrackCompleted += OnTrackCompleted;
     }
 

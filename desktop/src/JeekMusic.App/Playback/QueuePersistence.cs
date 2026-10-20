@@ -20,8 +20,8 @@ public sealed class QueuePersistence
     {
         _db = db;
         _player = player;
-        _debounce = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); SaveQueue(); });
-        _progress = new DispatcherTimer(TimeSpan.FromSeconds(10), DispatcherPriority.Background, (_, _) => SavePosition());
+        _debounce = UiTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, () => { _debounce!.Stop(); SaveQueue(); });
+        _progress = UiTimer(TimeSpan.FromSeconds(10), DispatcherPriority.Background, () => SavePosition());
         player.Queue.Changed += () => { _debounce.Stop(); _debounce.Start(); };
         player.StateChanged += () =>
         {

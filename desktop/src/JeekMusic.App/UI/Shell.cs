@@ -171,6 +171,12 @@ public sealed partial class Shell
 
     void OnSnapshotApplied()
     {
+        // 自动测试：曲库到了之后播放当前视图的第一首
+        if (_app.Args.Contains("--autoplay") && _main.ViewModel.Rows.FirstOrDefault(r => r.Track is not null)?.Track is { } first)
+        {
+            _app.Args = [.. _app.Args.Where(a => a != "--autoplay")];
+            _main.PlayFrom(first);
+        }
         if (_restored) return;
         _restored = true;
         _app.QueuePersistence.Restore(_app.Library.Snapshot);
@@ -204,7 +210,7 @@ public sealed partial class Shell
         _app.Player.StateChanged += UpdateSystemMedia;
         _app.Player.TrackChanged += _ => UpdateSystemMedia(trackChanged: true);
         _app.Player.Seeked += () => UpdateSystemMedia();
-        _progressTimer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => UpdateTaskbarProgress());
+        _progressTimer = UiTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, () => UpdateTaskbarProgress());
     }
 
     DispatcherTimer? _progressTimer;

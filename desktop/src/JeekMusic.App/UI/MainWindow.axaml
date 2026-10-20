@@ -114,7 +114,7 @@
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="标题" Binding="{Binding Title}" Width="3*" Tag="Title" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="艺术家" Binding="{Binding Artist}" Width="2*" Tag="Artist" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="专辑" Binding="{Binding Album}" Width="2*" Tag="Album" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="时长" Binding="{Binding Duration}" Width="64" Tag="Duration" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="时长" Binding="{Binding Duration}" Width="76" Tag="Duration" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="文件名" Binding="{Binding FileName}" Width="2*" Tag="FileName" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="修改时间" Binding="{Binding Modified}" Width="130" Tag="Modified" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="格式" Binding="{Binding Format}" Width="96" Tag="Format" />

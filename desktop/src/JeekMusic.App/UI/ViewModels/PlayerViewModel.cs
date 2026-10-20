@@ -27,11 +27,11 @@ public sealed partial class PlayerViewModel : ObservableObject
         _player = player;
         _sleep = sleep;
         _settings = settings;
-        _progress = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => UpdatePosition());
+        _progress = UiTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, () => UpdatePosition());
         player.StateChanged += OnState;
         player.TrackChanged += _ => OnTrack();
         player.Seeked += UpdatePosition;
-        player.OutputChanged += () => OnPropertyChanged(nameof(FormatText));
+        player.OutputChanged += () => { OnPropertyChanged(nameof(FormatText)); OnPropertyChanged(nameof(VolumeAvailable)); };
         sleep.Changed += () => { OnPropertyChanged(nameof(SleepActive)); OnPropertyChanged(nameof(SleepText)); };
         _volume = settings.Current.Volume;
         _muted = settings.Current.Muted;

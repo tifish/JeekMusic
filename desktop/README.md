@@ -9,4 +9,4 @@
 - 标签：TagLib#；智能标签：ONNX Runtime 跑 YAMNet
 - 与移动端互通：读写同一份 `.jeekmusic/backup.json`；艺术家拆分、文件名推断、CUE、LRC 等规则用两端共用的测试用例保证一致
 
-需求和设计文档定稿后放在 `desktop/docs/`。`spike/`（界面）和 `spike-audio/`（播放内核）是技术验证用的一次性工程。
+需求见 [docs/requirements.md](docs/requirements.md)（草案），设计文档待写。`spike/`（界面）和 `spike-audio/`（播放内核）是技术验证用的一次性工程。

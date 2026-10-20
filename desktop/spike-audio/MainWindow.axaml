@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="JeekMusic.AudioSpike.MainWindow"
+        Title="JeekMusic 播放内核验证" Width="900" Height="640">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10">
+            <Button x:Name="OpenButton">打开文件夹</Button>
+            <CheckBox x:Name="ExclusiveBox">WASAPI 独占</CheckBox>
+            <TextBlock VerticalAlignment="Center">无缝播放</TextBlock>
+            <ComboBox x:Name="GaplessBox" SelectedIndex="0">
+                <ComboBoxItem>weak（默认）</ComboBoxItem>
+                <ComboBoxItem>yes</ComboBoxItem>
+                <ComboBoxItem>no</ComboBoxItem>
+            </ComboBox>
+            <TextBlock VerticalAlignment="Center">音量</TextBlock>
+            <Slider x:Name="VolumeSlider" Width="140" Minimum="0" Maximum="100" Value="100" />
+            <TextBlock x:Name="VolumeText" VerticalAlignment="Center" Width="140" />
+        </StackPanel>
+        <TextBlock x:Name="FolderText" DockPanel.Dock="Top" Margin="0,8" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
+            <TextBlock x:Name="NowPlaying" FontSize="16" TextTrimming="CharacterEllipsis" />
+            <DockPanel>
+                <TextBlock x:Name="TimeText" DockPanel.Dock="Right" Width="110" TextAlignment="Right" VerticalAlignment="Center" />
+                <Slider x:Name="PositionSlider" Minimum="0" Maximum="1" />
+            </DockPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="PrevButton">上一首</Button>
+                <Button x:Name="PlayButton" Width="80">播放</Button>
+                <Button x:Name="NextButton">下一首</Button>
+            </StackPanel>
+            <TextBlock x:Name="FormatText" Opacity="0.8" TextWrapping="Wrap" />
+            <TextBlock x:Name="StatsText" Opacity="0.6" />
+        </StackPanel>
+
+        <ListBox x:Name="TrackList" />
+    </DockPanel>
+</Window>

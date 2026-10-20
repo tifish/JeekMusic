@@ -26,7 +26,7 @@ import com.tinyfish.jeekmusic.data.settings.LowPowerMode
  * **不在一首歌播放到一半时切换**：切换 offload 要重建音频输出，正在出声时会听到短暂的中断（需求 P-12）。
  * 需要切换时先记下来，等到本来就会断开或换歌的时候再切：暂停 / 停止、用户拖动进度或切歌、自动播放到下一首。
  */
-class OffloadController(private val context: Context, private val player: Player) {
+class OffloadController(private val context: Context, private val player: Player, private val log: PlaybackLog) {
 
     var mode: LowPowerMode = LowPowerMode.BACKGROUND
         set(value) {
@@ -48,7 +48,7 @@ class OffloadController(private val context: Context, private val player: Player
         apply("error", atBoundary = true)
     }
 
-    /** 发现 offload 下提前换歌（需求 P-14）：服务运行期间改用普通播放，重启后恢复。 */
+    /** 发现 offload 下进度超前、提前换歌（需求 P-14）：马上改用普通播放，服务运行期间不再用。 */
     fun disableForSession() {
         disabledForSession = true
         apply("early transition", atBoundary = true)
@@ -135,7 +135,7 @@ class OffloadController(private val context: Context, private val player: Player
             Log.i(TAG, "offload ${if (wanted) "on" else "off"} deferred ($reason)")
             return
         }
-        Log.i(TAG, "offload ${if (wanted) "on" else "off"} ($reason)")
+        log.add("offload ${if (wanted) "requested" else "not requested"} ($reason, mode $mode, screen ${if (screenOn) "on" else "off"}, ${if (appForeground) "foreground" else "background"})")
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setAudioOffloadPreferences(preferences)
             .build()

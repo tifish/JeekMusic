@@ -27,6 +27,7 @@ import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
 import com.tinyfish.jeekmusic.data.library.PlayingFiles
+import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -89,8 +90,12 @@ class PlaybackService : MediaLibraryService() {
             publishExtras()
             scope.launch { persistence.saveContext(context) }
         }
-        offload = OffloadController(this, player).also { it.start() }
-        diagnostics = PlaybackDiagnostics(player, offload, playbackLog).also { it.start() }
+        offload = OffloadController(this, player, playbackLog).also { it.start() }
+        // 这台设备的 offload 不可靠：马上改用普通播放，并把"低功耗播放"设为关闭（需求 P-14）
+        diagnostics = PlaybackDiagnostics(player, playbackLog, scope) {
+            offload.disableForSession()
+            scope.launch { settings.setLowPowerMode(LowPowerMode.OFF) }
+        }.also { it.start() }
         scope.launch { settings.settings.collect { offload.mode = it.lowPowerMode } }
 
         player.addListener(PersistenceListener(player))

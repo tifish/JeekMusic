@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:JeekMusic.Spike"
+        x:Class="JeekMusic.Spike.MainWindow"
+        Title="JeekMusic 桌面端验证" Width="1100" Height="700"
+        TransparencyLevelHint="Mica" Background="Transparent">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10">
+            <TextBox x:Name="Search" Width="320" PlaceholderText="搜索（用微软拼音测试输入法）" />
+            <ComboBox x:Name="ThemeBox" SelectedIndex="0">
+                <ComboBoxItem>跟随系统</ComboBoxItem>
+                <ComboBoxItem>浅色</ComboBoxItem>
+                <ComboBoxItem>深色</ComboBoxItem>
+            </ComboBox>
+            <ComboBox x:Name="FontBox" SelectedIndex="0">
+                <ComboBoxItem>默认字体</ComboBoxItem>
+                <ComboBoxItem>Microsoft YaHei UI</ComboBoxItem>
+            </ComboBox>
+            <CheckBox x:Name="MicaBox" IsChecked="True">Mica</CheckBox>
+            <Button x:Name="PlayButton">播放选中的歌（SMTC）</Button>
+        </StackPanel>
+        <TextBlock x:Name="Status" DockPanel.Dock="Bottom" Margin="12,6" Opacity="0.75" />
+        <DataGrid x:Name="Grid" IsReadOnly="True" CanUserSortColumns="True" CanUserResizeColumns="True"
+                  CanUserReorderColumns="True" SelectionMode="Extended" GridLinesVisibility="None">
+            <DataGrid.Columns>
+                <DataGridTextColumn x:DataType="local:Track" Header="标题" Binding="{Binding Title}" Width="3*" />
+                <DataGridTextColumn x:DataType="local:Track" Header="艺术家" Binding="{Binding Artist}" Width="2*" />
+                <DataGridTextColumn x:DataType="local:Track" Header="专辑" Binding="{Binding Album}" Width="2*" />
+                <DataGridTextColumn x:DataType="local:Track" Header="时长" Binding="{Binding Duration}" Width="70" />
+                <DataGridTextColumn x:DataType="local:Track" Header="文件夹" Binding="{Binding Folder}" Width="2*" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

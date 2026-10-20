@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using JeekMusic.Library;
 using JeekMusic.UI.ViewModels;
 

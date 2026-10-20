@@ -55,6 +55,17 @@ public sealed partial class Shell
         _app.Instance?.Listen();
 
         var startHidden = _app.Args.Contains("--tray");
+        // 自动测试时不打扰正在用电脑的人：不激活、不进任务栏、放到所有窗口后面（tech-spike.md"用法"一节）
+        if (_app.Args.Contains("--background"))
+        {
+            _main.ShowActivated = false;
+            _main.ShowInTaskbar = false;
+            _main.Opened += (_, _) =>
+            {
+                if (_main.TryGetPlatformHandle()?.Handle is { } hwnd)
+                    Win32.SetWindowPos(hwnd, 1 /* HWND_BOTTOM */, 0, 0, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOMOVE | Win32.SWP_NOACTIVATE);
+            };
+        }
         if (!startHidden) _main.Show();
         else Dispatcher.UIThread.Post(OnFirstShown, DispatcherPriority.Background);
     }

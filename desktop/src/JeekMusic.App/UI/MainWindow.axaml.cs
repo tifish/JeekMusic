@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using JeekMusic.Core.Queue;
 using JeekMusic.Library;
 using JeekMusic.Settings;

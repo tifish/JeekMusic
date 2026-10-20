@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using JeekMusic.Core.Library;
 using JeekMusic.Library;
 using JeekMusic.Platform;

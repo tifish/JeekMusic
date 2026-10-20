@@ -77,12 +77,12 @@ public sealed partial class Shell
 
     partial void AddTrayExtras(NativeMenu menu)
     {
-        var lyrics = new NativeMenuItem("桌面歌词") { ToggleType = NativeMenuItemToggleType.CheckBox, IsChecked = DesktopLyricsVisible };
+        var lyrics = new NativeMenuItem("桌面歌词") { ToggleType = MenuItemToggleType.CheckBox, IsChecked = DesktopLyricsVisible };
         lyrics.Click += (_, _) => SetDesktopLyrics(!DesktopLyricsVisible);
         menu.Add(lyrics);
         if (DesktopLyricsVisible)
         {
-            var locked = new NativeMenuItem("锁定桌面歌词") { ToggleType = NativeMenuItemToggleType.CheckBox, IsChecked = _desktopLyrics!.Locked };
+            var locked = new NativeMenuItem("锁定桌面歌词") { ToggleType = MenuItemToggleType.CheckBox, IsChecked = _desktopLyrics!.Locked };
             locked.Click += (_, _) => ToggleDesktopLyricsLock();
             menu.Add(locked);
         }
@@ -109,7 +109,7 @@ public sealed partial class Shell
     /// </summary>
     partial void OpenFiles(IReadOnlyList<string> files)
     {
-        ShowMainWindow();
+        if (!_app.Args.Contains("--background")) ShowMainWindow();
         var snapshot = _app.Library.Snapshot;
         var ids = new List<long>();
         var outside = 0;
@@ -135,6 +135,9 @@ public sealed partial class Shell
 
     partial void AfterStartup()
     {
+        // 命令行里的文件和文件夹：文件直接播放，文件夹添加为音乐文件夹（需求 PC-7）
+        var paths = _app.Args.Where(a => !a.StartsWith("--", StringComparison.Ordinal) && (File.Exists(a) || Directory.Exists(a))).ToList();
+        if (paths.Count > 0) OpenFiles(paths);
         if (_app.Settings.Current.DesktopLyricsVisible) SetDesktopLyrics(true);
         StartBackgroundServices();
     }

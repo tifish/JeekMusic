@@ -34,7 +34,7 @@ public sealed class DesktopLyricsWindow : Window
         _player = player;
         _lyrics = lyrics;
         _settings = settings;
-        SystemDecorations = SystemDecorations.None;
+        SystemDecorations = WindowDecorations.None;
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         Topmost = true;

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using JeekMusic.Library;
 
 namespace JeekMusic.UI;
@@ -48,7 +49,7 @@ static class DataGridExtensions
         grid.Tag = "header-menu";
         grid.AddHandler(Control.ContextRequestedEvent, (_, e) =>
         {
-            if (e.Source is not Avalonia.Visual v || v.FindAncestorOfType<Avalonia.Controls.Primitives.DataGridColumnHeader>(includeSelf: true) is null) return;
+            if (e.Source is not Avalonia.Visual v || v.FindAncestorOfType<DataGridColumnHeader>(includeSelf: true) is null) return;
             var menu = new ContextMenu();
             foreach (var c in grid.Columns)
             {

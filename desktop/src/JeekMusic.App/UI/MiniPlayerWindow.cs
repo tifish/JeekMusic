@@ -25,20 +25,20 @@ public sealed class MiniPlayerWindow : Window
         Height = 112;
         CanResize = false;
         Topmost = topmost;
-        SystemDecorations = SystemDecorations.BorderOnly;
+        SystemDecorations = WindowDecorations.BorderOnly;
         ExtendClientAreaToDecorationsHint = true;
         TransparencyLevelHint = [WindowTransparencyLevel.Mica, WindowTransparencyLevel.AcrylicBlur];
         Background = Brushes.Transparent;
         Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://JeekMusic/Assets/JeekMusic.ico")));
 
-        Button Icon(string glyph, string tip, string command, double size = 16)
+        Button IconButton(string glyph, string tip, string command, double size = 16)
         {
             var b = new Button { Classes = { "icon" }, FontSize = size, Content = glyph };
             ToolTip.SetTip(b, tip);
             b.Bind(Button.CommandProperty, new Binding(command));
             return b;
         }
-        var play = Icon(Icons.Play, "播放 / 暂停", nameof(PlayerViewModel.PlayPauseCommand), 20);
+        var play = IconButton(Icons.Play, "播放 / 暂停", nameof(PlayerViewModel.PlayPauseCommand), 20);
         play.Bind(ContentProperty, new Binding(nameof(PlayerViewModel.PlayIcon)));
         var restore = new Button { Classes = { "icon" }, Content = Icons.Expand };
         ToolTip.SetTip(restore, "回到主窗口");
@@ -61,7 +61,7 @@ public sealed class MiniPlayerWindow : Window
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { Icon(Icons.Previous, "上一首", nameof(PlayerViewModel.PreviousCommand)), play, Icon(Icons.Next, "下一首", nameof(PlayerViewModel.NextCommand)), pin, restore },
+            Children = { IconButton(Icons.Previous, "上一首", nameof(PlayerViewModel.PreviousCommand)), play, IconButton(Icons.Next, "下一首", nameof(PlayerViewModel.NextCommand)), pin, restore },
         };
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Thickness(10, 10, 10, 4) };
         var coverBox = new Border { Width = 64, Height = 64, CornerRadius = new CornerRadius(4), ClipToBounds = true, Child = cover, Background = new SolidColorBrush(Color.FromArgb(30, 128, 128, 128)) };

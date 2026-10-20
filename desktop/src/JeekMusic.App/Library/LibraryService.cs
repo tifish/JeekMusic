@@ -46,7 +46,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
         _scanner.Progress += (done, total) => Dispatcher.UIThread.Post(() => ScanProgress?.Invoke(done, total));
         Watcher.DirsChanged += (id, dirs) => _ = Enqueue(() => ScanFolder(id, dirs, full: false));
         Watcher.SyncChanged += id => SyncFolderChanged?.Invoke(id);
-        Watcher.Failed += _ => _ = Enqueue(RefreshVolumesCore);
+        Watcher.Failed += failedId => { _ = Enqueue(RefreshVolumesCore); };
     }
 
     public ScanConfig CurrentConfig()

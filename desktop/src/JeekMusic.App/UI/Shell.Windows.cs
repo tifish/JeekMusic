@@ -139,9 +139,6 @@ public sealed partial class Shell
         var paths = _app.Args.Where(a => !a.StartsWith("--", StringComparison.Ordinal) && (File.Exists(a) || Directory.Exists(a))).ToList();
         if (paths.Count > 0) OpenFiles(paths);
         if (_app.Settings.Current.DesktopLyricsVisible) SetDesktopLyrics(true);
-        StartBackgroundServices();
+        Features.StartAll(_app, this);
     }
-
-    /// <summary>同步、智能标签、在线获取、检查更新（各功能的 partial 里实现）。</summary>
-    partial void StartBackgroundServices();
 }

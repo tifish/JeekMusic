@@ -149,7 +149,7 @@ strip --strip-unneeded "$OUT/libmpv-2.dll"
 log "检查依赖的 DLL"
 imports="$(objdump -p "$OUT/libmpv-2.dll" | sed -n 's/^\s*DLL Name: //p' | sort -u)"
 echo "$imports"
-bad="$(echo "$imports" | grep -viE '^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|uuid|winmm|avrt|ws2_32|bcrypt|crypt32|secur32|shlwapi|version|ntdll|dwrite|imm32|comdlg32|setupapi|ksuser|propsys|mf|mfplat|mfuuid|dxgi|d3d11|dbghelp|psapi|userenv|api-ms-win-.*|ucrtbase|msvcrt)\.dll$' || true)"
+bad="$(echo "$imports" | grep -viE '^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|uuid|winmm|avrt|ws2_32|bcrypt|crypt32|secur32|shlwapi|version|ntdll|dwrite|dwmapi|shcore|uxtheme|imm32|comdlg32|setupapi|ksuser|propsys|mf|mfplat|mfuuid|dxgi|d3d11|dbghelp|psapi|userenv|api-ms-win-.*|ucrtbase|msvcrt)\.dll$' || true)"
 if [ -n "$bad" ]; then
     echo "依赖了不该依赖的 DLL：$bad"
     exit 1
@@ -196,7 +196,7 @@ cp "$SRC/freetype/docs/FTL.TXT" "$PKG/licenses/freetype-FTL.TXT"
 } > "$PKG/BUILDINFO.txt"
 cat "$PKG/BUILDINFO.txt"
 (cd "$PKG" && rm -f "$OUT/libmpv-lgpl-x86_64.zip" && zip -qr "$OUT/libmpv-lgpl-x86_64.zip" .)
-tar --exclude=.git --exclude=_build -cJf "$OUT/sources-lgpl.tar.xz" -C "$SRC" mpv ffmpeg libplacebo fribidi -C "$here" build.sh versions.sh
+tar --exclude=.git --exclude=_build --exclude='*.o' --exclude='*.a' --exclude='*.dll' --exclude='*.exe' -cJf "$OUT/sources-lgpl.tar.xz" -C "$SRC" mpv ffmpeg libplacebo fribidi libass freetype harfbuzz -C "$here" build.sh versions.sh
 cp "$PKG/BUILDINFO.txt" "$OUT/"
 ls -la "$OUT"
 endlog

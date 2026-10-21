@@ -115,7 +115,7 @@ if ! built harfbuzz "$HARFBUZZ_REF"; then
 fi
 if ! built libass "$LIBASS_REF"; then
     log "编译 libass"
-    meson_static libass --auto-features=disabled -Ddirectwrite=enabled -Dasm=enabled -Drequire-system-font-provider=false -Dtest=false
+    meson_static libass --auto-features=disabled -Ddirectwrite=enabled -Dasm=enabled -Drequire-system-font-provider=false -Dtest=disabled
     done_ libass "$LIBASS_REF"; endlog
 fi
 
@@ -132,7 +132,7 @@ MPV_ARGS=(
     --prefix="$WORK/mpv-install" --libdir=lib --buildtype=release --prefer-static --default-library=shared
     --wrap-mode=nodownload --auto-features=disabled
     -Dgpl=false -Dlibmpv=true -Dcplayer=false -Dtests=false -Dfuzzers=false -Dbuild-date=false
-    -Dwasapi=enabled -Dwin32-threads=enabled -Dvector=enabled
+    -Dwasapi=enabled -Dwin32-threads=enabled -Dvector=enabled -Dgl=disabled
     "-Dc_link_args=-static -static-libgcc -static-libstdc++"
 )
 rm -rf "$SRC/mpv/_build"

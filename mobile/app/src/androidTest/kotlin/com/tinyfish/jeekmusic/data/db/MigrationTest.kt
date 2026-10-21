@@ -48,6 +48,37 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun migrate5To6PreservesUserDataAndAddsTransactionalSyncJournal() {
+        helper.createDatabase(DB, 5).use { db ->
+            db.execSQL("INSERT INTO playlist (id, name, created_at, updated_at) VALUES (1, 'Road trip', 10, 20)")
+            db.execSQL("INSERT INTO playlist_item (playlist_id, position, track_key) VALUES (1, 0, 'local:song'), (1, 1, 'foreign:PC only.flac')")
+            db.execSQL("INSERT INTO pinned_tab (type, ref, position) VALUES ('ARTIST', 'Test Artist', 0)")
+            db.execSQL("INSERT INTO lyrics_offset (track_key, offset_ms) VALUES ('local:song', 250)")
+            db.execSQL("INSERT INTO tag_override (track_key, dimension, value) VALUES ('local:song', 'MOOD', 'SPORT')")
+            db.execSQL("INSERT INTO queue_item (position, track_key) VALUES (0, 'local:song')")
+        }
+        helper.runMigrationsAndValidate(DB, 6, true, MIGRATION_5_6).use { db ->
+            fun scalar(query: String) = db.query(query).use { c -> check(c.moveToFirst()); c.getString(0) }
+            assertEquals("Road trip", scalar("SELECT name FROM playlist WHERE id = 1"))
+            assertEquals("20", scalar("SELECT updated_at FROM playlist WHERE id = 1"))
+            assertEquals("local:song|foreign:PC only.flac", scalar("SELECT group_concat(track_key, '|') FROM (SELECT track_key FROM playlist_item ORDER BY position)"))
+            assertEquals("Test Artist", scalar("SELECT ref FROM pinned_tab"))
+            assertEquals("250", scalar("SELECT offset_ms FROM lyrics_offset"))
+            assertEquals("SPORT", scalar("SELECT value FROM tag_override"))
+            assertEquals("local:song", scalar("SELECT track_key FROM queue_item"))
+            assertEquals("0", scalar("SELECT count(*) FROM sync_journal"))
+            // A failed merge must roll back user data and its synchronization metadata together.
+            db.beginTransaction()
+            try {
+                db.execSQL("UPDATE playlist SET name = 'Interrupted' WHERE id = 1")
+                db.execSQL("INSERT INTO sync_journal (id, content) VALUES (1, '{}')")
+            } finally { db.endTransaction() }
+            assertEquals("Road trip", scalar("SELECT name FROM playlist WHERE id = 1"))
+            assertEquals("0", scalar("SELECT count(*) FROM sync_journal"))
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

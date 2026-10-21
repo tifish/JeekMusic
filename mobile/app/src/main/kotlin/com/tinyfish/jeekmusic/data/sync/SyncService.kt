@@ -139,7 +139,7 @@ class SyncService @Inject constructor(
         for (uid in previous.playlists.keys - currentLists.keys) deleted[uid] = now
         val scan = settings.current().scan
         val rules = SyncRules(scan.split.separators.sorted(), scan.split.exceptions, scan.inferFromFileName, scan.fileNameFormat.name, scan.legacyCharset?.name())
-        val nav = db.tabDao().all().map { NavRef(it.type, it.ref.takeIf(String::isNotEmpty)) }
+        val nav = SyncFormat.normalizeNavigation(db.tabDao().all().map { NavRef(it.type, it.ref.takeIf(String::isNotEmpty)) })
         val overrides = previous.tagOverrides.mapValues { it.value.toMutableMap() }.toMutableMap()
         val actual = db.tagDao().overrides().sortedBy { !it.trackKey.startsWith("foreign:") }.associate { (canonical(reference(it.trackKey, roots)) to it.dimension) to when {
             it.value != null -> it.value
@@ -248,9 +248,10 @@ class SyncService @Inject constructor(
         for ((uid, at) in result.state.deletedPlaylists) existing[uid]?.takeIf { it.updatedAt <= at }?.let { db.playlistDao().delete(it.id) }
         result.state.nav?.let { n ->
             val current = db.tabDao().all()
-            if (current.map { NavRef(it.type, it.ref.takeIf(String::isNotEmpty)) } != n.value) {
+            val normalized = SyncFormat.normalizeNavigation(n.value)
+            if (current.map { NavRef(it.type, it.ref.takeIf(String::isNotEmpty)) } != normalized) {
                 current.map { it.type }.distinct().forEach { db.tabDao().deleteType(it) }
-                db.tabDao().insert(n.value.distinct().mapIndexed { i, v -> PinnedTabEntity(type = v.type, ref = v.ref.orEmpty(), position = i) })
+                db.tabDao().insert(normalized.mapIndexed { i, v -> PinnedTabEntity(type = v.type, ref = v.ref.orEmpty(), position = i) })
             }
         }
         val existingOverrides = db.tagDao().overrides().associateBy { it.trackKey to it.dimension }

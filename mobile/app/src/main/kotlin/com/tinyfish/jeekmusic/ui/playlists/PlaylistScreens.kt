@@ -289,7 +289,7 @@ fun PlaylistDetailScreen(
                                 } else {
                                     // 文件暂时不可用：保留条目，灰色显示（需求 PL-3）
                                     Column(Modifier.fillMaxWidth().alpha(0.5f).padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                        Text(entry.item.trackKey.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(entry.item.trackKey.removePrefix("foreign:").substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(stringResource(R.string.playlist_unavailable), style = MaterialTheme.typography.bodySmall)
                                     }
                                 }

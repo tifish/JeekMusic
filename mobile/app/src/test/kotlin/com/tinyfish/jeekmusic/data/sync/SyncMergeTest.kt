@@ -12,6 +12,16 @@ import org.junit.Test
 
 /** 多设备同步的合并（需求 B-7）：两端共用的用例 shared/testcases/sync-merge.json。 */
 class SyncMergeTest {
+    @Test
+    fun partialNavigationKeepsBuiltinPagesAndCanonicalArtistKeys() {
+        val normalized = SyncFormat.normalizeNavigation(listOf(NavRef("PLAYLISTS", ""),
+            NavRef("ARTIST", " Test   Artist "), NavRef("ARTIST", "test artist"),
+            NavRef("ARTIST", " "), NavRef("UNKNOWN", null)))
+        assertEquals(listOf(NavRef("PLAYLISTS", null), NavRef("ARTIST", "test artist"),
+            NavRef("FOLDERS", null), NavRef("ARTISTS", null)), normalized)
+        assertEquals(normalized, SyncFormat.normalizeNavigation(normalized))
+        assertEquals(3, SyncFormat.normalizeNavigation(emptyList()).size)
+    }
 
     @Test
     fun normalizationKeepsNewestDimensionAndReset() {

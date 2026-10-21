@@ -44,6 +44,19 @@ data class SyncDevice(val id: String, val name: String, val platform: String, va
 data class SyncFile(val device: SyncDevice, val writtenAt: Long, val state: SyncState)
 
 object SyncFormat {
+    fun normalizeNavigation(items: List<NavRef>): List<NavRef> {
+        val builtins = listOf("FOLDERS", "ARTISTS", "PLAYLISTS")
+        val normalized = items.mapNotNull { item ->
+            when (item.type) {
+                "ARTIST" -> com.tinyfish.jeekmusic.data.scanner.ArtistSplitter.nameKey(item.ref.orEmpty())
+                    .takeIf(String::isNotEmpty)?.let { NavRef("ARTIST", it) }
+                in builtins -> NavRef(item.type, null)
+                else -> null
+            }
+        }.distinct()
+        return normalized + builtins.filter { type -> normalized.none { it.type == type } }.map { NavRef(it, null) }
+    }
+
     const val FORMAT = 2
     const val DIR = "sync"
     const val LEGACY_DEVICE_ID = "legacy-backup"

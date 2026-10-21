@@ -217,7 +217,7 @@
 
     <string name="settings_backup">备份</string>
     <string name="backup_now">立即备份</string>
-    <string name="backup_summary">播放列表、固定的标签和设置会保存到每个音乐文件夹下的 .jeekmusic/backup.json</string>
+    <string name="backup_summary">播放列表、固定的标签和曲库规则会保存到每个音乐文件夹 .jeekmusic/sync/ 下的本机文件</string>
     <string name="backup_last">上次备份：%s</string>
     <string name="backup_done">已备份</string>
     <string name="backup_failed">备份失败：没有可写入的音乐文件夹</string>

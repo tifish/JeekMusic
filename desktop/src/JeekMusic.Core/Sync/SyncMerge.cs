@@ -20,6 +20,22 @@ public static class SyncMerge
     public static IEnumerable<JsonObject> Objects(JsonNode? n) => n is JsonArray a ? a.OfType<JsonObject>() : [];
     static JsonObject Copy(JsonObject n) => (JsonObject)n.DeepClone();
     static string Id(JsonObject file) => Str(file["device"]?["id"]);
+    public static JsonArray NormalizeNavigation(JsonNode? items)
+    {
+        string[] builtins = ["FOLDERS", "ARTISTS", "PLAYLISTS"];
+        var result = new JsonArray();
+        var seen = new HashSet<(string, string?)>();
+        foreach (var item in Objects(items))
+        {
+            var type = Str(item["type"]);
+            var reference = type == "ARTIST" ? Library.ArtistSplitter.NameKey(Str(item["ref"])) : null;
+            if ((type == "ARTIST" ? string.IsNullOrEmpty(reference) : !builtins.Contains(type)) || !seen.Add((type, reference))) continue;
+            result.Add((JsonNode)new JsonObject { ["type"] = type, ["ref"] = reference });
+        }
+        foreach (var type in builtins)
+            if (seen.Add((type, null))) result.Add((JsonNode)new JsonObject { ["type"] = type, ["ref"] = null });
+        return result;
+    }
     public static JsonObject? ParseFile(string text)
     {
         try

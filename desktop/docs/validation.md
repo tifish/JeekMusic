@@ -14,8 +14,8 @@ Android 同时加入每设备同步文件、事务合并、删除记录、冲突
 
 | 项目 | 结果与边界 |
 |---|---|
-| 桌面自动化测试 | `dotnet test desktop/JeekMusic.slnx -c Release`：76 项通过（Core 62，App 14） |
-| Android 自动化测试 | 53 项单元测试通过；Debug APK 构建成功 |
+| 桌面自动化测试 | `dotnet test desktop/JeekMusic.slnx -c Release`：77 项通过（Core 63，App 14） |
+| Android 自动化测试 | 54 项单元测试通过；模拟器上 13 项设备测试通过；Debug APK 构建成功 |
 | 发布构建 | Windows x64 Native AOT 构建成功；Avalonia DataGrid 的 IL2104 / IL3053 裁剪与 AOT 警告仍存在，不能仅凭编译成功认定所有反射路径都正确 |
 | 中英文界面 | 两种语言均通过后台启动、截图检查和正常退出；英文资源键无缺失，格式占位符测试通过 |
 | 焦点 | 后台测试使用独立数据目录和 `--background`，PrintWindow 截图；最终中文测试 0/59 次焦点采样属于测试程序，正常退出成功 |
@@ -38,6 +38,30 @@ Android 同时加入每设备同步文件、事务合并、删除记录、冲突
 
 Android SAF 的同步与分析 JSON 读取在分配完整内容前限制为 32MB，避免异常文件无限分配。真实手机与 PC 经同步工具传输的端到端流程尚待设备验收。
 
+### Android 模拟器验收（2026-10-21）
+
+独立 AVD `JeekMusicAcceptance`，Android 16 / API 36.1、Google Play x86_64 镜像；测试包名 `com.tinyfish.jeekmusic.debug`。模拟器以无窗口、无扬声器输出方式运行，未使用或清除已有手机数据。桌面继续使用独立临时曲库。
+
+- 安装和覆盖安装成功；通过系统文件夹选择器授权 `Music/JeekAcceptance`，扫描出两首合成 FLAC，读取标题、艺术家、专辑和时长。点击播放后系统媒体会话显示对应歌曲，并自动进入下一首；这不验证真实扬声器或蓝牙音质。
+- 设备测试 13 项通过，新增 5→6 迁移覆盖播放列表、不可用歌曲、固定艺术家、歌词偏移、手动标签和队列保留，验证同步日志与播放列表能在同一事务中回滚。
+- 将桌面实际导出的设备 JSON 通过 ADB 传入，手机合并播放列表；存在的歌匹配本机路径，`Desktop only.flac` 保留为不可用，750ms 歌词偏移和 SPORT 手动修正正确入库。
+- 在手机 UI 将列表重命名为 `PhoneEdited`，将手机实际导出的 JSON 传回桌面；桌面名称更新，旧版本进入历史。桌面再修改并传回手机，手机历史中出现 `PhoneEdited`，点击恢复后再次导出该版本。
+- 在手机 UI 删除列表，手机导出删除记录；桌面导入后删除对应列表，两端音频文件仍存在。手机读取旧桌面文件时也未复活已经删除的列表。
+- 将模拟器设为未充电，离线清空它的测试分析记录（事前保存数据库备份），重新启动后从桌面分析文件导入两行；人声、古典、平静、能量、管弦乐和响度字段与桌面输出完全一致。验证的是共享结果直接复用，不是两种解码器自行分析得到相同分数。
+- 模拟器完整重启后，SAF 授权、两首歌曲、设备 ID 和删除记录保留；再次同步成功，已删除列表未被旧远端文件复活。同步前后对远端设备文件逐字节比较不变。
+
+本轮发现并修复：不完整的远端导航会隐藏 Android 内置页面，两端现在补齐内置项、去重并统一艺术家键；不可用条目不再暴露内部 `foreign:` 前缀；手机备份说明改为真实使用的 `.jeekmusic/sync/`。导航规范化在两端均有回归测试。
+
+传输由 ADB 复制实际设备文件完成，**不等同于 Syncthing / 网盘自身的传输与冲突验收**。本机截图、数据库快照与分析导入断言结果在 `%TEMP%/JeekMusic-acceptance-20261021/`。设备测试可通过以下命令复现（仅对测试模拟器）：
+
+```powershell
+# 在 mobile/ 下构建设备测试包
+.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest
+adb -s emulator-5580 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5580 install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
 ## 分析模型一致性
 
 使用 109 首歌曲、3270 个分析帧对比 TFLite 和 ONNX 管线，分数平均绝对误差为 **0.0002110815357971087**。其中 **2 首歌曲在 SPORT 阈值附近分类不同**；不能宣称两端逐位一致或所有分类完全相同。
@@ -50,7 +74,7 @@ Android SAF 的同步与分析 JSON 读取在分配完整内容前限制为 32MB
 
 测试机：AMD Ryzen 9 5900X、Windows 11 Pro for Workstations（build 26300），构建 SDK 为 .NET 10.0.300。
 
-最近一次无并行编译的 Native AOT 测量：
+上一轮在 SDK 10.0.300 下、无并行编译的 Native AOT 基线测量：
 
 | 指标 | 实测 | 要求与结论 |
 |---|---:|---|
@@ -66,6 +90,17 @@ Android SAF 的同步与分析 JSON 读取在分配完整内容前限制为 32MB
 
 独立列表构建的 Release/JIT 检查中，部分排序仍超过 100ms。**G-7 的全部操作 <100ms 和滚动 60fps 尚未验收**；不能将列表计算耗时等同于完整 UI 交互耗时。正式性能验收应补充真实曲库、多次独立进程启动和 UI 帧时间记录。
 
+本轮验收期间，本机 Visual Studio / .NET 更新将 SDK 从 10.0.300 换成 10.0.402（中间短暂仅能发现 10.0.113）。更新完成后 Native AOT 重建成功；关闭模拟器、停止并行编译后两次启动测得：
+
+| 本轮启动 | 窗口 | 全部行就绪 | 空闲私有内存 | 最后 5s CPU |
+|---|---:|---:|---:|---:|
+| 第一次 | 398ms | **1486ms** | 195.7MiB | 0ms |
+| 第二次 | 294ms | 764ms | 195.9MiB | 0ms |
+
+两次均正常退出，均为 0/89 次前台焦点采样。第一次表格装载超过 800ms，不能仅凭后一次通过宣称冷启动指标稳定达标；未控制系统文件缓存、安装器后台活动等因素，因此也不能把差异直接归因于 SDK。
+
+同轮 Release/JIT 列表计算检查：每列预热 3 次，再测 10 次。文件名、修改时间、标题、艺术家、专辑、时长、格式排序中位数分别为 54.5、27.7、76.1、31.8、56.7、48.3、58.3ms；最大值分别为 56.4、43.4、97.4、47.7、62.2、57.1、74.4ms。预热后的列表计算通过 100ms 检查，首次计算和完整 UI 渲染仍不在这组结果的覆盖范围内。原始样本在 `%TEMP%/JeekMusic-acceptance-20261021/sorting.json`。
+
 ## libmpv 与许可证
 
 当前原生 DLL 使用自行构建的音频版 LGPL libmpv 0.41.0，来自 [libmpv-lgpl-0.41.0-20261021-3](https://github.com/tifish/JeekMusic/releases/tag/libmpv-lgpl-0.41.0-20261021-3)。对应构建 [39602172287](https://github.com/tifish/JeekMusic/actions/runs/39602172287) 成功，Release 同时提供源码归档 `sources-lgpl.tar.xz` 与构建信息。
@@ -74,7 +109,7 @@ Android SAF 的同步与分析 JSON 读取在分配完整内容前限制为 32MB
 
 ## 尚待完成的验收
 
-- 真实五万首曲库的严格内存目标、所有排序/切换/筛选延迟及 60fps 滚动。
+- 真实五万首曲库的严格内存目标、稳定的冷启动装载时间、所有排序/切换/筛选延迟及 60fps 滚动。
 - WASAPI 独占模式在实际设备上的采样率、位深、硬件音量；默认设备切换、蓝牙和指定设备拔出。
 - 真实输出上的无缝播放、CUE 相邻音轨衔接，以及不同格式切换。
 - Windows 10 1809、不同显卡、100%–200% 和不同 DPI 的多显示器切换。

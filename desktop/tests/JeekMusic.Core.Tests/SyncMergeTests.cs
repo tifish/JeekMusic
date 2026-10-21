@@ -5,6 +5,17 @@ namespace JeekMusic.Core.Tests;
 
 public sealed class SyncMergeTests
 {
+    [Fact]
+    public void PartialNavigationKeepsBuiltinPagesAndCanonicalArtistKeys()
+    {
+        var input = JsonNode.Parse("""[{"type":"PLAYLISTS","ref":""},{"type":"ARTIST","ref":" Test   Artist "},{"type":"ARTIST","ref":"test artist"},{"type":"ARTIST","ref":" "},{"type":"UNKNOWN"}]""");
+        var normalized = SyncMerge.NormalizeNavigation(input);
+        Assert.Equal(new[] { "PLAYLISTS", "ARTIST", "FOLDERS", "ARTISTS" }, normalized.Select(n => SyncMerge.Str(n!["type"])));
+        Assert.Equal("test artist", SyncMerge.Str(normalized[1]!["ref"]));
+        Assert.True(JsonNode.DeepEquals(normalized, SyncMerge.NormalizeNavigation(normalized)));
+        Assert.Equal(3, SyncMerge.NormalizeNavigation(null).Count);
+    }
+
     [Theory]
     [InlineData("\"bad\"")]
     [InlineData("{\"song\":42}")]

@@ -115,7 +115,7 @@ public sealed class SyncFeature : IFeature
             ["infer_from_file_name"] = s.InferFromFileName, ["file_name_format"] = s.FileNameFormat, ["legacy_charset"] = s.LegacyCharset,
         } };
         state["nav"] = new JsonObject { ["updated_at"] = _app.Db.NavUpdatedAt,
-            ["items"] = new JsonArray(_app.Db.NavItems().Select(n => (JsonNode)new JsonObject { ["type"] = n.Type, ["ref"] = n.Ref }).ToArray()) };
+            ["items"] = NormalizeNavigation(new JsonArray(_app.Db.NavItems().Select(n => (JsonNode)new JsonObject { ["type"] = n.Type, ["ref"] = n.Ref }).ToArray())) };
         state["playlists"] = new JsonArray(_app.Db.Playlists().Select(p => (JsonNode)new JsonObject
         {
             ["uid"] = p.Uid, ["name"] = p.Name, ["updated_at"] = p.UpdatedAt,
@@ -293,7 +293,7 @@ public sealed class SyncFeature : IFeature
                 db.Exec("DELETE FROM lyrics_offset WHERE track_key = $k", null, ("$k", key));
             }
             if (state["nav"] is { } nav && Number(nav["updated_at"]) > db.NavUpdatedAt)
-                db.SetNavItems(Objects(nav["items"]).Select(n => new NavItem(Str(n["type"]), n["ref"]?.GetValue<string>())).ToList(), Number(nav["updated_at"]));
+                db.SetNavItems(Objects(NormalizeNavigation(nav["items"])).Select(n => new NavItem(Str(n["type"]), n["ref"]?.GetValue<string>())).ToList(), Number(nav["updated_at"]));
             if (state["rules"] is { } rules && Number(rules["updated_at"]) > _app.Settings.Current.RulesUpdatedAt)
             {
                 var s = _app.Settings.Current; var r = rules["value"]!;

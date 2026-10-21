@@ -222,7 +222,7 @@
 
     <string name="settings_backup">Backup</string>
     <string name="backup_now">Back up now</string>
-    <string name="backup_summary">Playlists, pinned tabs and settings are saved to .jeekmusic/backup.json in every music folder</string>
+    <string name="backup_summary">Playlists, pinned tabs and library rules are saved in this device’s file under .jeekmusic/sync/ in every music folder</string>
     <string name="backup_last">Last backup: %s</string>
     <string name="backup_done">Backup saved</string>
     <string name="backup_failed">Backup failed: no writable music folder</string>

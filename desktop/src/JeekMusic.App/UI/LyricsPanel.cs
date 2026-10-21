@@ -31,7 +31,7 @@ public sealed class LyricsPanel : UserControl
     readonly Border _locator;
     readonly TextBlock _locatorTime = new() { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
     readonly StackPanel _empty;
-    readonly Button _searchButton = new() { Content = "搜索歌词", HorizontalAlignment = HorizontalAlignment.Center };
+    readonly Button _searchButton = new() { Content = L.T("搜索歌词"), HorizontalAlignment = HorizontalAlignment.Center };
     readonly TextBlock _offsetText = new() { FontSize = 12, Opacity = 0.65, VerticalAlignment = VerticalAlignment.Center };
     Track? _track;
     FoundLyrics? _found;
@@ -77,7 +77,7 @@ public sealed class LyricsPanel : UserControl
         _empty = new StackPanel
         {
             Spacing = 12, VerticalAlignment = VerticalAlignment.Center, IsVisible = false,
-            Children = { new TextBlock { Text = "暂无歌词", Opacity = 0.6, HorizontalAlignment = HorizontalAlignment.Center }, _searchButton },
+            Children = { new TextBlock { Text = L.T("暂无歌词"), Opacity = 0.6, HorizontalAlignment = HorizontalAlignment.Center }, _searchButton },
         };
 
         Button Small(string text, string tip, Action action)
@@ -92,8 +92,8 @@ public sealed class LyricsPanel : UserControl
             Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 4,
             Children =
             {
-                Small("−0.5s", "歌词提前 0.5 秒", () => ChangeOffset(-500)), _offsetText, Small("+0.5s", "歌词推后 0.5 秒", () => ChangeOffset(500)),
-                Small("整页", "切换整页 / 侧栏", () => FullPageToggled?.Invoke()),
+                Small("−0.5s", L.T("歌词提前 0.5 秒"), () => ChangeOffset(-500)), _offsetText, Small("+0.5s", L.T("歌词推后 0.5 秒"), () => ChangeOffset(500)),
+                Small(L.T("整页"), L.T("切换整页 / 侧栏"), () => FullPageToggled?.Invoke()),
             },
         };
 

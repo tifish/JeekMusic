@@ -69,49 +69,49 @@ public partial class MainWindow
         {
             case NavKind.Folder:
                 var source = new QueueSource.Folder(node.FolderId, node.Dir, true);
-                Add("播放全部（含子文件夹）", () => PlaySource(source, node.Title, shuffle: false));
-                Add("随机播放（含子文件夹）", () => PlaySource(source, node.Title, shuffle: true));
-                Add("全部添加到队列", () => _app.Player.AddToQueue(ListBuilder.Tracks(_app.Library.Snapshot, source, _app.Settings.Current, _app.Playlists).Select(t => t.Id).ToList()));
-                Add("在资源管理器中打开", () => OpenFolder(node));
+                Add(L.T("播放全部（含子文件夹）"), () => PlaySource(source, node.Title, shuffle: false));
+                Add(L.T("随机播放（含子文件夹）"), () => PlaySource(source, node.Title, shuffle: true));
+                Add(L.T("全部添加到队列"), () => _app.Player.AddToQueue(ListBuilder.Tracks(_app.Library.Snapshot, source, _app.Settings.Current, _app.Playlists).Select(t => t.Id).ToList()));
+                Add(L.T("在资源管理器中打开"), () => OpenFolder(node));
                 if (node.IsFolderRoot)
                 {
                     menu.Items.Add(new Separator());
-                    Add("移除音乐文件夹…", async () =>
+                    Add(L.T("移除音乐文件夹…"), async () =>
                     {
                         var f = _app.Library.Snapshot.Folder(node.FolderId);
-                        if (f is not null && await Dialogs.Confirm(this, "移除音乐文件夹", $"移除「{f.Root.TrimEnd('\\')}」？其中的歌会从曲库消失，播放列表里的条目保留并显示为不可用。文件不会被删除。", "移除", danger: true))
+                        if (f is not null && await Dialogs.Confirm(this, L.T("移除音乐文件夹"), L.F($"移除「{f.Root.TrimEnd('\\')}」？其中的歌会从曲库消失，播放列表里的条目保留并显示为不可用。文件不会被删除。"), L.T("移除"), danger: true))
                             await _app.Library.RemoveFolderAsync(f.Id);
                     });
                 }
                 break;
             case NavKind.Folders:
-                Add("添加音乐文件夹…", () => _ = AddFolder());
-                Add("重新扫描", () => { _ = _app.Library.RescanAsync(false); _vm.ShowToast("正在重新扫描"); });
+                Add(L.T("添加音乐文件夹…"), () => _ = AddFolder());
+                Add(L.T("重新扫描"), () => { _ = _app.Library.RescanAsync(false); _vm.ShowToast(L.T("正在重新扫描")); });
                 break;
             case NavKind.Playlists:
-                Add("新建播放列表…", async () =>
+                Add(L.T("新建播放列表…"), async () =>
                 {
-                    if (await Dialogs.Prompt(this, "新建播放列表", "名称", "新建播放列表") is { } name) _app.Playlists.Create(name);
+                    if (await Dialogs.Prompt(this, L.T("新建播放列表"), L.T("名称"), L.T("新建播放列表")) is { } name) _app.Playlists.Create(name);
                 });
                 AddPlaylistsExtras(menu);
                 break;
             case NavKind.Playlist:
-                Add("播放", () => PlaySource(new QueueSource.Playlist(node.PlaylistId), node.Title, shuffle: false));
-                Add("随机播放", () => PlaySource(new QueueSource.Playlist(node.PlaylistId), node.Title, shuffle: true));
-                Add("重命名…", async () =>
+                Add(L.T("播放"), () => PlaySource(new QueueSource.Playlist(node.PlaylistId), node.Title, shuffle: false));
+                Add(L.T("随机播放"), () => PlaySource(new QueueSource.Playlist(node.PlaylistId), node.Title, shuffle: true));
+                Add(L.T("重命名…"), async () =>
                 {
-                    if (await Dialogs.Prompt(this, "重命名播放列表", "名称", node.Title) is { } name) _app.Playlists.Rename(node.PlaylistId, name);
+                    if (await Dialogs.Prompt(this, L.T("重命名播放列表"), L.T("名称"), node.Title) is { } name) _app.Playlists.Rename(node.PlaylistId, name);
                 });
                 AddPlaylistNodeExtras(menu, node.PlaylistId);
-                Add("删除…", async () =>
+                Add(L.T("删除…"), async () =>
                 {
-                    if (await Dialogs.Confirm(this, "删除播放列表", $"删除播放列表「{node.Title}」？歌曲文件不会被删除。", "删除", danger: true))
+                    if (await Dialogs.Confirm(this, L.T("删除播放列表"), L.F($"删除播放列表「{node.Title}」？歌曲文件不会被删除。"), L.T("删除"), danger: true))
                         _app.Playlists.Delete(node.PlaylistId);
                 });
                 break;
             case NavKind.PinnedArtist:
-                Add("播放全部", () => PlaySource(new QueueSource.Artist(node.ArtistKey), node.Title, shuffle: false));
-                Add("取消固定", () => TogglePin(node.ArtistKey));
+                Add(L.T("播放全部"), () => PlaySource(new QueueSource.Artist(node.ArtistKey), node.Title, shuffle: false));
+                Add(L.T("取消固定"), () => TogglePin(node.ArtistKey));
                 break;
         }
         if (node.IsTopLevel)
@@ -119,8 +119,8 @@ public partial class MainWindow
             menu.Items.Add(new Separator());
             var order = _vm.NavOrder();
             var index = order.FindIndex(i => i.Type == node.Item!.Type && i.Ref == node.Item.Ref);
-            Add("上移", () => MoveNav(index, index - 1), index > 0);
-            Add("下移", () => MoveNav(index, index + 1), index >= 0 && index < order.Count - 1);
+            Add(L.T("上移"), () => MoveNav(index, index - 1), index > 0);
+            Add(L.T("下移"), () => MoveNav(index, index + 1), index >= 0 && index < order.Count - 1);
         }
         e.Handled = true;
         menu.Open(NavTree);
@@ -222,7 +222,7 @@ public partial class MainWindow
             var snapshot = _app.Library.Snapshot;
             var tracks = ids.Split(',').Select(s => long.TryParse(s, out var id) ? snapshot.ById.GetValueOrDefault(id) : null).OfType<Track>().ToList();
             var n = _app.Playlists.Add(node.PlaylistId, tracks);
-            _vm.ShowToast($"已添加 {n} 首到「{node.Title}」");
+            _vm.ShowToast(L.F($"已添加 {n} 首到「{node.Title}」"));
         }
         else if (node is { Item: { } target } && e.DataTransfer.TryGetValue(NavFormat) is { } moving)
         {

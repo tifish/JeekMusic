@@ -51,18 +51,11 @@ jobs:
           count=$(git rev-list --count HEAD)
           echo "VERSION=1.0.$count" >> "$GITHUB_ENV"
 
-      # 正式发布用自己编的 LGPL 音频专用 libmpv（libmpv.yml 编译，desktop/docs/design.md §15.3）；
-      # 还没有时退回 shinchiro 的现成版本（GPL），并在更新说明里注明
-      - name: libmpv
-        run: |
-          if grep -q -- "--lgpl" desktop/tools/get-libmpv.sh && bash desktop/tools/get-libmpv.sh --lgpl; then
-            echo "LIBMPV=LGPL" >> "$GITHUB_ENV"
-          else
-            bash desktop/tools/get-libmpv.sh
-            echo "LIBMPV=GPL" >> "$GITHUB_ENV"
-          fi
+      # 发布必须携带自编译的 LGPL 内核；下载或校验失败时停止构建。
+      - name: libmpv (LGPL)
+        run: bash desktop/tools/get-libmpv.sh --lgpl
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test
         run: dotnet test desktop/JeekMusic.slnx -c Release
@@ -73,6 +66,7 @@ jobs:
           export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
           dotnet publish desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 \
             -p:JeekVersion=$VERSION -o publish/JeekMusic
+          python desktop/tools/collect-licenses.py publish/JeekMusic
           rm -f publish/JeekMusic/*.pdb
           ls -la publish/JeekMusic
 
@@ -96,9 +90,7 @@ jobs:
           last=$(git describe --tags --abbrev=0 --match 'desktop-v*' HEAD 2>/dev/null || true)
           if [ -n "$last" ]; then range="$last..HEAD"; else range="-20"; fi
           git log --no-merges --pretty='- %s' $range -- desktop shared > release-notes.md
-          if [ "$LIBMPV" = "GPL" ]; then
-            printf '\n> 这个版本附带的 libmpv 是 shinchiro/mpv-winbuild-cmake 的现成版本（GPL，源码见 https://github.com/shinchiro/mpv-winbuild-cmake ）。\n' >> release-notes.md
-          fi
+
 
       - uses: softprops/action-gh-release@v3
         if: env.PUBLISH == 'true'

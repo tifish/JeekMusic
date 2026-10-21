@@ -29,7 +29,7 @@ public sealed partial class SongRow : ObservableObject
     public bool Available => Track is not null;
 
     public string Number => Track?.TrackNo?.ToString() ?? "";
-    public string Title => Track?.Title ?? (MissingRef is { } r ? Path.GetFileNameWithoutExtension(r.Split('#')[0]) : "（不可用）");
+    public string Title => Track?.Title ?? (MissingRef is { } r ? Path.GetFileNameWithoutExtension(r.Split('#')[0]) : L.T("（不可用）"));
     public string Artist => Track is { } t ? Text.Artist(t) : "";
     public string Album => Track?.Album ?? "";
     public string Duration => Track is { } t ? Text.Duration(t.DurationMs) : "";

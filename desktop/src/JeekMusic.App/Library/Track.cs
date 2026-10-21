@@ -58,14 +58,16 @@ public sealed class Track
     /// <summary>实际的音频文件名（CUE 虚拟歌曲是整轨文件）；完整路径要加上音乐文件夹的当前根目录。</summary>
     public string RelativePath => Dir + FileName;
 
+    string? _formatLabel;
     public string FormatLabel
     {
         get
         {
+            if (_formatLabel is not null) return _formatLabel;
             var codec = Codec?.ToUpperInvariant() ?? Path.GetExtension(FileName).TrimStart('.').ToUpperInvariant();
             if (BitsPerSample is > 16 || SampleRate is > 48000)
-                return $"{codec} {BitsPerSample ?? 16}/{(SampleRate ?? 44100) / 1000.0:0.#}";
-            return codec;
+                return _formatLabel = $"{codec} {BitsPerSample ?? 16}/{(SampleRate ?? 44100) / 1000.0:0.#}";
+            return _formatLabel = codec;
         }
     }
 }

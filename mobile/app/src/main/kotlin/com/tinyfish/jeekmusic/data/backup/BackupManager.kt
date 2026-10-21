@@ -71,7 +71,7 @@ private val Context.backupStore by preferencesDataStore(name = "backup")
 
 /**
  * 数据备份（需求 B-1 ~ B-6，docs/design.md §3.1）：
- * 播放列表、固定标签、设置导出为 JSON，写入每个音乐文件夹下的 .jeekmusic/backup.json。
+ * 兼容旧备份导入；自动备份由 SyncService 写入每台设备独立的同步文件。
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -86,6 +86,7 @@ class BackupManager @Inject constructor(
     private val settings: SettingsRepository,
     private val scanner: LibraryScanner,
     private val tree: DocumentTree,
+    private val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -102,8 +103,8 @@ class BackupManager @Inject constructor(
     val offer: StateFlow<Backup?> = _offer.asStateFlow()
 
     suspend fun offerIfFound(folder: LibraryFolderEntity) {
-        val backup = withContext(Dispatchers.IO) { find(folder) } ?: return
-        if (hasNoUserData()) _offer.value = backup
+        scanner.busy.first { !it }
+        sync.syncNow()
     }
 
     fun dismissOffer() {
@@ -122,94 +123,14 @@ class BackupManager @Inject constructor(
     /** 备份范围内的数据变化后防抖 30 秒自动备份（需求 B-1）。 */
     @OptIn(FlowPreview::class)
     fun startAutoBackup() {
-        scope.launch {
-            merge(
-                db.invalidationTracker.createFlow("playlist", "playlist_item", "pinned_tab").drop(1),
-                settings.settings.map { it.copy(unsupportedFileCount = 0) }.drop(1),
-            ).debounce(30_000).collect { backupNow() }
-        }
+        sync.start()
     }
 
     /** 立即备份到所有音乐文件夹；内容没有变化时不写文件。返回成功写入的文件夹数。 */
-    suspend fun backupNow(force: Boolean = false): Int = mutex.withLock {
-        withContext(Dispatchers.IO) {
-            val folders = folderDao.all()
-            if (folders.isEmpty()) return@withContext 0
-            // 刚安装或清除数据后还没有任何用户数据：自动备份不能用空数据覆盖音乐目录里已有的备份，否则用户就没法恢复了。
-            // 只有用户手动点"立即备份"时才写。
-            if (!force && hasNoUserData()) return@withContext 0
-            val content = export(folders)
-            if (!force && content.toString() == lastContent) return@withContext folders.size
-            lastContent = content.toString()
-            content.put("exported_at", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(Instant.now().atZone(ZoneId.systemDefault())))
-            val bytes = content.toString(2).toByteArray(Charsets.UTF_8)
-            val written = folders.count { writeTo(it, bytes) }
-            if (written > 0) context.backupStore.edit { it[lastBackupKey] = System.currentTimeMillis() }
-            Log.i(TAG, "backup written to $written/${folders.size} folders")
-            written
-        }
-    }
-
-    private suspend fun export(folders: List<LibraryFolderEntity>): JSONObject {
-        val roots = folders.map { BackupRefs.Root(it.volumeName, it.relativePath) }
-        val s = settings.current()
-        return JSONObject()
-            .put("format", FORMAT)
-            .put("app_version", BuildConfig.VERSION_NAME)
-            .put(
-                "settings",
-                JSONObject()
-                    .put("artist_separators", JSONArray(s.scan.split.separators.sorted()))
-                    .put("artist_exceptions", JSONArray(s.scan.split.exceptions))
-                    .put("infer_from_file_name", s.scan.inferFromFileName)
-                    .put("file_name_format", s.scan.fileNameFormat.name)
-                    .put("legacy_charset", s.scan.legacyCharset?.name() ?: JSONObject.NULL)
-                    .put("theme", s.themeMode.name)
-                    .put("low_power_mode", s.lowPowerMode.name),
-            )
-            .put(
-                "pinned_tabs",
-                JSONArray(tabDao.all().map { JSONObject().put("type", it.type).put("ref", it.ref) }),
-            )
-            .put(
-                "playlists",
-                JSONArray(
-                    playlistDao.all().map { playlist ->
-                        val refs = playlistDao.items(playlist.id).mapNotNull { BackupRefs.refOf(it.trackKey, roots) }
-                        JSONObject().put("name", playlist.name).put("items", JSONArray(refs))
-                    },
-                ),
-            )
-    }
-
-    /**
-     * 原子替换（需求 B-6）：先写 backup.json.tmp，再把旧的 backup.json 改名为 backup.prev.json，最后把 tmp 改名为 backup.json。
-     * DocumentsProvider 不支持改名时，退化为直接覆盖写入。
-     */
-    private fun writeTo(folder: LibraryFolderEntity, bytes: ByteArray): Boolean {
-        val root = folder.treeDocumentId
-        val dir = tree.findChild(folder, root, DIR)
-            ?: tree.create(folder, root, DocumentsContract.Document.MIME_TYPE_DIR, DIR)
-            ?: return false
-        tree.findChild(folder, dir.documentId, TMP)?.let { tree.delete(folder, it.documentId) }
-        val tmp = tree.create(folder, dir.documentId, "application/octet-stream", TMP) ?: return false
-        if (tmp.name != TMP || !tree.write(folder, tmp.documentId, bytes)) {
-            tree.delete(folder, tmp.documentId)
-            return false
-        }
-        val current = tree.findChild(folder, dir.documentId, FILE)
-        if (current != null) {
-            tree.findChild(folder, dir.documentId, PREV)?.let { tree.delete(folder, it.documentId) }
-            if (!tree.rename(folder, current.documentId, PREV)) {
-                // 不支持改名：直接覆盖
-                tree.delete(folder, tmp.documentId)
-                return tree.write(folder, current.documentId, bytes)
-            }
-        }
-        if (tree.rename(folder, tmp.documentId, FILE)) return true
-        tree.delete(folder, tmp.documentId)
-        val target = tree.create(folder, dir.documentId, "application/octet-stream", FILE) ?: return false
-        return tree.write(folder, target.documentId, bytes)
+    suspend fun backupNow(force: Boolean = false): Int {
+        val written = sync.syncNow(forceWrite = force)
+        if (written > 0) context.backupStore.edit { it[lastBackupKey] = System.currentTimeMillis() }
+        return written
     }
 
     /** 读取某个音乐文件夹里的备份；backup.json 损坏时改用 backup.prev.json。 */

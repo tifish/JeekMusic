@@ -22,6 +22,7 @@ public sealed class NaturalOrderComparer : IComparer<string>
         {
             var ca = a[i];
             var cb = b[j];
+            if (ca == cb && !IsAsciiDigit(ca)) { i++; j++; continue; }
             if (IsAsciiDigit(ca) && IsAsciiDigit(cb))
             {
                 var endA = DigitRunEnd(a, i);

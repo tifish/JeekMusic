@@ -59,23 +59,26 @@ public sealed class SearchIndex
 {
     static readonly ConditionalWeakTable<LibrarySnapshot, SearchIndex> Cache = new();
 
-    readonly Dictionary<long, (string text, string initials)> _entries;
+    readonly Dictionary<long, string> _initials;
 
     SearchIndex(LibrarySnapshot snapshot)
     {
-        _entries = new Dictionary<long, (string, string)>(snapshot.Tracks.Count);
+        _initials = new Dictionary<long, string>();
         foreach (var t in snapshot.Tracks)
         {
-            var text = $"{t.Title}\n{t.ArtistDisplay}\n{t.Album}\n{t.FileName}".ToLowerInvariant();
-            _entries[t.Id] = (text, Initials(t.Title) + "\n" + Initials(t.ArtistDisplay) + "\n" + Initials(t.Album ?? ""));
+            var title = Initials(t.Title); var artist = Initials(t.ArtistDisplay); var album = Initials(t.Album ?? "");
+            if (title.Length + artist.Length + album.Length > 0) _initials[t.Id] = title + "\n" + artist + "\n" + album;
         }
     }
 
     public static SearchIndex For(LibrarySnapshot snapshot) => Cache.GetValue(snapshot, s => new SearchIndex(s));
 
     public bool Matches(Track t, string lowerQuery) =>
-        _entries.TryGetValue(t.Id, out var e) && (e.text.Contains(lowerQuery, StringComparison.Ordinal) ||
-                                                   lowerQuery.All(char.IsAsciiLetterOrDigit) && e.initials.Contains(lowerQuery, StringComparison.Ordinal));
+        t.Title.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase) ||
+        t.ArtistDisplay.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase) ||
+        (t.Album?.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        t.FileName.Contains(lowerQuery, StringComparison.OrdinalIgnoreCase) ||
+        _initials.TryGetValue(t.Id, out var initials) && lowerQuery.All(char.IsAsciiLetterOrDigit) && initials.Contains(lowerQuery, StringComparison.Ordinal);
 
     /// <summary>拼音首字母：只取汉字的（"周杰伦 Jay" → "zjl"），英文单词不参与，避免误匹配。</summary>
     static string Initials(string text)

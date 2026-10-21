@@ -44,6 +44,21 @@ class DocumentTree @Inject constructor(
         context.contentResolver.openInputStream(documentUri(folder, documentId))?.use { it.readBytes() }
     }.getOrNull()
 
+    /** Bound allocation before reading a sync file from another device. */
+    fun readLimited(folder: LibraryFolderEntity, documentId: String, maxBytes: Int): ByteArray? = runCatching {
+        context.contentResolver.openInputStream(documentUri(folder, documentId))?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(16 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (output.size() + count > maxBytes) return null
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray()
+        }
+    }.getOrNull()
+
     fun documentUri(folder: LibraryFolderEntity, documentId: String): Uri =
         DocumentsContract.buildDocumentUriUsingTree(Uri.parse(folder.treeUri), documentId)
 

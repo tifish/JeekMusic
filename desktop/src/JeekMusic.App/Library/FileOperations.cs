@@ -6,7 +6,7 @@ namespace JeekMusic.Library;
 public sealed record FileOpResult(int Done, int Skipped, string? Error)
 {
     public string Summary(string verb) =>
-        Error ?? (Skipped > 0 ? $"已{verb} {Done} 首，跳过 {Skipped} 首（CUE 整轨里的歌、正在播放的歌不能单独操作）" : $"已{verb} {Done} 首");
+        Error ?? (Skipped > 0 ? L.F($"已{verb} {Done} 首，跳过 {Skipped} 首（CUE 整轨里的歌、正在播放的歌不能单独操作）") : L.F($"已{verb} {Done} 首"));
 }
 
 /// <summary>
@@ -37,13 +37,13 @@ public sealed class FileOperations(LibraryService library)
     {
         if (track.IsCue || track.Id == playingId) return new(0, 1, null);
         var snapshot = library.Snapshot;
-        if (snapshot.Folder(track.FolderId) is not { Available: true } folder) return new(0, 0, "文件所在的盘不可用");
+        if (snapshot.Folder(track.FolderId) is not { Available: true } folder) return new(0, 0, L.T("文件所在的盘不可用"));
         var oldPath = folder.Root + track.RelativePath;
         var newName = newStem.Trim() + Path.GetExtension(track.FileName);
-        if (newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return new(0, 0, "文件名里有不能用的字符");
+        if (newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return new(0, 0, L.T("文件名里有不能用的字符"));
         var newPath = Path.Combine(Path.GetDirectoryName(oldPath)!, newName);
         if (string.Equals(oldPath, newPath, StringComparison.Ordinal)) return new(0, 0, null);
-        if (File.Exists(newPath) && !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase)) return new(0, 0, "已经有同名的文件");
+        if (File.Exists(newPath) && !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase)) return new(0, 0, L.T("已经有同名的文件"));
         try
         {
             MoveKeepingTime(oldPath, newPath);
@@ -57,7 +57,7 @@ public sealed class FileOperations(LibraryService library)
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             Log.Warn("fileops", $"改名失败 {oldPath}", e);
-            return new(0, 0, "改名失败：" + e.Message);
+            return new(0, 0, L.T("改名失败：") + e.Message);
         }
     }
 
@@ -67,7 +67,7 @@ public sealed class FileOperations(LibraryService library)
         var snapshot = library.Snapshot;
         targetDir = Volumes.WithSlash(Path.GetFullPath(targetDir));
         var target = snapshot.Folders.Where(f => f.Available && targetDir.StartsWith(f.Root, StringComparison.OrdinalIgnoreCase)).MaxBy(f => f.Root.Length);
-        if (target is null) return new(0, 0, "只能移动到音乐文件夹里");
+        if (target is null) return new(0, 0, L.T("只能移动到音乐文件夹里"));
         var relDir = targetDir[target.Root.Length..];
         int done = 0, skipped = 0;
         string? error = null;
@@ -79,7 +79,7 @@ public sealed class FileOperations(LibraryService library)
             var oldPath = source.Root + t.RelativePath;
             var newPath = targetDir + t.FileName;
             if (string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase)) continue;
-            if (File.Exists(newPath)) { error = $"目标文件夹里已经有「{t.FileName}」"; skipped++; continue; }
+            if (File.Exists(newPath)) { error = L.F($"目标文件夹里已经有「{t.FileName}」"); skipped++; continue; }
             try
             {
                 MoveKeepingTime(oldPath, newPath);
@@ -100,7 +100,7 @@ public sealed class FileOperations(LibraryService library)
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 Log.Warn("fileops", $"移动失败 {oldPath}", e);
-                error = "移动失败：" + e.Message;
+                error = L.T("移动失败：") + e.Message;
                 skipped++;
             }
         }
@@ -124,7 +124,7 @@ public sealed class FileOperations(LibraryService library)
         }
         if (paths.Count == 0) return new(0, skipped, null);
         foreach (var p in paths) library.Watcher.Ignore(p);
-        if (!SystemState.MoveToRecycleBin(paths, owner)) return new(0, skipped, "删除失败（文件可能被其他程序占用）");
+        if (!SystemState.MoveToRecycleBin(paths, owner)) return new(0, skipped, L.T("删除失败（文件可能被其他程序占用）"));
         lock (library.Db.Gate)
         {
             using var tx = library.Db.Begin();

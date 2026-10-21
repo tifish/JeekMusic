@@ -52,13 +52,13 @@ public sealed partial class PlayerViewModel : ObservableObject
 
     public bool IsPlaying => _player.IsPlaying;
     public string PlayIcon => IsPlaying ? Icons.Pause : Icons.Play;
-    public string PlayTip => IsPlaying ? "暂停（空格）" : "播放（空格）";
+    public string PlayTip => IsPlaying ? L.T("暂停（空格）") : L.T("播放（空格）");
 
     public bool Shuffle => _player.Queue.Shuffle;
     public RepeatMode Repeat => _player.Queue.Repeat;
     public string RepeatIcon => Repeat == RepeatMode.One ? Icons.RepeatOne : Icons.RepeatAll;
     public bool RepeatOn => Repeat != RepeatMode.Off;
-    public string RepeatTip => Repeat switch { RepeatMode.All => "列表循环", RepeatMode.One => "单曲循环", _ => "不循环" };
+    public string RepeatTip => Repeat switch { RepeatMode.All => L.T("列表循环"), RepeatMode.One => L.T("单曲循环"), _ => L.T("不循环") };
 
     [ObservableProperty] private double _positionSeconds;
     [ObservableProperty] private double _durationSeconds = 1;
@@ -66,7 +66,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     [ObservableProperty] private string _durationText = "0:00";
 
     public bool SleepActive => _sleep.Active;
-    public string SleepText => _sleep.Remaining is { } r ? Text.Duration(r) : _sleep.SongsLeft > 0 ? $"{_sleep.SongsLeft} 首" : "";
+    public string SleepText => _sleep.Remaining is { } r ? Text.Duration(r) : _sleep.SongsLeft > 0 ? L.F($"{_sleep.SongsLeft} 首") : "";
 
     /// <summary>播放栏显示的格式，如"FLAC 24/96 → 96kHz 独占"（需求 O-3）。</summary>
     public string FormatText
@@ -76,8 +76,8 @@ public sealed partial class PlayerViewModel : ObservableObject
             var f = _player.Format;
             if (Track is null || f.DeviceRate is null) return Track?.FormatLabel ?? "";
             var device = $"{f.DeviceRate / 1000.0:0.#}kHz";
-            var mode = _player.Exclusive ? "独占" : "共享";
-            return f.Resampled ? $"{Track.FormatLabel} → {device} {mode}（已重采样）" : $"{Track.FormatLabel} → {device} {mode}";
+            var mode = _player.Exclusive ? L.T("独占") : L.T("共享");
+            return f.Resampled ? L.F($"{Track.FormatLabel} → {device} {mode}（已重采样）") : $"{Track.FormatLabel} → {device} {mode}";
         }
     }
 

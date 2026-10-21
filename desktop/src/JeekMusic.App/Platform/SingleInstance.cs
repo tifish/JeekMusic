@@ -11,7 +11,9 @@ namespace JeekMusic.Platform;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    static readonly string Id = "JeekMusic-" + (WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName);
+    static readonly string Id = "JeekMusic-" + (WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName) + DataSuffix();
+    static string DataSuffix() => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JEEKMUSIC_DATA")) ? "" :
+        "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(AppPaths.DataDir).TrimEnd('\\').ToUpperInvariant())))[..16];
     readonly Mutex _mutex;
     readonly CancellationTokenSource _cts = new();
 
@@ -31,7 +33,7 @@ public sealed class SingleInstance : IDisposable
     {
         try
         {
-            Win32.AllowSetForegroundWindow(Win32.ASFW_ANY);
+            if (!args.Contains("--background")) Win32.AllowSetForegroundWindow(Win32.ASFW_ANY);
             using var client = new NamedPipeClientStream(".", Id, PipeDirection.Out);
             client.Connect(2000);
             var bytes = Encoding.UTF8.GetBytes(string.Join('\0', args) + "\n");

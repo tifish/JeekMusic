@@ -30,3 +30,10 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("DROP TABLE `track_mood`")
     }
 }
+
+/** Sync timestamps, identity and history commit atomically with playlists and corrections. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `sync_journal` (`id` INTEGER NOT NULL, `content` TEXT NOT NULL, PRIMARY KEY(`id`))")
+    }
+}

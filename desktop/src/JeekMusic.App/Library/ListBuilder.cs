@@ -79,12 +79,13 @@ public static class ListBuilder
                 : SongOrder.CompareFile(a, b, kind));
             return list;
         }
+        var albumKeys = sort == SongSort.Album ? list.Select(t => t.Album).OfType<string>().Distinct().ToDictionary(a => a, Core.Text.SortKeys.SortKey) : null;
         Comparison<Track> cmp = sort switch
         {
             SongSort.Modified => (a, b) => b.Mtime.CompareTo(a.Mtime) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             SongSort.Title => (a, b) => SongOrder.CompareKey(a.SortTitle, a.Title, b.SortTitle, b.Title) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             SongSort.Artist => (a, b) => SongOrder.CompareArtist(a, b) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
-            SongSort.Album => (a, b) => SongOrder.CompareKey(a.Album ?? "￿", a.Album ?? "", b.Album ?? "￿", b.Album ?? "") is var c && c != 0 ? c
+            SongSort.Album => (a, b) => SongOrder.CompareKey(a.Album is { } aa ? albumKeys![aa] : "￿", a.Album ?? "", b.Album is { } ba ? albumKeys![ba] : "￿", b.Album ?? "") is var c && c != 0 ? c
                 : (a.DiscNo ?? 1).CompareTo(b.DiscNo ?? 1) is var d && d != 0 ? d
                 : (a.TrackNo ?? int.MaxValue).CompareTo(b.TrackNo ?? int.MaxValue) is var n && n != 0 ? n : SongOrder.CompareFile(a, b, kind),
             SongSort.Duration => (a, b) => a.DurationMs.CompareTo(b.DurationMs) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),

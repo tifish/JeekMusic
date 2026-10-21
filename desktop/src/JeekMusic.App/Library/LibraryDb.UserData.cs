@@ -86,31 +86,27 @@ public sealed partial class LibraryDb
     /// <summary>删除播放列表，并记下删除记录（同步时别的设备也删掉它，需求 SY-3）。</summary>
     public void DeletePlaylist(long id, long? deletedAt = null)
     {
-        lock (Gate)
+        InTransaction(() =>
         {
-            using var tx = Begin();
-            var uid = Scalar("SELECT uid FROM playlist WHERE id = $id", tx, ("$id", id)) as string;
+            var uid = Scalar("SELECT uid FROM playlist WHERE id = $id", null, ("$id", id)) as string;
             if (uid is not null)
-                Exec("INSERT OR REPLACE INTO tombstone(kind, uid, deleted_at) VALUES('PLAYLIST', $u, $t)", tx, ("$u", uid), ("$t", deletedAt ?? Now()));
-            Exec("DELETE FROM playlist WHERE id = $id", tx, ("$id", id));
-            tx.Commit();
-        }
+                Exec("INSERT OR REPLACE INTO tombstone(kind, uid, deleted_at) VALUES('PLAYLIST', $u, $t)", null, ("$u", uid), ("$t", deletedAt ?? Now()));
+            Exec("DELETE FROM playlist WHERE id = $id", null, ("$id", id));
+        });
     }
 
     /// <summary>替换播放列表的全部条目（添加、移除、拖动排序都用它；列表通常不长）。</summary>
     public void SetPlaylistItems(long id, IReadOnlyList<(string trackKey, string? foreignRef)> items, long? updatedAt = null, string? name = null)
     {
-        lock (Gate)
+        InTransaction(() =>
         {
-            using var tx = Begin();
-            Exec("DELETE FROM playlist_item WHERE playlist_id = $p", tx, ("$p", id));
+            Exec("DELETE FROM playlist_item WHERE playlist_id = $p", null, ("$p", id));
             for (var i = 0; i < items.Count; i++)
-                Exec("INSERT INTO playlist_item(playlist_id, position, track_key, foreign_ref) VALUES($p, $i, $k, $f)", tx,
+                Exec("INSERT INTO playlist_item(playlist_id, position, track_key, foreign_ref) VALUES($p, $i, $k, $f)", null,
                     ("$p", id), ("$i", i), ("$k", items[i].trackKey), ("$f", items[i].foreignRef));
-            if (name is null) Exec("UPDATE playlist SET updated_at = $t WHERE id = $p", tx, ("$t", updatedAt ?? Now()), ("$p", id));
-            else Exec("UPDATE playlist SET updated_at = $t, name = $n WHERE id = $p", tx, ("$t", updatedAt ?? Now()), ("$n", name), ("$p", id));
-            tx.Commit();
-        }
+            if (name is null) Exec("UPDATE playlist SET updated_at = $t WHERE id = $p", null, ("$t", updatedAt ?? Now()), ("$p", id));
+            else Exec("UPDATE playlist SET updated_at = $t, name = $n WHERE id = $p", null, ("$t", updatedAt ?? Now()), ("$n", name), ("$p", id));
+        });
     }
 
     // ── 删除记录、同步历史 ──
@@ -218,16 +214,14 @@ public sealed partial class LibraryDb
 
     public void SetNavItems(IReadOnlyList<NavItem> items, long? updatedAt = null)
     {
-        lock (Gate)
+        InTransaction(() =>
         {
-            using var tx = Begin();
-            Exec("DELETE FROM nav_item", tx);
+            Exec("DELETE FROM nav_item", null);
             for (var i = 0; i < items.Count; i++)
-                Exec("INSERT INTO nav_item(position, type, ref) VALUES($i, $t, $r)", tx, ("$i", i), ("$t", items[i].Type), ("$r", items[i].Ref));
-            Exec("INSERT INTO kv(key, value) VALUES('nav_updated_at', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value", tx,
+                Exec("INSERT INTO nav_item(position, type, ref) VALUES($i, $t, $r)", null, ("$i", i), ("$t", items[i].Type), ("$r", items[i].Ref));
+            Exec("INSERT INTO kv(key, value) VALUES('nav_updated_at', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value", null,
                 ("$v", (updatedAt ?? Now()).ToString()));
-            tx.Commit();
-        }
+        });
     }
 
     public long NavUpdatedAt => long.TryParse(GetValue("nav_updated_at"), out var v) ? v : 0;

@@ -1,0 +1,1809 @@
+{
+  "description": "多设备同步的合并（desktop/docs/design.md §11.2，需求 SY-3 ~ SY-6、B-7）。self 是本机的设备 ID，now 是当前时间（UTC 毫秒）；local 是本机的状态（同步文件去掉 format / device / written_at 的部分），remotes 是读到的其他设备的同步文件；expected.state 是合并后本机的状态（播放列表、删除记录按 uid 比较，不比较顺序），expected.changes 是本机发生可见变化的项（\"类别:键@来自的设备\"，排序后比较；手动修正的键是 \"引用|维度\"，整组的键为空），expected.replaced 是被覆盖（或带 deleted: 前缀表示被删除）的本机播放列表的 uid，它们要存进同步历史。legacy_uids 是旧版备份里播放列表名字对应的 uid（\"legacy-\" + 名字 UTF-8 的 SHA-1 十六进制小写）。本文件由 build-sync-merge.py 生成。",
+  "legacy_uids": [
+    {
+      "name": "跑步",
+      "uid": "legacy-8eb2fcd697eba817d09a9c1c436cc93275382f46"
+    },
+    {
+      "name": "睡前",
+      "uid": "legacy-4f6527208a1e1cc0ece566af2eb906ba340b0e07"
+    },
+    {
+      "name": "Running",
+      "uid": "legacy-73989d9c59264da08a15dba21c7d58237a91f08f"
+    },
+    {
+      "name": "周杰伦 精选",
+      "uid": "legacy-e69f9b8a79a9716ac41769b09ee849ff15b7571f"
+    }
+  ],
+  "cases": [
+    {
+      "description": "别的设备新建的播放列表：本机新建",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994300000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994180000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994180000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "别的设备改得更晚：覆盖本机的，本机的旧版本存进历史",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994120000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994300000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步（新）",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步（新）",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "description": "本机改得更晚：旧的不覆盖新的",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994360000,
+            "items": [
+              "散曲/周深 - 大鱼.mp3"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994360000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "修改时间相同：保留本机的",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "本机",
+            "updated_at": 1799994240000,
+            "items": [
+              "散曲/周深 - 大鱼.mp3"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "电脑",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "本机",
+              "updated_at": 1799994240000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "只有时间不同、内容一样：更新时间但不算改动",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994120000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "别的设备删掉了（删除晚于本机的修改）：本机也删掉，旧版本存进历史",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994180000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": [
+          "deleted:p1"
+        ]
+      }
+    },
+    {
+      "description": "删除早于本机的修改：保留本机的，删除记录作废",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994360000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994360000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "删除和修改时间相同：删除优先",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994300000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": [
+          "deleted:p1"
+        ]
+      }
+    },
+    {
+      "description": "本机删掉了：别的设备更旧的同一播放列表不会把它加回来",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [
+          {
+            "uid": "p1",
+            "deleted_at": 1799994300000
+          }
+        ],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994180000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p1",
+              "deleted_at": 1799994300000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "本机删掉之后别的设备又改了它：以后改的为准，播放列表回来",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [
+          {
+            "uid": "p1",
+            "deleted_at": 1799994300000
+          }
+        ],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994360000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994360000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "删除记录超过 180 天：清掉",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [
+          {
+            "uid": "p1",
+            "deleted_at": 1784361600000
+          },
+          {
+            "uid": "p2",
+            "deleted_at": 1799136000000
+          }
+        ],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [
+            {
+              "uid": "p2",
+              "deleted_at": 1799136000000
+            }
+          ],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "对不上本机歌曲的条目（只在别的设备上有的歌）：原样保留",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994120000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "只在电脑上/某首歌.ape",
+                "整轨/专辑.ape#07"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994240000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "只在电脑上/某首歌.ape",
+                "整轨/专辑.ape#07"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "description": "没有出现不等于删除：别的设备的文件里没有本机的播放列表，本机的不受影响",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994120000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "a.mp3": {
+            "MOOD": {
+              "value": "SPORT",
+              "updated_at": 1799994120000
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "a.mp3": {
+            "offset_ms": -500,
+            "updated_at": 1799994120000
+          }
+        }
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "p2",
+              "name": "睡前",
+              "updated_at": 1799994180000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994120000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            },
+            {
+              "uid": "p2",
+              "name": "睡前",
+              "updated_at": 1799994180000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "MOOD": {
+                "value": "SPORT",
+                "updated_at": 1799994120000
+              }
+            }
+          },
+          "lyrics_offsets": {
+            "a.mp3": {
+              "offset_ms": -500,
+              "updated_at": 1799994120000
+            }
+          }
+        },
+        "changes": [
+          "playlist:p2@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "手动修正：别的设备改回自动（value 为 null）且更晚，本机也改回自动",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "a.mp3": {
+            "MOOD": {
+              "value": "SPORT",
+              "updated_at": 1799994120000
+            },
+            "VOICE": {
+              "value": "VOCAL",
+              "updated_at": 1799994120000
+            }
+          }
+        },
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "MOOD": {
+                "value": null,
+                "updated_at": 1799994240000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "MOOD": {
+                "value": null,
+                "updated_at": 1799994240000
+              },
+              "VOICE": {
+                "value": "VOCAL",
+                "updated_at": 1799994120000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "tag_override:a.mp3|MOOD@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "手动修正：别的设备更早的改回自动，不影响本机更晚的修正",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "a.mp3": {
+            "GENRE": {
+              "value": "CLASSICAL",
+              "updated_at": 1799994300000
+            }
+          }
+        },
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "GENRE": {
+                "value": null,
+                "updated_at": 1799994240000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "GENRE": {
+                "value": "CLASSICAL",
+                "updated_at": 1799994300000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "手动修正：本机没有的修正直接采用；别的设备的改回自动对本机没有可见变化，不算改动",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "MOOD": {
+                "value": "NON_SPORT",
+                "updated_at": 1799994180000
+              }
+            },
+            "b.mp3": {
+              "VOICE": {
+                "value": null,
+                "updated_at": 1799994180000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "MOOD": {
+                "value": "NON_SPORT",
+                "updated_at": 1799994180000
+              }
+            },
+            "b.mp3": {
+              "VOICE": {
+                "value": null,
+                "updated_at": 1799994180000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "tag_override:a.mp3|MOOD@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "改回自动超过 180 天的记录、为 0 的歌词偏移超过 180 天：清掉",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "a.mp3": {
+            "MOOD": {
+              "value": null,
+              "updated_at": 1782720000000
+            },
+            "VOICE": {
+              "value": "VOCAL",
+              "updated_at": 1782720000000
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "a.mp3": {
+            "offset_ms": 0,
+            "updated_at": 1782720000000
+          },
+          "b.mp3": {
+            "offset_ms": 500,
+            "updated_at": 1782720000000
+          }
+        }
+      },
+      "remotes": [],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "a.mp3": {
+              "VOICE": {
+                "value": "VOCAL",
+                "updated_at": 1782720000000
+              }
+            }
+          },
+          "lyrics_offsets": {
+            "b.mp3": {
+              "offset_ms": 500,
+              "updated_at": 1782720000000
+            }
+          }
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "歌词偏移：以后改的为准；本机没有的偏移等于 0",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {
+          "a.mp3": {
+            "offset_ms": -500,
+            "updated_at": 1799994120000
+          },
+          "b.mp3": {
+            "offset_ms": 1000,
+            "updated_at": 1799994360000
+          }
+        }
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {
+            "a.mp3": {
+              "offset_ms": 1500,
+              "updated_at": 1799994240000
+            },
+            "b.mp3": {
+              "offset_ms": 0,
+              "updated_at": 1799994300000
+            },
+            "c.mp3": {
+              "offset_ms": 0,
+              "updated_at": 1799994300000
+            }
+          }
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {
+            "a.mp3": {
+              "offset_ms": 1500,
+              "updated_at": 1799994240000
+            },
+            "b.mp3": {
+              "offset_ms": 1000,
+              "updated_at": 1799994360000
+            },
+            "c.mp3": {
+              "offset_ms": 0,
+              "updated_at": 1799994300000
+            }
+          }
+        },
+        "changes": [
+          "lyrics_offset:a.mp3@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "曲库规则：整组比较，别的设备的更晚就整组采用",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {},
+        "rules": {
+          "updated_at": 1799994120000,
+          "value": {
+            "artist_separators": [
+              ";",
+              "/",
+              "、",
+              "feat.",
+              "ft.",
+              "featuring"
+            ],
+            "artist_exceptions": [
+              "AC/DC"
+            ],
+            "infer_from_file_name": true,
+            "file_name_format": "ARTIST_TITLE",
+            "legacy_charset": null
+          }
+        }
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "rules": {
+            "updated_at": 1799994240000,
+            "value": {
+              "artist_separators": [
+                ";",
+                "/",
+                "&"
+              ],
+              "artist_exceptions": [],
+              "infer_from_file_name": true,
+              "file_name_format": "ARTIST_TITLE",
+              "legacy_charset": null
+            }
+          }
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "rules": {
+            "updated_at": 1799994240000,
+            "value": {
+              "artist_separators": [
+                ";",
+                "/",
+                "&"
+              ],
+              "artist_exceptions": [],
+              "infer_from_file_name": true,
+              "file_name_format": "ARTIST_TITLE",
+              "legacy_charset": null
+            }
+          }
+        },
+        "changes": [
+          "rules:@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "曲库规则：本机更晚时保留本机的整组（不会只采用其中一项）",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {},
+        "rules": {
+          "updated_at": 1799994300000,
+          "value": {
+            "artist_separators": [
+              ";",
+              "/",
+              "、",
+              "feat.",
+              "ft.",
+              "featuring"
+            ],
+            "artist_exceptions": [
+              "AC/DC"
+            ],
+            "infer_from_file_name": false,
+            "file_name_format": "ARTIST_TITLE",
+            "legacy_charset": null
+          }
+        }
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "rules": {
+            "updated_at": 1799994240000,
+            "value": {
+              "artist_separators": [
+                ";"
+              ],
+              "artist_exceptions": [
+                "AC/DC"
+              ],
+              "infer_from_file_name": true,
+              "file_name_format": "ARTIST_TITLE",
+              "legacy_charset": "GBK"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "rules": {
+            "updated_at": 1799994300000,
+            "value": {
+              "artist_separators": [
+                ";",
+                "/",
+                "、",
+                "feat.",
+                "ft.",
+                "featuring"
+              ],
+              "artist_exceptions": [
+                "AC/DC"
+              ],
+              "infer_from_file_name": false,
+              "file_name_format": "ARTIST_TITLE",
+              "legacy_charset": null
+            }
+          }
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "导航顺序：整组比较；本机从没改过时（updated_at 为 0）采用别的设备的",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {},
+        "nav": {
+          "updated_at": 0,
+          "items": [
+            {
+              "type": "FOLDERS",
+              "ref": null
+            },
+            {
+              "type": "ARTISTS",
+              "ref": null
+            },
+            {
+              "type": "PLAYLISTS",
+              "ref": null
+            }
+          ]
+        }
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "nav": {
+            "updated_at": 1799994240000,
+            "items": [
+              {
+                "type": "FOLDERS",
+                "ref": null
+              },
+              {
+                "type": "ARTIST",
+                "ref": "周深"
+              },
+              {
+                "type": "ARTISTS",
+                "ref": null
+              },
+              {
+                "type": "PLAYLISTS",
+                "ref": null
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {},
+          "nav": {
+            "updated_at": 1799994240000,
+            "items": [
+              {
+                "type": "FOLDERS",
+                "ref": null
+              },
+              {
+                "type": "ARTIST",
+                "ref": "周深"
+              },
+              {
+                "type": "ARTISTS",
+                "ref": null
+              },
+              {
+                "type": "PLAYLISTS",
+                "ref": null
+              }
+            ]
+          }
+        },
+        "changes": [
+          "nav:@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "同一台设备在几个音乐文件夹里都有文件：只用 written_at 最新的那份",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994300000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "旧",
+              "updated_at": 1799994180000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994480000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "新",
+              "updated_at": 1799994120000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "新",
+              "updated_at": 1799994120000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "本机自己的文件不参与合并",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "跑步",
+            "updated_at": 1799994120000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "phone",
+            "name": "phone",
+            "platform": "android",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994540000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "别的内容",
+              "updated_at": 1799994480000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "跑步",
+              "updated_at": 1799994120000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [],
+        "replaced": []
+      }
+    },
+    {
+      "description": "多台设备：每一项取所有设备里最新的",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "p1",
+            "name": "本机",
+            "updated_at": 1799994060000,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994540000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "电脑",
+              "updated_at": 1799994300000,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        {
+          "format": 2,
+          "device": {
+            "id": "pad",
+            "name": "iPad",
+            "platform": "android",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994540000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "平板",
+              "updated_at": 1799994360000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        {
+          "format": 2,
+          "device": {
+            "id": "pc2",
+            "name": "pc2",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994540000,
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "另一台电脑",
+              "updated_at": 1799994180000,
+              "items": []
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "p1",
+              "name": "平板",
+              "updated_at": 1799994360000,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05",
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:p1@pad"
+        ],
+        "replaced": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "description": "旧版备份（legacy uid）：两端从同一份旧 backup.json 读入的播放列表 uid 相同，不会重复",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [
+          {
+            "uid": "legacy-8eb2fcd697eba817d09a9c1c436cc93275382f46",
+            "name": "跑步",
+            "updated_at": 1,
+            "items": [
+              "周杰伦/叶惠美/03. 晴天.flac",
+              "Live/2004.flac#05"
+            ]
+          }
+        ],
+        "deleted_playlists": [],
+        "tag_overrides": {},
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994420000,
+          "playlists": [
+            {
+              "uid": "legacy-8eb2fcd697eba817d09a9c1c436cc93275382f46",
+              "name": "跑步",
+              "updated_at": 1,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            },
+            {
+              "uid": "legacy-4f6527208a1e1cc0ece566af2eb906ba340b0e07",
+              "name": "睡前",
+              "updated_at": 1,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [
+            {
+              "uid": "legacy-8eb2fcd697eba817d09a9c1c436cc93275382f46",
+              "name": "跑步",
+              "updated_at": 1,
+              "items": [
+                "周杰伦/叶惠美/03. 晴天.flac",
+                "Live/2004.flac#05"
+              ]
+            },
+            {
+              "uid": "legacy-4f6527208a1e1cc0ece566af2eb906ba340b0e07",
+              "name": "睡前",
+              "updated_at": 1,
+              "items": [
+                "散曲/周深 - 大鱼.mp3"
+              ]
+            }
+          ],
+          "deleted_playlists": [],
+          "tag_overrides": {},
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "playlist:legacy-4f6527208a1e1cc0ece566af2eb906ba340b0e07@pc"
+        ],
+        "replaced": []
+      }
+    }
+  ]
+}

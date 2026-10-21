@@ -75,9 +75,9 @@ public sealed unsafe partial class Taskbar
     {
         if (_list is null || _buttonsAdded) return;
         var buttons = stackalloc THUMBBUTTON[3];
-        buttons[0] = Button(IdPrevious, _iconPrev, "上一首");
-        buttons[1] = Button(IdPlayPause, _playing ? _iconPause : _iconPlay, _playing ? "暂停" : "播放");
-        buttons[2] = Button(IdNext, _iconNext, "下一首");
+        buttons[0] = Button(IdPrevious, _iconPrev, L.T("上一首"));
+        buttons[1] = Button(IdPlayPause, _playing ? _iconPause : _iconPlay, _playing ? L.T("暂停") : L.T("播放"));
+        buttons[2] = Button(IdNext, _iconNext, L.T("下一首"));
         _buttonsAdded = _list.ThumbBarAddButtons(_hwnd, 3, buttons) >= 0;
     }
 
@@ -97,7 +97,7 @@ public sealed unsafe partial class Taskbar
         _playing = playing;
         if (_list is null) return;
         if (!_buttonsAdded) { AddButtons(); return; }
-        var button = Button(IdPlayPause, playing ? _iconPause : _iconPlay, playing ? "暂停" : "播放");
+        var button = Button(IdPlayPause, playing ? _iconPause : _iconPlay, playing ? L.T("暂停") : L.T("播放"));
         _list.ThumbBarUpdateButtons(_hwnd, 1, &button);
     }
 

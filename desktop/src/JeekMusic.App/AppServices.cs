@@ -37,6 +37,7 @@ public sealed class AppServices : IDisposable
         Current = this;
         TagReader.Configure();
         Settings = new SettingsStore();
+        L.Initialize(Settings.Current.Language);
         Db = new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
         Playlists = new PlaylistService(Library);
@@ -52,6 +53,9 @@ public sealed class AppServices : IDisposable
 
     public void Dispose()
     {
+        if (OnExit is { } handlers)
+            foreach (Action handler in handlers.GetInvocationList())
+                try { handler(); } catch (Exception e) { Log.Warn("app", "停止后台服务失败", e); }
         try { QueuePersistence.SaveQueue(); } catch (Exception e) { Log.Warn("app", "保存队列失败", e); }
         Settings.WriteNow();
         Player.Dispose();
@@ -60,4 +64,6 @@ public sealed class AppServices : IDisposable
         Instance?.Dispose();
         Log.Flush();
     }
+
+    public event Action? OnExit;
 }

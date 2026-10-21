@@ -1,0 +1,81 @@
+name: libmpv (LGPL)
+
+# 编译 JeekMusic 桌面端用的 LGPL、只含音频的 libmpv-2.dll（需求 UP-3，设计 §15.3），发布为 prerelease：
+#   标签 libmpv-lgpl-<mpv 版本>-<日期>-<序号>，资源 libmpv-2.dll、libmpv-lgpl-x86_64.zip（含许可证和 BUILDINFO）、
+#   sources-lgpl.tar.xz（LGPL 组件的源码）。
+# 绝不能成为 latest：手机端的应用内更新取的是 releases/latest（移动端设计 §13.2）。
+# 桌面端的 CI 和本地开发用 `bash desktop/tools/get-libmpv.sh --lgpl` 下载最新的一个。
+on:
+  push:
+    branches: [main, libmpv-lgpl-build]
+    paths: [".github/workflows/libmpv.yml", "desktop/tools/libmpv/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git make diffutils tar xz zip
+          pacboy: >-
+            gcc:p meson:p ninja:p pkgconf:p nasm:p python:p
+
+      # 依赖（FFmpeg、libplacebo、libass 等）编好的静态库按版本缓存，mpv 每次都重新编
+      - uses: actions/cache@v4
+        with:
+          path: build-libmpv/prefix
+          key: libmpv-deps-${{ hashFiles('desktop/tools/libmpv/versions.sh', 'desktop/tools/libmpv/build.sh') }}
+          restore-keys: libmpv-deps-
+
+      - name: Build
+        run: WORK="$PWD/build-libmpv" bash desktop/tools/libmpv/build.sh
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: build-libmpv/prefix
+          key: libmpv-deps-${{ hashFiles('desktop/tools/libmpv/versions.sh', 'desktop/tools/libmpv/build.sh') }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-lgpl
+          path: |
+            build-libmpv/out/libmpv-2.dll
+            build-libmpv/out/libmpv-lgpl-x86_64.zip
+            build-libmpv/out/BUILDINFO.txt
+
+      - name: Release tag
+        id: tag
+        run: |
+          source desktop/tools/libmpv/versions.sh
+          echo "tag=libmpv-lgpl-${MPV_REF#v}-$(date -u +%Y%m%d)-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: build-libmpv/out/BUILDINFO.txt
+          prerelease: true
+          make_latest: false
+          files: |
+            build-libmpv/out/libmpv-2.dll
+            build-libmpv/out/libmpv-lgpl-x86_64.zip
+            build-libmpv/out/sources-lgpl.tar.xz

@@ -16,6 +16,9 @@ public static class Features
     [
         // 每个功能一行
         new Update.UpdateFeature(),
+        new Online.OnlineFeature(),
+        new Analysis.AnalysisFeature(),
+        new Sync.SyncFeature(),
     ];
 
     public static void StartAll(AppServices app, Shell shell)

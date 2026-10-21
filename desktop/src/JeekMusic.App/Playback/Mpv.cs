@@ -72,8 +72,18 @@ public sealed partial class Mpv : IDisposable
     {
         _handle = Create();
         if (_handle == 0) throw new InvalidOperationException("mpv_create 失败");
-        foreach (var (name, value) in options) Check(SetOptionString(_handle, name, value), $"{name}={value}");
-        Check(Initialize(_handle), "mpv_initialize");
+        try
+        {
+            foreach (var (name, value) in options)
+            {
+                var result = SetOptionString(_handle, name, value);
+                // Minimal LGPL builds omit the scripting subsystem, including its disable options.
+                if (result == -5 && value == "no" && name is "load-scripts" or "ytdl" or "osc") continue;
+                Check(result, $"{name}={value}");
+            }
+            Check(Initialize(_handle), "mpv_initialize");
+        }
+        catch { TerminateDestroy(_handle); _handle = 0; throw; }
         if (logLevel is not null) RequestLogMessages(_handle, logLevel);
         _eventThread = new Thread(EventLoop) { IsBackground = true, Name = "mpv-events" };
         _eventThread.Start();
@@ -194,7 +204,7 @@ public sealed partial class Mpv : IDisposable
         // 不能在另一个线程还在 mpv_wait_event 时销毁句柄：先唤醒事件线程让它退出
         _stopping = true;
         Wakeup(_handle);
-        _eventThread.Join(2000);
+        _eventThread.Join();
         TerminateDestroy(_handle);
         _handle = 0;
     }

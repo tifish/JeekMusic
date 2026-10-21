@@ -1,0 +1,12 @@
+{
+  "Avalonia.txt": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/12.1.4/licence.md",
+  "ATL.txt": "https://raw.githubusercontent.com/Zeugma440/atldotnet/61fbf286d99d04f6d668e944bc9c57c007ffd2c2/LICENSE",
+  "MicroCom.txt": "https://raw.githubusercontent.com/kekekeks/MicroCom/76785efcafd91b5902fd19dd11145f6dd655b7b4/LICENSE",
+  "SQLitePCLRaw.txt": "https://raw.githubusercontent.com/ericsink/SQLitePCL.raw/master/LICENSE.TXT",
+  "Microsoft.Data.Sqlite.txt": "https://raw.githubusercontent.com/dotnet/efcore/v10.0.13/LICENSE.txt",
+  "dotnet-runtime.txt": "https://raw.githubusercontent.com/dotnet/runtime/v10.0.8/LICENSE.TXT",
+  "YAMNet.txt": "https://raw.githubusercontent.com/tensorflow/models/master/LICENSE",
+  "Unicode.txt": "https://www.unicode.org/license.txt",
+  "Ude-MPL-1.1.txt": "https://raw.githubusercontent.com/yinyue200/ude/master/license/MPL-1.1.txt",
+  "Tmds.DBus.txt": "https://raw.githubusercontent.com/tmds/Tmds.DBus/rel/0.94.1/COPYING"
+}

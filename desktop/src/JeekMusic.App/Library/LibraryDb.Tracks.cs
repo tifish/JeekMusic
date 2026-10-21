@@ -79,20 +79,30 @@ public sealed partial class LibraryDb
     {
         using var r = cmd.ExecuteReader();
         var list = new List<Track>();
+        var strings = new Dictionary<string, string>(StringComparer.Ordinal);
+        var artistLists = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        string Pool(string value)
+        {
+            if (strings.TryGetValue(value, out var present)) return present;
+            strings[value] = value; return value;
+        }
+        string? Optional(int index) => r.Str(index) is { } value ? Pool(value) : null;
         while (r.Read())
         {
             var artists = r.GetString(13);
+            if (!artistLists.TryGetValue(artists, out var names))
+                artistLists[artists] = names = artists.Length == 0 ? [] : artists.Split(MultiValueSeparator).Select(Pool).ToArray();
             list.Add(new Track
             {
-                Id = r.GetInt64(0), TrackKey = r.GetString(1), FolderId = r.GetInt64(2), Dir = r.GetString(3), FileName = r.GetString(4),
-                TitleTag = r.Str(5), Title = r.GetString(6), Album = r.Str(7), AlbumArtist = r.Str(8), AlbumKey = r.Str(9),
-                ArtistRaw = r.Str(10), ArtistDisplay = r.GetString(11), ArtistInferred = r.Bool(12),
-                Artists = artists.Length == 0 ? [] : artists.Split(MultiValueSeparator),
-                TrackNo = r.Int(14), DiscNo = r.Int(15), Year = r.Int(16), Genre = r.Str(17), DurationMs = r.GetInt64(18),
-                Codec = r.Str(19), Bitrate = r.Int(20), SampleRate = r.Int(21), BitsPerSample = r.Int(22), Channels = r.Int(23),
+                Id = r.GetInt64(0), TrackKey = r.GetString(1), FolderId = r.GetInt64(2), Dir = Pool(r.GetString(3)), FileName = r.GetString(4),
+                TitleTag = Optional(5), Title = Pool(r.GetString(6)), Album = Optional(7), AlbumArtist = Optional(8), AlbumKey = Optional(9),
+                ArtistRaw = Optional(10), ArtistDisplay = Pool(r.GetString(11)), ArtistInferred = r.Bool(12),
+                Artists = names,
+                TrackNo = r.Int(14), DiscNo = r.Int(15), Year = r.Int(16), Genre = Optional(17), DurationMs = r.GetInt64(18),
+                Codec = Optional(19), Bitrate = r.Int(20), SampleRate = r.Int(21), BitsPerSample = r.Int(22), Channels = r.Int(23),
                 HasEmbeddedLyrics = r.Bool(24), HasEmbeddedCover = r.Bool(25),
                 CueTrackNo = r.Int(26), StartMs = r.Long(27), EndMs = r.Long(28), Mtime = r.GetInt64(29), Size = r.GetInt64(30),
-                SortTitle = r.GetString(31), SortFile = r.GetString(32), SortArtist = r.GetString(33),
+                SortTitle = Pool(r.GetString(31)), SortFile = r.GetString(32), SortArtist = Pool(r.GetString(33)),
             });
         }
         return list;

@@ -36,8 +36,10 @@ public sealed partial class MainViewModel : ObservableObject
     readonly Stack<NavTarget> _back = new();
     readonly Stack<NavTarget> _forward = new();
     bool _navigating;
+    bool _firstContentLogged;
 
     public PlayerViewModel Player { get; }
+    [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _albumCover;
 
     public MainViewModel(AppServices app)
     {
@@ -47,7 +49,7 @@ public sealed partial class MainViewModel : ObservableObject
         _playlists = app.Playlists;
         Player = new PlayerViewModel(app.Player, app.SleepTimer, app.Settings);
         _library.SnapshotChanged += OnSnapshotChanged;
-        _library.ScanProgress += (done, total) => ScanText = total == 0 ? "" : $"正在扫描 {done:N0} / {total:N0}";
+        _library.ScanProgress += (done, total) => ScanText = total == 0 ? "" : L.F($"正在扫描 {done:N0} / {total:N0}");
         _playlists.Changed += OnPlaylistsChanged;
         app.Player.TrackChanged += _ => MarkPlaying();
         app.Player.Error += ShowToast;
@@ -77,7 +79,7 @@ public sealed partial class MainViewModel : ObservableObject
             case NavKind.Playlists:
                 value.IsExpanded = true;
                 if (value.Children.FirstOrDefault() is { } p) SelectedNav = p;
-                else Show(ContentKind.Hint, "播放列表", "还没有播放列表。在歌曲上点右键，选择\"添加到播放列表\" → \"新建播放列表\"。");
+                else Show(ContentKind.Hint, L.T("播放列表"), L.T("还没有播放列表。在歌曲上点右键，选择\"添加到播放列表\" → \"新建播放列表\"。"));
                 break;
             case NavKind.Playlist: Navigate(new NavTarget.Playlist(value.PlaylistId)); break;
             case NavKind.PinnedArtist: Navigate(new NavTarget.PinnedArtist(value.ArtistKey)); break;
@@ -108,16 +110,16 @@ public sealed partial class MainViewModel : ObservableObject
                 switch (item.Type)
                 {
                     case "FOLDERS":
-                        var folders = new NavNode { Kind = NavKind.Folders, Title = "文件夹", Icon = Icons.Folder, Item = item };
+                        var folders = new NavNode { Kind = NavKind.Folders, Title = L.T("文件夹"), Icon = Icons.Folder, Item = item };
                         foreach (var root in Snapshot.Roots)
                             if (FolderNode(root, filter) is { } n) folders.Children.Add(n);
                         Nav.Add(folders);
                         break;
                     case "ARTISTS":
-                        Nav.Add(new NavNode { Kind = NavKind.Artists, Title = "艺术家", Icon = Icons.Artist, Item = item });
+                        Nav.Add(new NavNode { Kind = NavKind.Artists, Title = L.T("艺术家"), Icon = Icons.Artist, Item = item });
                         break;
                     case "PLAYLISTS":
-                        var lists = new NavNode { Kind = NavKind.Playlists, Title = "播放列表", Icon = Icons.Playlist, Item = item };
+                        var lists = new NavNode { Kind = NavKind.Playlists, Title = L.T("播放列表"), Icon = Icons.Playlist, Item = item };
                         foreach (var p in _playlists.All)
                             lists.Children.Add(new NavNode { Kind = NavKind.Playlist, Title = p.Name, Icon = Icons.Playlist, PlaylistId = p.Id });
                         Nav.Add(lists);
@@ -315,7 +317,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             case NavTarget.Folder f:
                 var node = Snapshot.Node(f.FolderId, f.Dir);
-                title = node is null ? "文件夹" : (f.Dir.Length == 0 ? node.Name : node.Folder.DisplayName + "\\" + f.Dir.TrimEnd('\\'));
+                title = node is null ? L.T("文件夹") : (f.Dir.Length == 0 ? node.Name : node.Folder.DisplayName + "\\" + f.Dir.TrimEnd('\\'));
                 source = new QueueSource.Folder(f.FolderId, f.Dir, IncludeSubfolders);
                 break;
             case NavTarget.Artists a when a.ArtistKey is { } key:
@@ -323,25 +325,25 @@ public sealed partial class MainViewModel : ObservableObject
                 source = new QueueSource.Artist(key);
                 break;
             case NavTarget.Artists:
-                Show(ContentKind.Hint, "艺术家", "选择一个艺术家");
+                Show(ContentKind.Hint, L.T("艺术家"), L.T("选择一个艺术家"));
                 return;
             case NavTarget.PinnedArtist pa:
                 title = Snapshot.ArtistByKey.TryGetValue(pa.ArtistKey, out var pinned) ? pinned.Name : pa.ArtistKey;
                 source = new QueueSource.Artist(pa.ArtistKey);
                 break;
             case NavTarget.Playlist p:
-                title = _playlists.Get(p.PlaylistId)?.Name ?? "播放列表";
+                title = _playlists.Get(p.PlaylistId)?.Name ?? L.T("播放列表");
                 source = new QueueSource.Playlist(p.PlaylistId);
                 break;
             case NavTarget.Album al:
                 var tracks = Snapshot.Albums.GetValueOrDefault(al.AlbumKey);
                 var first = tracks?.FirstOrDefault();
-                title = first?.Album ?? "专辑";
+                title = first?.Album ?? L.T("专辑");
                 AlbumInfo = AlbumHeader(tracks);
                 source = new QueueSource.Album(al.AlbumKey);
                 break;
             case NavTarget.Search s:
-                title = $"搜索：{s.Query}";
+                title = L.F($"搜索：{s.Query}");
                 SearchArtists = SearchIndex.Artists(Snapshot, s.Query).Take(20).ToList();
                 source = new QueueSource.Search(s.Query);
                 break;
@@ -367,9 +369,14 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 if (cts.IsCancellationRequested) return;
                 Rows = rows;
+                if (!_firstContentLogged && rows.Count > 0)
+                {
+                    _firstContentLogged = true;
+                    Infrastructure.Log.Info("startup", $"{rows.Count} rows ready after {(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds:F0} ms");
+                }
                 var available = rows.Count(r => r.Available);
-                ContentSubtitle = Text.Count(available) + (rows.Count > available ? $"（另有 {rows.Count - available} 首不可用）" : "")
-                                  + (isSearch && list.Count >= 200 ? "，只显示前 200 首" : "");
+                ContentSubtitle = Text.Count(available) + (rows.Count > available ? L.F($"（另有 {rows.Count - available} 首不可用）") : "")
+                                  + (isSearch && list.Count >= 200 ? L.T("，只显示前 200 首") : "");
                 MarkPlaying();
                 // 播放队列跟着来源列表走（需求 P-15）
                 if (_app.Player.Queue.Context?.Source == source) _app.Player.Queue.SourceChanged(list.Select(t => t.Id).ToList());
@@ -465,7 +472,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public IReadOnlyList<string> TagFilter => S.TagFilter;
     public bool FilterActive => S.TagFilter.Count > 0;
-    public string FilterText => FilterActive ? string.Join("·", S.TagFilter.Select(Text.TagName)) : "筛选";
+    public string FilterText => FilterActive ? string.Join("·", S.TagFilter.Select(Text.TagName)) : L.T("筛选");
 
     /// <summary>点一下选中，再点一下取消；同一维度只能选一个。</summary>
     public void ToggleTag(string tag)
@@ -523,7 +530,7 @@ public sealed partial class MainViewModel : ObservableObject
         // 预先建好搜索索引，第一次搜索不卡
         var snapshot = Snapshot;
         _ = Task.Run(() => SearchIndex.For(snapshot));
-        if (_app.Player.Queue.Items.Count > 0) _app.Player.Queue.RemoveMissing(id => snapshot.ById.ContainsKey(id));
+        if (_app.Player.Queue.Items.Count > 0) _app.Player.Queue.RemoveMissing(id => _app.Library.ById(id) is not null);
         SnapshotApplied?.Invoke();
     }
 

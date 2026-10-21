@@ -20,7 +20,7 @@ public sealed partial class Shell
             _mini = new MiniPlayerWindow(_main.ViewModel.Player, _app.Settings.Current.MiniPlayerTopmost);
             _mini.RestoreRequested += ShowMainWindow;
             _mini.TopmostChanged += v => { _app.Settings.Current.MiniPlayerTopmost = v; _app.Settings.Save("mini"); };
-            _mini.Closing += (_, e) => { e.Cancel = true; ShowMainWindow(); };
+            _mini.Closing += (_, e) => { if (!_main.ExitRequested) { e.Cancel = true; ShowMainWindow(); } };
             if (_ui.MiniX is { } x && _ui.MiniY is { } y)
             {
                 _mini.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -77,16 +77,16 @@ public sealed partial class Shell
 
     partial void AddTrayExtras(NativeMenu menu)
     {
-        var lyrics = new NativeMenuItem("桌面歌词") { ToggleType = MenuItemToggleType.CheckBox, IsChecked = DesktopLyricsVisible };
+        var lyrics = new NativeMenuItem(L.T("桌面歌词")) { ToggleType = MenuItemToggleType.CheckBox, IsChecked = DesktopLyricsVisible };
         lyrics.Click += (_, _) => SetDesktopLyrics(!DesktopLyricsVisible);
         menu.Add(lyrics);
         if (DesktopLyricsVisible)
         {
-            var locked = new NativeMenuItem("锁定桌面歌词") { ToggleType = MenuItemToggleType.CheckBox, IsChecked = _desktopLyrics!.Locked };
+            var locked = new NativeMenuItem(L.T("锁定桌面歌词")) { ToggleType = MenuItemToggleType.CheckBox, IsChecked = _desktopLyrics!.Locked };
             locked.Click += (_, _) => ToggleDesktopLyricsLock();
             menu.Add(locked);
         }
-        var mini = new NativeMenuItem("迷你播放器");
+        var mini = new NativeMenuItem(L.T("迷你播放器"));
         mini.Click += (_, _) => ShowMiniPlayer();
         menu.Add(mini);
         menu.Add(new NativeMenuItemSeparator());
@@ -105,30 +105,38 @@ public sealed partial class Shell
     // ── 打开文件（需求 PC-7、§3.7）──
 
     /// <summary>
-    /// 播放外部的文件：在曲库里的直接按曲库里的歌播放；不在曲库里的提示先添加所在的文件夹。
+    /// 播放外部文件；曲库外的文件使用临时队列，不自动添加音乐文件夹。
     /// </summary>
     partial void OpenFiles(IReadOnlyList<string> files)
     {
         if (!_app.Args.Contains("--background")) ShowMainWindow();
-        var snapshot = _app.Library.Snapshot;
+        _ = OpenFilesAsync(files);
+    }
+
+    int _openGeneration;
+
+    async Task OpenFilesAsync(IReadOnlyList<string> files)
+    {
+        var generation = ++_openGeneration;
         var ids = new List<long>();
-        var outside = 0;
+        var failed = 0;
         foreach (var path in files)
         {
             if (Directory.Exists(path)) { _ = _main.AddFolder(path); continue; }
-            var full = Path.GetFullPath(path);
-            var track = snapshot.Tracks.FirstOrDefault(t => !t.IsCue && string.Equals(snapshot.PathOf(t), full, StringComparison.OrdinalIgnoreCase));
-            if (track is not null) ids.Add(track.Id);
-            else outside++;
+            try { ids.Add((await Task.Run(() => _app.Library.OpenExternal(path))).Id); }
+            catch (Exception e) { failed++; Infrastructure.Log.Warn("open", "无法打开文件", e); }
         }
-        if (ids.Count > 0) _app.Player.Play(null, ids, 0, shuffle: false);
-        if (outside > 0) _main.ViewModel.ShowToast($"有 {outside} 个文件不在曲库里：先把它们所在的文件夹添加为音乐文件夹");
+        if (generation != _openGeneration) return;
+        if (ids.Count > 0) { _restored = true; _app.Player.Play(null, ids, 0, shuffle: false); }
+        if (failed > 0) _main.ViewModel.ShowToast(L.F($"有 {failed} 个文件无法打开"));
     }
 
     public void Open(IReadOnlyList<string> files) => OpenFiles(files);
 
     partial void BeforeExit()
     {
+        _openGeneration++;
+        _mini?.Close();
         _desktopLyrics?.Close();
         if (_desktopLyrics is not null) _ui.LyricsBarWidth = _desktopLyrics.Width;
     }
@@ -140,5 +148,11 @@ public sealed partial class Shell
         if (paths.Count > 0) OpenFiles(paths);
         if (_app.Settings.Current.DesktopLyricsVisible) SetDesktopLyrics(true);
         Features.StartAll(_app, this);
+        if (_app.Args.Contains("--memory-diagnostics")) DispatcherTimer.RunOnce(() =>
+        {
+            Infrastructure.Log.Info("memory", $"Before collection: managed={GC.GetTotalMemory(false) / 1048576.0:F1} MB; committed={GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0:F1} MB");
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            Infrastructure.Log.Info("memory", $"After collection: managed={GC.GetTotalMemory(false) / 1048576.0:F1} MB; committed={GC.GetGCMemoryInfo().TotalCommittedBytes / 1048576.0:F1} MB");
+        }, TimeSpan.FromSeconds(10));
     }
 }

@@ -17,7 +17,7 @@ public static class SleepDialog
         var prefs = app.Settings.Current.Sleep;
         var w = new Window
         {
-            Title = "睡眠定时", Width = 380, SizeToContent = SizeToContent.Height, CanResize = false, ShowInTaskbar = false,
+            Title = L.T("睡眠定时"), Width = 380, SizeToContent = SizeToContent.Height, CanResize = false, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 10 };
@@ -25,16 +25,16 @@ public static class SleepDialog
         {
             panel.Children.Add(new TextBlock
             {
-                Text = timer.Remaining is { } r ? $"还剩 {Text.Duration(r)}{(timer.FinishSong ? "，到时间后播完当前这首再停止" : "")}" : $"再播 {timer.SongsLeft} 首后停止",
+                Text = timer.Remaining is { } r ? L.F($"还剩 {Text.Duration(r)}{(timer.FinishSong ? L.T("，到时间后播完当前这首再停止") : "")}") : L.F($"再播 {timer.SongsLeft} 首后停止"),
                 FontWeight = FontWeight.SemiBold,
             });
-            var cancel = new Button { Content = "取消定时" };
+            var cancel = new Button { Content = L.T("取消定时") };
             cancel.Click += (_, _) => { timer.Cancel(); w.Close(); };
             panel.Children.Add(cancel);
             panel.Children.Add(new Separator());
         }
-        var finish = new CheckBox { Content = "时间到后播完当前这首再停止（不渐弱）", IsChecked = prefs.FinishSong };
-        var sleepPc = new CheckBox { Content = "停止后让电脑睡眠", IsChecked = prefs.SleepComputer };
+        var finish = new CheckBox { Content = L.T("时间到后播完当前这首再停止（不渐弱）"), IsChecked = prefs.FinishSong };
+        var sleepPc = new CheckBox { Content = L.T("停止后让电脑睡眠"), IsChecked = prefs.SleepComputer };
         void StartMinutes(int minutes)
         {
             prefs.FinishSong = finish.IsChecked == true;
@@ -44,29 +44,29 @@ public static class SleepDialog
             timer.StartMinutes(minutes, prefs.FinishSong, prefs.SleepComputer);
             w.Close();
         }
-        panel.Children.Add(new TextBlock { Text = "按时间", Opacity = 0.65 });
+        panel.Children.Add(new TextBlock { Text = L.T("按时间"), Opacity = 0.65 });
         var presets = new WrapPanel();
         foreach (var m in new[] { 15, 30, 45, 60, 90 })
         {
-            var b = new Button { Content = $"{m} 分钟", Margin = new Thickness(0, 0, 6, 6) };
+            var b = new Button { Content = L.F($"{m} 分钟"), Margin = new Thickness(0, 0, 6, 6) };
             if (m == prefs.LastMinutes) b.Classes.Add("accent");
             b.Click += (_, _) => StartMinutes(m);
             presets.Children.Add(b);
         }
         panel.Children.Add(presets);
         var custom = new NumericUpDown { Value = prefs.CustomMinutes, Minimum = 1, Maximum = 600, Increment = 5, Width = 140, FormatString = "0" };
-        var customGo = new Button { Content = "开始" };
+        var customGo = new Button { Content = L.T("开始") };
         customGo.Click += (_, _) =>
         {
             prefs.CustomMinutes = (int)(custom.Value ?? 20);
             StartMinutes(prefs.CustomMinutes);
         };
-        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = "自定义（分钟）", VerticalAlignment = VerticalAlignment.Center }, custom, customGo } });
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = L.T("自定义（分钟）"), VerticalAlignment = VerticalAlignment.Center }, custom, customGo } });
         panel.Children.Add(finish);
 
-        panel.Children.Add(new TextBlock { Text = "按歌曲数（手动切歌不计数）", Opacity = 0.65, Margin = new Thickness(0, 8, 0, 0) });
+        panel.Children.Add(new TextBlock { Text = L.T("按歌曲数（手动切歌不计数）"), Opacity = 0.65, Margin = new Thickness(0, 8, 0, 0) });
         var songs = new NumericUpDown { Value = prefs.SongCount, Minimum = 1, Maximum = 200, Width = 140, FormatString = "0" };
-        var songsGo = new Button { Content = "开始" };
+        var songsGo = new Button { Content = L.T("开始") };
         songsGo.Click += (_, _) =>
         {
             prefs.SongCount = (int)(songs.Value ?? 3);
@@ -75,9 +75,9 @@ public static class SleepDialog
             timer.StartSongs(prefs.SongCount, prefs.SleepComputer);
             w.Close();
         };
-        var current = new Button { Content = "播完当前这首" };
+        var current = new Button { Content = L.T("播完当前这首") };
         current.Click += (_, _) => { prefs.SleepComputer = sleepPc.IsChecked == true; app.Settings.Save("sleep"); timer.StartSongs(1, prefs.SleepComputer); w.Close(); };
-        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = "播完", VerticalAlignment = VerticalAlignment.Center }, songs, new TextBlock { Text = "首", VerticalAlignment = VerticalAlignment.Center }, songsGo } });
+        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = L.T("播完"), VerticalAlignment = VerticalAlignment.Center }, songs, new TextBlock { Text = L.T("首"), VerticalAlignment = VerticalAlignment.Center }, songsGo } });
         panel.Children.Add(current);
         panel.Children.Add(new Separator());
         panel.Children.Add(sleepPc);

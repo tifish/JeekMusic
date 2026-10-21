@@ -26,8 +26,9 @@ import javax.inject.Singleton
         TrackFeaturesEntity::class,
         TagOverrideEntity::class,
         TrackTagEntity::class,
+        SyncJournalEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class JeekDatabase : RoomDatabase() {
@@ -41,6 +42,7 @@ abstract class JeekDatabase : RoomDatabase() {
     abstract fun lyricsDao(): LyricsDao
     abstract fun tagDao(): TagDao
     abstract fun fileMoveDao(): FileMoveDao
+    abstract fun syncJournalDao(): SyncJournalDao
 }
 
 @Module
@@ -53,7 +55,7 @@ object DatabaseModule {
         Room.databaseBuilder(context, JeekDatabase::class.java, "jeek.db")
             // 1.0 起数据库结构变化必须提供 Migration（app/schemas/ 中导出了每个版本的结构），
             // 不再直接重建，以免丢失播放列表等用户数据；只有降级时才重建（docs/design.md §3）
-            .addMigrations(MIGRATION_4_5)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 

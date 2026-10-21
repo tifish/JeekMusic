@@ -14,7 +14,7 @@ public partial class MainWindow
         if (tracks.Count == 1)
         {
             menu.Items.Add(new Separator());
-            var info = new MenuItem { Header = "歌曲信息" };
+            var info = new MenuItem { Header = L.T("歌曲信息") };
             info.Click += (_, _) => _ = SongInfoWindow.Show(this, _app, tracks[0]);
             menu.Items.Add(info);
         }

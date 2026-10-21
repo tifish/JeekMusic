@@ -9,6 +9,7 @@ namespace JeekMusic.Library;
 public sealed partial class LibraryDb : IDisposable
 {
     readonly SqliteConnection _conn;
+    SqliteTransaction? _transaction;
     public readonly Lock Gate = new();
 
     static LibraryDb() => SQLitePCL.Batteries_V2.Init();
@@ -134,7 +135,7 @@ public sealed partial class LibraryDb : IDisposable
     {
         var cmd = _conn.CreateCommand();
         cmd.CommandText = sql;
-        cmd.Transaction = tx;
+        cmd.Transaction = tx ?? _transaction;
         return cmd;
     }
 
@@ -154,6 +155,19 @@ public sealed partial class LibraryDb : IDisposable
     }
 
     public SqliteTransaction Begin() => _conn.BeginTransaction();
+
+    /// <summary>Compose user-data operations into one commit; callers share the connection lock.</summary>
+    public void InTransaction(Action action)
+    {
+        lock (Gate)
+        {
+            if (_transaction is not null) { action(); return; }
+            using var tx = Begin();
+            _transaction = tx;
+            try { action(); tx.Commit(); }
+            finally { _transaction = null; }
+        }
+    }
 
     // ── 键值（kv 表）──
 

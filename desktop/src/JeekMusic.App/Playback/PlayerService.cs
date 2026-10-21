@@ -42,6 +42,14 @@ public sealed class PlayerService : IDisposable
     public Track? CurrentTrack { get; private set; }
 
     public string? TrackKeyOf(long id) => _tracks.ById(id)?.TrackKey;
+    /// <summary>当前文件与已经预加载的下一首都不能被标签写入占用。</summary>
+    public bool IsFileInUse(Track t)
+    {
+        var path = _tracks.PathOf(t);
+        if (path is null || IsIdle) return false;
+        return CurrentTrack is { } current && string.Equals(path, _tracks.PathOf(current), StringComparison.OrdinalIgnoreCase)
+            || _nextEntry >= 0 && _tracks.ById(_nextTrackId) is { } next && string.Equals(path, _tracks.PathOf(next), StringComparison.OrdinalIgnoreCase);
+    }
     public bool IsPlaying { get; private set; }
     /// <summary>mpv 还没加载任何歌（启动时、队列为空）。</summary>
     public bool IsIdle { get; private set; } = true;
@@ -91,7 +99,7 @@ public sealed class PlayerService : IDisposable
         catch (Exception e) when (e is DllNotFoundException or InvalidOperationException or EntryPointNotFoundException)
         {
             Log.Error("player", "libmpv 初始化失败", e);
-            Error?.Invoke("播放内核加载失败：" + e.Message);
+            Error?.Invoke(L.T("播放内核加载失败：") + e.Message);
             return;
         }
         foreach (var p in new[]
@@ -311,7 +319,7 @@ public sealed class PlayerService : IDisposable
         var path = _tracks.PathOf(track);
         if (path is null || !File.Exists(path))
         {
-            SkipBroken(track, "文件不存在或所在的盘不可用");
+            SkipBroken(track, L.T("文件不存在或所在的盘不可用"));
             return;
         }
         ApplyPendingExclusive();
@@ -432,7 +440,7 @@ public sealed class PlayerService : IDisposable
         if (reason == Mpv.EndReason.Error)
         {
             Log.Playback($"出错：条目 {entryId} {error}");
-            if (entryId == _currentEntry && CurrentTrack is { } t) SkipBroken(t, error ?? "无法解码");
+            if (entryId == _currentEntry && CurrentTrack is { } t) SkipBroken(t, error ?? L.T("无法解码"));
             else if (entryId == _nextEntry) { _nextEntry = -1; _nextTrackId = -1; }
             return;
         }
@@ -451,7 +459,7 @@ public sealed class PlayerService : IDisposable
     void SkipBroken(Track track, string reason)
     {
         _consecutiveErrors++;
-        Error?.Invoke($"无法播放「{track.Title}」：{reason}");
+        Error?.Invoke(L.F($"无法播放「{track.Title}」：{reason}"));
         Log.Playback($"无法播放 {track.RelativePath}：{reason}（连续第 {_consecutiveErrors} 首）");
         if (_consecutiveErrors >= 3 || Queue.NextIndex(user: false) is not { } next || next == Queue.CurrentIndex)
         {
@@ -488,7 +496,7 @@ public sealed class PlayerService : IDisposable
                 if (Device is not null && Devices.Count > 0 && Devices.All(d => d.name != Device) && IsPlaying)
                 {
                     Pause();
-                    Error?.Invoke("指定的输出设备已断开，播放已暂停");
+                    Error?.Invoke(L.T("指定的输出设备已断开，播放已暂停"));
                 }
                 break;
             default:

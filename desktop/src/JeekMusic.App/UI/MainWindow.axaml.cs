@@ -51,8 +51,10 @@ public partial class MainWindow : Window
         LocateButton.Click += (_, _) => LocatePlaying();
         ListMoreButton.Click += (_, _) => ShowListMenu();
         NowTitle.PointerPressed += (_, _) => LocatePlaying();
-        NowArtist.PointerPressed += (_, _) => { if (_app.Player.CurrentTrack is { } t) GoToArtist(t); };
+        NowArtist.Click += (_, _) => { if (_app.Player.CurrentTrack is { } t) GoToArtist(t); };
 
+        NowAlbum.Click += (_, _) => { if (_app.Player.CurrentTrack is { } track) GoToAlbum(track); };
+        OutputButton.Click += (_, _) => ShowOutputMenu();
         ArtistList.SelectionChanged += (_, _) => { };
         LetterIndex.PointerPressed += OnLetterIndexPressed;
         _vm.PropertyChanged += (_, e) =>
@@ -142,8 +144,8 @@ public partial class MainWindow : Window
 
     static readonly Dictionary<string, string> ColumnTitles = new()
     {
-        ["TrackNo"] = "#", ["Title"] = "标题", ["Artist"] = "艺术家", ["Album"] = "专辑", ["Duration"] = "时长", ["FileName"] = "文件名",
-        ["Modified"] = "修改时间", ["Format"] = "格式", ["Tags"] = "智能标签",
+        ["TrackNo"] = "#", ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
+        ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"), ["Tags"] = L.T("智能标签"),
     };
 
     /// <summary>表头的排序箭头自己画（DataGrid 自带的只反映它自己的排序）。</summary>
@@ -273,7 +275,7 @@ public partial class MainWindow : Window
                 break;
             case Key.F5:
                 _ = _app.Library.RescanAsync(full: false);
-                _vm.ShowToast("正在重新扫描");
+                _vm.ShowToast(L.T("正在重新扫描"));
                 e.Handled = true;
                 break;
             case Key.Escape when inText:
@@ -307,11 +309,11 @@ public partial class MainWindow : Window
                 menu.Items.Add(item);
             }
         }
-        Group("氛围", "SPORT", "NON_SPORT");
-        Group("人声", "VOCAL", "INSTRUMENTAL");
-        Group("曲风", "CLASSICAL", "NON_CLASSICAL");
+        Group(L.T("氛围"), "SPORT", "NON_SPORT");
+        Group(L.T("人声"), "VOCAL", "INSTRUMENTAL");
+        Group(L.T("曲风"), "CLASSICAL", "NON_CLASSICAL");
         menu.Items.Add(new Separator());
-        var clear = new MenuItem { Header = "清除筛选", IsEnabled = _vm.FilterActive };
+        var clear = new MenuItem { Header = L.T("清除筛选"), IsEnabled = _vm.FilterActive };
         clear.Click += (_, _) => _vm.ClearFilterCommand.Execute(null);
         menu.Items.Add(clear);
         AddFilterExtras(menu);
@@ -337,7 +339,7 @@ public partial class MainWindow : Window
 
     public async Task AddFolder()
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "选择音乐文件夹", AllowMultiple = true });
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = L.T("选择音乐文件夹"), AllowMultiple = true });
         foreach (var f in folders)
             if (f.TryGetLocalPath() is { } path) await AddFolder(path);
     }
@@ -348,22 +350,22 @@ public partial class MainWindow : Window
         switch (check.Status)
         {
             case AddFolderStatus.NotFound:
-                await Dialogs.Info(this, "添加音乐文件夹", $"找不到文件夹：{path}");
+                await Dialogs.Info(this, L.T("添加音乐文件夹"), L.F($"找不到文件夹：{path}"));
                 return;
             case AddFolderStatus.AlreadyAdded:
-                _vm.ShowToast($"「{check.Folder!.DisplayName}」已经添加过了");
+                _vm.ShowToast(L.F($"「{check.Folder!.DisplayName}」已经添加过了"));
                 return;
             case AddFolderStatus.AlreadyContained:
-                await Dialogs.Info(this, "添加音乐文件夹", $"这个文件夹已包含在「{check.Folder!.Root.TrimEnd('\\')}」里，不需要再添加。");
+                await Dialogs.Info(this, L.T("添加音乐文件夹"), L.F($"这个文件夹已包含在「{check.Folder!.Root.TrimEnd('\\')}」里，不需要再添加。"));
                 return;
             case AddFolderStatus.ContainsExisting:
                 var names = string.Join("\n", check.Children.Select(c => "  " + c.Root.TrimEnd('\\')));
-                if (!await Dialogs.Confirm(this, "添加音乐文件夹", $"这个文件夹包含已经添加的音乐文件夹：\n{names}\n\n是否用它替换这些子文件夹？", "替换"))
+                if (!await Dialogs.Confirm(this, L.T("添加音乐文件夹"), L.F($"这个文件夹包含已经添加的音乐文件夹：\n{names}\n\n是否用它替换这些子文件夹？"), L.T("替换")))
                     return;
                 await _app.Library.AddFolderAsync(path, replaceChildren: true);
                 break;
             default:
-                _vm.ShowToast("正在扫描新添加的文件夹…");
+                _vm.ShowToast(L.T("正在扫描新添加的文件夹…"));
                 await _app.Library.AddFolderAsync(path, replaceChildren: false);
                 break;
         }
@@ -374,7 +376,13 @@ public partial class MainWindow : Window
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         base.OnClosing(e);
-        if (ExitRequested || _app.Settings.Current.CloseAction == CloseAction.Exit) return;
+        if (ExitRequested) return;
+        if (_app.Settings.Current.CloseAction == CloseAction.Exit)
+        {
+            e.Cancel = true;
+            Dispatcher.UIThread.Post(Shell.Current.Exit);
+            return;
+        }
         e.Cancel = true;
         Hide();
         if (!_app.Settings.Current.CloseToTrayHintShown)

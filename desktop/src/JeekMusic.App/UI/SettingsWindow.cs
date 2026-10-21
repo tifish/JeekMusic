@@ -51,7 +51,7 @@ public sealed class SettingsWindow : Window
 
     SettingsWindow(AppServices app, MainWindow main)
     {
-        Title = "设置";
+        Title = L.T("设置");
         Width = 860;
         Height = 640;
         MinWidth = 640;
@@ -130,11 +130,11 @@ public sealed class SettingsWindow : Window
     {
         if (_builtins) return;
         _builtins = true;
-        Register("曲库", 10, LibrarySection);
-        Register("曲库规则", 20, RulesSection);
-        Register("播放", 30, PlaybackSection);
-        Register("外观和窗口", 40, WindowSection);
-        Register("快捷键", 50, HotkeySection);
+        Register(L.T("曲库"), 10, LibrarySection);
+        Register(L.T("曲库规则"), 20, RulesSection);
+        Register(L.T("播放"), 30, PlaybackSection);
+        Register(L.T("外观和窗口"), 40, WindowSection);
+        Register(L.T("快捷键"), 50, HotkeySection);
         ExtraSections?.Invoke();
     }
 
@@ -144,7 +144,7 @@ public sealed class SettingsWindow : Window
     static Control LibrarySection(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(Note("曲库围绕这些文件夹组织（需求 L-1）。可以是本地磁盘、U 盘、移动硬盘；也可以从资源管理器把文件夹拖进这里。"));
+        panel.Children.Add(Note(L.T("曲库围绕这些文件夹组织（需求 L-1）。可以是本地磁盘、U 盘、移动硬盘；也可以从资源管理器把文件夹拖进这里。")));
         var list = new StackPanel { Spacing = 4 };
         void Fill()
         {
@@ -152,10 +152,10 @@ public sealed class SettingsWindow : Window
             foreach (var f in c.App.Library.Db.Folders())
             {
                 var count = c.App.Library.Snapshot.Tracks.Count(t => t.FolderId == f.Id);
-                var remove = new Button { Content = "移除", Padding = new Thickness(10, 2) };
+                var remove = new Button { Content = L.T("移除"), Padding = new Thickness(10, 2) };
                 remove.Click += async (_, _) =>
                 {
-                    if (!await Dialogs.Confirm(c.Window, "移除音乐文件夹", $"移除「{f.Root.TrimEnd('\\')}」？其中的歌会从曲库消失，播放列表里的条目保留并显示为不可用。文件不会被删除。", "移除", danger: true)) return;
+                    if (!await Dialogs.Confirm(c.Window, L.T("移除音乐文件夹"), L.F($"移除「{f.Root.TrimEnd('\\')}」？其中的歌会从曲库消失，播放列表里的条目保留并显示为不可用。文件不会被删除。"), L.T("移除"), danger: true)) return;
                     await c.App.Library.RemoveFolderAsync(f.Id);
                     Fill();
                 };
@@ -164,28 +164,28 @@ public sealed class SettingsWindow : Window
                     ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
                     Children =
                     {
-                        new TextBlock { Text = f.Root.TrimEnd('\\') + (f.Available ? "" : "（不可用）"), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+                        new TextBlock { Text = f.Root.TrimEnd('\\') + (f.Available ? "" : L.T("（不可用）")), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
                         Col(new TextBlock { Text = Text.Count(count), Opacity = 0.6, Margin = new Thickness(12, 0), VerticalAlignment = VerticalAlignment.Center }, 1),
                         Col(remove, 2),
                     },
                 });
             }
-            if (list.Children.Count == 0) list.Children.Add(Note("还没有添加音乐文件夹。"));
+            if (list.Children.Count == 0) list.Children.Add(Note(L.T("还没有添加音乐文件夹。")));
         }
         Fill();
         c.App.Library.SnapshotChanged += Fill;
         c.Window.Closed += (_, _) => c.App.Library.SnapshotChanged -= Fill;
         panel.Children.Add(list);
         panel.Children.Add(Row(
-            Action("添加文件夹…", async () => { await c.Main.AddFolder(); }),
-            Action("重新扫描", () => { _ = c.App.Library.RescanAsync(full: false); c.Main.ViewModel.ShowToast("正在重新扫描"); }),
-            Action("重建曲库", async () =>
+            Action(L.T("添加文件夹…"), async () => { await c.Main.AddFolder(); }),
+            Action(L.T("重新扫描"), () => { _ = c.App.Library.RescanAsync(full: false); c.Main.ViewModel.ShowToast(L.T("正在重新扫描")); }),
+            Action(L.T("重建曲库"), async () =>
             {
-                if (await Dialogs.Confirm(c.Window, "重建曲库", "清空曲库缓存，重新读取所有文件的标签？播放列表、手动修正等不受影响。", "重建"))
-                { _ = c.App.Library.RescanAsync(full: true); c.Main.ViewModel.ShowToast("正在重建曲库"); }
+                if (await Dialogs.Confirm(c.Window, L.T("重建曲库"), L.T("清空曲库缓存，重新读取所有文件的标签？播放列表、手动修正等不受影响。"), L.T("重建")))
+                { _ = c.App.Library.RescanAsync(full: true); c.Main.ViewModel.ShowToast(L.T("正在重建曲库")); }
             })));
         if (c.App.Library.UnsupportedCount > 0)
-            panel.Children.Add(Note($"有 {c.App.Library.UnsupportedCount} 个不支持的文件（如 DSD），没有加入曲库。可以转换成 FLAC。"));
+            panel.Children.Add(Note(L.F($"有 {c.App.Library.UnsupportedCount} 个不支持的文件（如 DSD），没有加入曲库。可以转换成 FLAC。")));
         DragDrop.SetAllowDrop(panel, true);
         panel.AddHandler(DragDrop.DropEvent, async (_, e) =>
         {
@@ -204,9 +204,9 @@ public sealed class SettingsWindow : Window
     static Control RulesSection(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 6 };
-        panel.Children.Add(Note("这些规则和手机端一样，改动后自动同步到其他设备（需求 SY-2）。改了之后用库里已有的标签重新整理艺术家，不用重新读文件。"));
-        panel.Children.Add(SubHeading("艺术家分隔符"));
-        panel.Children.Add(Note("一首歌的艺术家标签里有这些符号时拆成多个艺术家（需求 A-3）。& 和 , 默认不拆，因为会把\"小娟&山谷里的居民\"这类组合名拆坏。"));
+        panel.Children.Add(Note(L.T("这些规则和手机端一样，改动后自动同步到其他设备（需求 SY-2）。改了之后用库里已有的标签重新整理艺术家，不用重新读文件。")));
+        panel.Children.Add(SubHeading(L.T("艺术家分隔符")));
+        panel.Children.Add(Note(L.T("一首歌的艺术家标签里有这些符号时拆成多个艺术家（需求 A-3）。& 和 , 默认不拆，因为会把\"小娟&山谷里的居民\"这类组合名拆坏。")));
         var wrap = new WrapPanel();
         foreach (var sep in ArtistSplitConfig.AllSeparators)
         {
@@ -225,8 +225,8 @@ public sealed class SettingsWindow : Window
             };
         panel.Children.Add(wrap);
 
-        panel.Children.Add(SubHeading("不拆分的名字"));
-        panel.Children.Add(Note("名字里本来就带分隔符的乐队或组合，每行一个（需求 A-4）。"));
+        panel.Children.Add(SubHeading(L.T("不拆分的名字")));
+        panel.Children.Add(Note(L.T("名字里本来就带分隔符的乐队或组合，每行一个（需求 A-4）。")));
         var exceptions = new TextBox { AcceptsReturn = true, Height = 110, Text = string.Join("\n", c.S.ArtistExceptions), TextWrapping = TextWrapping.NoWrap };
         exceptions.LostFocus += (_, _) =>
         {
@@ -237,14 +237,14 @@ public sealed class SettingsWindow : Window
         };
         panel.Children.Add(exceptions);
 
-        panel.Children.Add(SubHeading("从文件名推断艺术家"));
-        panel.Children.Add(Toggle("艺术家标签为空时，从文件名推断（需求 A-9）", c.S.InferFromFileName, v => { c.S.InferFromFileName = v; RulesChanged(c); }));
-        panel.Children.Add(Labeled("文件名格式", Choice<string>([("ARTIST_TITLE", "艺术家 - 标题"), ("TITLE_ARTIST", "标题 - 艺术家")], c.S.FileNameFormat,
+        panel.Children.Add(SubHeading(L.T("从文件名推断艺术家")));
+        panel.Children.Add(Toggle(L.T("艺术家标签为空时，从文件名推断（需求 A-9）"), c.S.InferFromFileName, v => { c.S.InferFromFileName = v; RulesChanged(c); }));
+        panel.Children.Add(Labeled(L.T("文件名格式"), Choice<string>([("ARTIST_TITLE", L.T("艺术家 - 标题")), ("TITLE_ARTIST", L.T("标题 - 艺术家"))], c.S.FileNameFormat,
             v => { c.S.FileNameFormat = v; RulesChanged(c); })));
 
-        panel.Children.Add(SubHeading("旧标签编码"));
-        panel.Children.Add(Note("ID3v2.3 等旧标签里没有标明编码的文字。自动时只修复看起来像 GBK 的乱码；改编码后要\"重建曲库\"才对已有的歌生效。"));
-        panel.Children.Add(Labeled("编码", Choice<string?>([(null, "自动"), ("GBK", "GBK（简体中文）"), ("Big5", "Big5（繁体中文）"), ("Shift_JIS", "Shift-JIS（日文）")], c.S.LegacyCharset,
+        panel.Children.Add(SubHeading(L.T("旧标签编码")));
+        panel.Children.Add(Note(L.T("ID3v2.3 等旧标签里没有标明编码的文字。自动时只修复看起来像 GBK 的乱码；改编码后要\"重建曲库\"才对已有的歌生效。")));
+        panel.Children.Add(Labeled(L.T("编码"), Choice<string?>([(null, L.T("自动")), ("GBK", L.T("GBK（简体中文）")), ("Big5", L.T("Big5（繁体中文）")), ("Shift_JIS", L.T("Shift-JIS（日文）"))], c.S.LegacyCharset,
             v => { c.S.LegacyCharset = v; c.Save("rules"); })));
         return panel;
     }
@@ -259,10 +259,10 @@ public sealed class SettingsWindow : Window
     {
         var panel = new StackPanel { Spacing = 6 };
         var p = c.App.Player;
-        panel.Children.Add(SubHeading("输出设备"));
-        var devices = new List<(string?, string)> { (null, "跟随 Windows 的默认设备") };
+        panel.Children.Add(SubHeading(L.T("输出设备")));
+        var devices = new List<(string?, string)> { (null, L.T("跟随 Windows 的默认设备")) };
         devices.AddRange(p.Devices.Where(d => d.name != "auto").Select(d => ((string?)d.name, d.description)));
-        if (c.S.OutputDevice is { } current && devices.All(d => d.Item1 != current)) devices.Add((current, (c.S.OutputDeviceDescription ?? current) + "（未连接）"));
+        if (c.S.OutputDevice is { } current && devices.All(d => d.Item1 != current)) devices.Add((current, (c.S.OutputDeviceDescription ?? current) + L.T("（未连接）")));
         panel.Children.Add(Choice<string?>(devices, c.S.OutputDevice, v =>
         {
             c.S.OutputDevice = v;
@@ -270,47 +270,61 @@ public sealed class SettingsWindow : Window
             c.Save("playback");
             p.SetDevice(v);
         }));
-        panel.Children.Add(Note("跟随默认设备时，插上耳机、连上蓝牙后自动切过去；指定的设备断开时暂停（需求 O-2）。"));
+        panel.Children.Add(Note(L.T("跟随默认设备时，插上耳机、连上蓝牙后自动切过去；指定的设备断开时暂停（需求 O-2）。")));
 
-        panel.Children.Add(SubHeading("音质"));
-        panel.Children.Add(Toggle("WASAPI 独占模式", c.S.Exclusive, v => { c.S.Exclusive = v; c.Save("playback"); p.SetExclusive(v); }));
-        panel.Children.Add(Note("开启后设备使用文件自己的采样率和位深，不经过系统混音器、不重采样；这时其他程序没有声音，音量条调的是设备音量（设备不支持时不可调）。正在播放时切换会在这首歌结束、暂停或跳转时生效（需求 O-3、O-4）。"));
-        panel.Children.Add(Note($"当前：{c.Main.ViewModel.Player.FormatText}"));
+        panel.Children.Add(SubHeading(L.T("音质")));
+        panel.Children.Add(Toggle(L.T("WASAPI 独占模式"), c.S.Exclusive, v => { c.S.Exclusive = v; c.Save("playback"); p.SetExclusive(v); }));
+        panel.Children.Add(Note(L.T("开启后设备使用文件自己的采样率和位深，不经过系统混音器、不重采样；这时其他程序没有声音，音量条调的是设备音量（设备不支持时不可调）。正在播放时切换会在这首歌结束、暂停或跳转时生效（需求 O-3、O-4）。")));
+        panel.Children.Add(Note(L.F($"当前：{c.Main.ViewModel.Player.FormatText}")));
 
-        panel.Children.Add(SubHeading("其他"));
-        panel.Children.Add(Toggle("任务栏图标上显示播放进度", c.S.TaskbarProgress, v => { c.S.TaskbarProgress = v; c.Save("playback"); }));
+        panel.Children.Add(SubHeading(L.T("其他")));
+        panel.Children.Add(Toggle(L.T("任务栏图标上显示播放进度"), c.S.TaskbarProgress, v => { c.S.TaskbarProgress = v; c.Save("playback"); }));
         return panel;
     }
 
     static Control WindowSection(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 6 };
-        panel.Children.Add(Labeled("主题", Choice([(ThemeMode.System, "跟随系统"), (ThemeMode.Light, "浅色"), (ThemeMode.Dark, "深色")], c.S.Theme,
+        panel.Children.Add(Labeled(L.T("语言 / Language"), Choice([("auto", L.T("跟随系统")), ("zh-Hans", L.T("简体中文")), ("en", "English")], c.S.Language, v => { c.S.Language = v; c.Save("language"); })));
+        panel.Children.Add(Note(L.T("语言设置在重新启动后生效。")));
+        panel.Children.Add(Labeled(L.T("主题"), Choice([(ThemeMode.System, L.T("跟随系统")), (ThemeMode.Light, L.T("浅色")), (ThemeMode.Dark, L.T("深色"))], c.S.Theme,
             v => { c.S.Theme = v; c.Save("theme"); })));
-        panel.Children.Add(Labeled("关闭主窗口时", Choice([(CloseAction.Tray, "隐藏到托盘，继续播放"), (CloseAction.Exit, "退出程序")], c.S.CloseAction,
+        panel.Children.Add(Labeled(L.T("关闭主窗口时"), Choice([(CloseAction.Tray, L.T("隐藏到托盘，继续播放")), (CloseAction.Exit, L.T("退出程序"))], c.S.CloseAction,
             v => { c.S.CloseAction = v; c.Save("window"); })));
-        panel.Children.Add(Toggle("开机时启动（隐藏在托盘里）", c.S.LaunchAtStartup, v =>
+        panel.Children.Add(Toggle(L.T("开机时启动（隐藏在托盘里）"), c.S.LaunchAtStartup, v =>
         {
             c.S.LaunchAtStartup = v;
             c.Save("window");
             SystemState.SetLaunchAtStartup(v);
         }));
-        panel.Children.Add(Toggle("迷你播放器总在最前", c.S.MiniPlayerTopmost, v => { c.S.MiniPlayerTopmost = v; c.Save("mini"); }));
+        panel.Children.Add(Toggle(L.T("迷你播放器总在最前"), c.S.MiniPlayerTopmost, v => { c.S.MiniPlayerTopmost = v; c.Save("mini"); }));
+        panel.Children.Add(SubHeading(L.T("文件关联")));
+        panel.Children.Add(Note(L.T("把 JeekMusic 加入音频文件的“打开方式”。默认播放器由你在 Windows 设置中选择；移动程序目录后可再次注册。")));
+        var status = Note(FileAssociations.Registered ? L.T("已注册当前程序位置") : L.T("当前程序位置尚未注册"));
+        void RunAssociation(Action action)
+        {
+            try { action(); status.Text = FileAssociations.Registered ? L.T("已注册当前程序位置") : L.T("当前程序位置尚未注册"); }
+            catch (Exception e) { _ = Dialogs.Info(c.Window, L.T("文件关联"), e.Message); }
+        }
+        panel.Children.Add(status);
+        panel.Children.Add(Row(Action(L.T("注册打开方式"), () => RunAssociation(FileAssociations.Register)),
+            Action(L.T("取消注册"), () => RunAssociation(FileAssociations.Unregister)),
+            Action(L.T("Windows 默认应用…"), () => RunAssociation(FileAssociations.OpenDefaults))));
         return panel;
     }
 
     static readonly (string action, string label)[] HotkeyActions =
     [
-        ("PlayPause", "播放 / 暂停"), ("Previous", "上一首"), ("Next", "下一首"), ("DesktopLyrics", "显示 / 隐藏桌面歌词"),
-        ("LockLyrics", "锁定 / 解锁桌面歌词"), ("ShowWindow", "显示主窗口"),
+        ("PlayPause", L.T("播放 / 暂停")), ("Previous", L.T("上一首")), ("Next", L.T("下一首")), ("DesktopLyrics", L.T("显示 / 隐藏桌面歌词")),
+        ("LockLyrics", L.T("锁定 / 解锁桌面歌词")), ("ShowWindow", L.T("显示主窗口")),
     ];
 
     static Control HotkeySection(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 6 };
-        panel.Children.Add(SubHeading("全局快捷键"));
-        panel.Children.Add(Note("窗口不在前台、隐藏到托盘时也有效（需求 PC-3）。点输入框后按下想要的组合键；按 Backspace 清空。"));
-        panel.Children.Add(Toggle("启用全局快捷键", c.S.GlobalHotkeysEnabled, v => { c.S.GlobalHotkeysEnabled = v; c.Save("hotkeys"); }));
+        panel.Children.Add(SubHeading(L.T("全局快捷键")));
+        panel.Children.Add(Note(L.T("窗口不在前台、隐藏到托盘时也有效（需求 PC-3）。点输入框后按下想要的组合键；按 Backspace 清空。")));
+        panel.Children.Add(Toggle(L.T("启用全局快捷键"), c.S.GlobalHotkeysEnabled, v => { c.S.GlobalHotkeysEnabled = v; c.Save("hotkeys"); }));
         foreach (var (action, label) in HotkeyActions)
         {
             var box = new TextBox { Width = 220, IsReadOnly = true, Text = c.S.GlobalHotkeys.GetValueOrDefault(action, "") };
@@ -325,11 +339,11 @@ public sealed class SettingsWindow : Window
                 c.Save("hotkeys");
             };
             panel.Children.Add(Labeled(label, failed
-                ? Row(box, new TextBlock { Text = "已被其他程序占用", Foreground = Brushes.IndianRed, VerticalAlignment = VerticalAlignment.Center })
+                ? Row(box, new TextBlock { Text = L.T("已被其他程序占用"), Foreground = Brushes.IndianRed, VerticalAlignment = VerticalAlignment.Center })
                 : box));
         }
-        panel.Children.Add(SubHeading("窗口里的快捷键"));
-        panel.Children.Add(Note("空格 播放 / 暂停　Ctrl+← / → 上一首 / 下一首　Ctrl+F 搜索　Ctrl+L 定位到正在播放\nAlt+← / → 后退 / 前进　F5 重新扫描　回车 播放选中的歌　F2 改名　Delete 删除"));
+        panel.Children.Add(SubHeading(L.T("窗口里的快捷键")));
+        panel.Children.Add(Note(L.T("空格 播放 / 暂停　Ctrl+← / → 上一首 / 下一首　Ctrl+F 搜索　Ctrl+L 定位到正在播放\nAlt+← / → 后退 / 前进　F5 重新扫描　回车 播放选中的歌　F2 改名　Delete 删除")));
         return panel;
     }
 

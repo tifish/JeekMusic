@@ -22,10 +22,14 @@
     <TrimmerRootAssembly Include="JeekMusic" />
     <TrimmerRootAssembly Include="Avalonia.Controls.DataGrid" />
     <AvaloniaResource Include="Assets\**" />
+    <EmbeddedResource Include="Strings\en.json" LogicalName="JeekMusic.Strings.en.json" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- 开发阶段用 tools/get-libmpv.sh 下载的现成 libmpv（docs/design.md §15.3） -->
+    <None Include="..\..\licenses\**" Link="licenses\upstream\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\native\licenses\**" Link="licenses\libmpv\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\native\BUILDINFO.txt" Link="licenses\libmpv\BUILDINFO.txt" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\..\native\BUILDINFO.txt')" />
     <None Include="..\..\native\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\..\native\libmpv-2.dll')" />
   </ItemGroup>
 
@@ -38,6 +42,11 @@
     <PackageReference Include="Microsoft.Data.Sqlite.Core" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="z440.atl.core" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Models\yamnet.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

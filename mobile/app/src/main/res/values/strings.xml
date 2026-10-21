@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_restore_title">Sync data found</string>
+    <string name="sync_restore_message">Merge playlists, pinned artists, tag corrections and lyric offsets from the music folders?</string>
+    <string name="sync_merge">Merge</string>
     <string name="app_name">JeekMusic</string>
 
     <string name="tab_folders">Folders</string>
@@ -398,4 +401,15 @@
         <item quantity="other">Move %1$d songs to the trash?</item>
     </plurals>
     <string name="file_delete_message">The music files go to the system trash and can be restored within 30 days. With “All files access”, the .lrc and image files with the same name go too. Playlist entries are kept and shown as unavailable.</string>
+    <string name="settings_sync">Device sync</string>
+    <string name="sync_device_name">This device</string>
+    <string name="sync_now">Sync now</string>
+    <string name="sync_summary">Each device writes its own file in the music folder. Your file sync tool transfers it.</string>
+    <string name="sync_history">Playlist history</string>
+    <string name="sync_history_summary">Restore versions replaced during sync within 30 days.</string>
+    <string name="sync_history_empty">No replaced playlists.</string>
+    <string name="sync_restore_playlist">Restore %1$s</string>
+    <string name="sync_done">Sync complete</string>
+    <string name="sync_failed">Sync failed: %1$s</string>
+    <string name="sync_changes">Synced %2$d changes from “%1$s”</string>
 </resources>

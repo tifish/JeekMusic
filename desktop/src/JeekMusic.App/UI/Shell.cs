@@ -23,6 +23,7 @@ public sealed partial class Shell
     MainWindow _main = null!;
     TrayIcon? _tray;
     bool _restored;
+    bool _exiting;
 
     public Shell(AppServices app, IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -48,7 +49,7 @@ public sealed partial class Shell
         _main.ViewModel.InitialTarget = InitialTarget();
         _main.Opened += (_, _) => OnFirstShown();
         _main.ViewModel.SnapshotApplied += OnSnapshotApplied;
-        _main.TrayHint += () => _main.ViewModel.ShowToast("JeekMusic 仍在后台播放，可以从任务栏右下角的托盘图标退出");
+        _main.TrayHint += () => _main.ViewModel.ShowToast(L.T("JeekMusic 仍在后台播放，可以从任务栏右下角的托盘图标退出"));
         CreateTray();
 
         _app.Instance?.Received += args => Dispatcher.UIThread.Post(() => OnInstanceArgs(args));
@@ -144,6 +145,7 @@ public sealed partial class Shell
     {
         if (_firstShown) return;
         _firstShown = true;
+        Log.Info("startup", $"Window opened after {(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds:F0} ms");
         // 窗口句柄：隐藏启动时也要有（快捷键、任务栏消息都发给它）
         _app.Messages.Attach(_main);
         _app.System.Attach(_app.Messages);
@@ -280,14 +282,14 @@ public sealed partial class Shell
         var p = _app.Player;
         var menu = new NativeMenu();
         if (p.CurrentTrack is { } t) menu.Add(new NativeMenuItem($"{t.Title} — {Text.Artist(t)}") { IsEnabled = false });
-        menu.Add(Item(p.IsPlaying ? "暂停" : "播放", p.PlayPause));
-        menu.Add(Item("上一首", p.Previous));
-        menu.Add(Item("下一首", p.Next));
+        menu.Add(Item(p.IsPlaying ? L.T("暂停") : L.T("播放"), p.PlayPause));
+        menu.Add(Item(L.T("上一首"), p.Previous));
+        menu.Add(Item(L.T("下一首"), p.Next));
         menu.Add(new NativeMenuItemSeparator());
         AddTrayExtras(menu);
-        menu.Add(Item("显示主窗口", ShowMainWindow));
+        menu.Add(Item(L.T("显示主窗口"), ShowMainWindow));
         menu.Add(new NativeMenuItemSeparator());
-        menu.Add(Item("退出", Exit));
+        menu.Add(Item(L.T("退出"), Exit));
         _tray.Menu = menu;
     }
 
@@ -341,7 +343,7 @@ public sealed partial class Shell
     {
         var files = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToList();
         if (files.Count > 0) OpenFiles(files);
-        else ShowMainWindow();
+        else if (!args.Contains("--background")) ShowMainWindow();
     }
 
     /// <summary>双击音乐文件、拖进窗口：直接播放（需求 PC-7、§3.7）。</summary>
@@ -351,9 +353,11 @@ public sealed partial class Shell
 
     public void Exit()
     {
+        if (_exiting) return;
+        _exiting = true;
+        _main.ExitRequested = true;
         SaveWindow();
         BeforeExit();
-        _main.ExitRequested = true;
         _tray?.Dispose();
         _app.Dispose();
         _desktop.Shutdown();

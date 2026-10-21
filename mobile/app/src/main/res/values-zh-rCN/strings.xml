@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_restore_title">发现同步数据</string>
+    <string name="sync_restore_message">合并音乐文件夹中的播放列表、固定艺术家、标签修正和歌词偏移？</string>
+    <string name="sync_merge">合并</string>
     <string name="app_name">JeekMusic</string>
 
     <string name="tab_folders">文件夹</string>
@@ -389,4 +392,15 @@
         <item quantity="other">把 %1$d 首歌移到回收站？</item>
     </plurals>
     <string name="file_delete_message">音乐文件会移到系统的回收站，30 天内可以恢复；有“所有文件访问权限”时，同名的 .lrc、图片也一起移过去。播放列表里的条目保留，显示为不可用。</string>
+    <string name="settings_sync">设备同步</string>
+    <string name="sync_device_name">本机名称</string>
+    <string name="sync_now">立即同步</string>
+    <string name="sync_summary">每台设备在音乐文件夹里写入自己的数据，由文件同步工具传输。</string>
+    <string name="sync_history">播放列表历史</string>
+    <string name="sync_history_summary">找回 30 天内被同步覆盖的播放列表。</string>
+    <string name="sync_history_empty">暂无被覆盖的播放列表。</string>
+    <string name="sync_restore_playlist">恢复 %1$s</string>
+    <string name="sync_done">同步完成</string>
+    <string name="sync_failed">同步失败：%1$s</string>
+    <string name="sync_changes">已同步来自「%1$s」的 %2$d 项改动</string>
 </resources>

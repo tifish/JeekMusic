@@ -31,9 +31,9 @@ public static class Dialogs
     public static async Task<bool> Confirm(Window owner, string title, string message, string ok = "确定", string cancel = "取消", bool danger = false)
     {
         var result = false;
-        var okButton = new Button { Content = ok, IsDefault = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var okButton = new Button { Content = L.T(ok), IsDefault = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         if (!danger) okButton.Classes.Add("accent");
-        var cancelButton = new Button { Content = cancel, IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var cancelButton = new Button { Content = L.T(cancel), IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         var panel = new StackPanel { Children = { new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap }, Buttons(okButton, cancelButton) } };
         var w = Frame(title, panel);
         okButton.Click += (_, _) => { result = true; w.Close(); };
@@ -45,7 +45,7 @@ public static class Dialogs
     /// <summary>只有一个"知道了"按钮的提示。</summary>
     public static async Task Info(Window owner, string title, string message)
     {
-        var okButton = new Button { Content = "知道了", IsDefault = true, IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var okButton = new Button { Content = L.T("知道了"), IsDefault = true, IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         var panel = new StackPanel { Children = { new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap }, Buttons(okButton) } };
         var w = Frame(title, panel);
         okButton.Click += (_, _) => w.Close();
@@ -57,9 +57,9 @@ public static class Dialogs
     {
         string? result = null;
         var box = new TextBox { Text = initial, Margin = new Thickness(0, 8, 0, 0) };
-        var okButton = new Button { Content = "确定", IsDefault = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var okButton = new Button { Content = L.T("确定"), IsDefault = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         okButton.Classes.Add("accent");
-        var cancelButton = new Button { Content = "取消", IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var cancelButton = new Button { Content = L.T("取消"), IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         var panel = new StackPanel { Children = { new TextBlock { Text = label }, box, Buttons(okButton, cancelButton) } };
         var w = Frame(title, panel);
         void Accept()
@@ -95,7 +95,7 @@ public static class Dialogs
             b.Click += (_, _) => { result = index; w.Close(); };
             panel.Children.Add(b);
         }
-        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var cancel = new Button { Content = L.T("取消"), IsCancel = true, MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
         cancel.Click += (_, _) => w.Close();
         panel.Children.Add(Buttons(cancel));
         await w.ShowDialog(owner);

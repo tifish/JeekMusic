@@ -22,6 +22,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
     readonly Scanner _scanner;
     readonly SemaphoreSlim _work = new(1, 1);
     readonly CancellationTokenSource _cts = new();
+    readonly MemoryMaintenance _memory = new();
 
     public LibraryDb Db { get; }
     public FolderWatcher Watcher { get; } = new();
@@ -75,8 +76,9 @@ public sealed class LibraryService : ITrackSource, IDisposable
 
     Task Enqueue(Action action) => Task.Run(async () =>
     {
-        await _work.WaitAsync(_cts.Token);
-        try { action(); }
+        try { await _work.WaitAsync(_cts.Token); }
+        catch (OperationCanceledException) { return; }
+        try { if (!_cts.IsCancellationRequested) action(); }
         catch (OperationCanceledException) { }
         catch (Exception e) { Log.Error("library", "后台任务出错", e); }
         finally { _work.Release(); }
@@ -94,8 +96,10 @@ public sealed class LibraryService : ITrackSource, IDisposable
         var snapshot = new LibrarySnapshot(folders, tracks, tags);
         Dispatcher.UIThread.Post(() =>
         {
+            if (_cts.IsCancellationRequested) return;
             Snapshot = snapshot;
             SnapshotChanged?.Invoke();
+            _memory.AfterLibraryWork(snapshot.Tracks.Count);
         });
     }
 
@@ -181,12 +185,13 @@ public sealed class LibraryService : ITrackSource, IDisposable
     /// <summary>"重新扫描"（增量）或"重建曲库"（全量重新解析，需求 L-6）。</summary>
     public Task RescanAsync(bool full) => Enqueue(() =>
     {
+        var changed = full;
         foreach (var f in Db.Folders().Where(f => f.Available))
         {
             if (full) Db.ClearFolder(f.Id);
-            ScanFolderCore(f, null, full);
+            changed |= ScanFolderCore(f, null, full).Changed;
         }
-        RebuildSnapshot();
+        if (changed) RebuildSnapshot();
     });
 
     void ScanFolder(long id, IReadOnlyCollection<string>? dirs, bool full)
@@ -227,13 +232,40 @@ public sealed class LibraryService : ITrackSource, IDisposable
 
     // ── ITrackSource ──
 
-    public Track? ById(long id) => Snapshot.ById.GetValueOrDefault(id);
-    public Track? ByKey(string trackKey) => Snapshot.ByKey.GetValueOrDefault(trackKey);
-    public string? PathOf(Track track) => Snapshot.PathOf(track);
+    readonly System.Collections.Concurrent.ConcurrentDictionary<long, (Track track, string path)> _external = new();
+    long _externalId;
+
+    /// <summary>直接打开的文件仅放在临时队列，不自动把整个目录加入曲库。</summary>
+    public Track OpenExternal(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!Scanner.AudioExtensions.Contains(Path.GetExtension(full))) throw new NotSupportedException("不支持的音频格式");
+        var known = Snapshot.Tracks.FirstOrDefault(t => !t.IsCue && string.Equals(Snapshot.PathOf(t), full, StringComparison.OrdinalIgnoreCase));
+        if (known is not null) return known;
+        foreach (var entry in _external.Values)
+            if (entry.path.Equals(full, StringComparison.OrdinalIgnoreCase)) return entry.track;
+        var info = new FileInfo(full);
+        var directory = info.DirectoryName!;
+        var (volume, relative) = Volumes.Locate(directory);
+        var folder = new LibraryFolder { Id = 0, VolumeId = volume, PathInVolume = relative, Root = Volumes.WithSlash(directory), DisplayName = directory };
+        TrackTags? tags = null;
+        try { tags = TagReader.Read(full); }
+        catch (Exception e) { Log.Warn("open", "标签读取失败，仍尝试播放", e); }
+        var t = new TrackBuilder(CurrentConfig()).Build(new AudioFile(folder, "", info.Name, info.LastWriteTimeUtc.Ticks, info.Length), tags, Interlocked.Decrement(ref _externalId));
+        _external[t.Id] = (t, full);
+        return t;
+    }
+
+    public Track? ById(long id) => Snapshot.ById.GetValueOrDefault(id) ?? (_external.TryGetValue(id, out var e) ? e.track : null);
+    public Track? ByKey(string trackKey) => Snapshot.ByKey.GetValueOrDefault(trackKey) ?? _external.Values.FirstOrDefault(e => e.track.TrackKey == trackKey).track;
+    public string? PathOf(Track track) => _external.TryGetValue(track.Id, out var e) ? e.path : Snapshot.PathOf(track);
 
     public void Dispose()
     {
         _cts.Cancel();
+        _memory.Dispose();
         Watcher.Dispose();
+        _work.Wait(); // Workers only post UI updates; cancellation makes this independent of the dispatcher.
+        _work.Release();
     }
 }

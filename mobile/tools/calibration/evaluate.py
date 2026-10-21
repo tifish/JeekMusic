@@ -112,4 +112,5 @@ def main():
               f"准确 {ok / (library[1] + library[3]):.1%}")
 
 
-main()
+if __name__ == "__main__":
+    main()

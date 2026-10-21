@@ -23,22 +23,22 @@ public partial class MainWindow
         var ids = tracks.Select(t => t.Id).ToList();
         if (tracks.Count > 0)
         {
-            Add("播放", () => PlayFrom(tracks[0]));
-            Add("下一首播放", () => { _app.Player.PlayNext(ids); _vm.ShowToast($"{tracks.Count} 首将在下一首播放"); });
-            Add("添加到队列", () => { _app.Player.AddToQueue(ids); _vm.ShowToast($"已添加 {tracks.Count} 首到队列"); });
+            Add(L.T("播放"), () => PlayFrom(tracks[0]));
+            Add(L.T("下一首播放"), () => { _app.Player.PlayNext(ids); _vm.ShowToast(L.F($"{tracks.Count} 首将在下一首播放")); });
+            Add(L.T("添加到队列"), () => { _app.Player.AddToQueue(ids); _vm.ShowToast(L.F($"已添加 {tracks.Count} 首到队列")); });
             menu.Items.Add(PlaylistSubmenu(tracks));
             menu.Items.Add(new Separator());
         }
         if (tracks.Count == 1)
         {
             var t = tracks[0];
-            Add("查看艺术家", () => GoToArtist(t), t.Artists.Count > 0);
-            Add("查看专辑", () => GoToAlbum(t), t.AlbumKey is not null);
-            Add("在资源管理器中显示", () => ShowInExplorer(t));
+            Add(L.T("查看艺术家"), () => GoToArtist(t), t.Artists.Count > 0);
+            Add(L.T("查看专辑"), () => GoToAlbum(t), t.AlbumKey is not null);
+            Add(L.T("在资源管理器中显示"), () => ShowInExplorer(t));
             menu.Items.Add(new Separator());
         }
         if (_vm.IsPlaylistView && _vm.Current is NavTarget.Playlist p)
-            Add("从播放列表移除", () => _app.Playlists.Remove(p.PlaylistId, rows.Select(r => r.Position)));
+            Add(L.T("从播放列表移除"), () => _app.Playlists.Remove(p.PlaylistId, rows.Select(r => r.Position)));
         AddSongActions(menu, tracks);
         e.Handled = true;
         menu.Open(Table);
@@ -49,15 +49,15 @@ public partial class MainWindow
 
     MenuItem PlaylistSubmenu(IReadOnlyList<Track> tracks)
     {
-        var sub = new MenuItem { Header = "添加到播放列表" };
-        var create = new MenuItem { Header = "新建播放列表…" };
+        var sub = new MenuItem { Header = L.T("添加到播放列表") };
+        var create = new MenuItem { Header = L.T("新建播放列表…") };
         create.Click += async (_, _) =>
         {
-            var name = await Dialogs.Prompt(this, "新建播放列表", "名称", "新建播放列表");
+            var name = await Dialogs.Prompt(this, L.T("新建播放列表"), L.T("名称"), L.T("新建播放列表"));
             if (name is null) return;
             var id = _app.Playlists.Create(name);
             _app.Playlists.Add(id, tracks);
-            _vm.ShowToast($"已添加 {tracks.Count} 首到「{_app.Playlists.Get(id)?.Name}」");
+            _vm.ShowToast(L.F($"已添加 {tracks.Count} 首到「{_app.Playlists.Get(id)?.Name}」"));
         };
         sub.Items.Add(create);
         if (_app.Playlists.All.Count > 0) sub.Items.Add(new Separator());
@@ -67,7 +67,7 @@ public partial class MainWindow
             item.Click += (_, _) =>
             {
                 _app.Playlists.Add(p.Id, tracks);
-                _vm.ShowToast($"已添加 {tracks.Count} 首到「{p.Name}」");
+                _vm.ShowToast(L.F($"已添加 {tracks.Count} 首到「{p.Name}」"));
             };
             sub.Items.Add(item);
         }
@@ -76,7 +76,7 @@ public partial class MainWindow
 
     void ShowInExplorer(Track t)
     {
-        if (_app.Library.PathOf(t) is not { } path) { _vm.ShowToast("文件所在的盘不可用"); return; }
+        if (_app.Library.PathOf(t) is not { } path) { _vm.ShowToast(L.T("文件所在的盘不可用")); return; }
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = false });
     }
 
@@ -91,29 +91,29 @@ public partial class MainWindow
             menu.Items.Add(item);
         }
         var any = _vm.Rows.Any(r => r.Available);
-        Add("播放全部", () => PlayAll(shuffle: false), any);
-        Add("随机播放", () => PlayAll(shuffle: true), any);
+        Add(L.T("播放全部"), () => PlayAll(shuffle: false), any);
+        Add(L.T("随机播放"), () => PlayAll(shuffle: true), any);
         if (_vm.IsFolderView && !_vm.IncludeSubfolders)
         {
-            Add("播放全部（含子文件夹）", () => PlayAll(shuffle: false, recursive: true));
-            Add("随机播放（含子文件夹）", () => PlayAll(shuffle: true, recursive: true));
+            Add(L.T("播放全部（含子文件夹）"), () => PlayAll(shuffle: false, recursive: true));
+            Add(L.T("随机播放（含子文件夹）"), () => PlayAll(shuffle: true, recursive: true));
         }
-        Add("全部添加到队列", () => _app.Player.AddToQueue(_vm.Rows.Where(r => r.Track is not null).Select(r => r.Track!.Id).ToList()), any);
-        Add("全选", () => Table.SelectAll(), any);
+        Add(L.T("全部添加到队列"), () => _app.Player.AddToQueue(_vm.Rows.Where(r => r.Track is not null).Select(r => r.Track!.Id).ToList()), any);
+        Add(L.T("全选"), () => Table.SelectAll(), any);
         switch (_vm.Current)
         {
             case NavTarget.Playlist p:
                 menu.Items.Add(new Separator());
-                Add("重命名播放列表…", async () =>
+                Add(L.T("重命名播放列表…"), async () =>
                 {
-                    if (await Dialogs.Prompt(this, "重命名播放列表", "名称", _app.Playlists.Get(p.PlaylistId)?.Name ?? "") is { } name)
+                    if (await Dialogs.Prompt(this, L.T("重命名播放列表"), L.T("名称"), _app.Playlists.Get(p.PlaylistId)?.Name ?? "") is { } name)
                         _app.Playlists.Rename(p.PlaylistId, name);
                 });
                 AddPlaylistExtras(menu, p.PlaylistId);
-                Add("删除播放列表…", async () =>
+                Add(L.T("删除播放列表…"), async () =>
                 {
                     var name = _app.Playlists.Get(p.PlaylistId)?.Name;
-                    if (await Dialogs.Confirm(this, "删除播放列表", $"删除播放列表「{name}」？歌曲文件不会被删除。", "删除", danger: true))
+                    if (await Dialogs.Confirm(this, L.T("删除播放列表"), L.F($"删除播放列表「{name}」？歌曲文件不会被删除。"), L.T("删除"), danger: true))
                         _app.Playlists.Delete(p.PlaylistId);
                 });
                 break;
@@ -141,7 +141,7 @@ public partial class MainWindow
     {
         var order = _vm.NavOrder();
         var pinned = order.Any(i => i.Type == "ARTIST" && i.Ref == artistKey);
-        var item = new MenuItem { Header = pinned ? "取消固定" : "固定到导航栏" };
+        var item = new MenuItem { Header = pinned ? L.T("取消固定") : L.T("固定到导航栏") };
         item.Click += (_, _) => TogglePin(artistKey);
         menu.Items.Add(item);
     }
@@ -153,7 +153,7 @@ public partial class MainWindow
         if (existing >= 0)
         {
             order.RemoveAt(existing);
-            _vm.ShowToast("已取消固定");
+            _vm.ShowToast(L.T("已取消固定"));
         }
         else
         {
@@ -161,7 +161,7 @@ public partial class MainWindow
             var at = order.FindIndex(i => i.Type == "FOLDERS") + 1;
             while (at < order.Count && order[at].Type == "ARTIST") at++;
             order.Insert(at, new NavItem("ARTIST", artistKey));
-            _vm.ShowToast("已固定到导航栏");
+            _vm.ShowToast(L.T("已固定到导航栏"));
         }
         _app.Db.SetNavItems(order);
         NavOrderChanged?.Invoke();

@@ -67,17 +67,17 @@ public sealed class LyricsService(LibraryService library)
             if (folder is { Available: true })
             {
                 var hidden = HiddenPath(folder, t);
-                if (File.Exists(hidden) && Make(CharsetDetector.Decode(File.ReadAllBytes(hidden)), "隐藏目录", hidden) is { } h) return h;
+                if (File.Exists(hidden) && Make(CharsetDetector.Decode(File.ReadAllBytes(hidden)), L.T("隐藏目录"), hidden) is { } h) return h;
             }
-            if (library.Db.CachedLyrics(t.TrackKey) is { content: { } cachedText } && Make(cachedText, "应用内缓存", null) is { } c) return c;
-            if (folder is { Available: true })
+            if (library.Db.CachedLyrics(t.TrackKey) is { content: { } cachedText } && Make(cachedText, L.T("应用内缓存"), null) is { } c) return c;
+            if (library.PathOf(t) is { } audioPath)
             {
                 foreach (var name in SidecarNames(t))
                 {
-                    var path = folder.Root + t.Dir + name;
-                    if (File.Exists(path) && Make(CharsetDetector.Decode(File.ReadAllBytes(path)), "同名 .lrc", path) is { } s) return s;
+                    var path = Path.Combine(Path.GetDirectoryName(audioPath)!, name);
+                    if (File.Exists(path) && Make(CharsetDetector.Decode(File.ReadAllBytes(path)), L.T("同名 .lrc"), path) is { } sidecar) return sidecar;
                 }
-                if (!t.IsCue && t.HasEmbeddedLyrics && TagReader.ReadLyrics(folder.Root + t.RelativePath) is { } embedded && Make(embedded, "内嵌歌词", null) is { } e) return e;
+                if (!t.IsCue && t.HasEmbeddedLyrics && TagReader.ReadLyrics(audioPath) is { } embedded && Make(embedded, L.T("内嵌歌词"), null) is { } e) return e;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -91,6 +91,11 @@ public sealed class LyricsService(LibraryService library)
     {
         lock (_lock) _cache.Remove(t.TrackKey);
         Changed?.Invoke(t);
+    }
+
+    public void ClearMemoryCache()
+    {
+        lock (_lock) _cache.Clear();
     }
 
     /// <summary>调整这首歌的歌词偏移（±0.5 秒步进，需求 LY-6），参与同步（需求 SY-2）。</summary>

@@ -46,7 +46,7 @@ public sealed class FolderWatcher : IDisposable
                 lock (_lock)
                     if (_ignored.TryGetValue(fullPath, out var until) && Environment.TickCount64 < until) return;
                 var rel = fullPath[root.Length..];
-                if (rel.StartsWith(@".jeekmusic\", StringComparison.OrdinalIgnoreCase) || rel.Contains(@"\.jeekmusic\", StringComparison.OrdinalIgnoreCase))
+                if (rel.Equals(".jeekmusic", StringComparison.OrdinalIgnoreCase) || rel.StartsWith(@".jeekmusic\", StringComparison.OrdinalIgnoreCase) || rel.Contains(@"\.jeekmusic\", StringComparison.OrdinalIgnoreCase))
                 {
                     if (rel.Contains(@"sync\", StringComparison.OrdinalIgnoreCase)) lock (_lock) { _syncPending.Add(id); Arm(); }
                     return;

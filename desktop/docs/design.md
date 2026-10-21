@@ -2,6 +2,8 @@
 
 > 状态：草案 v0.1 · 2026-10-20 · 需求见 `requirements.md`，技术验证见 `tech-spike.md`
 
+> 2026-10-21：D1–D6 的主要实现已接入。本文保留原设计与验证计划；实际已验证范围、性能数据和未验收项以 [validation.md](validation.md) 为准。
+
 和移动端相同的规则（标签解析、艺术家拆分、CUE、歌词、排序、智能标签分类、队列）只写桌面端的做法和区别，规则本身见移动端设计文档（`mobile/docs/design.md`，下文简称"移动端设计"）。
 
 ## 1. 技术栈
@@ -348,7 +350,7 @@ MainWindow（Mica，标题栏扩展到客户区）
 
 - LrcParser、CharsetDetector（BOM → 严格 UTF-8 → GBK → Big5 → UTF-8 替换）移植到 Core，用共用用例测试
 - 在线歌词、封面的来源和匹配规则移植移动端设计 §8.4；HTTP 用 `HttpClient`，JSON 用源生成
-- 写入音乐文件（用户选择的保存位置）用 ATL；**正在播放和已经预加载的歌不写**（同移动端 P-14 ④，先存隐藏目录，播放器不再用这个文件后再写）；写入后恢复修改时间
+- 写入音乐文件（用户选择的保存位置）用 ATL；**正在播放和已经预加载的歌不写**（同移动端 P-14 ④，先存隐藏目录，播放器不再用这个文件后再写）。在同一文件系统的 `.jeekmusic/tag-writes/` 创建副本，封面和歌词合并保存成功后原子替换；保留修改时间。音频内容不变时同步更新现有分析结果的文件签名，避免重复分析
 - 歌词面板（LyricsPanel）：规则同移动端设计 §8.6（当前行居中、手动滚动后暂停跟随、拖动出现定位线）；面板不可见时不跟随进度
 
 ## 10. 智能标签
@@ -359,12 +361,12 @@ MainWindow（Mica，标题栏扩展到客户区）
 
 - **方案 A**：每个分析线程一个单独的 mpv 实例，`ao=pcm`、`ao-pcm-file=\\.\pipe\jeekmusic-pcm-<n>`（我们创建命名管道的服务端，mpv 把样本写进来）、`audio-format=float`，`loadfile ... start=,end=` 只解码需要的片段。不写临时文件（5 万首的临时文件会有几百 GB 的写入）
 - **方案 B**（方案 A 不行时）：自己编 libmpv 时把 FFmpeg 编成单独的 DLL（§15.3），分析直接调 libavformat / libavcodec
-- **D5 验证**：方案 A 的管道能否正常工作、解码速度；用移动端的校准集（`mobile/tools/calibration/`）对比两端的模型得分
+- **D5 验证（2026-10-21）**：已采用方案 A。管道输出原始采样率和声道的 float WAV，由 C# 使用与移动端一致的等功率下混和 box 抽取；44.1kHz 双声道逐样本测试通过。详细模型对比见 [validation.md](validation.md)
 
 ### 10.2 模型（AudioTagger）
 
 - `yamnet.tflite` 用 tf2onnx 转成 `yamnet.onnx`，转换脚本在 `desktop/tools/`；用校准集检查转换前后的得分一致
-- ONNX Runtime 只在分析时加载，分析完 5 分钟后释放（`InferenceSession.Dispose`）
+- ONNX Runtime 只在分析时加载，当前批次结束或暂停后立即释放（`InferenceSession.Dispose`），推理线程不空转
 - 得分之后的分类规则（`TagClassifier`、`ClassicalTitles`）在 Core 里，和移动端共用测试用例
 
 ### 10.3 调度（AnalysisService）
@@ -372,7 +374,7 @@ MainWindow（Mica，标题栏扩展到客户区）
 - 有待分析的歌、并且满足条件时才运行；条件不满足时等待通知，**不轮询**
 - **电源**：`RegisterPowerSettingNotification(GUID_ACDC_POWER_SOURCE)`，接上 / 拔掉电源时收到通知；台式机没有电池（`GetSystemPowerStatus` 的 `BatteryFlag` 为 128），视为一直接着电源
 - **全屏时暂停**：`SHQueryUserNotificationState` 返回 `QUNS_BUSY`、`QUNS_RUNNING_D3D_FULL_SCREEN`、`QUNS_PRESENTATION_MODE` 时暂停；分析运行中每处理完一首检查一次
-- 并发：核心数 / 4（至少 1），线程用 `THREAD_MODE_BACKGROUND_BEGIN`（CPU 和磁盘 IO 都是最低优先级）
+- 并发：一个最低优先级工作线程，ONNX 内外部并发均为 1；线程用 `THREAD_MODE_BACKGROUND_BEGIN`（CPU 和磁盘 IO 都是最低优先级）
 - 分析结果写数据库，并按 §11.4 共享给其他设备；开始分析一首之前先看其他设备有没有同一版本的结果
 
 ## 11. 多设备同步（SyncService）
@@ -487,6 +489,7 @@ Main
 - `windows-latest`：`dotnet test` → `dotnet publish -c Release -r win-x64`（Native AOT）→ 放入 libmpv → 打包 `JeekMusic-desktop-1.0.<提交数>-win-x64.zip`
 - 发布：标签 `desktop-v1.0.<提交数>`，**`make_latest: false`**（移动端的应用内更新取的是 latest，移动端设计 §13.2）；更新说明是上个桌面端版本之后改动了 `desktop/`、`shared/` 的提交标题
 - `mobile.yml` 的触发路径加上 `shared/**`
+- 发布前收集 NuGet、模型及原生库的完整许可文件；发布包的 `licenses/libmpv/SOURCE.txt` 指向与 DLL 对应的源码 Release。LGPL 包下载失败会终止构建
 
 ### 15.2 程序内更新（Updater）
 

@@ -56,6 +56,7 @@ class MainViewModel @Inject constructor(
     private val observer: LibraryObserver,
     private val player: PlayerConnection,
     private val backups: BackupManager,
+    val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
     private val analysis: AnalysisScheduler,
     private val onlineFetch: OnlineFetchScheduler,
     private val embedDownloaded: EmbedDownloadedScheduler,
@@ -185,6 +186,8 @@ class MainViewModel @Inject constructor(
     }
 
     private var startupDone = false
+
+    fun onForeground() = sync.onForeground()
 
     /**
      * 首帧显示后才做的工作（docs/design.md §9.3）：连接播放服务、注册媒体库监听、增量扫描。

@@ -20,7 +20,7 @@ public static class QueueFlyout
         var list = new StackPanel { Spacing = 0 };
         var scroll = new ScrollViewer { Content = list, Width = 420, MaxHeight = 560 };
         var header = new TextBlock { FontSize = 16, FontWeight = FontWeight.SemiBold, Margin = new Thickness(8, 4, 8, 8) };
-        var clear = new Button { Content = "清空队列", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(10, 2) };
+        var clear = new Button { Content = L.T("清空队列"), HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(10, 2) };
         clear.Click += (_, _) => { app.Player.Queue.Clear(); app.Player.Pause(); };
         flyout.Content = new StackPanel { Children = { new Grid { Children = { header, clear } }, scroll } };
 
@@ -31,13 +31,13 @@ public static class QueueFlyout
             list.Children.Clear();
             var q = app.Player.Queue;
             var snapshot = app.Library.Snapshot;
-            header.Text = $"播放队列（{q.Items.Count} 首）";
+            header.Text = L.F($"播放队列（{q.Items.Count} 首）");
             var manualEnd = q.CurrentIndex + 1;
             while (manualEnd < q.Items.Count && q.Items[manualEnd].Manual) manualEnd++;
             for (var i = 0; i < q.Items.Count; i++)
             {
-                if (i == q.CurrentIndex + 1 && i < manualEnd) list.Children.Add(Section("手动添加的"));
-                if (i == manualEnd && i > q.CurrentIndex && q.Context is { } ctx) list.Children.Add(Section($"来自「{ctx.Title}」"));
+                if (i == q.CurrentIndex + 1 && i < manualEnd) list.Children.Add(Section(L.T("手动添加的")));
+                if (i == manualEnd && i > q.CurrentIndex && q.Context is { } ctx) list.Children.Add(Section(L.F($"来自「{ctx.Title}」")));
                 var track = snapshot.ById.GetValueOrDefault(q.Items[i].TrackId);
                 var row = Row(i, track, i == q.CurrentIndex, i < q.CurrentIndex);
                 if (i == q.CurrentIndex) currentRow = row;
@@ -49,7 +49,7 @@ public static class QueueFlyout
 
         Control Row(int index, Track? track, bool current, bool played)
         {
-            var title = new TextBlock { Text = track?.Title ?? "（不可用）", TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
+            var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
             var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.6, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
             var remove = new Button { Content = Icons.Close, Classes = { "icon" }, FontSize = 10, Padding = new Thickness(6) };
             remove.Click += (_, _) => app.Player.Queue.RemoveAt(index);

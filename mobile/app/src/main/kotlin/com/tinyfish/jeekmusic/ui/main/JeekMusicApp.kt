@@ -132,6 +132,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun JeekMusicApp(viewModel: MainViewModel) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val syncOffer by viewModel.sync.offer.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.sync.status.collectAsStateWithLifecycle()
     val playbackStatus by viewModel.playbackStatus.collectAsStateWithLifecycle()
     // 提示放在最外层收集：设置、搜索等页面发出的提示（比如"已是最新版本"）也要显示，
     // 以前只在主界面收集，其他页面打开时的提示都丢了
@@ -142,6 +144,16 @@ fun JeekMusicApp(viewModel: MainViewModel) {
         launch { viewModel.playbackErrors.collect { snackbar.showSnackbar(resources.getString(R.string.playback_error, it)) } }
     }
     JeekTheme(themeMode = themeMode) {
+        LaunchedEffect(syncStatus) {
+            if (syncStatus.isNotEmpty() && syncStatus != resources.getString(R.string.sync_done)) snackbar.showSnackbar(syncStatus)
+        }
+        if (syncOffer) androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel.sync::dismissRestore,
+            title = { androidx.compose.material3.Text(stringResource(R.string.sync_restore_title)) },
+            text = { androidx.compose.material3.Text(stringResource(R.string.sync_restore_message)) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = viewModel.sync::acceptRestore) { androidx.compose.material3.Text(stringResource(R.string.sync_merge)) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = viewModel.sync::dismissRestore) { androidx.compose.material3.Text(stringResource(android.R.string.cancel)) } },
+        )
         CompositionLocalProvider(LocalNavigator provides viewModel, LocalSnackbar provides snackbar, LocalPlaybackStatus provides playbackStatus) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                 UpdatePrompt()

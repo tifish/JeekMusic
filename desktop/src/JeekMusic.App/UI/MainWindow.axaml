@@ -7,32 +7,55 @@
         x:DataType="vm:MainViewModel"
         Title="JeekMusic" Width="1200" Height="760" MinWidth="760" MinHeight="480"
         Icon="avares://JeekMusic/Assets/JeekMusic.ico"
-        TransparencyLevelHint="Mica" Background="Transparent">
+        TransparencyLevelHint="Mica" Background="Transparent"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaTitleBarHeightHint="46">
+    <Window.Resources>
+        <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="Transparent" />
+    </Window.Resources>
+    <Window.Styles>
+        <Style Selector="WindowDrawnDecorations /template/ Panel#PART_TitleTextPanel > TextBlock">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="WindowDrawnDecorations /template/ Panel#PART_TitleBar">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="WindowDrawnDecorations /template/ Border#PART_WindowBorder">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Grid#TitleBar Button">
+            <Setter Property="WindowDecorationProperties.ElementRole" Value="User" />
+        </Style>
+        <Style Selector="Grid#TitleBar TextBox">
+            <Setter Property="WindowDecorationProperties.ElementRole" Value="User" />
+        </Style>
+    </Window.Styles>
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- 工具栏：后退 / 前进、搜索、筛选、设置 -->
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="8,6,8,4">
-            <Button Grid.Column="0" Classes="icon" Content="{x:Static ui:Icons.Back}" Command="{Binding GoBackCommand}"
-                    IsEnabled="{Binding CanGoBack}" ToolTip.Tip="后退（Alt+←）" />
-            <Button Grid.Column="1" Classes="icon" Content="{x:Static ui:Icons.Forward}" Command="{Binding GoForwardCommand}"
-                    IsEnabled="{Binding CanGoForward}" ToolTip.Tip="前进（Alt+→）" />
-            <TextBox Grid.Column="2" x:Name="SearchBox" Text="{Binding SearchText}" Margin="12,0" MaxWidth="460" HorizontalAlignment="Left"
-                     MinWidth="260" PlaceholderText="搜索歌名、艺术家、专辑、文件名，或拼音首字母（Ctrl+F）" VerticalContentAlignment="Center" />
-            <TextBlock Grid.Column="3" Text="{Binding ScanText}" Classes="secondary" VerticalAlignment="Center" Margin="0,0,12,0" />
-            <Button Grid.Column="4" x:Name="FilterButton" Classes="icon" ToolTip.Tip="按智能标签筛选" Padding="10,6">
+        <!-- 标题栏（需求 W-7）：工具栏放在标题栏里，空白处可以拖动窗口；右边留出系统的最小化 / 最大化 / 关闭按钮 -->
+        <Grid Grid.Row="0" x:Name="TitleBar" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="8,4,150,2" Background="Transparent" MinHeight="40" WindowDecorationProperties.ElementRole="TitleBar">
+            <Image Grid.Column="0" Source="avares://JeekMusic/Assets/JeekMusic.png" Width="18" Height="18" Margin="4,0,8,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+            <Button Grid.Column="1" Classes="icon" Content="{x:Static ui:Icons.Back}" Command="{Binding GoBackCommand}"
+                    IsEnabled="{Binding CanGoBack}" AutomationProperties.Name="{ui:Tr &apos;后退（Alt+←）&apos;}" ToolTip.Tip="{ui:Tr &apos;后退（Alt+←）&apos;}" />
+            <Button Grid.Column="2" Classes="icon" Content="{x:Static ui:Icons.Forward}" Command="{Binding GoForwardCommand}"
+                    IsEnabled="{Binding CanGoForward}" AutomationProperties.Name="{ui:Tr &apos;前进（Alt+→）&apos;}" ToolTip.Tip="{ui:Tr &apos;前进（Alt+→）&apos;}" />
+            <TextBox Grid.Column="3" x:Name="SearchBox" Text="{Binding SearchText}" Margin="12,0" MaxWidth="460" HorizontalAlignment="Left"
+                     MinWidth="260" PlaceholderText="{ui:Tr &apos;搜索歌名、艺术家、专辑、文件名，或拼音首字母（Ctrl+F）&apos;}" VerticalContentAlignment="Center" />
+            <TextBlock Grid.Column="4" Text="{Binding ScanText}" Classes="secondary" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <Button Grid.Column="5" x:Name="FilterButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;按智能标签筛选&apos;}" ToolTip.Tip="{ui:Tr &apos;按智能标签筛选&apos;}" Padding="10,6">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Filter}" />
                     <TextBlock Text="{Binding FilterText}" FontFamily="{x:Static FontFamily.Default}" FontSize="13" VerticalAlignment="Center"
                                MaxWidth="160" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Button>
-            <Button Grid.Column="5" x:Name="SettingsButton" Classes="icon" Content="{x:Static ui:Icons.Settings}" ToolTip.Tip="设置" />
+            <Button Grid.Column="6" x:Name="SettingsButton" Classes="icon" Content="{x:Static ui:Icons.Settings}" AutomationProperties.Name="{ui:Tr &apos;设置&apos;}" ToolTip.Tip="{ui:Tr &apos;设置&apos;}" />
         </Grid>
 
         <!-- 主区：导航栏 | 艺术家栏 | 内容 | 歌词面板 -->
         <Grid Grid.Row="1" x:Name="MainArea" ColumnDefinitions="230,Auto,Auto,*,Auto,Auto">
             <DockPanel Grid.Column="0" x:Name="NavPanel">
             <Button DockPanel.Dock="Top" x:Name="NavCollapse" Classes="icon" Content="{x:Static ui:Icons.NavPane}" HorizontalAlignment="Left" Margin="8,0,0,2"
-                    ToolTip.Tip="折叠 / 展开导航栏" />
+                    AutomationProperties.Name="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" ToolTip.Tip="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" />
             <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" SelectedItem="{Binding SelectedNav}" Margin="4,0,0,0">
                 <TreeView.Styles>
                     <Style Selector="TreeViewItem" x:DataType="vm:NavNode">
@@ -79,9 +102,9 @@
                 <!-- 首次启动：引导添加音乐文件夹（同移动端 L-4） -->
                 <StackPanel IsVisible="{Binding IsWelcome}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
                     <Image Source="avares://JeekMusic/Assets/JeekMusic.png" Width="96" Height="96" />
-                    <TextBlock Text="欢迎使用 JeekMusic" Classes="title" HorizontalAlignment="Center" />
-                    <TextBlock Text="添加存放音乐的文件夹，曲库就围绕这些文件夹组织。" Classes="secondary" HorizontalAlignment="Center" />
-                    <Button x:Name="WelcomeAddFolder" Content="添加音乐文件夹" HorizontalAlignment="Center" Classes="accent" Padding="20,8" />
+                    <TextBlock Text="{ui:Tr &apos;欢迎使用 JeekMusic&apos;}" Classes="title" HorizontalAlignment="Center" />
+                    <TextBlock Text="{ui:Tr &apos;添加存放音乐的文件夹，曲库就围绕这些文件夹组织。&apos;}" Classes="secondary" HorizontalAlignment="Center" />
+                    <Button x:Name="WelcomeAddFolder" Content="{ui:Tr &apos;添加音乐文件夹&apos;}" HorizontalAlignment="Center" Classes="accent" Padding="20,8" />
                 </StackPanel>
 
                 <TextBlock IsVisible="{Binding IsHint}" Text="{Binding HintText}" Classes="secondary" TextWrapping="Wrap"
@@ -89,15 +112,20 @@
 
                 <Grid IsVisible="{Binding IsSongs}" RowDefinitions="Auto,Auto,*">
                     <Grid ColumnDefinitions="*,Auto" Margin="4,4,4,8">
-                        <StackPanel>
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="88" Height="88" Margin="0,0,12,0" IsVisible="{Binding IsAlbumView}" CornerRadius="4" ClipToBounds="True" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+                                <Image Source="{Binding AlbumCover}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding ContentTitle}" Classes="title" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding AlbumInfo}" Classes="secondary" IsVisible="{Binding IsAlbumView}" Margin="0,2,0,0" />
                             <TextBlock Text="{Binding ContentSubtitle}" Classes="secondary" Margin="0,2,0,0" />
-                        </StackPanel>
+                            </StackPanel>
+                        </DockPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
-                            <CheckBox Content="包含子文件夹" IsChecked="{Binding IncludeSubfolders}" IsVisible="{Binding IsFolderView}" />
-                            <Button x:Name="LocateButton" Classes="icon" Content="{x:Static ui:Icons.Locate}" ToolTip.Tip="定位到正在播放（Ctrl+L）" />
-                            <Button x:Name="ListMoreButton" Classes="icon" Content="{x:Static ui:Icons.More}" ToolTip.Tip="更多" />
+                            <CheckBox Content="{ui:Tr &apos;包含子文件夹&apos;}" IsChecked="{Binding IncludeSubfolders}" IsVisible="{Binding IsFolderView}" />
+                            <Button x:Name="LocateButton" Classes="icon" Content="{x:Static ui:Icons.Locate}" AutomationProperties.Name="{ui:Tr &apos;定位到正在播放（Ctrl+L）&apos;}" ToolTip.Tip="{ui:Tr &apos;定位到正在播放（Ctrl+L）&apos;}" />
+                            <Button x:Name="ListMoreButton" Classes="icon" Content="{x:Static ui:Icons.More}" AutomationProperties.Name="{ui:Tr &apos;更多&apos;}" ToolTip.Tip="{ui:Tr &apos;更多&apos;}" />
                         </StackPanel>
                     </Grid>
                     <!-- 搜索结果里的艺术家 -->
@@ -115,14 +143,14 @@
                               CanUserSortColumns="True" CanUserResizeColumns="True" CanUserReorderColumns="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="#" Binding="{Binding Number}" Width="44" Tag="TrackNo" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="标题" Binding="{Binding Title}" Width="3*" Tag="Title" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="艺术家" Binding="{Binding Artist}" Width="2*" Tag="Artist" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="专辑" Binding="{Binding Album}" Width="2*" Tag="Album" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="时长" Binding="{Binding Duration}" Width="76" Tag="Duration" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="文件名" Binding="{Binding FileName}" Width="2*" Tag="FileName" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="修改时间" Binding="{Binding Modified}" Width="130" Tag="Modified" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="格式" Binding="{Binding Format}" Width="96" Tag="Format" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="智能标签" Binding="{Binding TagText}" Width="140" Tag="Tags" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;标题&apos;}" Binding="{Binding Title}" Width="3*" Tag="Title" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;艺术家&apos;}" Binding="{Binding Artist}" Width="2*" Tag="Artist" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;专辑&apos;}" Binding="{Binding Album}" Width="2*" Tag="Album" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;时长&apos;}" Binding="{Binding Duration}" Width="92" Tag="Duration" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;文件名&apos;}" Binding="{Binding FileName}" Width="2*" Tag="FileName" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;修改时间&apos;}" Binding="{Binding Modified}" Width="130" Tag="Modified" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;格式&apos;}" Binding="{Binding Format}" Width="96" Tag="Format" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;智能标签&apos;}" Binding="{Binding TagText}" Width="140" Tag="Tags" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
@@ -134,7 +162,7 @@
 
         <!-- 播放栏（需求 W-5） -->
         <Border Grid.Row="2" x:Name="PlayerBar" Padding="12,8" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-            <Grid ColumnDefinitions="300,*,320" DataContext="{Binding Player}" x:DataType="vm:PlayerViewModel">
+            <Grid ColumnDefinitions="280,*,350" DataContext="{Binding Player}" x:DataType="vm:PlayerViewModel">
                 <!-- 封面、标题、艺术家 -->
                 <Grid ColumnDefinitions="Auto,*">
                     <Border Width="52" Height="52" CornerRadius="4" ClipToBounds="True" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
@@ -145,18 +173,21 @@
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock x:Name="NowTitle" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Cursor="Hand" />
-                        <TextBlock x:Name="NowArtist" Text="{Binding ArtistAlbum}" Classes="secondary" FontSize="12" TextTrimming="CharacterEllipsis" Cursor="Hand" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="NowArtist" Content="{Binding Artist}" Padding="0" MinHeight="0" Background="Transparent" BorderThickness="0" FontSize="12" MaxWidth="140" AutomationProperties.Name="{ui:Tr &apos;查看艺术家&apos;}" ToolTip.Tip="{ui:Tr &apos;查看艺术家&apos;}" />
+                            <Button x:Name="NowAlbum" Content="{Binding Album}" Padding="0" MinHeight="0" Background="Transparent" BorderThickness="0" FontSize="12" MaxWidth="140" AutomationProperties.Name="{ui:Tr &apos;查看专辑&apos;}" ToolTip.Tip="{ui:Tr &apos;查看专辑&apos;}" />
+                        </StackPanel>
                         <TextBlock Text="{Binding FormatText}" Classes="secondary" FontSize="11" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </Grid>
                 <!-- 播放控制和进度 -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
-                        <ToggleButton Classes="icon" Content="{x:Static ui:Icons.Shuffle}" IsChecked="{Binding Shuffle, Mode=OneWay}" Command="{Binding ToggleShuffleCommand}" ToolTip.Tip="随机播放" />
-                        <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" ToolTip.Tip="上一首（Ctrl+←）" />
-                        <Button Classes="icon large" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" ToolTip.Tip="{Binding PlayTip}" />
-                        <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" ToolTip.Tip="下一首（Ctrl+→）" />
-                        <ToggleButton Classes="icon" Content="{Binding RepeatIcon}" IsChecked="{Binding RepeatOn, Mode=OneWay}" Command="{Binding CycleRepeatCommand}" ToolTip.Tip="{Binding RepeatTip}" />
+                        <ToggleButton Classes="icon" Content="{x:Static ui:Icons.Shuffle}" IsChecked="{Binding Shuffle, Mode=OneWay}" Command="{Binding ToggleShuffleCommand}" AutomationProperties.Name="{ui:Tr &apos;随机播放&apos;}" ToolTip.Tip="{ui:Tr &apos;随机播放&apos;}" />
+                        <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（Ctrl+←）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（Ctrl+←）&apos;}" />
+                        <Button Classes="icon large" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" AutomationProperties.Name="{Binding PlayTip}" ToolTip.Tip="{Binding PlayTip}" />
+                        <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（Ctrl+→）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（Ctrl+→）&apos;}" />
+                        <ToggleButton Classes="icon" Content="{Binding RepeatIcon}" IsChecked="{Binding RepeatOn, Mode=OneWay}" Command="{Binding CycleRepeatCommand}" AutomationProperties.Name="{Binding RepeatTip}" ToolTip.Tip="{Binding RepeatTip}" />
                     </StackPanel>
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <TextBlock Text="{Binding PositionText}" Classes="secondary" FontSize="11" VerticalAlignment="Center" MinWidth="40" TextAlignment="Right" />
@@ -167,18 +198,19 @@
                 </StackPanel>
                 <!-- 睡眠定时、音量、队列、歌词、迷你播放器 -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
-                    <Button x:Name="SleepButton" Classes="icon" ToolTip.Tip="睡眠定时">
+                    <Button x:Name="OutputButton" Classes="icon" Content="{x:Static ui:Icons.Speaker}" AutomationProperties.Name="{ui:Tr &apos;输出设备&apos;}" ToolTip.Tip="{ui:Tr &apos;输出设备&apos;}" />
+                    <Button x:Name="SleepButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;睡眠定时&apos;}" ToolTip.Tip="{ui:Tr &apos;睡眠定时&apos;}">
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Moon}" />
                             <TextBlock Text="{Binding SleepText}" FontFamily="{x:Static FontFamily.Default}" FontSize="12" IsVisible="{Binding SleepActive}" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="icon" Content="{Binding VolumeIcon}" Command="{Binding ToggleMuteCommand}" ToolTip.Tip="静音" />
+                    <Button Classes="icon" Content="{Binding VolumeIcon}" Command="{Binding ToggleMuteCommand}" AutomationProperties.Name="{ui:Tr &apos;静音&apos;}" ToolTip.Tip="{ui:Tr &apos;静音&apos;}" />
                     <Slider Width="90" Minimum="0" Maximum="100" Value="{Binding Volume}" VerticalAlignment="Center" IsEnabled="{Binding VolumeAvailable}"
-                            ToolTip.Tip="音量（独占模式下调的是设备音量）" />
-                    <Button x:Name="QueueButton" Classes="icon" Content="{x:Static ui:Icons.Queue}" ToolTip.Tip="播放队列" />
-                    <ToggleButton x:Name="LyricsToggle" Classes="icon" Content="{x:Static ui:Icons.Lyrics}" ToolTip.Tip="歌词" />
-                    <Button x:Name="MiniButton" Classes="icon" Content="{x:Static ui:Icons.MiniPlayer}" ToolTip.Tip="迷你播放器" />
+                            AutomationProperties.Name="{ui:Tr &apos;音量（独占模式下调的是设备音量）&apos;}" ToolTip.Tip="{ui:Tr &apos;音量（独占模式下调的是设备音量）&apos;}" />
+                    <Button x:Name="QueueButton" Classes="icon" Content="{x:Static ui:Icons.Queue}" AutomationProperties.Name="{ui:Tr &apos;播放队列&apos;}" ToolTip.Tip="{ui:Tr &apos;播放队列&apos;}" />
+                    <ToggleButton x:Name="LyricsToggle" Classes="icon" Content="{x:Static ui:Icons.Lyrics}" AutomationProperties.Name="{ui:Tr &apos;歌词&apos;}" ToolTip.Tip="{ui:Tr &apos;歌词&apos;}" />
+                    <Button x:Name="MiniButton" Classes="icon" Content="{x:Static ui:Icons.MiniPlayer}" AutomationProperties.Name="{ui:Tr &apos;迷你播放器&apos;}" ToolTip.Tip="{ui:Tr &apos;迷你播放器&apos;}" />
                 </StackPanel>
             </Grid>
         </Border>

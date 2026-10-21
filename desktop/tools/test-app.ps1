@@ -16,10 +16,17 @@ param(
     # 传给程序的参数，用分号分隔（pwsh -File 不能传数组）
     [string]$AppArgs = "",
     [int]$LogLines = 15,
-    [switch]$KeepRunning
+    [switch]$KeepRunning,
+    [switch]$GracefulExit
 )
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-if ($Fresh) { Remove-Item -Recurse -Force $Data -ErrorAction SilentlyContinue }
+$Data = [IO.Path]::GetFullPath($Data)
+if ($Fresh) {
+    $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+    $workspaceRoot = [IO.Path]::GetFullPath("$PSScriptRoot\..\..").TrimEnd('\') + '\'
+    if (-not ($Data.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or $Data.StartsWith($workspaceRoot, [StringComparison]::OrdinalIgnoreCase))) { throw "Fresh test data must be inside TEMP or this workspace: $Data" }
+    Remove-Item -LiteralPath $Data -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force $Data | Out-Null
 Add-Type -AssemblyName System.Drawing
 if (-not ("JmTest" -as [type])) {
@@ -34,6 +41,7 @@ public static class JmTest {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint f);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wparam, IntPtr lparam);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
   public static List<IntPtr> Windows(uint pid) {
@@ -54,12 +62,15 @@ foreach ($a in ($AppArgs -split ';' | Where-Object { $_ })) { $psi.ArgumentList.
 $p = [System.Diagnostics.Process]::Start($psi)
 $stole = 0; $samples = 0
 $deadline = (Get-Date).AddSeconds($Seconds)
+$idleCpu = $null
 while ((Get-Date) -lt $deadline -and -not $p.HasExited) {
     Start-Sleep -Milliseconds 200
     $fp = 0; [JmTest]::GetWindowThreadProcessId([JmTest]::GetForegroundWindow(), [ref]$fp) | Out-Null
     $samples++; if ($fp -eq $p.Id) { $stole++ }
+    if ($null -eq $idleCpu -and (Get-Date) -gt $deadline.AddSeconds(-[Math]::Min(5, $Seconds / 2))) { $idleCpu = $p.TotalProcessorTime.TotalMilliseconds }
 }
 "exited: $($p.HasExited)  foreground samples owned by app: $stole / $samples"
+if (-not $p.HasExited) { $p.Refresh(); "private memory MB: $([Math]::Round($p.PrivateMemorySize64 / 1MB, 1)); final idle CPU ms: $([Math]::Round($p.TotalProcessorTime.TotalMilliseconds - $idleCpu, 1))" }
 if (-not $p.HasExited -and $Shot) {
     $main = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'JeekMusic' } | Select-Object -First 1
     if ($main) {
@@ -69,5 +80,11 @@ if (-not $p.HasExited -and $Shot) {
         $bmp.Save($Shot); "screenshot $($bmp.Width)x$($bmp.Height) -> $Shot"
     } else { "no main window found" }
 }
+if ($GracefulExit -and -not $KeepRunning -and -not $p.HasExited) {
+    $closeTarget = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'JeekMusic' } | Select-Object -First 1
+    if ($closeTarget) { [JmTest]::PostMessage($closeTarget, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
+    "graceful exit: $($p.WaitForExit(5000))"
+}
 if (-not $KeepRunning -and -not $p.HasExited) { $p.Kill(); $p.WaitForExit(3000) | Out-Null }
 if (Test-Path "$Data\logs\app.log") { "--- app.log"; Get-Content "$Data\logs\app.log" -Tail $LogLines }
+if ($stole -gt 0) { throw "Background smoke test stole foreground focus in $stole samples" }

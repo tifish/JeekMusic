@@ -34,7 +34,7 @@ public sealed class DesktopLyricsWindow : Window
         _player = player;
         _lyrics = lyrics;
         _settings = settings;
-        SystemDecorations = WindowDecorations.None;
+        WindowDecorations = WindowDecorations.None;
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         Topmost = true;
@@ -43,7 +43,7 @@ public sealed class DesktopLyricsWindow : Window
         CanResize = false;
         SizeToContent = SizeToContent.Height;
         Width = 900;
-        Title = "JeekMusic 桌面歌词";
+        Title = L.T("JeekMusic 桌面歌词");
 
         Button Tool(string glyph, string tip, Action action)
         {
@@ -61,10 +61,10 @@ public sealed class DesktopLyricsWindow : Window
                 Orientation = Orientation.Horizontal, Spacing = 2,
                 Children =
                 {
-                    Tool(Icons.Previous, "上一首", player.Previous), Tool(Icons.Play, "播放 / 暂停", player.PlayPause), Tool(Icons.Next, "下一首", player.Next),
-                    Tool("A−", "缩小字号", () => Resize(-2)), Tool("A+", "放大字号", () => Resize(2)),
-                    Tool(Icons.Lock, "锁定（鼠标穿透；从托盘或快捷键解锁）", () => SetLocked(true)),
-                    Tool(Icons.Close, "关闭桌面歌词", () => VisibilityChanged?.Invoke(false)),
+                    Tool(Icons.Previous, L.T("上一首"), player.Previous), Tool(Icons.Play, L.T("播放 / 暂停"), player.PlayPause), Tool(Icons.Next, L.T("下一首"), player.Next),
+                    Tool("A−", L.T("缩小字号"), () => Resize(-2)), Tool("A+", L.T("放大字号"), () => Resize(2)),
+                    Tool(Icons.Lock, L.T("锁定（鼠标穿透；从托盘或快捷键解锁）"), () => SetLocked(true)),
+                    Tool(Icons.Close, L.T("关闭桌面歌词"), () => VisibilityChanged?.Invoke(false)),
                 },
             },
         };
@@ -79,6 +79,12 @@ public sealed class DesktopLyricsWindow : Window
         root.PointerPressed += (_, e) => { if (!Locked && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e); };
         Content = root;
         ApplyStyle();
+        settings.Changed += category =>
+        {
+            if (category != "lyrics-window") return;
+            ApplyStyle();
+            if (Locked != settings.Current.DesktopLyricsLocked) SetLocked(settings.Current.DesktopLyricsLocked);
+        };
 
         _next.Tick += (_, _) => { _next.Stop(); Update(); };
         player.TrackChanged += t => Load(t);

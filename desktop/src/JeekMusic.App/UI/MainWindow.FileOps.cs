@@ -17,13 +17,13 @@ public partial class MainWindow
         var tracks = SelectedTracks();
         if (tracks.Count != 1) return;
         var t = tracks[0];
-        if (t.IsCue) { _vm.ShowToast("CUE 整轨里的歌共用一个文件，不能单独改名"); return; }
-        if (t.Id == PlayingId) { _vm.ShowToast("正在播放的歌不能改名"); return; }
+        if (t.IsCue) { _vm.ShowToast(L.T("CUE 整轨里的歌共用一个文件，不能单独改名")); return; }
+        if (t.Id == PlayingId) { _vm.ShowToast(L.T("正在播放的歌不能改名")); return; }
         var stem = Path.GetFileNameWithoutExtension(t.FileName);
-        var name = await Dialogs.Prompt(this, "改名", "新的文件名（不含扩展名；同名的歌词、图片一起改）", stem);
+        var name = await Dialogs.Prompt(this, L.T("改名"), L.T("新的文件名（不含扩展名；同名的歌词、图片一起改）"), stem);
         if (name is null || name == stem) return;
         var r = FileOps.Rename(t, name, PlayingId);
-        _vm.ShowToast(r.Summary("改名"));
+        _vm.ShowToast(r.Summary(L.T("改名")));
     }
 
     async Task MoveSelected()
@@ -33,22 +33,22 @@ public partial class MainWindow
         var start = _app.Library.Snapshot.Folder(tracks[0].FolderId)?.Root;
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "移动到（只能选音乐文件夹或其中的子文件夹）",
+            Title = L.T("移动到（只能选音乐文件夹或其中的子文件夹）"),
             SuggestedStartLocation = start is null ? null : await StorageProvider.TryGetFolderFromPathAsync(start),
         });
         if (folders.FirstOrDefault()?.TryGetLocalPath() is not { } target) return;
         var r = FileOps.Move(tracks, target, PlayingId);
-        _vm.ShowToast(r.Summary("移动"));
+        _vm.ShowToast(r.Summary(L.T("移动")));
     }
 
     async Task DeleteSelected()
     {
         var tracks = SelectedTracks();
         if (tracks.Count == 0) return;
-        var what = tracks.Count == 1 ? $"「{tracks[0].Title}」" : $"{tracks.Count} 首歌";
-        if (!await Dialogs.Confirm(this, "删除", $"把{what}移到回收站？同名的歌词、图片一起移过去，可以从回收站恢复。", "删除", danger: true)) return;
+        var what = tracks.Count == 1 ? $"「{tracks[0].Title}」" : L.F($"{tracks.Count} 首歌");
+        if (!await Dialogs.Confirm(this, L.T("删除"), L.F($"把{what}移到回收站？同名的歌词、图片一起移过去，可以从回收站恢复。"), L.T("删除"), danger: true)) return;
         var r = FileOps.Delete(tracks, PlayingId, TryGetPlatformHandle()?.Handle ?? 0);
-        _vm.ShowToast(r.Summary("删除"));
+        _vm.ShowToast(r.Summary(L.T("删除")));
     }
 
     void AddFileActions(ContextMenu menu, IReadOnlyList<Track> tracks)
@@ -61,8 +61,8 @@ public partial class MainWindow
             item.Click += async (_, _) => await action();
             menu.Items.Add(item);
         }
-        Add("改名…（F2）", RenameSelected, tracks.Count == 1 && !tracks[0].IsCue);
-        Add("移动到…", MoveSelected, tracks.Any(t => !t.IsCue));
-        Add("删除…（Delete）", DeleteSelected, tracks.Any(t => !t.IsCue));
+        Add(L.T("改名…（F2）"), RenameSelected, tracks.Count == 1 && !tracks[0].IsCue);
+        Add(L.T("移动到…"), MoveSelected, tracks.Any(t => !t.IsCue));
+        Add(L.T("删除…（Delete）"), DeleteSelected, tracks.Any(t => !t.IsCue));
     }
 }

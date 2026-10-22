@@ -30,10 +30,10 @@
         </Style>
     </Window.Styles>
     <Grid RowDefinitions="Auto,*,Auto">
-        <!-- 工具栏：后退 / 前进、搜索、筛选、设置 -->
+        <!-- 工具栏：后退 / 前进、搜索、筛选 -->
         <!-- 标题栏（需求 W-7）：工具栏放在标题栏里，空白处可以拖动窗口；右边留出系统的最小化 / 最大化 / 关闭按钮 -->
         <Grid Grid.Row="0" x:Name="TitleBar" ColumnDefinitions="Auto,*,Auto,150" Margin="8,4,0,2" Background="Transparent" MinHeight="40" WindowDecorationProperties.ElementRole="TitleBar">
-            <!-- 最后一列专门留给系统窗口按钮；中间区域可收缩，不能把设置按钮挤过去。 -->
+            <!-- 最后一列专门留给系统窗口按钮，中间的搜索区域可收缩。 -->
             <StackPanel Orientation="Horizontal">
             <Image Source="avares://JeekMusic/Assets/JeekMusic.png" Width="18" Height="18" Margin="4,0,8,0" VerticalAlignment="Center" IsHitTestVisible="False" />
             <Button Classes="icon" Content="{x:Static ui:Icons.Back}" Command="{Binding GoBackCommand}"
@@ -46,16 +46,13 @@
                          PlaceholderText="{ui:Tr &apos;搜索歌名、艺术家、专辑、文件名，或拼音首字母（Ctrl+F）&apos;}" VerticalContentAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding ScanText}" Classes="secondary" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
             </Grid>
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
-            <Button x:Name="FilterButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;按智能标签筛选&apos;}" ToolTip.Tip="{ui:Tr &apos;按智能标签筛选&apos;}" Padding="10,6">
+            <Button Grid.Column="2" x:Name="FilterButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;按智能标签筛选&apos;}" ToolTip.Tip="{ui:Tr &apos;按智能标签筛选&apos;}" Padding="10,6">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Filter}" />
                     <TextBlock Text="{Binding FilterText}" FontFamily="{x:Static FontFamily.Default}" FontSize="13" VerticalAlignment="Center"
                                MaxWidth="160" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Button>
-            <Button x:Name="SettingsButton" Classes="icon" Content="{x:Static ui:Icons.Settings}" AutomationProperties.Name="{ui:Tr &apos;设置&apos;}" ToolTip.Tip="{ui:Tr &apos;设置&apos;}" />
-            </StackPanel>
         </Grid>
 
         <!-- 主区：导航栏 | 艺术家栏 | 内容 | 歌词面板 -->
@@ -63,6 +60,8 @@
             <DockPanel Grid.Column="0" x:Name="NavPanel">
             <Button DockPanel.Dock="Top" x:Name="NavCollapse" Classes="icon" Content="{x:Static ui:Icons.NavPane}" HorizontalAlignment="Left" Margin="8,0,0,2"
                     AutomationProperties.Name="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" ToolTip.Tip="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" />
+            <Button DockPanel.Dock="Bottom" x:Name="SettingsButton" Classes="icon" Content="{x:Static ui:Icons.Settings}" HorizontalAlignment="Left" Margin="8,4,0,8"
+                    AutomationProperties.Name="{ui:Tr &apos;设置&apos;}" ToolTip.Tip="{ui:Tr &apos;设置&apos;}" />
             <TreeView x:Name="NavTree" ItemsSource="{Binding Nav}" SelectedItem="{Binding SelectedNav}" Margin="4,0,0,0">
                 <TreeView.Styles>
                     <Style Selector="TreeViewItem" x:DataType="vm:NavNode">

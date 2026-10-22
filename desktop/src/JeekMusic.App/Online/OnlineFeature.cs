@@ -39,6 +39,7 @@ public sealed partial class OnlineFeature : IFeature
     {
         Current = this; _app = app; _shell = shell;
         Covers = new CoverService(app.Library, app.Settings);
+        shell.Main.SetCoverService(Covers);
         var netEase = new NetEaseMusic(); var qq = new QqMusic(); var lrc = new LrcLibClient();
         CoverClient = new CoverClient(app.Settings, netEase, qq);
         LyricsClient = new OnlineLyricsClient(app.Settings, lrc, netEase, qq);

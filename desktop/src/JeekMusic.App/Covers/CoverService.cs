@@ -78,10 +78,14 @@ public sealed partial class CoverService
             var none = Path.Combine(_cacheDir, key + ".none");
             if (!File.Exists(file) && !File.Exists(none))
             {
-                var bytes = await Task.Run(() => AlbumImage(t), ct);
-                var scaled = bytes is null ? null : CoverImages.Scaled(bytes, size);
-                if (scaled is null) TryWrite(none, []);
-                else TryWrite(file, scaled);
+                await Task.Run(() =>
+                {
+                    var bytes = AlbumImage(t);
+                    var scaled = bytes is null ? null : CoverImages.Scaled(bytes, size);
+                    ct.ThrowIfCancellationRequested();
+                    if (scaled is null) TryWrite(none, []);
+                    else TryWrite(file, scaled);
+                }, ct);
             }
         }
         finally { gate.Release(); }

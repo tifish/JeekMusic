@@ -145,7 +145,21 @@
                               CanUserSortColumns="True" CanUserResizeColumns="True" CanUserReorderColumns="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="#" Binding="{Binding Number}" Width="44" Tag="TrackNo" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;标题&apos;}" Binding="{Binding Title}" Width="3*" Tag="Title" />
+                            <DataGridTemplateColumn Header="{ui:Tr &apos;标题&apos;}" SortMemberPath="Title" Width="3*" Tag="Title">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SongRow">
+                                        <Grid ColumnDefinitions="Auto,*" Margin="4,2">
+                                            <Border Width="32" Height="32" CornerRadius="3" ClipToBounds="True" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+                                                <Panel>
+                                                    <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="16" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                                                </Panel>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;艺术家&apos;}" Binding="{Binding Artist}" Width="2*" Tag="Artist" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;专辑&apos;}" Binding="{Binding Album}" Width="2*" Tag="Album" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;时长&apos;}" Binding="{Binding Duration}" Width="92" Tag="Duration" />

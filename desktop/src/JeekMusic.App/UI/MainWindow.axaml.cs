@@ -167,11 +167,17 @@ public partial class MainWindow : Window
         e.Row.Classes.Set("missing", !row.Available);
         row.PropertyChanged += OnRowChanged;
         e.Row.Tag = row;
+        LoadRowCover(e.Row, row);
     }
 
     void OnUnloadingRow(object? sender, DataGridRowEventArgs e)
     {
-        if (e.Row.Tag is SongRow row) row.PropertyChanged -= OnRowChanged;
+        CancelRowCover(e.Row);
+        if (e.Row.Tag is SongRow row)
+        {
+            row.PropertyChanged -= OnRowChanged;
+            row.Cover = null;
+        }
         e.Row.Tag = null;
     }
 

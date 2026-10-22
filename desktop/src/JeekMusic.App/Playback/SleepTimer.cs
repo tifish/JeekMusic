@@ -59,6 +59,27 @@ public sealed class SleepTimer
         Changed?.Invoke();
     }
 
+    /// <summary>立即更新按时间定时的结束方式，保留原截止时间。</summary>
+    public void SetFinishSong(bool finishSong)
+    {
+        if (FinishSong == finishSong) return;
+        if (EndTime is not null)
+        {
+            FinishSong = finishSong;
+            if (finishSong && _fading)
+            {
+                _player.SetFadeVolume(100);
+                _fading = false;
+            }
+            Tick();
+        }
+        else if (FinishSong && SongsLeft > 0 && !finishSong)
+        {
+            // 截止时间已过，取消等待本首就立即停止。
+            Stop();
+        }
+    }
+
     public void Cancel() => Cancel(notify: true);
 
     void Cancel(bool notify)

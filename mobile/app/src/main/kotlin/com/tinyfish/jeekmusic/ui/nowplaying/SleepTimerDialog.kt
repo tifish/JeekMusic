@@ -54,14 +54,21 @@ private const val MAX_SONGS = 99
 @Composable
 fun SleepTimerDialog(viewModel: PlayerViewModel, timer: SleepTimerState, onDismiss: () -> Unit) {
     val prefs by viewModel.sleepPrefs.collectAsStateWithLifecycle()
-    var finishSong by remember(prefs) { mutableStateOf(prefs.finishSong) }
-    var customText by remember(prefs) { mutableStateOf(prefs.customMinutes.toString()) }
-    var songCount by remember(prefs) { mutableIntStateOf(prefs.songCount) }
+    var finishSong by remember(prefs.finishSong, timer.endElapsedMs > 0, timer.finishSong) {
+        mutableStateOf(if (timer.endElapsedMs > 0 || timer.finishSong) timer.finishSong else prefs.finishSong)
+    }
+    var customText by remember(prefs.customMinutes) { mutableStateOf(prefs.customMinutes.toString()) }
+    var songCount by remember(prefs.songCount) { mutableIntStateOf(prefs.songCount) }
     val customMinutes = customText.toIntOrNull()?.takeIf { it in 1..MAX_MINUTES }
 
     fun startMinutes(minutes: Int, custom: Boolean) {
         viewModel.sleepAfterMinutes(minutes, finishSong, custom)
         onDismiss()
+    }
+
+    fun setFinishSong(enabled: Boolean) {
+        finishSong = enabled
+        viewModel.setSleepFinishSong(enabled)
     }
 
     AlertDialog(
@@ -98,10 +105,10 @@ fun SleepTimerDialog(viewModel: PlayerViewModel, timer: SleepTimerState, onDismi
                     ) { Text(stringResource(R.string.sleep_start)) }
                 }
                 Row(
-                    Modifier.fillMaxWidth().clickable { finishSong = !finishSong }.padding(vertical = 4.dp).testTag("sleep_finish_song"),
+                    Modifier.fillMaxWidth().clickable { setFinishSong(!finishSong) }.padding(vertical = 4.dp).testTag("sleep_finish_song"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(checked = finishSong, onCheckedChange = { finishSong = it })
+                    Checkbox(checked = finishSong, onCheckedChange = { setFinishSong(it) })
                     Text(stringResource(R.string.sleep_finish_song), style = MaterialTheme.typography.bodyMedium)
                 }
 

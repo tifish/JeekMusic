@@ -201,6 +201,13 @@ class PlayerConnection @Inject constructor(
         sendCustomCommand(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY), Bundle.EMPTY)
     }
 
+    fun setSleepFinishSong(finishSong: Boolean) = withController {
+        sendCustomCommand(
+            SessionCommand(PlaybackCommands.SLEEP_FINISH_SONG, Bundle.EMPTY),
+            Bundle().apply { putBoolean(PlaybackCommands.EXTRA_FINISH_SONG, finishSong) },
+        )
+    }
+
     fun next() = withController { seekToNextMediaItem() }
 
     fun previous() = withController { seekToPrevious() }

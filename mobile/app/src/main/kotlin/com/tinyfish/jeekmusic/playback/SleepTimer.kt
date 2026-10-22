@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 class SleepTimer(
     private val player: Player,
     private val scope: CoroutineScope,
+    private val nowMs: () -> Long = SystemClock::elapsedRealtime,
     private val onChanged: (Status) -> Unit,
 ) {
     /** [endElapsedMs] 是 SystemClock.elapsedRealtime() 时间，0 表示不按时间；[songsLeft] 为 0 表示不按歌曲数。 */
@@ -52,23 +53,46 @@ class SleepTimer(
 
     fun startMinutes(minutes: Int, finishSong: Boolean) {
         cancel()
-        val totalMs = minutes * 60_000L
-        publish(Status(endElapsedMs = SystemClock.elapsedRealtime() + totalMs, finishSong = finishSong))
-        job = scope.launch {
-            if (finishSong) {
-                delay(totalMs)
-                publish(Status(songsLeft = 1, finishSong = true))
-                return@launch
-            }
-            delay((totalMs - FADE_MS).coerceAtLeast(0))
-            val steps = 30
-            for (i in 1..steps) {
-                player.volume = 1f - i.toFloat() / steps
-                delay(FADE_MS / steps)
-            }
+        publish(Status(endElapsedMs = nowMs() + minutes * 60_000L, finishSong = finishSong))
+        scheduleCountdown()
+    }
+
+    /** 立即更新结束方式，不重新计算截止时间；按歌曲数的定时不受影响。 */
+    fun setFinishSong(finishSong: Boolean) {
+        if (status.finishSong == finishSong) return
+        if (status.endElapsedMs > 0) {
+            publish(status.copy(finishSong = finishSong))
+            if (finishSong) player.volume = 1f
+            scheduleCountdown()
+        } else if (status.finishSong && status.songsLeft > 0 && !finishSong) {
             player.pause()
-            player.volume = 1f
             cancel()
+        }
+    }
+
+    private fun scheduleCountdown() {
+        job?.cancel()
+        job = scope.launch {
+            while (true) {
+                val left = status.endElapsedMs - nowMs()
+                if (left <= 0) {
+                    if (status.finishSong) {
+                        publish(Status(songsLeft = 1, finishSong = true))
+                    } else {
+                        player.pause()
+                        cancel()
+                    }
+                    return@launch
+                }
+                if (status.finishSong) {
+                    delay(left)
+                } else if (left > FADE_MS) {
+                    delay(left - FADE_MS)
+                } else {
+                    player.volume = (left.toFloat() / FADE_MS).coerceAtMost(1f)
+                    delay(minOf(left, 1_000L))
+                }
+            }
         }
     }
 

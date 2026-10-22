@@ -332,6 +332,7 @@ class PlaybackService : MediaLibraryService() {
                     commands.add(SessionCommand(PlaybackCommands.SLEEP_MINUTES, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_SONGS, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.SLEEP_FINISH_SONG, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.PLAY_SOURCE, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.PLAY_NEXT, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.ADD_TO_QUEUE, Bundle.EMPTY))
@@ -355,6 +356,7 @@ class PlaybackService : MediaLibraryService() {
                 )
                 PlaybackCommands.SLEEP_SONGS -> sleepTimer.startSongs(args.getInt(PlaybackCommands.EXTRA_COUNT))
                 PlaybackCommands.SLEEP_CANCEL -> sleepTimer.cancel()
+                PlaybackCommands.SLEEP_FINISH_SONG -> sleepTimer.setFinishSong(args.getBoolean(PlaybackCommands.EXTRA_FINISH_SONG))
                 PlaybackCommands.TOGGLE_SHUFFLE -> session.player.shuffleModeEnabled = !session.player.shuffleModeEnabled
                 PlaybackCommands.PLAY_SOURCE -> {
                     val source = QueueSource.decode(args.getString(PlaybackCommands.EXTRA_SOURCE))
@@ -431,6 +433,7 @@ object PlaybackCommands {
     const val SLEEP_MINUTES = "jeek.sleep.minutes"
     const val SLEEP_SONGS = "jeek.sleep.songs"
     const val SLEEP_CANCEL = "jeek.sleep.cancel"
+    const val SLEEP_FINISH_SONG = "jeek.sleep.finish_song"
     const val TOGGLE_SHUFFLE = "jeek.shuffle.toggle"
     const val PLAY_SOURCE = "jeek.queue.play_source"
     const val PLAY_NEXT = "jeek.queue.play_next"

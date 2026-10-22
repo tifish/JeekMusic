@@ -23,17 +23,26 @@ public static class SleepDialog
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 10 };
         if (timer.Active)
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = timer.Remaining is { } r ? L.F($"还剩 {Text.Duration(r)}{(timer.FinishSong ? L.T("，到时间后播完当前这首再停止") : "")}") : L.F($"再播 {timer.SongsLeft} 首后停止"),
-                FontWeight = FontWeight.SemiBold,
-            });
+            var status = new TextBlock { FontWeight = FontWeight.SemiBold };
+            void UpdateStatus() => status.Text = !timer.Active ? "" : timer.Remaining is { } r
+                ? L.F($"还剩 {Text.Duration(r)}{(timer.FinishSong ? L.T("，到时间后播完当前这首再停止") : "")}")
+                : L.F($"再播 {timer.SongsLeft} 首后停止");
+            UpdateStatus();
+            timer.Changed += UpdateStatus;
+            w.Closed += (_, _) => timer.Changed -= UpdateStatus;
+            panel.Children.Add(status);
             var cancel = new Button { Content = L.T("取消定时") };
             cancel.Click += (_, _) => { timer.Cancel(); w.Close(); };
             panel.Children.Add(cancel);
             panel.Children.Add(new Separator());
         }
-        var finish = new CheckBox { Content = L.T("时间到后播完当前这首再停止（不渐弱）"), IsChecked = prefs.FinishSong };
+        var finish = new CheckBox { Content = L.T("时间到后播完当前这首再停止（不渐弱）"), IsChecked = timer.EndTime is not null || timer.FinishSong ? timer.FinishSong : prefs.FinishSong };
+        finish.IsCheckedChanged += (_, _) =>
+        {
+            prefs.FinishSong = finish.IsChecked == true;
+            app.Settings.Save("sleep");
+            timer.SetFinishSong(prefs.FinishSong);
+        };
         var sleepPc = new CheckBox { Content = L.T("停止后让电脑睡眠"), IsChecked = prefs.SleepComputer };
         void StartMinutes(int minutes)
         {

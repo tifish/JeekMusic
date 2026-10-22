@@ -117,6 +117,11 @@ class PlayerViewModel @Inject constructor(
     }
     fun cancelSleepTimer() = player.cancelSleepTimer()
 
+    fun setSleepFinishSong(finishSong: Boolean) {
+        player.setSleepFinishSong(finishSong)
+        viewModelScope.launch { settings.setSleepPrefs(sleepPrefs.value.copy(finishSong = finishSong)) }
+    }
+
     val state: StateFlow<PlayerUiState> = player.state
 
     fun position(intervalMs: Long): Flow<Long> = player.position(intervalMs)

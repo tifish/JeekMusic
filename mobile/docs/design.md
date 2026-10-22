@@ -805,6 +805,7 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - 位于 Service 内，状态（剩余时间、模式）通过 `MediaSession` 的 session extras 同步给 UI
 - 模式 A（N 分钟）：协程 delay，最后 30s 线性降低 `player.volume`，然后暂停并恢复音量
 - 模式 A'（N 分钟 + 播完整首）：delay N 分钟后不渐弱，转为模式 B 且 N = 1
+- “播完整首”随时切换立即更新运行中的按时间定时，截止时间不变；勾选时恢复渐弱音量，取消勾选后按剩余时间渐弱。已到时间且正在等本首结束时取消勾选立即暂停；未定时或独立按歌曲数定时时只保存偏好。
 - 模式 B（播完 N 首）：监听 `onMediaItemTransition`，只有自然播完（`AUTO`）或单曲循环重新开始（`REPEAT`）才计数减一，手动切歌不计数；减到 0 时暂停。队列播完（`STATE_ENDED`）时取消
 - session extras：`sleep_end_elapsed`（0 表示不按时间）、`sleep_songs_left`（0 表示不按歌曲数）、`sleep_finish_song`
 - 对话框里的"播完整首"、自定义分钟数和歌曲数保存在设置（`SleepPrefs`）中，下次打开时沿用

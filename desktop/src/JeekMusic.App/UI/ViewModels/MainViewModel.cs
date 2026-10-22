@@ -135,6 +135,7 @@ public sealed partial class MainViewModel : ObservableObject
             SelectedNav = selectedKey is null ? null : Nav.SelectMany(Flatten).FirstOrDefault(n => n.Key == selectedKey);
         }
         finally { _navigating = false; }
+        RefreshArtistPin();
     }
 
     static IEnumerable<NavNode> Flatten(NavNode n) => n.Children.SelectMany(Flatten).Prepend(n);
@@ -228,6 +229,26 @@ public sealed partial class MainViewModel : ObservableObject
     public NavTarget? Current { get; private set; }
     public QueueSource? CurrentSource { get; private set; }
 
+    public string? CurrentArtistKey => Current switch
+    {
+        NavTarget.Artists { ArtistKey: { Length: > 0 } key } => key,
+        NavTarget.PinnedArtist { ArtistKey: { Length: > 0 } key } => key,
+        _ => null,
+    };
+    public bool CanPinArtist => CurrentArtistKey is not null;
+    public bool IsArtistPinned => CurrentArtistKey is { } key && NavOrder().Any(i => i.Type == "ARTIST" && i.Ref == key);
+    public string ArtistPinIcon => IsArtistPinned ? Icons.Unpin : Icons.Pin;
+    public string ArtistPinText => IsArtistPinned ? L.T("取消固定") : L.T("固定到导航栏");
+
+    void RefreshArtistPin()
+    {
+        OnPropertyChanged(nameof(CurrentArtistKey));
+        OnPropertyChanged(nameof(CanPinArtist));
+        OnPropertyChanged(nameof(IsArtistPinned));
+        OnPropertyChanged(nameof(ArtistPinIcon));
+        OnPropertyChanged(nameof(ArtistPinText));
+    }
+
     /// <summary>"包含子文件夹"开关（需求 W-3）。</summary>
     private bool _includeSubfolders;
     public bool IncludeSubfolders
@@ -254,6 +275,7 @@ public sealed partial class MainViewModel : ObservableObject
             _forward.Clear();
         }
         Current = target;
+        RefreshArtistPin();
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
         ShowArtistPane = target is NavTarget.Artists;

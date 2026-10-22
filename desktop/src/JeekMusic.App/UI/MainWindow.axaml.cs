@@ -50,12 +50,13 @@ public partial class MainWindow : Window
         WelcomeAddFolder.Click += async (_, _) => await AddFolder();
         LocateButton.Click += (_, _) => LocatePlaying();
         ListMoreButton.Click += (_, _) => ShowListMenu();
+        ArtistPinButton.Click += (_, _) => { if (_vm.CurrentArtistKey is { } key) TogglePin(key); };
         NowTitle.PointerPressed += (_, _) => LocatePlaying();
         NowArtist.Click += (_, _) => { if (_app.Player.CurrentTrack is { } t) GoToArtist(t); };
 
         NowAlbum.Click += (_, _) => { if (_app.Player.CurrentTrack is { } track) GoToAlbum(track); };
         OutputButton.Click += (_, _) => ShowOutputMenu();
-        ArtistList.SelectionChanged += (_, _) => { };
+        ArtistList.ContextRequested += OnArtistContextRequested;
         LetterIndex.PointerPressed += OnLetterIndexPressed;
         _vm.PropertyChanged += (_, e) =>
         {

@@ -6,6 +6,8 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 同步文件位于音乐目录的 `.jeekmusic/sync/`，每台设备仅写自己的 JSON 文件。同步工具负责传输目录；播放器负责按修改时间合并数据。旧 `backup.json` 可以导入，新版本不再覆盖它。
 
+常听的艺术家可以用艺术家页标题旁的图钉固定到左侧导航栏，也可以右键艺术家或单首歌曲选择“固定到导航栏”（合作歌曲可分别选择艺术家）。固定项支持拖动排序、右键取消固定，重启后保留，并随导航顺序同步到其他设备。
+
 需求：[requirements.md](docs/requirements.md)。设计：[design.md](docs/design.md)。当前验证结果及未验收项：[validation.md](docs/validation.md)。性能目标和设备兼容性仍以验证报告为准。
 
 ## 开发与验证

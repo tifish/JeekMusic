@@ -1,5 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
+using JeekMusic.Core.Library;
 using JeekMusic.Library;
 using JeekMusic.UI.ViewModels;
 
@@ -33,6 +36,20 @@ public partial class MainWindow
         {
             var t = tracks[0];
             Add(L.T("查看艺术家"), () => GoToArtist(t), t.Artists.Count > 0);
+            var artists = t.Artists.Select(name => (Name: name, Key: ArtistSplitter.NameKey(name)))
+                .Where(a => a.Key.Length > 0).DistinctBy(a => a.Key).ToList();
+            if (artists.Count == 1) menu.Items.Add(ArtistPinItem(artists[0].Key));
+            else if (artists.Count > 1)
+            {
+                var pin = new MenuItem { Header = L.T("固定到导航栏") };
+                foreach (var artist in artists)
+                {
+                    var item = ArtistPinItem(artist.Key);
+                    item.Header = artist.Name + " · " + item.Header;
+                    pin.Items.Add(item);
+                }
+                menu.Items.Add(pin);
+            }
             Add(L.T("查看专辑"), () => GoToAlbum(t), t.AlbumKey is not null);
             Add(L.T("在资源管理器中显示"), () => ShowInExplorer(t));
             menu.Items.Add(new Separator());
@@ -137,17 +154,31 @@ public partial class MainWindow
     partial void AddListExtras(MenuFlyout menu);
 
     /// <summary>固定到导航栏 / 取消固定（需求 W-2，同移动端 T-3）。</summary>
-    void AddPinItem(MenuFlyout menu, string artistKey)
+    void AddPinItem(MenuFlyout menu, string artistKey) => menu.Items.Add(ArtistPinItem(artistKey));
+
+    MenuItem ArtistPinItem(string artistKey)
     {
         var order = _vm.NavOrder();
         var pinned = order.Any(i => i.Type == "ARTIST" && i.Ref == artistKey);
         var item = new MenuItem { Header = pinned ? L.T("取消固定") : L.T("固定到导航栏") };
         item.Click += (_, _) => TogglePin(artistKey);
-        menu.Items.Add(item);
+        return item;
+    }
+
+    void OnArtistContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        var artist = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ArtistInfo;
+        if (artist is null && !e.TryGetPosition(ArtistList, out _)) artist = ArtistList.SelectedItem as ArtistInfo;
+        if (artist is null || artist.NameKey.Length == 0) return;
+        var menu = new ContextMenu();
+        menu.Items.Add(ArtistPinItem(artist.NameKey));
+        e.Handled = true;
+        menu.Open(ArtistList);
     }
 
     public void TogglePin(string artistKey)
     {
+        if (string.IsNullOrWhiteSpace(artistKey)) return;
         var order = _vm.NavOrder();
         var existing = order.FindIndex(i => i.Type == "ARTIST" && i.Ref == artistKey);
         if (existing >= 0)

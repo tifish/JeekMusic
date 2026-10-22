@@ -124,6 +124,8 @@
                         </DockPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
                             <CheckBox Content="{ui:Tr &apos;包含子文件夹&apos;}" IsChecked="{Binding IncludeSubfolders}" IsVisible="{Binding IsFolderView}" />
+                            <Button x:Name="ArtistPinButton" Classes="icon" Content="{Binding ArtistPinIcon}" IsVisible="{Binding CanPinArtist}"
+                                    AutomationProperties.Name="{Binding ArtistPinText}" ToolTip.Tip="{Binding ArtistPinText}" />
                             <Button x:Name="LocateButton" Classes="icon" Content="{x:Static ui:Icons.Locate}" AutomationProperties.Name="{ui:Tr &apos;定位到正在播放（Ctrl+L）&apos;}" ToolTip.Tip="{ui:Tr &apos;定位到正在播放（Ctrl+L）&apos;}" />
                             <Button x:Name="ListMoreButton" Classes="icon" Content="{x:Static ui:Icons.More}" AutomationProperties.Name="{ui:Tr &apos;更多&apos;}" ToolTip.Tip="{ui:Tr &apos;更多&apos;}" />
                         </StackPanel>

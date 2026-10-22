@@ -53,8 +53,8 @@ public sealed class AppSettings
 
     // ── 界面 ──
     public ThemeMode Theme { get; set; } = ThemeMode.System;
-    /// <summary>界面语言：auto（跟随系统）/ zh-Hans / en。</summary>
-    public string Language { get; set; } = "auto";
+    /// <summary>界面语言：默认简体中文；auto（跟随系统）/ zh-Hans / en。</summary>
+    public string Language { get; set; } = "zh-Hans";
     public SongSort SongSort { get; set; } = SongSort.FileName;
     public bool SortDescending { get; set; }
     /// <summary>智能标签筛选（需求 M-6）：选中的标签名，如 "SPORT"、"INSTRUMENTAL"；每个维度最多一个。</summary>

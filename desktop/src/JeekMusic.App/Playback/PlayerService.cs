@@ -32,6 +32,7 @@ public sealed class PlayerService : IDisposable
     IPlaybackEngine? _mpv;
     readonly Func<IEnumerable<(string, string)>, IPlaybackEngine> _createEngine;
     readonly IEndpointVolume? _endpointVolume;
+    readonly IExclusiveAudioFormat? _exclusiveAudioFormat;
     readonly Dictionary<string, double> _sharedDeviceVolumes = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>独占输出修改过的设备，其原系统主音量待切回共享时恢复。</summary>
     public IReadOnlyDictionary<string, double> SharedDeviceVolumes => _sharedDeviceVolumes;
@@ -107,13 +108,15 @@ public sealed class PlayerService : IDisposable
     /// <summary>一首歌自然播完（睡眠定时"播完 N 首"计数用，需求 P-8）。</summary>
     public event Action? TrackCompleted;
 
-    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume()) { }
+    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume(), new ExclusiveAudioFormat()) { }
 
-    internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine, IEndpointVolume? endpointVolume = null)
+    internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine,
+        IEndpointVolume? endpointVolume = null, IExclusiveAudioFormat? exclusiveAudioFormat = null)
     {
         _tracks = tracks;
         _createEngine = createEngine;
         _endpointVolume = endpointVolume;
+        _exclusiveAudioFormat = exclusiveAudioFormat;
         Queue.Changed += OnQueueChanged;
     }
 
@@ -542,12 +545,20 @@ public sealed class PlayerService : IDisposable
     /// loadfile 的选项：CUE 虚拟歌曲用 start / end 截取。<b>end 比分轨点早 1 微秒</b>，
     /// 否则分轨点上的那个样本会在前后两首里各播一次（验证结论，设计 §7.3）。
     /// </summary>
-    static string FileOptions(Track track, TimeSpan? start)
+    string FileOptions(Track track, TimeSpan? start)
     {
         var opts = new List<string>();
         var begin = (track.StartMs ?? 0) / 1000m + (decimal)(start ?? TimeSpan.Zero).TotalSeconds;
         if (begin > 0 || track.IsCue) opts.Add("start=" + begin.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (track.EndMs is { } end) opts.Add("end=" + (end / 1000m - 0.000001m).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (Exclusive && track.SampleRate is > 0 && track.Channels is > 0 &&
+            _exclusiveAudioFormat?.Select(Device, track.SampleRate.Value, track.Channels.Value, track.BitsPerSample) is { } format)
+        {
+            // 文件级选项同样用于预加载的下一首，切回共享或切换歌曲时不会遗留固定的位深 / 采样率。
+            opts.Add("audio-format=" + format);
+            opts.Add("audio-samplerate=" + track.SampleRate.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Log.Playback($"独占输出优先源采样率 {track.SampleRate}Hz，样本格式 {format}，文件 {track.RelativePath}");
+        }
         return string.Join(',', opts);
     }
 

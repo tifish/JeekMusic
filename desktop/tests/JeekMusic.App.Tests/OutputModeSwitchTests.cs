@@ -13,6 +13,46 @@ namespace JeekMusic.App.Tests;
 public sealed class OutputModeSwitchTests
 {
     [Fact]
+    public async Task ExclusiveLoadsAndPreloadsEachTrackAtItsOwnNativeRateAndClearsTheOptionsInSharedMode()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        await session.Dispatch(() =>
+        {
+            var selector = new FakeExclusiveFormat();
+            using var f = new Fixture(formats: selector);
+            Assert.Empty(selector.Queries);
+            f.Player.SetExclusive(true);
+            var loads = f.Current.Commands.Where(c => c[0] == "loadfile").ToArray();
+            Assert.Contains("audio-format=s16", loads[0][4]);
+            Assert.Contains("audio-samplerate=44100", loads[0][4]);
+            var start = loads[0][4].Split(',').Single(o => o.StartsWith("start="))[6..];
+            Assert.Equal(72.345, double.Parse(start, CultureInfo.InvariantCulture), 6);
+            Assert.Contains("end=179.999999", loads[0][4]);
+            Assert.Contains("audio-format=s32", loads[1][4]);
+            Assert.Contains("audio-samplerate=96000", loads[1][4]);
+            Assert.Equal(new[] { 44100, 96000 }, selector.Queries);
+            f.Ready();
+            f.Player.SetExclusive(false);
+            Assert.All(f.Current.Commands.Where(c => c[0] == "loadfile"), c => Assert.DoesNotContain("audio-format", c[4]));
+            Assert.All(f.Current.Commands.Where(c => c[0] == "loadfile"), c => Assert.DoesNotContain("audio-samplerate", c[4]));
+            Assert.Equal(2, selector.Queries.Count);
+            f.Ready();
+            Assert.Empty(f.Errors);
+        }, CancellationToken.None);
+    }
+
+    sealed class FakeExclusiveFormat : IExclusiveAudioFormat
+    {
+        public List<int> Queries { get; } = [];
+        public string? Select(string? device, int sampleRate, int channels, int? sourceBits)
+        {
+            Queries.Add(sampleRate);
+            Assert.Equal(2, channels);
+            return sampleRate == 44100 ? "s16" : "s32";
+        }
+    }
+
+    [Fact]
     public Task ReturningToSharedRestoresSystemVolumeSeparatelyFromSessionVolume() => RunWithEndpoint(f =>
     {
         Assert.Equal(55, f.Endpoint!.Volume);
@@ -546,11 +586,12 @@ public sealed class OutputModeSwitchTests
         public FakeEngine Current => Engines[^1];
         public FakeEndpointVolume? Endpoint { get; }
 
-        public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null)
+        public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null,
+            IExclusiveAudioFormat? formats = null)
         {
             Endpoint = endpoint;
-            _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000 };
-            _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000 };
+            _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000, SampleRate = 44100, Channels = 2 };
+            _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000, SampleRate = 96000, BitsPerSample = 24, Channels = 2 };
             Player = new PlayerService(this, options =>
             {
                 var engine = new FakeEngine(options);
@@ -562,7 +603,7 @@ public sealed class OutputModeSwitchTests
                 }
                 Engines.Add(engine);
                 return engine;
-            }, endpoint);
+            }, endpoint, formats);
             Player.Error += Errors.Add;
             if (settings is null) Player.SetVolume(23, false);
             else OutputSettingsBinding.Attach(Player, settings);

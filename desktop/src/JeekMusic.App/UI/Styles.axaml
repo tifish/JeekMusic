@@ -1,5 +1,13 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 列表模板从所属控件读取此附加属性；统一让滚动区域为完整宽度的滚动条留出空间。 -->
+    <Style Selector=":is(Control)">
+        <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar">
+        <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+
     <!-- 图标按钮：Segoe Fluent Icons / Segoe MDL2 Assets 的字形（UI/Icons.cs） -->
     <Style Selector="Button.icon, ToggleButton.icon">
         <Setter Property="Background" Value="Transparent" />

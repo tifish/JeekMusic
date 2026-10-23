@@ -42,6 +42,8 @@ public sealed partial class PlayerViewModel : ObservableObject
             OnPropertyChanged(nameof(FormatText));
             OnPropertyChanged(nameof(OutputModeTip));
             OnPropertyChanged(nameof(VolumeAvailable));
+            OnPropertyChanged(nameof(VolumeTip));
+            OnPropertyChanged(nameof(VolumeState));
         };
         sleep.Changed += () => { OnPropertyChanged(nameof(SleepActive)); OnPropertyChanged(nameof(SleepText)); };
         _volume = player.Volume;
@@ -118,13 +120,20 @@ public sealed partial class PlayerViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _muted, value)) return;
-            _player.SetVolume(Volume, _muted);
+            _player.SetMuted(_muted);
             OnPropertyChanged(nameof(VolumeIcon));
         }
     }
 
     public string VolumeIcon => Muted ? Icons.Mute : Volume < 1 ? Icons.Volume0 : Icons.Volume;
     public bool VolumeAvailable => _player.VolumeAvailable;
+    public string VolumeTip => _player.VolumeTip;
+    public string VolumeState => _player.OutputPending && _player.OutputBlockReason is not null ? _player.OutputSafetyMessage
+        : _player.EndpointVolumeValue is null ? L.T("设备音量读取失败")
+        : _player.Exclusive && _player.HardwareVolume == false ? L.T("请使用硬件旋钮")
+        : _player.EndpointMuted == true ? L.T("系统设备已静音")
+        : _player.SessionMuted == true ? L.T("Windows 合成器已静音 JeekMusic")
+        : _player.SessionVolume is < 99.999 ? L.T("Windows 合成器已调低 JeekMusic 音量") : "";
 
     // ── 命令 ──
 
@@ -199,6 +208,8 @@ public sealed partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(RepeatOn));
         OnPropertyChanged(nameof(RepeatTip));
         OnPropertyChanged(nameof(VolumeAvailable));
+        OnPropertyChanged(nameof(VolumeTip));
+        OnPropertyChanged(nameof(VolumeState));
         UpdateTimer();
         UpdatePosition();
     }

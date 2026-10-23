@@ -43,8 +43,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
-| `set_volume` | 至少提供 `volume`（0–100）或 `muted`。共用共享/独占音量持久化；独占模式可能改变 Windows 设备音量 |
-| `get_output` | 无参数。WASAPI 设备列表、当前设备/独占模式、文件与设备的音频格式 |
+| `set_volume` | 至少提供 `volume`（0–100）或 `muted`。两种模式都设置当前实际设备端点主音量，共享下影响同设备其他程序；不持久化音量。`muted` 只静音播放器。不可调/写入失败返回业务错误 |
+| `get_output` | 无参数。WASAPI 设备列表、所选设备/独占模式、文件与设备的音频格式，以及下述 `volumeState` |
 | `set_output` | 至少提供 `device` 或 `exclusive`。`device` 来自设备列表；`auto` 跟随系统默认设备。设置持久化，模式切换可能重建音频输出 |
 | `list_playlists` | 支持分页。播放列表 ID、UID、名称和时间戳 |
 | `get_playlist` | `playlistId`，支持分页。按手动顺序返回条目，保留不可用条目 |
@@ -60,6 +60,20 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 播放、seek 和音频输出由 libmpv 异步完成；返回的状态是命令执行后的即时快照，应再次调用 `get_status` 确认实际播放状态。扫描、添加/移除文件夹通过现有后台曲库队列执行，`queued: true` 只表示已入队。通过快照版本、扫描状态、搜索结果和日志确认结果；扫描失败原因也进入正常应用日志。
 
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
+
+### 音量输出语义
+
+原 `get_status.volume` 保留数值字段，表示端点读数（不可读时为 0 占位，**不能把它当作真实值**）；`muted` 只表示应用静音。`get_status.output` 和 `get_output.volumeState` 提供同样的详细对象：
+
+- `semantics: "endpoint-master"`、`muteScope: "player"`。
+- `actualDeviceId`：绑定给 WASAPI 的物理端点 ID；`device: "auto"` 仍表示用户选择跟随默认。
+- `endpointVolume` / `endpointMuted`：设备当前读数，不可读为 `null`；不等于应用静音。
+- `volumeAvailable`：当前能否写端点音量。`hardwareVolume` / `hardwareMute`：硬件支持，未知为 `null`。独占无硬件音量时端点软件音量不影响实际响度，不能以滑块数值声称独占响度。
+- `sessionVolume` / `sessionMuted`：本进程默认会话的 Windows 合成器状态，未知为 `null`；`sessionPolicy: "preserve-external-block-exclusive"`。正常新会话为 100%，已有用户衰减/静音保留；请在合成器中恢复后再进入独占。
+- `hardwareVolumeConfirmationRequired`：独占会绕过软件音量或软件静音时，用户需先用物理旋钮确认安全音量，再调用 `playback` 的 `resume` 或点击播放。切换设备/模式会重新要求确认；此确认不能绕过读取错误或会话衰减。
+- `outputPending`、`blockReason`、`diagnostic`：保护门控和读取/写入错误，诊断包含 Core Audio 操作及 HRESULT。修复设备后显式 `resume` 重试，不自动恢复播放。`endpoint-write-failed`、`endpoint-read-failed`、`hardware-support-unreadable`、`session-attenuated-or-unreadable`、`hardware-volume-confirmation` 等原因可用于诊断。
+
+`set_output` 若进入独占被会话策略拒绝，返回 `isError`，原模式保留。已接受的异步重建仍需轮询输出状态。音量、静音和默认设备每 250ms 只读同步；窗口在托盘时同样更新。启动、模式/设备切换和退出均不写历史端点音量。旧设置中的 `volume` / `sharedVolume` / `exclusiveVolume` / `sharedDeviceVolumes` 被忽略并在保存时移除。
 
 ## 日常调试
 
@@ -96,4 +110,4 @@ python desktop/tools/test-mcp.py --sdk
 python desktop/tools/test-mcp.py --exe desktop/artifacts/publish/JeekMusic.exe --sdk
 ```
 
-端到端脚本自动使用临时数据目录和静音 WAV，验证冷启动、stdio 关闭、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、保留活动连接时正常退出和重启后设置恢复；结束后只清理它自己的测试播放器。脚本不激活窗口，也不使用正式曲库。`show_window` 的激活行为不在后台测试中调用。
+端到端脚本自动使用临时数据目录和静音 WAV，验证冷启动、stdio 关闭、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、保留活动连接时正常退出和重启后应用静音恢复、当前端点读取、切换安全门控；不调高或恢复用户设备音量。结束后只清理它自己的测试播放器。脚本不激活窗口，也不使用正式曲库。`show_window` 的激活行为不在后台测试中调用。

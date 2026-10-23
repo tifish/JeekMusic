@@ -302,10 +302,15 @@ MainWindow（Mica，标题栏扩展到客户区）
 - **设备列表**：mpv 的 `audio-device-list` 属性（WASAPI 设备 ID 和名称），设备增减时属性会变；选中的设备存设备 ID，设成 `audio-device`。默认值 `auto` 就是跟随 Windows 的默认设备，mpv 自己会在默认设备改变时切过去（验证日志里的 `Monitoring changes in device`）
 - **指定的设备断开**：`audio-device-list` 里没有它了 → 暂停并提示（需求 O-2）
 - **独占格式选择**：对已知采样率和声道数的单 / 双声道歌曲，先用 `IAudioClient::IsFormatSupported(EXCLUSIVE)` 查询原采样率下可用的样本格式，再把 `audio-format` / `audio-samplerate` 作为 `loadfile` 的文件级选项传入；当前歌曲和预加载下一首各自协商，切回共享时不附加这些选项。16bit 源文件优先保持 16bit；其他音频优先选设备在原采样率支持的浮点或高位深 PCM，仅在原采样率不支持高位深时选择 16bit。例如设备支持 44.1kHz/16bit、48/96kHz/24bit 时，44.1kHz 的 MP3 使用 44.1kHz/16bit，避免 mpv 自动协商到 96kHz/24bit。查询失败、元数据不全、多声道或原采样率不支持时仍由内核协商，播放栏继续显示实际输出和重采样状态。
-- **独占模式**（需求 O-3）：切换时记录当前歌曲内的位置和播放状态，先静音、暂停并销毁旧引擎，按新的 `audio-exclusive` 设置重建引擎，再用 `loadfile` 的 `start` / `end` 重新解码原歌曲（保留 CUE 偏移和边界）。新引擎始终以暂停、静音状态启动；文件加载完成后恢复 `ao-volume` 并读回验证，才恢复原来的静音和播放状态。恢复失败保持暂停、静音并提示；旧引擎或旧条目的延迟事件不允许解除保护。
-- **音量**（需求 O-4）：用 mpv 的 `ao-volume` 属性，它直接调输出端的音量：共享模式下是本程序在 Windows 音量合成器里的会话音量，独占模式下是设备的端点音量。mpv 自己的 `volume` 始终是 100，不做软件音量。两种模式的音量分别持久化为 `sharedVolume` / `exclusiveVolume`，切换时恢复目标模式上次的设置，滑块随之同步；离开模式时保留外部合成器调低后的实际音量。尚无记录的模式（含旧版本迁移）以原音量为参考，不高于新输出的既有音量，确认成功后才建立记录；重载中的后端值不能覆盖已保存的记录。新输出的音量不可用、写入失败或读回不符时，保持暂停和静音，不按默认 100% 出声。睡眠定时的渐弱值随引擎重建保留
-- **系统主音量恢复**：独占模式的设备音量也会改变 Windows 系统主音量，因此仅恢复共享会话音量不能恢复原来的响度。在独占输出首次修改每个设备前，通过 `IAudioEndpointVolume` 保存该设备的原系统主音量；独占引擎完全关闭后，按原设备 ID 写回并读回验证，再启动共享播放。待恢复的记录持久化为 `sharedDeviceVolumes`，重启独占输出不能覆盖旧记录；恢复成功后移除，下一次进入独占时重新捕获用户最新设置。正常退出软件时也在关闭引擎后恢复，最后写入设置。恢复失败保留记录并暂停播放，不修改程序会话音量、系统静音或声道平衡。
-- 播放栏显示的格式：`audio-codec-name`、`audio-params/samplerate`、`audio-params/format` → `audio-out-params/samplerate`、`audio-out-params/format`；两边采样率不同时提示"已重采样（系统混音）"
+- **独占与设备切换**（需求 O-2、O-3）：先静音、暂停并销毁旧引擎，保留当前歌曲、CUE 位置、队列和播放意图。新引擎始终暂停且本播放器静音，文件加载完成、输出后端及设备读数确认后才恢复。旧引擎/条目的延迟事件不能解除保护。暂停或静音命令失败时销毁引擎；读取失败、重载超时等路径保持暂停，用户按播放重试。
+- **实际端点绑定**：通过 `IMMDeviceEnumerator` 解析显式设备或 `eRender/eMultimedia` 默认设备，检查 active 状态，然后将明确的 `wasapi/<endpointId>` 交给 mpv，避免 `auto` 的音频和音量各自解析到不同设备。250ms 的 UI 线程只读轮询同步外部端点/会话音量、静音和默认设备变化（托盘状态也运行）；默认设备 ID 变化走上述完整重建流程。指定设备失效保持暂停，重连后需播放重试。读数通知只更新 UI 字段，不经过滑块 setter，不写回系统。
+- **统一端点主音量**（需求 O-4）：两种模式的滑块都用 `IAudioEndpointVolume` 读取当前绑定设备，只有显式用户操作写 `SetMasterVolumeLevelScalar` 并读回验证，共享下影响同设备其他程序。不保存任何端点音量，不在启动、切换、退出时写历史值。删除 `volume`、`sharedVolume`、`exclusiveVolume`、`sharedDeviceVolumes` 设置；旧 JSON 字段直接忽略，下一次保存移除，绝不执行旧恢复快照。
+- **能力和失败分开**：`QueryHardwareSupport` 的硬件 volume/mute 位与读取 HRESULT 分开报告。独占无硬件 volume 时滑块不可调，端点的软件读数不代表独占响度；每次模式/设备重建先暂停，提示用物理旋钮确认安全音量，再通过明确的“播放”继续。同样防止无硬件 mute 时绕过 Windows 软件静音。这份确认仅在当前绑定生命周期有效。读取失败或能力未知不能通过确认绕过，修复后再按播放重试；共享不要求硬件能力。
+- **Windows 合成器策略**：使用 `IAudioSessionManager::GetSimpleAudioVolume(GUID_NULL, 0)` 读取与 mpv 一致的本进程默认会话。全新会话由 Windows 正常初始化为 100%/非静音；已有会话保留 Windows 中用户设置的衰减和静音，包括重建及重启。应用不反复写 `ao-volume=100`，也不强制清除用户的合成器设置。进入独占前、启动独占及重建后的出声门控检查会话；衰减、静音或无法读取时拒绝进入或保持暂停，提示用户先在合成器恢复 100%/取消静音。独占运行期间也监测会话状态。取舍：不模拟合成器衰减、不改变样本，不自动改系统音量；需要用户显式处理外部衰减。
+- **静音与样本**：`Muted` 仅通过 mpv `mute` 使本播放器静音；从不写 `ao-mute`、端点或会话静音。外部端点/会话静音独立显示，不合并进应用 `Muted`。mpv `volume` 保持 100，睡眠定时渐弱仍是唯一例外且跨引擎重建保留。
+- **诊断与 MCP**：UI、MCP 共用上述服务，Debug/Release/AOT 没有不同开关。输出包括实际端点 ID、可空读数、硬件能力、会话状态、保护原因及 COM 操作/HRESULT。`set_volume` 保留原参数；仅 `muted` 不触碰端点，无法调节时显式报错，不能返回虚假音量成功。
+
+依据：[微软 EndpointVolume](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpointvolume-api)、[IAudioEndpointVolume](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudioendpointvolume)、[GetSimpleAudioVolume](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionmanager-getsimpleaudiovolume)。端点软件控制仅作用于共享，硬件控制才作用于独占；共享会话与端点是独立层。
 
 ### 7.5 系统集成
 
@@ -529,4 +534,4 @@ Main
 | 同步的边界情况（时钟偏差、同步工具改名、部分同步） | 合并算法在 Core 里，单元测试覆盖；读不到完整文件就跳过等下一次 |
 | AOT 下的 COM（任务栏）和 WinRT（SMTC） | SMTC 验证过；任务栏用 `[GeneratedComInterface]`，D3 验证 |
 | 没有代码签名，SmartScreen 拦截 | 说明里写清楚"仍要运行"；以后再考虑签名 |
-| 独占模式下音量不可调 | `ao-volume` 不行时音量条不可用并提示（需求 O-4） |
+| 独占模式下音量不可调 | 检查硬件能力；无硬件音量时音量条不可用，提示硬件旋钮与明确播放确认；读取失败暂停重试（需求 O-4） |

@@ -142,10 +142,50 @@ def main():
                 assert call(other, "list_playlists")["items"][0]["name"] == "重命名"
 
                 call(client, "set_output", device="auto", exclusive=False)
-                call(client, "set_volume", volume=40, muted=True)
+                initial_output = call(client, "get_output")["volumeState"]
+                assert initial_output["semantics"] == "endpoint-master"
+                assert initial_output["actualDeviceId"]
+                assert initial_output["volumeAvailable"]
+                initial_volume = initial_output["endpointVolume"]
+                # Never raise or restore the real user's endpoint volume in smoke tests.
+                call(client, "set_volume", muted=True)
+                assert call(client, "get_output")["volumeState"]["endpointMuted"] == initial_output["endpointMuted"]
                 call(client, "set_play_mode", shuffle=False, repeat="all")
                 call(client, "play_tracks", trackIds=ids)
                 wait_for(other, "get_status", lambda s: s["playing"] and s["track"]["id"] == ids[0])
+                # Bind explicitly to the same real endpoint, then back to auto. Only silent
+                # WAVs play and application mute remains on; do not touch endpoint volume.
+                output = call(client, "get_output")
+                endpoint_id = output["volumeState"]["actualDeviceId"]
+                device = next(d["id"] for d in output["devices"]
+                              if d["id"] != "auto" and endpoint_id.endswith(d["id"].removeprefix("wasapi/")))
+                call(client, "set_output", device=device)
+                wait_for(other, "get_status", lambda s: s["playing"])
+                assert call(client, "get_output")["volumeState"]["actualDeviceId"] == endpoint_id
+                call(client, "set_output", device="auto")
+                wait_for(other, "get_status", lambda s: s["playing"])
+                output = call(client, "get_output")["volumeState"]
+                exclusive = client.call("set_output", {"exclusive": True})
+                if output["sessionMuted"] or output["sessionVolume"] is None or output["sessionVolume"] < 99.999:
+                    assert exclusive.get("isError"), exclusive
+                    assert call(client, "get_output")["exclusive"] is False
+                    print("PASS: real mixer attenuation/mute blocks exclusive without overriding it")
+                else:
+                    assert not exclusive.get("isError"), exclusive
+                    state = wait_for(other, "get_status", lambda s: s["playing"] or s["output"]["blockReason"])
+                    if state["output"]["hardwareVolumeConfirmationRequired"]:
+                        # This fixture consists entirely of digital silence and is app-muted.
+                        call(client, "playback", action="resume")
+                        wait_for(other, "get_status", lambda s: s["playing"])
+                    else:
+                        assert state["playing"], state
+                    call(client, "set_output", exclusive=False)
+                    wait_for(other, "get_status", lambda s: s["playing"])
+                    print("PASS: real shared/exclusive/shared decoder rebuild")
+                current_output = call(client, "get_output")["volumeState"]
+                assert abs(current_output["endpointVolume"] - initial_volume) < 0.5
+                assert current_output["endpointMuted"] == initial_output["endpointMuted"]
+                assert call(client, "get_status")["muted"]
                 assert call(client, "get_queue")["total"] == 3
                 call(client, "playback", action="pause")
                 wait_for(other, "get_status", lambda s: not s["playing"])
@@ -193,7 +233,8 @@ def main():
             with McpClient(exe, data) as restarted:
                 restored = call(restarted, "get_diagnostics")
                 player_pid = restored["processId"]
-                assert restored["status"]["volume"] == 40 and restored["status"]["muted"]
+                assert abs(restored["status"]["volume"] - initial_volume) < 0.5 and restored["status"]["muted"]
+                assert restored["output"]["volumeState"]["actualDeviceId"] == initial_output["actualDeviceId"]
                 close_player(player_pid)
                 player_pid = None
             print("PASS: cold start, stdio shutdown, shared multi-client state, Unicode, pagination, library, playlists, playback, queue, validation, logs, graceful exit with active clients, settings persistence" + (", official SDK" if args.sdk else ""))

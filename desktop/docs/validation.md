@@ -25,6 +25,17 @@ Android 同时加入每设备同步文件、事务合并、删除记录、冲突
 
 写入封面和歌词先在同卷隐藏目录复制文件，ATL 修改副本，确认原文件未变后原子替换。失败时保留原文件。歌词成功保存到文件后清理重复的应用缓存；取消退出中的缓存清理不会抛出未处理的取消异常。
 
+## 统一端点音量验证（2026-10-23）
+
+- `dotnet test desktop/JeekMusic.slnx --verbosity minimal`：151 项通过（Core 63、App 88）。输出测试使用可注入 Core Audio 设备，覆盖共享/独占切换、CUE 位置、快速重建与旧事件隔离、外部音量无反馈写回、真实设备 ID 绑定、默认设备变更、指定设备断开/恢复、旧 JSON 迁移、局部静音、合成器衰减/静音/未知读数、无硬件音量明确继续、写入/读回失败及读取恢复后的显式重试。
+- `python desktop/tools/test-mcp.py --sdk`：开发/框架运行版通过；21 个工具和官方 SDK 的 Schema/调用验证通过。静音 WAV 验证实际 WASAPI 共享播放、同端点显式设备/auto 重建、会话静音阻止独占、应用静音不改变端点静音及重启读取当前端点值。测试不写端点音量，不用固定的 40% 覆盖用户设置。
+- `$env:PATH = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer;' + $env:PATH` 后执行 `dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 -o desktop/artifacts/publish --verbosity minimal`：Native AOT 发布成功，仅保留既有 Avalonia DataGrid IL2104/IL3053 警告。首次未补 PATH 时链接失败，按仓库现有说明修复环境后通过。
+- `python desktop/tools/test-mcp.py --exe desktop/artifacts/publish/JeekMusic.exe --sdk`：正式 Native AOT 包相同 MCP/SDK smoke 通过，真实 WASAPI **共享→独占→共享** 重建通过；生成音频全为静音 WAV，应用静音保持开启，端点音量/静音未改变。发布路径下的新会话为 100% 且未静音。
+- 当前真实默认端点读数约 20%，驱动报告硬件 volume/mute 均支持；`output/JeekMusic.exe` 的既有 Windows 合成器会话已静音。开发路径测试保留这个外部设置，验证拒绝绕过；没有为测试强行取消用户静音。
+- `pwsh -NoProfile -File desktop/tools/test-app.ps1 ... -Seconds 5 -Shot ...`：中英文播放栏截图复核通过，提示不挤掉队列/歌词/迷你播放器按钮，两轮后台启动均为 0/25 次前台焦点采样；英文使用 `-GracefulExit` 正常退出。
+- 外部系统音量调整、默认设备跨物理设备变化、拔插、无硬件控制设备及异常 HRESULT 的主要覆盖来自可注入测试；尚不能代替不同 USB DAC、蓝牙、驱动及实际响度的人工验收。250ms 只读轮询属于近实时同步；主线程被其他工作阻塞时可能延迟。
+- 正常新会话由 Windows 初始化为 100%；既有合成器衰减/静音保留。迁移不会自动恢复历史端点音量，也不会自动清除旧版本可能留下的会话静音，需要用户在 Windows 合成器自行解除。
+
 ## MCP 接口验证（2026-10-23）
 
 Windows 开发版和 Native AOT 发布包均内置 `--mcp` stdio 入口，提供同一组 21 个工具，复用客户端服务。接入配置及工具参数见 [mcp.md](mcp.md)。

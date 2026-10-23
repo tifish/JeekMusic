@@ -259,9 +259,12 @@
                             <TextBlock Text="{Binding SleepText}" FontFamily="{x:Static FontFamily.Default}" FontSize="12" IsVisible="{Binding SleepActive}" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="icon" Content="{Binding VolumeIcon}" Command="{Binding ToggleMuteCommand}" AutomationProperties.Name="{ui:Tr &apos;静音&apos;}" ToolTip.Tip="{ui:Tr &apos;静音&apos;}" />
-                    <Slider Width="90" Minimum="0" Maximum="100" Value="{Binding Volume}" VerticalAlignment="Center" IsEnabled="{Binding VolumeAvailable}"
-                            AutomationProperties.Name="{ui:Tr &apos;音量（独占模式下调的是设备音量）&apos;}" ToolTip.Tip="{ui:Tr &apos;音量（独占模式下调的是设备音量）&apos;}" />
+                    <Button Classes="icon" Content="{Binding VolumeIcon}" Command="{Binding ToggleMuteCommand}" AutomationProperties.Name="{ui:Tr &apos;静音&apos;}" ToolTip.Tip="{ui:Tr &apos;仅静音本播放器&apos;}" />
+                    <StackPanel Width="90" VerticalAlignment="Center">
+                        <Slider Minimum="0" Maximum="100" Value="{Binding Volume}" IsEnabled="{Binding VolumeAvailable}"
+                                AutomationProperties.Name="{ui:Tr &apos;当前输出设备主音量&apos;}" ToolTip.Tip="{Binding VolumeTip}" />
+                        <TextBlock Text="{Binding VolumeState}" MaxHeight="28" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" FontSize="10" ToolTip.Tip="{Binding VolumeState}" />
+                    </StackPanel>
                     <Button x:Name="QueueButton" Classes="icon" Content="{x:Static ui:Icons.Queue}" AutomationProperties.Name="{ui:Tr &apos;播放队列&apos;}" ToolTip.Tip="{ui:Tr &apos;播放队列&apos;}" />
                     <ToggleButton x:Name="LyricsToggle" Classes="icon" Content="{x:Static ui:Icons.Lyrics}" AutomationProperties.Name="{ui:Tr &apos;歌词&apos;}" ToolTip.Tip="{ui:Tr &apos;歌词&apos;}" />
                     <Button x:Name="MiniButton" Classes="icon" Content="{x:Static ui:Icons.MiniPlayer}" AutomationProperties.Name="{ui:Tr &apos;迷你播放器&apos;}" ToolTip.Tip="{ui:Tr &apos;迷你播放器&apos;}" />

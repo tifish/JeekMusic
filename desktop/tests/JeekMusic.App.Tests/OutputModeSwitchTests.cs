@@ -53,285 +53,278 @@ public sealed class OutputModeSwitchTests
     }
 
     [Fact]
-    public Task ReturningToSharedRestoresSystemVolumeSeparatelyFromSessionVolume() => RunWithEndpoint(f =>
+    public Task ViewModelExternalRefreshAndMuteDoNotWriteEndpointVolume() => Run(f =>
     {
-        Assert.Equal(55, f.Endpoint!.Volume);
-        f.Player.SetExclusive(true);
-        f.Ready();
-        f.Player.SetVolume(10, false);
-        Assert.Equal(10, f.Endpoint.Volume);
-        f.Player.SetExclusive(false);
-        f.Ready();
-        Assert.Equal(55, f.Endpoint.Volume);
-        Assert.Equal(23, f.Player.Volume);
-        Assert.Equal("23", f.Current.Properties["ao-volume"]);
-        f.Endpoint.Volume = 42; // 下一轮应记住用户新调的系统主音量。
-        f.Player.SetExclusive(true);
-        f.Ready();
-        Assert.Equal(10, f.Endpoint.Volume);
-        f.Player.SetExclusive(false);
-        f.Ready();
-        Assert.Equal(42, f.Endpoint.Volume);
-        Assert.Empty(f.Errors);
+        var settings = new SettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json"));
+        var vm = new JeekMusic.UI.ViewModels.PlayerViewModel(f.Player, new SleepTimer(f.Player), settings);
+        f.Endpoint.Volume = 19;
+        f.Player.RefreshOutput();
+        Assert.Equal(19, vm.Volume);
+        vm.Muted = true;
+        Assert.True(f.Player.Muted);
+        Assert.Empty(f.Endpoint.Writes);
+        vm.Volume = 15;
+        Assert.Equal(15, f.Endpoint.Volume);
+        Assert.Single(f.Endpoint.Writes);
     });
 
     [Fact]
-    public Task FailedSystemVolumeRestoreKeepsPlaybackStoppedAndRetainsTheSnapshot() => RunWithEndpoint(f =>
+    public Task McpReportsUnknownReadingsSeparatelyFromUnsupportedHardware() => Run(f =>
     {
+        f.Endpoint.HardwareVolume = false;
         f.Player.SetExclusive(true);
         f.Ready();
-        f.Player.SetVolume(10, false);
-        f.Endpoint!.RejectRestore = true;
-        f.Player.SetExclusive(false);
-        Assert.True(f.Current.Disposed);
-        Assert.False(f.Player.EngineReady);
-        Assert.False(f.Player.IsPlaying);
-        Assert.Equal(55, f.Player.SharedDeviceVolumes["render-device"]);
-        f.Player.Resume();
-        f.Ready();
-        Assert.DoesNotContain("set pause=no", f.Current.Operations);
-        Assert.DoesNotContain("set mute=no", f.Current.Operations);
-        f.Endpoint.RejectRestore = false;
-        f.Player.Resume();
-        Assert.Equal(55, f.Endpoint.Volume);
-        Assert.True(f.Player.IsPlaying);
-        Assert.Empty(f.Player.SharedDeviceVolumes);
+        var output = JeekMusic.Automation.McpTools.VolumeState(f.Player);
+        Assert.Equal("endpoint-master", output["semantics"]!.GetValue<string>());
+        Assert.Equal("player", output["muteScope"]!.GetValue<string>());
+        Assert.False(output["volumeAvailable"]!.GetValue<bool>());
+        Assert.False(output["hardwareVolume"]!.GetValue<bool>());
+        Assert.Equal(55, output["endpointVolume"]!.GetValue<double>());
+        Assert.True(output["hardwareVolumeConfirmationRequired"]!.GetValue<bool>());
+        f.Endpoint.FailCapture = true;
+        f.Player.RefreshOutput();
+        output = JeekMusic.Automation.McpTools.VolumeState(f.Player);
+        Assert.Null(output["endpointVolume"]);
+        Assert.Null(output["hardwareVolume"]);
+        Assert.NotNull(output["diagnostic"]);
     });
 
     [Fact]
-    public Task DeviceChangeRestoresEachPhysicalDeviceByItsOriginalId() => RunWithEndpoint(f =>
+    public Task IdleEngineStillAllowsEndpointControlsAndInitializesNoSavedVolume() => Run(f =>
     {
-        f.Player.SetExclusive(true);
-        f.Ready();
-        f.Player.SetVolume(10, false);
-        f.Endpoint!.DeviceId = "second-device";
-        f.Endpoint.Volume = 72;
-        f.Player.SetDevice("wasapi/second-device");
-        f.Current.Emit(Mpv.EventId.AudioReconfig);
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(10, f.Endpoint.Volume);
-        f.Player.SetExclusive(false);
-        f.Ready();
-        Assert.Equal(72, f.Endpoint.Volume);
-        f.Endpoint.DeviceId = "render-device";
-        Assert.Equal(55, f.Endpoint.Volume);
-        Assert.Empty(f.Player.SharedDeviceVolumes);
+        using var player = new PlayerService(f, options => new FakeEngine(options), f.Endpoint);
+        player.EnsureEngine();
+        Assert.False(player.OutputPending);
+        Assert.True(player.VolumeAvailable);
+        Assert.True(player.SetVolume(13, false));
+        Assert.Equal(13, f.Endpoint.Volume);
     });
 
     [Fact]
-    public Task ExitingExclusivePlaybackRestoresSystemVolumeAfterClosingTheDecoder() => RunWithEndpoint(f =>
+    public Task ModesAndExitNeverRestoreHistoricalVolume() => Run(f =>
     {
+        Assert.Equal(55, f.Player.Volume);
+        f.Player.SetVolume(18, false);
         f.Player.SetExclusive(true);
         f.Ready();
-        f.Player.SetVolume(10, false);
+        Assert.Equal(18, f.Player.Volume);
+        f.Endpoint.Volume = 31;
+        f.Player.RefreshOutput();
+        Assert.Equal(31, f.Player.Volume);
+        f.Player.SetExclusive(false);
+        f.Ready();
+        Assert.Equal(31, f.Player.Volume);
         f.Player.Dispose();
-        Assert.True(f.Current.Disposed);
-        Assert.Equal(55, f.Endpoint!.Volume);
-        Assert.Empty(f.Player.SharedDeviceVolumes);
+        Assert.Equal(31, f.Endpoint.Volume);
+        Assert.Single(f.Endpoint.Writes);
+        Assert.All(f.Engines, e => Assert.DoesNotContain(e.Operations, op => op.StartsWith("set ao-")));
     });
 
     [Fact]
-    public Task RestartInExclusivePreservesTheOriginalSystemVolumeSnapshot() => RunWithEndpoint(f =>
+    public Task ExplicitAndDefaultDeviceChangesPinTheNewDeviceWithoutWritingVolume() => Run(f =>
     {
-        f.Endpoint!.Volume = 10; // 上一进程的独占音量仍留在设备上。
-        using var restarted = new PlayerService(f, options => new FakeEngine(options), f.Endpoint);
-        restarted.RestoreVolumeSettings(true, 10, 23, 10, false,
-            new Dictionary<string, double> { ["render-device"] = 55 });
-        restarted.Restore([new(1, false)], 0, false, RepeatMode.Off, null, TimeSpan.Zero);
-        restarted.PrepareRestored();
-        restarted.SetExclusive(false);
-        Assert.Equal(55, f.Endpoint.Volume);
-        Assert.Empty(restarted.SharedDeviceVolumes);
-        Assert.Equal(23, restarted.Volume);
-    });
-
-    [Fact]
-    public Task UnableToSaveSystemVolumeBlocksExclusivePlaybackBeforeChangingTheDevice() => RunWithEndpoint(f =>
-    {
-        f.Endpoint!.FailCapture = true;
-        f.Player.SetExclusive(true);
+        f.Endpoint.Volumes["second-device"] = 72;
+        f.Player.SetDevice("wasapi/second-device");
         f.Ready();
-        Assert.Equal(55, f.Endpoint.Volume);
-        Assert.DoesNotContain(f.Current.Operations, op => op.StartsWith("set ao-volume="));
-        Assert.DoesNotContain("set pause=no", f.Current.Operations);
-        Assert.False(f.Player.IsPlaying);
-        f.Endpoint.FailCapture = false;
-        f.Player.Resume();
-        Assert.True(f.Player.IsPlaying);
-        Assert.Equal(55, f.Player.SharedDeviceVolumes["render-device"]);
-    });
-
-    [Fact]
-    public async Task SystemVolumeSnapshotSurvivesSettingsSerializationAndIsClearedAfterRestore()
-    {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
-        var path = Path.Combine(Path.GetTempPath(), "jeek-system-volume-" + Guid.NewGuid().ToString("N") + ".json");
-        var restartPath = path + ".restart";
-        try
-        {
-            await session.Dispatch(() =>
-            {
-                var settings = new SettingsStore(path);
-                var endpoint = new FakeEndpointVolume();
-                byte[] saved;
-                using (var f = new Fixture(settings, endpoint: endpoint))
-                {
-                    f.Player.SetVolume(23, false);
-                    f.Player.SetExclusive(true);
-                    f.Ready();
-                    f.Player.SetVolume(10, false);
-                    Assert.Equal(55, settings.Current.SharedDeviceVolumes["render-device"]);
-                    settings.WriteNow();
-                    saved = File.ReadAllBytes(path);
-                }
-                // 用上次进程退出前的文件模拟独占状态下重启，不能把设备上现存的 10 当成共享原音量。
-                endpoint.Volume = 10;
-                File.WriteAllBytes(restartPath, saved);
-                var reloaded = new SettingsStore(restartPath);
-                using (var f = new Fixture(reloaded, endpoint: endpoint))
-                {
-                    Assert.Equal(10, endpoint.Volume);
-                    Assert.Equal(55, f.Player.SharedDeviceVolumes["render-device"]);
-                    f.Player.SetExclusive(false);
-                    f.Ready();
-                    Assert.Equal(55, endpoint.Volume);
-                    Assert.Equal(23, f.Player.Volume);
-                    Assert.Empty(reloaded.Current.SharedDeviceVolumes);
-                    reloaded.WriteNow();
-                    var result = JsonSerializer.Deserialize(File.ReadAllBytes(restartPath), SettingsJsonContext.Default.AppSettings)!;
-                    Assert.Empty(result.SharedDeviceVolumes);
-                    Assert.False(result.Exclusive);
-                }
-            }, CancellationToken.None);
-        }
-        finally
-        {
-            await Task.Delay(1300);
-            File.Delete(path);
-            File.Delete(restartPath);
-        }
-    }
-
-    [Fact]
-    public Task ModesRememberTheirVolumesAndRestoreHigherSavedValuesBeforePlaying() => Run(f =>
-    {
-        f.Player.SetVolume(65, false);
-        f.Player.SetExclusive(true);
+        Assert.Equal("wasapi/second-device", f.Current.Properties["audio-device"]);
+        Assert.Equal(72, f.Player.Volume);
+        f.Player.SetDevice(null);
         f.Ready();
-        f.Player.SetVolume(18, false);
-        for (var i = 0; i < 3; i++)
-        {
-            f.Player.SetExclusive(false);
-            f.Current.Properties["ao-volume"] = "18";
-            Assert.Equal(65, f.Player.Volume);
-            Assert.Equal("yes", f.Current.Properties["mute"]);
-            f.Ready();
-            Assert.Equal("65", f.Current.Properties["ao-volume"]);
-            Assert.True(f.Current.Operations.IndexOf("set ao-volume=65") < f.Current.Operations.IndexOf("set pause=no"));
-            f.Player.SetExclusive(true);
-            f.Ready();
-            Assert.Equal(18, f.Player.Volume);
-            Assert.Equal("18", f.Current.Properties["ao-volume"]);
-            Assert.Equal(65, f.Player.SharedVolume);
-            Assert.Equal(18, f.Player.ExclusiveVolume);
-        }
-        Assert.Empty(f.Errors);
-    });
-
-    [Fact]
-    public Task RapidSwitchDoesNotReplaceSavedVolumeWithAnUninitializedBackendValue() => Run(f =>
-    {
-        f.Player.SetVolume(65, false);
-        f.Player.SetExclusive(true);
+        Assert.Equal(55, f.Player.Volume);
+        f.Endpoint.DeviceId = "second-device";
+        f.Player.RefreshOutput();
+        Assert.True(f.Current.Properties["mute"] == "yes");
         f.Ready();
-        f.Player.SetVolume(18, false);
-        f.Player.SetExclusive(false);
-        f.Current.Properties["ao-volume"] = "2";
-        f.Player.SetExclusive(true);
-        f.Ready();
-        f.Player.SetExclusive(false);
-        f.Ready();
-        Assert.Equal(65, f.Player.Volume);
-        Assert.Equal(18, f.Player.ExclusiveVolume);
-    });
-
-    [Theory]
-    [InlineData("rejected")]
-    [InlineData("ignored")]
-    public Task SavedHigherVolumeStillRequiresSuccessfulReadback(string failure) => Run(f =>
-    {
-        f.Player.SetVolume(65, false);
-        f.Player.SetExclusive(true);
-        f.Ready();
-        f.Player.SetVolume(18, false);
-        f.Player.SetExclusive(false);
-        f.Current.Properties["ao-volume"] = "18";
-        f.Current.RejectVolume = failure == "rejected";
-        f.Current.IgnoreVolume = failure == "ignored";
-        f.Ready();
-        Assert.False(f.Player.IsPlaying);
-        Assert.DoesNotContain("set mute=no", f.Current.Operations);
-        Assert.DoesNotContain("set pause=no", f.Current.Operations);
-        Assert.Equal(65, f.Player.SharedVolume);
-        Assert.Single(f.Errors);
+        Assert.Equal("second-device", f.Player.ActualDeviceId);
+        Assert.Equal(72, f.Player.Volume);
+        Assert.Empty(f.Endpoint.Writes);
     });
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SeparateVolumesPersistAcrossRestartAndLegacyVolumeIsSafelyInitialized(bool exclusive)
+    public Task ExternalEndpointChangesNeverFeedBackAndMuteIsLocal(bool exclusive) => Run(f =>
+    {
+        f.Player.SetExclusive(exclusive);
+        f.Ready();
+        f.Endpoint.Volume = 12;
+        f.Endpoint.Muted = true;
+        f.Player.RefreshOutput();
+        Assert.Equal(12, f.Player.Volume);
+        Assert.True(f.Player.EndpointMuted);
+        Assert.False(f.Player.Muted);
+        f.Player.SetMuted(true);
+        Assert.Equal("yes", f.Current.Properties["mute"]);
+        f.Player.SetMuted(false);
+        Assert.True(f.Endpoint.Muted);
+        Assert.Empty(f.Endpoint.Writes);
+        Assert.DoesNotContain(f.Current.Operations, op => op.StartsWith("set ao-"));
+    });
+
+    [Theory]
+    [InlineData(10.0, false)]
+    [InlineData(100.0, true)]
+    [InlineData(null, false)]
+    public Task MixerAttenuationMuteAndReadFailureBlockExclusiveWithoutOverridingUser(double? volume, bool muted) => Run(f =>
+    {
+        f.Endpoint.SessionVolume = volume;
+        f.Endpoint.SessionMuted = muted;
+        f.Player.SetExclusive(true);
+        Assert.False(f.Player.Exclusive);
+        Assert.Single(f.Engines);
+        Assert.Equal("session-attenuated-or-unreadable", f.Player.OutputBlockReason);
+        Assert.Equal(volume, f.Endpoint.SessionVolume);
+        Assert.Equal(muted, f.Endpoint.SessionMuted);
+        f.Endpoint.SessionVolume = 100;
+        f.Endpoint.SessionMuted = false;
+        f.Player.SetExclusive(true);
+        f.Ready();
+        Assert.True(f.Player.IsPlaying);
+    });
+
+    [Fact]
+    public Task ExclusiveStartupAlsoChecksPersistedMixerAndCannotBypassItWithResume() => Run(f =>
+    {
+        FakeEngine? engine = null;
+        using var player = new PlayerService(f, options => engine = new FakeEngine(options), f.Endpoint);
+        player.RestoreVolumeSettings(true, false);
+        f.Endpoint.SessionVolume = 8;
+        player.Restore([new(1, false)], 0, false, RepeatMode.Off, null, TimeSpan.Zero);
+        player.PrepareRestored();
+        engine!.Emit(Mpv.EventId.FileLoaded);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("session-attenuated-or-unreadable", player.OutputBlockReason);
+        player.Resume();
+        Assert.False(player.IsPlaying);
+        Assert.Empty(f.Endpoint.Writes);
+    });
+
+    [Fact]
+    public Task UnsupportedHardwareIsDistinctFromReadFailureAndCanBeExplicitlyResumed() => Run(f =>
+    {
+        f.Endpoint.HardwareVolume = false;
+        f.Player.SetExclusive(true);
+        f.Ready();
+        Assert.False(f.Player.VolumeAvailable);
+        Assert.False(f.Player.IsPlaying);
+        Assert.Equal("hardware-volume-confirmation", f.Player.OutputBlockReason);
+        Assert.False(f.Player.SetVolume(90, false));
+        Assert.Equal(55, f.Player.Volume);
+        f.Player.Resume();
+        Assert.True(f.Player.IsPlaying);
+        Assert.Equal("100", f.Current.Properties["volume"]);
+        Assert.Empty(f.Endpoint.Writes);
+        // Rebuilding for another device revokes the physical-knob acknowledgement.
+        f.Endpoint.Volumes["second-device"] = 20;
+        f.Player.SetDevice("wasapi/second-device");
+        f.Ready();
+        Assert.False(f.Player.IsPlaying);
+        Assert.True(f.Player.HardwareVolumeConfirmationRequired);
+    });
+
+    [Fact]
+    public Task SoftwareEndpointMuteIsNotSilentlyBypassedInExclusive() => Run(f =>
+    {
+        f.Endpoint.HardwareMute = false;
+        f.Endpoint.Muted = true;
+        f.Player.SetExclusive(true);
+        f.Ready();
+        Assert.False(f.Player.IsPlaying);
+        Assert.True(f.Player.HardwareVolumeConfirmationRequired);
+        Assert.True(f.Endpoint.Muted);
+        f.Player.Resume();
+        Assert.True(f.Player.IsPlaying);
+        Assert.True(f.Endpoint.Muted);
+    });
+
+    [Theory]
+    [InlineData("endpoint")]
+    [InlineData("volume")]
+    [InlineData("capability")]
+    public Task ReadFailureKeepsPausedUntilSuccessfulRetry(string failure) => Run(f =>
+    {
+        f.Player.SetExclusive(true);
+        f.Endpoint.FailCapture = failure == "endpoint";
+        f.Endpoint.FailVolume = failure == "volume";
+        if (failure == "capability") f.Endpoint.HardwareVolume = null;
+        f.Ready();
+        Assert.False(f.Player.IsPlaying);
+        Assert.DoesNotContain("set mute=no", f.Current.Operations);
+        Assert.DoesNotContain("set pause=no", f.Current.Operations);
+        f.Player.Resume();
+        Assert.False(f.Player.IsPlaying);
+        f.Endpoint.FailCapture = f.Endpoint.FailVolume = false;
+        f.Endpoint.HardwareVolume = true;
+        f.Player.Resume();
+        Assert.True(f.Player.IsPlaying);
+        Assert.Empty(f.Endpoint.Writes);
+    });
+
+    [Fact]
+    public Task FailedEndpointWriteDoesNotPretendSuccessAndKeepsPlaybackSafe() => Run(f =>
+    {
+        f.Endpoint.RejectWrite = true;
+        Assert.False(f.Player.SetVolume(90, false));
+        Assert.Equal(55, f.Player.Volume);
+        Assert.False(f.Player.IsPlaying);
+        Assert.Equal("endpoint-write-failed", f.Player.OutputBlockReason);
+        f.Player.Resume();
+        Assert.True(f.Player.IsPlaying); // read-only retry can use the actual unchanged volume
+    });
+
+    [Fact]
+    public Task EndpointLostImmediatelyAfterWriteCannotReturnSuccess() => Run(f =>
+    {
+        f.Endpoint.FailAfterWrite = true;
+        Assert.False(f.Player.SetVolume(20, false));
+        Assert.False(f.Player.IsPlaying);
+        Assert.Null(f.Player.EndpointVolumeValue);
+        Assert.False(f.Player.VolumeAvailable);
+    });
+
+    [Fact]
+    public Task DeviceLossPausesAndReconnectionDoesNotAutoplay() => Run(f =>
+    {
+        f.Player.SetDevice("wasapi/render-device");
+        f.Ready();
+        f.Endpoint.FailCapture = true;
+        f.Player.RefreshOutput();
+        Assert.False(f.Player.IsPlaying);
+        Assert.False(f.Player.VolumeAvailable);
+        f.Endpoint.FailCapture = false;
+        f.Player.RefreshOutput();
+        Assert.False(f.Player.IsPlaying);
+        f.Player.Resume();
+        Assert.True(f.Player.IsPlaying);
+    });
+
+    [Fact]
+    public async Task LegacySettingsDiscardAllVolumeFieldsWithoutAnyEndpointWrite()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
-        var path = Path.Combine(Path.GetTempPath(), "jeek-volume-settings-" + Guid.NewGuid().ToString("N") + ".json");
+        var path = Path.Combine(Path.GetTempPath(), "jeek-volume-migration-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
-            // 原版本只有一个音量；不能把它误当成另一种模式已确认的音量。
-            File.WriteAllText(path, $$"""{"exclusive":{{exclusive.ToString().ToLowerInvariant()}},"volume":100}""");
+            File.WriteAllText(path, """{"exclusive":true,"volume":100,"sharedVolume":95,"exclusiveVolume":80,"sharedDeviceVolumes":{"render-device":100},"muted":true}""");
             await session.Dispatch(() =>
             {
                 var settings = new SettingsStore(path);
-                using (var f = new Fixture(settings, initialNativeVolume: "30"))
+                using (var f = new Fixture(settings))
                 {
-                    Assert.Equal(exclusive, f.Player.Exclusive);
-                    Assert.Equal(30, f.Player.Volume);
-                    Assert.Null(exclusive ? f.Player.SharedVolume : f.Player.ExclusiveVolume);
-                    f.Player.SetExclusive(false);
-                    f.Ready();
-                    f.Player.SetVolume(65, false);
-                    f.Player.SetExclusive(true);
-                    f.Ready();
-                    f.Player.SetVolume(18, true);
-                    settings.WriteNow();
-                }
-                var reloaded = new SettingsStore(path);
-                using (var f = new Fixture(reloaded, initialNativeVolume: "5"))
-                {
-                    Assert.True(f.Player.Exclusive);
-                    Assert.Equal(18, f.Player.Volume);
+                    Assert.Equal(55, f.Player.Volume);
                     Assert.True(f.Player.Muted);
-                    Assert.Equal(65, reloaded.Current.SharedVolume);
-                    Assert.Equal(18, reloaded.Current.ExclusiveVolume);
                     f.Player.SetExclusive(false);
                     f.Ready();
-                    Assert.Equal(65, f.Player.Volume);
-                    Assert.Equal(65, reloaded.Current.Volume);
-                    f.Player.SetVolume(42, true);
-                    Assert.Equal(42, reloaded.Current.SharedVolume);
-                    Assert.Equal(18, reloaded.Current.ExclusiveVolume);
-                    reloaded.WriteNow();
+                    Assert.Empty(f.Endpoint.Writes);
+                    Assert.Equal(55, f.Endpoint.Volume);
                 }
-                var saved = JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.AppSettings)!;
-                Assert.False(saved.Exclusive);
-                Assert.Equal(42, saved.SharedVolume);
-                Assert.Equal(18, saved.ExclusiveVolume);
+                settings.WriteNow();
+                var json = File.ReadAllText(path);
+                foreach (var key in new[] { "volume", "sharedVolume", "exclusiveVolume", "sharedDeviceVolumes" })
+                    Assert.DoesNotContain("\"" + key + "\"", json);
             }, CancellationToken.None);
         }
-        finally
-        {
-            // 等防抖写入结束后再清理，避免计时器重建已删掉的临时文件。
-            await Task.Delay(1300);
-            File.Delete(path);
-        }
+        finally { await Task.Delay(1300); File.Delete(path); }
     }
 
     [Fact]
@@ -359,9 +352,8 @@ public sealed class OutputModeSwitchTests
         engine.Emit(Mpv.EventId.FileLoaded);
         Dispatcher.UIThread.RunJobs();
         Assert.True(f.Player.IsPlaying);
-        Assert.Equal("23", engine.Properties["ao-volume"]);
-        Assert.True(engine.Operations.IndexOf("set ao-volume=23") < engine.Operations.IndexOf("set mute=no"));
-        Assert.True(engine.Operations.IndexOf("set ao-volume=23") < engine.Operations.IndexOf("set pause=no"));
+        Assert.Equal(55, f.Player.Volume);
+        Assert.Empty(f.Endpoint.Writes);
         Assert.Equal(before, f.Player.Queue.Items);
         Assert.Equal(0, f.Player.Queue.CurrentIndex);
         Assert.True(f.Player.Queue.Shuffle);
@@ -385,54 +377,6 @@ public sealed class OutputModeSwitchTests
         Assert.Equal(muted ? "yes" : "no", f.Current.Properties["mute"]);
         Assert.Equal(muted, f.Player.Muted);
         Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
-    });
-
-    [Theory]
-    [InlineData("unavailable")]
-    [InlineData("rejected")]
-    [InlineData("ignored")]
-    [InlineData("invalid")]
-    public Task FailedVolumeRestorationNeverUnmutesOrResumes(string failure) => Run(f =>
-    {
-        f.Player.SetExclusive(true);
-        var engine = f.Current;
-        if (failure == "unavailable") engine.Properties.Remove("ao-volume");
-        if (failure == "rejected") engine.RejectVolume = true;
-        if (failure == "ignored") engine.IgnoreVolume = true;
-        if (failure == "invalid") engine.Properties["ao-volume"] = "NaN";
-        f.Ready();
-        Assert.False(f.Player.IsPlaying);
-        Assert.Equal("yes", engine.Properties["pause"]);
-        Assert.Equal("yes", engine.Properties["mute"]);
-        Assert.DoesNotContain("set pause=no", engine.Operations);
-        Assert.DoesNotContain("set mute=no", engine.Operations);
-        Assert.Single(f.Errors);
-        f.Player.Resume();
-        Assert.False(f.Player.IsPlaying);
-        Assert.Equal("yes", engine.Properties["mute"]);
-    });
-
-    [Fact]
-    public Task DoesNotRaiseExistingDeviceVolumeToTheStoredHundredPercent() => Run(f =>
-    {
-        f.Player.SetVolume(100, false);
-        f.Player.SetExclusive(true);
-        f.Current.Properties["ao-volume"] = "30";
-        f.Ready();
-        Assert.Equal(30, f.Player.Volume);
-        Assert.Equal("30", f.Current.Properties["ao-volume"]);
-        Assert.DoesNotContain("set ao-volume=100", f.Current.Operations);
-        Assert.True(f.Player.IsPlaying);
-    });
-
-    [Fact]
-    public Task KeepsLowerVolumeChosenInTheWindowsMixer() => Run(f =>
-    {
-        f.Current.Properties["ao-volume"] = "7";
-        f.Player.SetExclusive(true);
-        f.Ready();
-        Assert.Equal(7, f.Player.Volume);
-        Assert.Equal("7", f.Current.Properties["ao-volume"]);
     });
 
     [Fact]
@@ -499,10 +443,10 @@ public sealed class OutputModeSwitchTests
                 }
                 var source = new SilentTrackSource(path);
                 Mpv? engine = null;
-                using var player = new PlayerService(source, options => engine = new Mpv(options.Select(o => o.Item1 == "ao" ? ("ao", "null") : o)));
+                using var player = new PlayerService(source, options => engine = new Mpv(options.Select(o => o.Item1 == "ao" ? ("ao", "null") : o)), new FakeEndpointVolume());
                 var errors = new List<string>();
                 player.Error += errors.Add;
-                player.SetVolume(15, false);
+
                 player.Restore([new(1, false)], 0, false, RepeatMode.Off, null, TimeSpan.FromSeconds(6.75));
                 player.PrepareRestored();
                 WaitFor(() => engine!.GetDouble("time-pos") is > 6.7);
@@ -550,27 +494,29 @@ public sealed class OutputModeSwitchTests
         }, CancellationToken.None);
     }
 
-    static async Task RunWithEndpoint(Action<Fixture> scenario)
-    {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
-        await session.Dispatch(() =>
-        {
-            using var fixture = new Fixture(endpoint: new FakeEndpointVolume());
-            scenario(fixture);
-        }, CancellationToken.None);
-    }
-
     sealed class FakeEndpointVolume : IEndpointVolume
     {
-        readonly Dictionary<string, double> _volumes = new() { ["render-device"] = 55 };
+        public readonly Dictionary<string, double> Volumes = new() { ["render-device"] = 55 };
+        public readonly List<(string, double)> Writes = [];
         public string DeviceId = "render-device";
-        public bool RejectRestore, FailCapture;
-        public double Volume { get => _volumes[DeviceId]; set => _volumes[DeviceId] = value; }
-        public EndpointVolumeSnapshot? Capture(string? device) => FailCapture ? null : new(DeviceId, Volume);
-        public bool Restore(EndpointVolumeSnapshot snapshot)
+        public bool RejectWrite, FailCapture, FailVolume, FailAfterWrite, Muted;
+        public bool? HardwareVolume = true, HardwareMute = true;
+        public double? SessionVolume = 100;
+        public bool? SessionMuted = false;
+        public string? LastError => FailCapture || FailVolume ? "test read failure" : RejectWrite ? "test write failure" : null;
+        public double Volume { get => Volumes[DeviceId]; set => Volumes[DeviceId] = value; }
+        public EndpointVolumeSnapshot? Capture(string? device)
         {
-            if (RejectRestore) return false;
-            _volumes[snapshot.DeviceId] = snapshot.Volume;
+            var id = device is null or "auto" ? DeviceId : device.Replace("wasapi/", "");
+            return FailCapture || !Volumes.TryGetValue(id, out var volume) ? null :
+                new(id, FailVolume ? null : volume, Muted, HardwareVolume, HardwareMute, SessionVolume, SessionMuted, LastError);
+        }
+        public bool SetVolume(string deviceId, double volume)
+        {
+            if (RejectWrite) return false;
+            Writes.Add((deviceId, volume));
+            Volumes[deviceId] = volume;
+            if (FailAfterWrite) FailCapture = true;
             return true;
         }
     }
@@ -584,29 +530,23 @@ public sealed class OutputModeSwitchTests
         public List<FakeEngine> Engines { get; } = [];
         public List<string> Errors { get; } = [];
         public FakeEngine Current => Engines[^1];
-        public FakeEndpointVolume? Endpoint { get; }
+        public FakeEndpointVolume Endpoint { get; }
 
         public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null,
             IExclusiveAudioFormat? formats = null)
         {
-            Endpoint = endpoint;
+            Endpoint = endpoint ?? new FakeEndpointVolume();
             _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000, SampleRate = 44100, Channels = 2 };
             _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000, SampleRate = 96000, BitsPerSample = 24, Channels = 2 };
             Player = new PlayerService(this, options =>
             {
                 var engine = new FakeEngine(options);
                 if (Engines.Count == 0) engine.Properties["ao-volume"] = initialNativeVolume;
-                if (endpoint is not null && engine.Properties["audio-exclusive"] == "yes")
-                {
-                    engine.Properties["ao-volume"] = Mpv.Num(endpoint.Volume);
-                    engine.VolumeSet = v => endpoint.Volume = v;
-                }
                 Engines.Add(engine);
                 return engine;
-            }, endpoint, formats);
+            }, Endpoint, formats);
             Player.Error += Errors.Add;
-            if (settings is null) Player.SetVolume(23, false);
-            else OutputSettingsBinding.Attach(Player, settings);
+            if (settings is not null) OutputSettingsBinding.Attach(Player, settings);
             Player.Restore([new(1, false), new(2, true)], 0, true, RepeatMode.All, null, TimeSpan.FromSeconds(12.345));
             Player.PrepareRestored();
             Current.Emit(Mpv.EventId.FileLoaded);
@@ -633,8 +573,7 @@ public sealed class OutputModeSwitchTests
         public Dictionary<string, string> Properties { get; } = new() { ["ao-volume"] = "100", ["ao-mute"] = "no", ["current-ao"] = "wasapi", ["playlist-count"] = "0" };
         public List<string[]> Commands { get; } = [];
         public List<string> Operations { get; } = [];
-        public bool Disposed, RejectVolume, IgnoreVolume, RejectMute;
-        public Action<double>? VolumeSet;
+        public bool Disposed, RejectMute;
         public FakeEngine(IEnumerable<(string, string)> options)
         {
             foreach (var (key, value) in options) Properties[key] = value;
@@ -658,10 +597,7 @@ public sealed class OutputModeSwitchTests
         {
             Operations.Add($"set {name}={value}");
             if (name == "mute" && RejectMute) return -1;
-            if (name == "ao-volume" && RejectVolume) return -1;
-            if (name == "ao-volume" && IgnoreVolume) return 0;
             Properties[name] = value;
-            if (name == "ao-volume") VolumeSet?.Invoke(double.Parse(value, CultureInfo.InvariantCulture));
             if (name == "pause") PropertyChanged?.Invoke(name, value);
             return 0;
         }

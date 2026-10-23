@@ -33,9 +33,22 @@ public sealed class PlayerService : IDisposable
     readonly Func<IEnumerable<(string, string)>, IPlaybackEngine> _createEngine;
     readonly IEndpointVolume? _endpointVolume;
     readonly IExclusiveAudioFormat? _exclusiveAudioFormat;
-    readonly Dictionary<string, double> _sharedDeviceVolumes = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>独占输出修改过的设备，其原系统主音量待切回共享时恢复。</summary>
-    public IReadOnlyDictionary<string, double> SharedDeviceVolumes => _sharedDeviceVolumes;
+    readonly DispatcherTimer _outputMonitor;
+    EndpointVolumeSnapshot? _endpoint;
+    string? _boundDeviceId;
+    bool _hardwareVolumeConfirmed;
+    public string? ActualDeviceId => _boundDeviceId;
+    public double? EndpointVolumeValue => _endpoint?.Volume;
+    public bool? EndpointMuted => _endpoint?.Muted;
+    public bool? HardwareVolume => _endpoint?.HardwareVolume;
+    public bool? HardwareMute => _endpoint?.HardwareMute;
+    public double? SessionVolume => _endpoint?.SessionVolume;
+    public bool? SessionMuted => _endpoint?.SessionMuted;
+    public string? VolumeDiagnostic { get; private set; }
+    public string? OutputBlockReason { get; private set; }
+    public bool OutputPending => _restoringOutput && CurrentTrack is not null;
+    public bool HardwareVolumeConfirmationRequired => Exclusive &&
+        (_endpoint?.HardwareVolume == false || _endpoint is { Muted: true, HardwareMute: false }) && !_hardwareVolumeConfirmed;
 
     /// <summary>mpv 播放列表里的条目：条目 ID → 队列位置对应的歌曲。</summary>
     long _currentEntry = -1, _nextEntry = -1;
@@ -67,33 +80,17 @@ public sealed class PlayerService : IDisposable
     // 设置（由外部从 AppSettings 同步过来）
     public bool Exclusive { get; private set; }
     public string? Device { get; private set; }
-    public double Volume { get; private set; } = 100;
-    public double? SharedVolume { get; private set; }
-    public double? ExclusiveVolume { get; private set; }
+    // Volume is a compatibility/UI number only. Unknown readings use 0 and are explicitly unavailable.
+    public double Volume { get; private set; }
     public bool Muted { get; private set; }
 
-    /// <summary>启动时恢复音量记录；旧版本的单个音量仅作为首次初始化的参考。</summary>
-    internal void RestoreVolumeSettings(bool exclusive, double volume, double? sharedVolume, double? exclusiveVolume, bool muted,
-        IReadOnlyDictionary<string, double>? sharedDeviceVolumes = null)
+    internal void RestoreVolumeSettings(bool exclusive, bool muted)
     {
         Exclusive = exclusive;
-        SharedVolume = ValidVolume(sharedVolume);
-        ExclusiveVolume = ValidVolume(exclusiveVolume);
-        Volume = (exclusive ? ExclusiveVolume : SharedVolume) ?? ValidVolume(volume) ?? 100;
         Muted = muted;
-        if (sharedDeviceVolumes is not null)
-            foreach (var (id, saved) in sharedDeviceVolumes)
-                if (!string.IsNullOrWhiteSpace(id) && double.IsFinite(saved) && saved is >= 0 and <= 100)
-                    _sharedDeviceVolumes[id] = saved;
     }
 
     static double? ValidVolume(double? value) => value is { } v && double.IsFinite(v) ? Math.Clamp(v, 0, 100) : null;
-
-    void RememberVolume()
-    {
-        if (Exclusive) ExclusiveVolume = Volume;
-        else SharedVolume = Volume;
-    }
 
     /// <summary>播放状态变了（播放 / 暂停、换歌）。</summary>
     public event Action? StateChanged;
@@ -118,6 +115,9 @@ public sealed class PlayerService : IDisposable
         _endpointVolume = endpointVolume;
         _exclusiveAudioFormat = exclusiveAudioFormat;
         Queue.Changed += OnQueueChanged;
+        _outputMonitor = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background,
+            (_, _) => RefreshOutput());
+        _outputMonitor.Start();
     }
 
     // ── mpv 的创建：首帧之后（设计 §12）──
@@ -127,13 +127,14 @@ public sealed class PlayerService : IDisposable
     public void EnsureEngine()
     {
         if (_mpv is not null) return;
+        if (!ReadEndpoint(Device, bind: true)) { BlockOutputRestore("endpoint-read-failed"); return; }
         _restoringOutput = true;
         _outputFileLoaded = _outputRestoreFailed = false;
         try
         {
             _mpv = _createEngine(Mpv.BaseOptions().Concat([
                 ("ao", "wasapi"), ("gapless-audio", "weak"), ("prefetch-playlist", "yes"),
-                ("audio-exclusive", Exclusive ? "yes" : "no"), ("audio-device", Device ?? "auto"),
+                ("audio-exclusive", Exclusive ? "yes" : "no"), ("audio-device", "wasapi/" + _boundDeviceId),
                 ("keep-open", "no"), ("pause", "yes"),
                 ("mute", _restoringOutput || Muted ? "yes" : "no"),
                 ("volume", Mpv.Num(_fadeVolume)),
@@ -216,12 +217,16 @@ public sealed class PlayerService : IDisposable
         EnsureEngine();
         if (IsIdle) { LoadCurrent(play: true, start: _restoringOutput ? _restorePosition : null); return; }
         _wantPlaying = true;
+        // Explicit Play after the hardware warning acknowledges the physical knob. Never
+        // acknowledge read failures, mixer attenuation, or automatic mode/device changes.
+        if (OutputBlockReason == "hardware-volume-confirmation") _hardwareVolumeConfirmed = true;
         if (_restoringOutput)
         {
             _outputRestoreFailed = false;
             TryFinishOutputRestore();
             return;
         }
+        if (!CheckOutputSafety()) { BlockOutputRestore(OutputBlockReason); return; }
         _mpv?.TrySet("pause", "no");
     }
 
@@ -285,63 +290,65 @@ public sealed class PlayerService : IDisposable
 
     public void SetDevice(string? device)
     {
+        device = device is "auto" ? null : device;
+        if (Device == device && _boundDeviceId is not null) return;
         Device = device;
-        _mpv?.TrySet("audio-device", device ?? "auto");
+        RebuildOutput();
     }
 
-    /// <summary>重建输出及解码器，从当前歌曲的位置恢复；确认音量以前始终暂停并静音。</summary>
     public void SetExclusive(bool exclusive)
     {
         if (Exclusive == exclusive) return;
+        // Refuse a bypass before closing the shared stream, including mixer changes made
+        // while paused or during a pending reload. The same check also runs on startup.
+        if (exclusive && (!ReadEndpoint(_boundDeviceId ?? Device) || !SessionAllowsExclusive()))
+        {
+            OutputBlockReason = "session-attenuated-or-unreadable";
+            Error?.Invoke(L.T("Windows 音量合成器中的 JeekMusic 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"));
+            OutputChanged?.Invoke();
+            return;
+        }
+        Exclusive = exclusive;
+        RebuildOutput();
+    }
+
+    /// <summary>绑定明确的物理端点后重建，保留队列、CUE 位置与播放意图；不向新端点写旧值。</summary>
+    void RebuildOutput()
+    {
         var position = Position;
         var play = _restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no";
         var oldEngine = _mpv;
-        // 先保存离开模式的实际音量；重载中的后端还未应用音量，不能用于覆盖记录。
-        if (oldEngine is not null && !_restoringOutput && !IsIdle)
-        {
-            if (oldEngine.GetDouble("ao-volume") is { } actual && double.IsFinite(actual) && actual >= 0)
-                Volume = Math.Min(Volume, Math.Clamp(actual, 0, 100));
-            RememberVolume();
-        }
-        Exclusive = exclusive;
-        Volume = (exclusive ? ExclusiveVolume : SharedVolume) ?? Volume;
         _restorePosition = position;
         _restoringOutput = oldEngine is not null && CurrentTrack is not null;
         _outputFileLoaded = _outputRestoreFailed = false;
+        _hardwareVolumeConfirmed = false;
+        OutputBlockReason = null;
         if (oldEngine is not null)
         {
-            if (oldEngine.Get("ao-mute") == "yes") Muted = true;
             var muted = oldEngine.TrySet("mute", "yes") >= 0;
             var paused = oldEngine.TrySet("pause", "yes") >= 0;
+            _mpv = null;
+            oldEngine.Dispose();
             if (!muted || !paused)
             {
                 _wantPlaying = false;
-                // 停止旧引擎而非继续在无法静音的状态下切换。
-                _mpv = null;
-                oldEngine.Dispose();
                 IsPlaying = false;
                 IsIdle = true;
+                OutputBlockReason = "quiesce-failed";
                 Error?.Invoke(L.T("无法安全切换输出模式，播放已暂停。"));
                 OutputChanged?.Invoke();
                 StateChanged?.Invoke();
                 return;
             }
-            _mpv = null;
-            oldEngine.Dispose();
         }
         _currentEntry = _nextEntry = _nextTrackId = -1;
         IsIdle = true;
         IsPlaying = false;
         Format = new(null, null, null, null, null, null, null);
-        // 独占引擎完全关闭后才恢复系统主音量，避免原独占音频以共享模式的音量出声。
-        if (!Exclusive && !RestoreSharedDeviceVolumes()) { BlockOutputRestore(); return; }
-        if (oldEngine is not null && CurrentTrack is not null)
-        {
-            _restoringOutput = true;
-            _outputFileLoaded = _outputRestoreFailed = false;
-            LoadCurrent(play, position);
-        }
-        Log.Playback($"切换独占模式 {(Exclusive ? "开" : "关")}，保留位置 {position.TotalSeconds:F3}s");
+        _boundDeviceId = null;
+        ReadEndpoint(Device, bind: true);
+        if (oldEngine is not null && CurrentTrack is not null) LoadCurrent(play, position);
+        Log.Playback($"重建输出：{(Exclusive ? "独占" : "共享")}，设备 {_boundDeviceId}，保留位置 {position.TotalSeconds:F3}s");
         OutputChanged?.Invoke();
         StateChanged?.Invoke();
     }
@@ -350,30 +357,8 @@ public sealed class PlayerService : IDisposable
     {
         if (!_restoringOutput || !_outputFileLoaded || _outputRestoreFailed || _mpv is null) return;
         if (string.IsNullOrEmpty(_mpv.Get("current-ao"))) return;
-        if (Exclusive ? !CaptureSharedDeviceVolume() : !RestoreSharedDeviceVolumes())
-        {
-            BlockOutputRestore();
-            return;
-        }
-        var actual = _mpv.GetDouble("ao-volume");
-        if (actual is null || !double.IsFinite(actual.Value) || actual < 0)
-        {
-            BlockOutputRestore();
-            return;
-        }
-        // 已记录的模式恢复自己的音量；未初始化的模式不抬高新设备既有音量。
-        if ((Exclusive ? ExclusiveVolume : SharedVolume) is null)
-            Volume = Math.Min(Volume, Math.Clamp(actual.Value, 0, 100));
-        if (_mpv.TrySet("ao-volume", Mpv.Num(Volume)) < 0 ||
-            _mpv.GetDouble("ao-volume") is not { } restored || !double.IsFinite(restored) ||
-            Math.Abs(restored - Volume) > 0.5)
-        {
-            BlockOutputRestore();
-            return;
-        }
-        RememberVolume();
-        if (_mpv.Get("ao-mute") == "yes") Muted = true;
-        _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
+        if (_mpv.Get("current-ao") != "wasapi") { BlockOutputRestore("unexpected-audio-backend"); return; }
+        if (!CheckOutputSafety()) { BlockOutputRestore(OutputBlockReason); return; }
         if (_mpv.TrySet("mute", Muted ? "yes" : "no") < 0 ||
             _mpv.TrySet("pause", _wantPlaying ? "no" : "yes") < 0)
         {
@@ -388,8 +373,11 @@ public sealed class PlayerService : IDisposable
         Seeked?.Invoke();
     }
 
-    void BlockOutputRestore()
+    void BlockOutputRestore(string? reason = null)
     {
+        _restorePosition = Position;
+        OutputBlockReason = reason ?? "output-restore-failed";
+        Log.Playback($"输出保护：{OutputBlockReason}；设备 {_boundDeviceId}；{VolumeDiagnostic}");
         _restoringOutput = CurrentTrack is not null;
         if (_mpv is { } engine)
         {
@@ -405,57 +393,115 @@ public sealed class PlayerService : IDisposable
         _wantPlaying = false;
         IsPlaying = false;
         _outputRestoreFailed = true;
-        Error?.Invoke(L.T("无法恢复输出音量，已保持暂停和静音。请切回共享模式或检查设备音量控制。"));
+        Error?.Invoke(OutputSafetyMessage);
         OutputChanged?.Invoke();
         StateChanged?.Invoke();
     }
 
-    /// <summary>音量：mpv 的 ao-volume，共享模式下是会话音量，独占模式下是设备音量；mpv 自己的软件音量始终是 100（需求 O-4）。</summary>
-    public void SetVolume(double volume, bool muted)
+    public string OutputSafetyMessage => OutputBlockReason switch
     {
-        if (ValidVolume(volume) is not { } valid) return;
-        Volume = valid;
-        RememberVolume();
+        "hardware-volume-confirmation" => L.T("独占模式无法使用设备的软件音量或静音。请先用硬件旋钮确认安全音量，再按播放继续。"),
+        "session-attenuated-or-unreadable" => L.T("Windows 音量合成器中的 JeekMusic 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"),
+        _ => L.T("无法确认输出设备或音量，已保持暂停和本播放器静音。请检查设备后按播放重试。")
+    };
+
+    public string VolumeTip => VolumeDiagnostic is not null && _endpoint?.Volume is null
+        ? L.T("无法读取当前设备音量，请检查设备连接。")
+        : Exclusive && HardwareVolume == false
+            ? L.T("独占模式音量不可调，请使用设备硬件旋钮；显示的端点软件音量不影响独占输出。")
+            : L.T("当前输出设备的主音量；共享模式下也影响同设备的其他程序。");
+
+    public bool VolumeAvailable => _endpoint?.Volume is not null && (!Exclusive || HardwareVolume == true) &&
+        !OutputPending && _boundDeviceId is not null;
+
+    /// <summary>显式音量操作写当前绑定端点；muted 始终只控制 mpv 软件静音。</summary>
+    public bool SetVolume(double volume, bool muted)
+    {
+        SetMuted(muted);
+        if (ValidVolume(volume) is not { } valid) return false;
+        RefreshOutput();
+        if (!VolumeAvailable || _boundDeviceId is null || _endpointVolume is null)
+        {
+            Error?.Invoke(VolumeTip);
+            OutputChanged?.Invoke();
+            return false;
+        }
+        var ok = _endpointVolume.SetVolume(_boundDeviceId, valid);
+        var error = _endpointVolume.LastError;
+        var readable = ReadEndpoint(_boundDeviceId);
+        if (!ok || !readable)
+        {
+            VolumeDiagnostic = error ?? VolumeDiagnostic ?? "endpoint write/readback failed";
+            BlockOutputRestore("endpoint-write-failed");
+        }
+        OutputChanged?.Invoke();
+        return ok && readable;
+    }
+
+    public void SetMuted(bool muted)
+    {
         Muted = muted;
-        if (!_restoringOutput) ApplyVolume();
+        if (_mpv is not null && _mpv.TrySet("mute", _restoringOutput || muted ? "yes" : "no") < 0)
+            BlockOutputRestore("app-mute-failed");
         OutputChanged?.Invoke();
     }
 
-    /// <summary>独占模式下设备不支持调音量时 ao-volume 不可用（需求 O-4）。</summary>
-    public bool VolumeAvailable => _mpv is null || IsIdle || _mpv.Get("ao-volume") is not null;
-
-    void ApplyVolume()
+    bool ReadEndpoint(string? device, bool bind = false)
     {
-        if (_mpv is null) return;
-        if (Exclusive && !CaptureSharedDeviceVolume()) { BlockOutputRestore(); return; }
-        _mpv.TrySet("ao-volume", Mpv.Num(Volume));
-        _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
-        _mpv.TrySet("mute", Muted ? "yes" : "no");
-    }
-
-    bool CaptureSharedDeviceVolume()
-    {
-        if (_endpointVolume is null) return true;
-        if (_endpointVolume.Capture(Device) is not { } snapshot) return false;
-        if (_sharedDeviceVolumes.TryAdd(snapshot.DeviceId, snapshot.Volume))
+        _endpoint = _endpointVolume?.Capture(device);
+        if (bind) _boundDeviceId = _endpoint?.DeviceId;
+        Volume = _endpoint?.Volume ?? 0;
+        VolumeDiagnostic = _endpoint?.Error ?? _endpointVolume?.LastError;
+        if (_endpoint?.Volume is null || _endpoint.Muted is null)
         {
-            Log.Playback($"保存共享模式系统主音量 {snapshot.Volume:F1}%，设备 {snapshot.DeviceId}");
-            OutputChanged?.Invoke();
+            VolumeDiagnostic ??= "endpoint volume/mute unavailable";
+            return false;
         }
         return true;
     }
 
-    bool RestoreSharedDeviceVolumes()
+    bool SessionAllowsExclusive() => _endpoint is { SessionVolume: >= 99.999, SessionMuted: false };
+
+    bool CheckOutputSafety()
     {
-        if (_endpointVolume is null) return _sharedDeviceVolumes.Count == 0;
-        var restored = true;
-        foreach (var (id, volume) in _sharedDeviceVolumes.ToArray())
+        if (!ReadEndpoint(_boundDeviceId ?? Device)) { OutputBlockReason = "endpoint-read-failed"; return false; }
+        if (Exclusive)
         {
-            if (!_endpointVolume.Restore(new(id, volume))) { restored = false; continue; }
-            _sharedDeviceVolumes.Remove(id);
-            Log.Playback($"恢复共享模式系统主音量 {volume:F1}%，设备 {id}");
+            if (!SessionAllowsExclusive()) { OutputBlockReason = "session-attenuated-or-unreadable"; return false; }
+            if (HardwareVolume is null || HardwareMute is null) { OutputBlockReason = "hardware-support-unreadable"; return false; }
+            if (HardwareVolumeConfirmationRequired) { OutputBlockReason = "hardware-volume-confirmation"; return false; }
         }
-        return restored;
+        OutputBlockReason = null;
+        return true;
+    }
+
+    /// <summary>250ms 只读同步（含托盘状态）；从不因通知写回。auto 的实际输出固定为解析后的端点。</summary>
+    internal void RefreshOutput()
+    {
+        var previous = _endpoint;
+        var diagnostic = VolumeDiagnostic;
+        if (Device is null)
+        {
+            var desired = _endpointVolume?.Capture(null);
+            if (desired is not null && desired.DeviceId != _boundDeviceId)
+            {
+                RebuildOutput();
+                return;
+            }
+            if (desired is null)
+            {
+                _endpoint = null;
+                Volume = 0;
+                VolumeDiagnostic = _endpointVolume?.LastError ?? "default endpoint unavailable";
+                if (!_outputRestoreFailed && _mpv is not null) BlockOutputRestore("endpoint-read-failed");
+                if (previous != _endpoint || diagnostic != VolumeDiagnostic) OutputChanged?.Invoke();
+                return;
+            }
+        }
+        var readable = ReadEndpoint(_boundDeviceId ?? Device, bind: _boundDeviceId is null);
+        if (_mpv is not null && !_restoringOutput && (!readable || !CheckOutputSafety()))
+            BlockOutputRestore(OutputBlockReason ?? "endpoint-read-failed");
+        if (previous != _endpoint || diagnostic != VolumeDiagnostic) OutputChanged?.Invoke();
     }
 
     /// <summary>睡眠定时渐弱用的软件音量（唯一允许改动样本的情况，需求 §4.1）。</summary>
@@ -723,7 +769,8 @@ public sealed class PlayerService : IDisposable
         switch (e)
         {
             case Mpv.EventId.AudioReconfig:
-                if (_restoringOutput) TryFinishOutputRestore(); else ApplyVolume();
+                if (_restoringOutput) TryFinishOutputRestore();
+                else RefreshOutput();
                 break;
             case Mpv.EventId.PlaybackRestart:
                 Seeked?.Invoke();
@@ -746,9 +793,9 @@ public sealed class PlayerService : IDisposable
 
     public void Dispose()
     {
+        _outputMonitor.Stop();
         _mpv?.Dispose();
         _mpv = null;
-        RestoreSharedDeviceVolumes();
         OutputChanged?.Invoke();
     }
 }

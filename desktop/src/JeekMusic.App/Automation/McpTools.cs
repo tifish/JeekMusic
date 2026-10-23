@@ -36,10 +36,10 @@ public sealed class McpTools
         Tool("edit_queue", "Edit the queue: add/next require trackIds, remove/jump require index, move requires index and toIndex; clear needs no other arguments. Indices are zero-based. Adding to an empty queue starts playback, like the UI.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"next\",\"remove\",\"jump\",\"move\",\"clear\"]},\"trackIds\":" + Ids + ",\"index\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647},\"toIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"]),
         Tool("set_play_mode", "Set shuffle and/or repeat (off, all, one).", "\"shuffle\":{\"type\":\"boolean\"},\"repeat\":{\"type\":\"string\",\"enum\":[\"off\",\"all\",\"one\"]}", []),
-        Tool("set_volume", "Set output volume (0–100) and/or mute using the same shared/exclusive volume persistence as the UI. This can change the Windows output device volume.",
-            "\"volume\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100},\"muted\":{\"type\":\"boolean\"}", []),
-        Tool("get_output", "Read WASAPI devices, selected output, exclusive mode and current file/device audio format.", "", [], true),
-        Tool("set_output", "Select a device from get_output (auto follows Windows default) and/or set exclusive mode. Changes persist and may reinitialize audio.",
+        Tool("set_volume", "Set the current physical endpoint master volume (0–100) in both modes, affecting other apps on that endpoint. Never persisted/restored. muted controls this player only. Unavailable endpoint writes fail; mute-only remains supported.",
+            "\"volume\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100,\"description\":\"Current endpoint master volume; requires volumeAvailable. No saved mode value.\"},\"muted\":{\"type\":\"boolean\",\"description\":\"Mute only JeekMusic; never writes endpoint or session mute.\"}", []),
+        Tool("get_output", "Read WASAPI selection, actual bound endpoint, endpoint master volume/mute, hardware capability, process mixer state, safety gate/diagnostics and current audio format.", "", [], true),
+        Tool("set_output", "Select a device from get_output (auto follows Windows default) and/or set exclusive mode. Changes persist and may reinitialize audio. Exclusive is blocked by mixer attenuation/mute or unreadable controls. Without hardware volume, explicit playback resume after checking the physical knob is required.",
             "\"device\":{\"type\":\"string\",\"minLength\":1},\"exclusive\":{\"type\":\"boolean\"}", []),
         Tool("list_playlists", "List playlists with local IDs, stable UIDs and names. Paginated.", Page, [], true),
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
@@ -135,7 +135,12 @@ public sealed class McpTools
                 return Status();
             case "set_volume":
                 RequireAny(a, "volume", "muted");
-                p.SetVolume(a["volume"]?.GetValue<double>() ?? p.Volume, a["muted"]?.GetValue<bool>() ?? p.Muted);
+                if (a["volume"] is { } volume)
+                {
+                    if (!p.SetVolume(volume.GetValue<double>(), a["muted"]?.GetValue<bool>() ?? p.Muted))
+                        throw new InvalidOperationException(p.VolumeDiagnostic ?? p.VolumeTip);
+                }
+                else p.SetMuted(a["muted"]!.GetValue<bool>());
                 return Status();
             case "get_output": return Output();
             case "set_output":
@@ -149,7 +154,11 @@ public sealed class McpTools
                     app.Settings.Save("playback");
                     p.SetDevice(device == "auto" ? null : device);
                 }
-                if (a["exclusive"] is { } exclusive) p.SetExclusive(exclusive.GetValue<bool>());
+                if (a["exclusive"] is { } exclusive)
+                {
+                    p.SetExclusive(exclusive.GetValue<bool>());
+                    if (p.Exclusive != exclusive.GetValue<bool>()) throw new InvalidOperationException(p.OutputSafetyMessage);
+                }
                 return Output();
             case "list_playlists": return Paginate(app.Playlists.All, a, PlaylistJson);
             case "get_playlist":
@@ -206,6 +215,7 @@ public sealed class McpTools
         {
             ["playing"] = p.IsPlaying, ["idle"] = p.IsIdle, ["positionSeconds"] = p.Position.TotalSeconds,
             ["durationSeconds"] = p.Duration.TotalSeconds, ["volume"] = p.Volume, ["muted"] = p.Muted,
+            ["output"] = VolumeState(p),
             ["shuffle"] = p.Queue.Shuffle, ["repeat"] = p.Queue.Repeat.ToString().ToLowerInvariant(),
             ["queueIndex"] = p.Queue.CurrentIndex, ["queueCount"] = p.Queue.Items.Count,
             ["track"] = p.CurrentTrack is { } track ? TrackJson(track) : null,
@@ -247,11 +257,25 @@ public sealed class McpTools
         return new JsonObject
         {
             ["device"] = p.Device ?? "auto", ["exclusive"] = p.Exclusive,
+            ["volumeState"] = VolumeState(p),
             ["devices"] = new JsonArray(p.Devices.Select(d => (JsonNode)new JsonObject { ["id"] = d.name, ["description"] = d.description }).ToArray()),
             ["format"] = new JsonObject { ["codec"] = f.Codec, ["fileRate"] = f.FileRate, ["fileFormat"] = f.FileFormat,
                 ["deviceRate"] = f.DeviceRate, ["deviceFormat"] = f.DeviceFormat, ["deviceChannels"] = f.DeviceChannels, ["ao"] = f.Ao, ["resampled"] = f.Resampled }
         };
     }
+
+    internal static JsonObject VolumeState(Playback.PlayerService p) => new()
+    {
+        ["semantics"] = "endpoint-master", ["muteScope"] = "player",
+        ["actualDeviceId"] = p.ActualDeviceId, ["endpointVolume"] = p.EndpointVolumeValue,
+        ["endpointMuted"] = p.EndpointMuted, ["volumeAvailable"] = p.VolumeAvailable,
+        ["hardwareVolume"] = p.HardwareVolume, ["hardwareMute"] = p.HardwareMute,
+        ["sessionVolume"] = p.SessionVolume, ["sessionMuted"] = p.SessionMuted,
+        ["sessionPolicy"] = "preserve-external-block-exclusive",
+        ["hardwareVolumeConfirmationRequired"] = p.HardwareVolumeConfirmationRequired,
+        ["outputPending"] = p.OutputPending, ["blockReason"] = p.OutputBlockReason,
+        ["diagnostic"] = p.VolumeDiagnostic
+    };
 
     JsonObject EditPlaylist(JsonObject a)
     {

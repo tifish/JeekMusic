@@ -1,10 +1,12 @@
 namespace JeekMusic.Playback;
 
-internal sealed record EndpointVolumeSnapshot(string DeviceId, double Volume);
+internal sealed record EndpointVolumeSnapshot(string DeviceId, double? Volume, bool? Muted,
+    bool? HardwareVolume, bool? HardwareMute, double? SessionVolume, bool? SessionMuted, string? Error = null);
 
-/// <summary>设备主音量独立于共享模式的程序会话音量；以设备 ID 恢复，不能跟随已变化的默认设备。</summary>
+/// <summary>只读探测端点与本进程默认会话；仅显式用户操作可以按已绑定 ID 写端点音量，绝不写静音。</summary>
 internal interface IEndpointVolume
 {
     EndpointVolumeSnapshot? Capture(string? device);
-    bool Restore(EndpointVolumeSnapshot snapshot);
+    string? LastError { get; }
+    bool SetVolume(string deviceId, double volume);
 }

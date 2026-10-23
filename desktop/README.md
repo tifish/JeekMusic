@@ -14,6 +14,14 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 需求：[requirements.md](docs/requirements.md)。设计：[design.md](docs/design.md)。当前验证结果及未验收项：[validation.md](docs/validation.md)。性能目标和设备兼容性仍以验证报告为准。
 
+## 音量与独占输出
+
+共享与独占都使用当前播放设备的端点主音量，共享下也影响同设备其他程序。外部系统音量会同步到滑块；启动、切换设备/模式和退出都不恢复旧音量。静音按钮只静音 JeekMusic，系统静音独立显示。
+
+Windows 合成器的 JeekMusic 衰减/静音会保留；请在合成器恢复 100% 并取消静音后再进入独占。设备无硬件音量时，独占滑块不可调：先使用硬件旋钮确认安全音量，再按播放继续。设备或音量读取失败时保持暂停，修复后按播放重试。
+
+Both output modes control the current endpoint master volume; in shared mode this affects other apps on that device. External volume changes are reflected in the slider. Startup, switching and exit never restore historical volume. Mute affects JeekMusic only. Windows mixer attenuation/mute is preserved and must be cleared in the mixer before entering exclusive mode. Without hardware volume control, set a safe level with the physical knob, then press Play. Unreadable controls keep playback paused until a successful retry.
+
 ## 开发与验证
 
 需要 Windows、.NET 10 SDK、Git Bash，以及 Native AOT 链接所需的 Visual Studio C++ 工具。

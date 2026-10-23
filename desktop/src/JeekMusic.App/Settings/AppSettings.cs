@@ -66,13 +66,8 @@ public sealed class AppSettings
     public string? OutputDevice { get; set; }
     public string? OutputDeviceDescription { get; set; }
     public bool Exclusive { get; set; }
-    /// <summary>输出音量 0–100（mpv 的 ao-volume，需求 O-4）。</summary>
-    public double Volume { get; set; } = 100;
-    /// <summary>各输出模式上次的音量；null 表示尚未初始化，首次出声前保守确认。</summary>
-    public double? SharedVolume { get; set; }
-    public double? ExclusiveVolume { get; set; }
-    /// <summary>独占输出使用过的设备，其原系统主音量；退出独占后恢复并移除。</summary>
-    public Dictionary<string, double> SharedDeviceVolumes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    // Legacy volume/sharedVolume/exclusiveVolume/sharedDeviceVolumes are deliberately
+    // absent: JSON migration ignores them and the next save removes historical snapshots.
     public bool Muted { get; set; }
     public bool TaskbarProgress { get; set; } = true;
     public SleepPrefs Sleep { get; set; } = new();

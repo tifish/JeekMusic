@@ -145,7 +145,7 @@ public partial class MainWindow : Window
 
     static readonly Dictionary<string, string> ColumnTitles = new()
     {
-        ["TrackNo"] = "#", ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
+        ["TrackNo"] = L.T("曲目号"), ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
         ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"), ["Tags"] = L.T("智能标签"),
     };
 

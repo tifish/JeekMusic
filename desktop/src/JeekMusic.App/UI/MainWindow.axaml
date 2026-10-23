@@ -150,13 +150,6 @@
                     <DataGrid Grid.Row="2" x:Name="Table" ItemsSource="{Binding Rows}" IsReadOnly="True" SelectionMode="Extended"
                               CanUserSortColumns="True" CanUserResizeColumns="True" CanUserReorderColumns="True">
                         <DataGrid.Columns>
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;曲目号&apos;}" Binding="{Binding Number}" Width="92" MinWidth="92" Tag="TrackNo">
-                                <DataGridTextColumn.HeaderTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <TextBlock Text="{Binding}" ToolTip.Tip="{ui:Tr &apos;歌曲在专辑中的曲目编号，来自音频标签或 CUE；不是列表行号。缺失时留空。&apos;}" />
-                                    </DataTemplate>
-                                </DataGridTextColumn.HeaderTemplate>
-                            </DataGridTextColumn>
                             <DataGridTemplateColumn Header="{ui:Tr &apos;标题&apos;}" SortMemberPath="Title" Width="3*" Tag="Title">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="vm:SongRow">

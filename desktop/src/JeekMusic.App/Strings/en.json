@@ -224,8 +224,6 @@
   "来自「{0}」": "From “{0}”",
   "查看专辑": "View album",
   "查看艺术家": "View artist",
-  "曲目号": "Track no.",
-  "歌曲在专辑中的曲目编号，来自音频标签或 CUE；不是列表行号。缺失时留空。": "The track number within the album, from audio tags or CUE; not the list row number. Blank when unavailable.",
   "标题": "Title",
   "标题 - 艺术家": "Title - Artist",
   "格式": "Format",

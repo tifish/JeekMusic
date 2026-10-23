@@ -10,13 +10,15 @@ public partial class MainWindow
     public void RestoreLayout(UiState ui)
     {
         MainArea.ColumnDefinitions[0].Width = new GridLength(Math.Clamp(ui.NavWidth, 160, 480));
-        foreach (var state in ui.Columns)
+        // 按保存的顺序恢复现有列，跳过已移除的列，避免旧位置留下空档。
+        var columnOrder = 0;
+        foreach (var state in ui.Columns.OrderBy(c => c.Order))
         {
             var column = Table.Columns.FirstOrDefault(c => c.Tag as string == state.Tag);
             if (column is null) continue;
             if (state.Width > 20) column.Width = new DataGridLength(state.Width);
             column.IsVisible = state.Visible;
-            if (state.Order >= 0 && state.Order < Table.Columns.Count) column.DisplayIndex = state.Order;
+            if (state.Order >= 0) column.DisplayIndex = columnOrder++;
         }
         // 默认隐藏的列：文件名、修改时间、智能标签（右键表头可以打开）
         if (ui.Columns.Count == 0)

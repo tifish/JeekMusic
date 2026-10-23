@@ -132,7 +132,7 @@ public partial class MainWindow : Window
 
     static readonly Dictionary<string, SongSort> SortOfColumn = new()
     {
-        ["TrackNo"] = SongSort.Album, ["Title"] = SongSort.Title, ["Artist"] = SongSort.Artist, ["Album"] = SongSort.Album,
+        ["Title"] = SongSort.Title, ["Artist"] = SongSort.Artist, ["Album"] = SongSort.Album,
         ["Duration"] = SongSort.Duration, ["FileName"] = SongSort.FileName, ["Modified"] = SongSort.Modified, ["Format"] = SongSort.Format,
     };
 
@@ -145,7 +145,7 @@ public partial class MainWindow : Window
 
     static readonly Dictionary<string, string> ColumnTitles = new()
     {
-        ["TrackNo"] = L.T("曲目号"), ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
+        ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
         ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"), ["Tags"] = L.T("智能标签"),
     };
 
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
         foreach (var c in Table.Columns)
         {
             if (c.Tag is not string tag || !ColumnTitles.TryGetValue(tag, out var title)) continue;
-            var sorted = SortOfColumn.TryGetValue(tag, out var s) && s == _vm.Sort && tag != "TrackNo";
+            var sorted = SortOfColumn.TryGetValue(tag, out var s) && s == _vm.Sort;
             c.Header = sorted ? title + (_vm.SortDescending ? " ↓" : " ↑") : title;
         }
     }

@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <_JeekTestOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'output'))</_JeekTestOutput>
+  </PropertyGroup>
+
+  <!-- -o / OutputPath / PublishDir must not bypass the managed-only staging boundary. -->
+  <Target Name="ValidateJeekOutputPaths" BeforeTargets="PrepareForBuild;PrepareForPublish">
+    <PropertyGroup>
+      <_JeekActualOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutputPath)'))</_JeekActualOutput>
+      <_JeekActualPublish>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_JeekActualPublish>
+    </PropertyGroup>
+    <Error Condition="$(_JeekActualOutput.StartsWith('$(_JeekTestOutput)', System.StringComparison.OrdinalIgnoreCase)) Or $(_JeekActualPublish.StartsWith('$(_JeekTestOutput)', System.StringComparison.OrdinalIgnoreCase))"
+           Text="Repository output/ is reserved for framework-dependent daily builds. Use an isolated build/publish directory (for example desktop/artifacts/publish), then run that directory's JeekMusic.exe." />
+  </Target>
+
+  <!-- Always copy, including incremental builds and Debug/Release switches. RID and
+       publish builds never replace the user's daily test entry point. -->
+  <Target Name="StageJeekDailyBuild" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true' and '$(RuntimeIdentifier)' == '' and '$(SelfContained)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(TargetDir).&quot;" />
+  </Target>
+</Project>

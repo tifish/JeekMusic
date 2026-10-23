@@ -1,7 +1,9 @@
-"""End-to-end MCP checks using an isolated player and generated silent WAVs.
+"""Real EXE/MCP startup diagnostics; launches a temporary client even by default.
 
-python desktop/tools/test-mcp.py [--exe output/JeekMusic.exe] [--sdk]
---sdk also verifies interoperability with the official Python SDK (pip install mcp).
+--audio explicitly enables real shared WASAPI playback using silent WAVs.
+--audio --exclusive additionally opens the real endpoint exclusively: other apps
+can lose sound despite digital silence / application mute. Do not run while gaming.
+--sdk additionally verifies the official Python SDK (pip install mcp).
 """
 import argparse
 import asyncio
@@ -11,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import tempfile
 import time
 import wave
@@ -96,7 +99,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, default=DEFAULT_EXE)
     parser.add_argument("--sdk", action="store_true")
+    parser.add_argument("--startup-only", action="store_true", help="Explicit alias for the default startup/diagnostics checks; still launches a client")
+    parser.add_argument("--audio", action="store_true", help="Opt into real shared WASAPI playback/device tests (silent audio still opens an endpoint)")
+    parser.add_argument("--exclusive", action="store_true", help="With --audio, opt into exclusive endpoint tests that can silence other apps")
+    parser.add_argument("--catalog", type=Path, help="Write the actual tool catalog for build parity checks")
     args = parser.parse_args()
+    if args.exclusive and not args.audio:
+        parser.error("--exclusive requires --audio; exclusive access can interrupt other apps")
+    if args.startup_only and args.audio:
+        parser.error("--startup-only cannot be combined with --audio")
     exe = args.exe.resolve()
     player_pid = None
     with tempfile.TemporaryDirectory(prefix="jeekmusic-mcp-") as temp:
@@ -105,7 +116,7 @@ def main():
         (data / "settings.json").write_text(json.dumps({"closeAction": "Exit", "autoUpdateCheck": False}), encoding="utf-8")
         music = Path(temp) / "music"
         music.mkdir()
-        for name in ("01-测试歌曲", "02-Silence", "03-Last"):
+        for name in (("01-测试歌曲", "02-Silence", "03-Last") if args.audio else ()):
             with wave.open(str(music / (name + ".wav")), "wb") as wav:
                 wav.setparams((2, 2, 44100, 0, "NONE", "not compressed"))
                 wav.writeframes(bytes(44100 * 4 * 30))
@@ -115,7 +126,33 @@ def main():
                 diagnostics = call(first, "get_diagnostics")
                 player_pid = diagnostics["processId"]
                 assert Path(diagnostics["dataDirectory"]) == data
+                assert Path(diagnostics["processPath"]).samefile(exe)
+                assert diagnostics["processArchitecture"] == "X64"
+                assert isinstance(diagnostics["dynamicCodeSupported"], bool)
+                expected_dynamic = os.environ.get("JEEK_EXPECT_DYNAMIC_CODE")
+                if expected_dynamic:
+                    assert diagnostics["dynamicCodeSupported"] == (expected_dynamic == "true"), diagnostics
+                assert diagnostics["frameworkDescription"].startswith(".NET")
                 assert call(first, "get_status")["trackCount"] == 0
+                catalog = first.request("tools/list")
+                assert len(catalog["tools"]) == 21
+                if args.catalog:
+                    args.catalog.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
+                print("Runtime: " + json.dumps({k: diagnostics[k] for k in (
+                    "processPath", "frameworkDescription", "processArchitecture", "dynamicCodeSupported")}), flush=True)
+                if not args.audio:
+                    if args.sdk:
+                        asyncio.run(sdk_check(exe, data, player_pid))
+                    result = subprocess.run([str(exe), "--mcp"], input="", capture_output=True,
+                                            text=True, timeout=40,
+                                            env={**os.environ, "JEEKMUSIC_DATA": str(data),
+                                                 "DOTNET_DISABLE_GUI_ERRORS": "1"})
+                    assert result.returncode == 0 and not result.stdout and not result.stderr, (
+                        result.returncode, result.stdout, result.stderr)
+                    close_player(player_pid)
+                    player_pid = None
+                    print("PASS: actual EXE/MCP cold start, 21 tools, diagnostics, graceful GUI exit, bridge exit=0 stdout/stderr empty (no audio endpoint required)")
+                    return
             # Both clients share the same GUI, but each negotiates its own MCP session.
             with McpClient(exe, data) as client, McpClient(exe, data) as other:
                 assert call(other, "get_diagnostics")["processId"] == player_pid
@@ -164,24 +201,25 @@ def main():
                 assert call(client, "get_output")["volumeState"]["actualDeviceId"] == endpoint_id
                 call(client, "set_output", device="auto")
                 wait_for(other, "get_status", lambda s: s["playing"])
-                output = call(client, "get_output")["volumeState"]
-                exclusive = client.call("set_output", {"exclusive": True})
-                if output["sessionMuted"] or output["sessionVolume"] is None or output["sessionVolume"] < 99.999:
-                    assert exclusive.get("isError"), exclusive
-                    assert call(client, "get_output")["exclusive"] is False
-                    print("PASS: real mixer attenuation/mute blocks exclusive without overriding it")
-                else:
-                    assert not exclusive.get("isError"), exclusive
-                    state = wait_for(other, "get_status", lambda s: s["playing"] or s["output"]["blockReason"])
-                    if state["output"]["hardwareVolumeConfirmationRequired"]:
-                        # This fixture consists entirely of digital silence and is app-muted.
-                        call(client, "playback", action="resume")
-                        wait_for(other, "get_status", lambda s: s["playing"])
+                if args.exclusive:
+                    output = call(client, "get_output")["volumeState"]
+                    exclusive = client.call("set_output", {"exclusive": True})
+                    if output["sessionMuted"] or output["sessionVolume"] is None or output["sessionVolume"] < 99.999:
+                        assert exclusive.get("isError"), exclusive
+                        assert call(client, "get_output")["exclusive"] is False
+                        print("PASS: real mixer attenuation/mute blocks exclusive without overriding it")
                     else:
-                        assert state["playing"], state
-                    call(client, "set_output", exclusive=False)
-                    wait_for(other, "get_status", lambda s: s["playing"])
-                    print("PASS: real shared/exclusive/shared decoder rebuild")
+                        assert not exclusive.get("isError"), exclusive
+                        state = wait_for(other, "get_status", lambda s: s["playing"] or s["output"]["blockReason"])
+                        if state["output"]["hardwareVolumeConfirmationRequired"]:
+                            # Explicit --exclusive authorizes real device ownership, even for silence.
+                            call(client, "playback", action="resume")
+                            wait_for(other, "get_status", lambda s: s["playing"])
+                        else:
+                            assert state["playing"], state
+                        call(client, "set_output", exclusive=False)
+                        wait_for(other, "get_status", lambda s: s["playing"])
+                        print("PASS: real shared/exclusive/shared decoder rebuild")
                 current_output = call(client, "get_output")["volumeState"]
                 assert abs(current_output["endpointVolume"] - initial_volume) < 0.5
                 assert current_output["endpointMuted"] == initial_output["endpointMuted"]
@@ -251,6 +289,19 @@ def main():
                 close_player(player_pid)
                 player_pid = None
             print("PASS: cold start, stdio shutdown, shared multi-client state, Unicode, pagination, library, playlists, playback, queue, validation, logs, graceful exit with active clients, settings persistence" + (", official SDK" if args.sdk else ""))
+            # Also capture the real apphost's stdio and exit code after stdin EOF.
+            # Use an already-running isolated player so this probe owns only a bridge.
+            with McpClient(exe, data) as final:
+                player_pid = call(final, "get_diagnostics")["processId"]
+                result = subprocess.run([str(exe), "--mcp"], input="", capture_output=True,
+                                        text=True, timeout=40,
+                                        env={**os.environ, "JEEKMUSIC_DATA": str(data),
+                                             "DOTNET_DISABLE_GUI_ERRORS": "1"})
+                assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+                assert not result.stdout and not result.stderr, (result.stdout, result.stderr)
+                close_player(player_pid)
+                player_pid = None
+            print("PASS: real EXE stdio EOF exit=0, stdout/stderr empty")
         finally:
             if player_pid:
                 try:

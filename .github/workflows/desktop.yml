@@ -58,7 +58,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test
-        run: dotnet test desktop/JeekMusic.slnx -c Release
+        run: |
+          python desktop/tools/test_build_workflow.py
+          dotnet test desktop/JeekMusic.slnx -c Release
 
       - name: Publish (Native AOT)
         run: |
@@ -69,6 +71,10 @@ jobs:
           python desktop/tools/collect-licenses.py publish/JeekMusic
           rm -f publish/JeekMusic/*.pdb
           ls -la publish/JeekMusic
+
+      - name: Build isolation and real EXE/MCP round trips
+        # Hosted Windows VMs need not have a WASAPI endpoint; still launch every EXE.
+        run: python desktop/tools/test-build-isolation.py --startup-only --published-exe publish/JeekMusic/JeekMusic.exe
 
       - name: Package
         run: |

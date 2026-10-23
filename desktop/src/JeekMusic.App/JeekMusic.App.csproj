@@ -6,15 +6,10 @@
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <AssemblyName>JeekMusic</AssemblyName>
     <RootNamespace>JeekMusic</RootNamespace>
-    <!-- 本地测试固定从仓库根目录 output/ 启动，Debug / Release 共用同一个位置。 -->
-    <OutputPath>$(MSBuildThisFileDirectory)..\..\..\output\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\JeekMusic.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <PublishAot>true</PublishAot>
     <IsAotCompatible>true</IsAotCompatible>
     <!-- 版本号 = Git 提交数，由 CI 通过 -p:JeekVersion=1.0.N 传入 -->
     <JeekVersion Condition="'$(JeekVersion)' == ''">1.0.0</JeekVersion>
@@ -60,4 +55,5 @@
   <ItemGroup>
     <InternalsVisibleTo Include="JeekMusic.App.Tests" />
   </ItemGroup>
+  <Import Project="..\..\BuildSupport\JeekMusic.Output.targets" />
 </Project>

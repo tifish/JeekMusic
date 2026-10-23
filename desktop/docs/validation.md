@@ -149,3 +149,32 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - 真实 mpv/WASAPI 静音 WAV 测试发现曲尾前 100ms 仍可能提前换歌，终点因此统一保护到 `max(0, duration - 1s)`；正常播放自然到尾仍继续队列。另以独立 6 分钟静音 WAV/CUE 验证第二分轨的 0/20 秒请求落在分轨相对 0/19 秒，保留暂停及当前曲目。没有解除系统或用户客户端静音。
 - MCP 保持 21 个工具，复用已有 `playback seek` 和 `set_volume`；没有增加相对参数或键盘专用工具。seek 描述、seconds Schema 说明和使用文档同步；未加载、不可 seek 或输出保护中返回业务错误。
 - 限制：本轮未重新发布 Native AOT，也未完成 Windows 原生按键/截图目测（Computer Use 返回 `native pipe is unavailable`）；主/迷你窗口已由 Avalonia Headless 验证。构建目录中旧的 app-local `hostfxr.dll` 曾导致框架依赖 EXE 错认 .NET 根目录，已备份旧输出并干净重建恢复；长期产物隔离另项处理。
+
+## 构建产物隔离与旧运行时迁移（2026-10-23）
+
+### 根因和目录规则
+
+- 旧配置取消 TFM/RID 输出后缀，将 App 普通 build、自包含 RID build 和 publish 的编译阶段写入同一个根 `output/`；旧 `IntermediateOutputPath` 同为 `obj/Release/`。系统实际已安装 x64 .NET 10.0.13，错误不是缺少 .NET。
+- 在原配置真实复现：`dotnet build desktop/src/JeekMusic.App -c Release -r win-x64 --self-contained true -p:PublishAot=false`，随后普通 `dotnet build desktop/src/JeekMusic.App -c Release`。后者保留前者的 `output/hostfxr.dll`。真实 EXE 返回 **2147516566**，host trace 显示将 `output/` 视为 .NET 根目录、找不到框架。负向子进程单独设置 `DOTNET_DISABLE_GUI_ERRORS=1` 和 host trace，没有为诊断弹出安装提示。证据：`%TEMP%/jeek-build-isolation-20261023/legacy-*.log`、`legacy-exe.txt`。
+- App 的 `bin/` 与 `obj/`（包含 NuGet assets）现按 build/publish、RID/portable、显式 PublishAot/SelfContained/PublishSelfContained 参数分开，之后由 SDK 追加配置、TFM/RID。配置在 SDK 导入前确定。Core 是 RID 无关类库，其项目引用构建会移除 RID/SelfContained，故 Core 和测试项目保留 SDK 默认目录。
+- 只有普通无 RID 框架依赖 build 成功后自动同步完整运行文件到根 `output/`，Debug/Release 增量往返也会覆盖正确版本。RID、自包含 build 及 publish 不覆盖该入口。`-o output`、`PublishDir=output` 及其子目录会在编译/发布复制之前报错，包括 publish `--no-build`。
+- 自动迁移仅将明确名单中的旧核心运行时文件移至 `desktop/artifacts/legacy-output-runtime-<唯一ID>/`，不整目录删除、不按 DLL 通配删除；验证源/目标绝对路径并拒绝重解析点，曲库、正式用户数据和未知文件不迁移。原完整备份 `desktop/artifacts/shortcut-output-backup-20261023-2253/` 仍保留。
+
+### 已实际完成的验证
+
+- 中断前的真实 EXE/MCP 记录在 `desktop/artifacts/build-isolation-20261023-230711/`：步骤 01–12 完成，覆盖 Debug、自包含 win-x64、普通 Release、RID 框架依赖、NativeAOT 发布及各自产物的真正 EXE 冷启动。每个已完成的 smoke 都通过 21 工具、库/队列/播放、多客户端、重启持久化、GUI 正常退出以及 stdio 桥接退出码 **0**、stdout/stderr 空。负向污染重现返回 **2147516566**，后续普通 Release 自动备份迁移并恢复 EXE；根目录测试标记文件保留。步骤 12 的回到 Debug 构建及文件哈希比对完成；**步骤 13 的再次 Debug EXE smoke 中断，后续 Release EXE smoke 未完成**。
+- NativeAOT 命令：`dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 -o desktop/artifacts/build-isolation-publish`，当前进程 PATH 补入 Visual Studio Installer。首次实际生成 native code 成功，保留既有 DataGrid **IL2104 / IL3053** 警告，未扩展修复范围。该真正 NativeAOT EXE 的 MCP 完整回归在中断前通过；诊断显示实际发布 EXE 路径、X64、动态代码不支持。测试子进程使用不存在的 DOTNET_ROOT/DOTNET_ROOT_X64 且禁用多级搜索，没有生成 host trace，发布目录没有 runtimeconfig/hostfxr/coreclr。未在卸载 .NET 的干净 VM 复测。
+- 游戏限制下另行运行了**只含 dotnet build/publish/msbuild 的静态流程**，没有重跑已中断的客户端测试批处理。证据：`desktop/artifacts/build-isolation-static-20261023-231828/`，`summary.json` 记录 `clientLaunches=0`：Debug → 自包含 RID build → 托管自包含 publish → Release → RID 框架依赖 build → NativeAOT publish → Debug → Release 全通过；RID/发布期间根入口四个主要文件 SHA-256 不变，Debug/Release 往返恢复各自原哈希。静态检查模型、原生 DLL、许可证目录及不同部署类型的运行时文件清单通过。
+- 最终静态发布：`desktop/artifacts/build-isolation-static-20261023-231828/native-publish/`，未启动。根 `output/JeekMusic.exe` 为最后的普通 Release（186368 字节），没有上述四个核心本地运行时文件。
+- `dotnet build ... -o output`、`dotnet publish ... -o output`、`dotnet publish ... --no-build -o output`、`dotnet publish ... -o output/forbidden-publish` 均预期退出 **1**，提示保留目录，根入口哈希不变。直接调用 staging 脚本的目录越界源、自包含源也均退出 **1** 且不改变输出。
+- `dotnet test desktop/tests/JeekMusic.App.Tests -c Release --filter "FullyQualifiedName~McpSessionTests|FullyQualifiedName~ExclusiveAudioFormatTests|FullyQualifiedName~PlaybackShortcutTests|(FullyQualifiedName~OutputModeSwitchTests&FullyQualifiedName!~RealDecoderReloadsSilentAudioAtTheSavedPositionWithoutUsingAudioHardware)"`：**99 项通过**。已检查其端点/引擎注入为模拟实现；显式排除真实解码器测试。使用临时 JEEKMUSIC_DATA，不访问真实 WASAPI。
+- `dotnet test desktop/tests/JeekMusic.Core.Tests -c Release`：**63 项通过**（平台无关规则）。本轮没有在游戏限制后运行 App/solution 全集。
+- `python desktop/tools/test_build_workflow.py`：**5 项通过**，客户端、进程和音频均模拟，覆盖默认只读启动流程、独占必须显式选择、模式冲突启动前拒绝、构建脚本默认显式 startup-only 以及 build-only 不调用进程启动器。Python 语法检查、`git diff --check` 通过。
+
+### 音频干扰、测试入口修正与延期项
+
+- 旧通用 `test-mcp.py` 默认会真实 `set_output(exclusive=true)`。本轮中断前的隔离 smoke 确实执行过共享→独占→共享；**静音 WAV 和应用静音不能阻止占用物理端点，独占会令其他程序失声**。主对话读到 `%TEMP%/jeekmusic-mcp-mp1olw1h/data/logs/playback.log` 在 23:10:43.260 打开耳机独占、23:10:44.147 切回共享，用户游戏受到声音干扰。已停止编排及仅属于本轮的测试进程，确认没有 JeekMusic.exe/test-mcp.py/test-build-isolation.py 残留；未调整设备音量、静音或操作游戏进程。
+- `test-mcp.py` 和构建隔离回归现在默认只做启动/只读诊断与退出，不播放、不切换设备。真实共享音频需要 `--audio`，真实独占还需要 `--exclusive`；说明和 CI 同步。`--startup-only` 仍会启动真实客户端、读取系统音频状态，不能在用户禁止启动期间使用；独立数据目录不隔离物理设备。`--build-only` 跳过所有客户端启动，明确报告跳过项。
+- MCP 仍为 **21 工具**；`get_diagnostics` 兼容性新增 `processPath`、`frameworkDescription`、`processArchitecture`、`dynamicCodeSupported`，描述/文档和验证同步，无参数 Schema 保持空对象、拒绝额外参数。动态代码支持为 false 不单独证明 NativeAOT（AOT 兼容托管构建也可为 false）。没有新增工具或仅开发版开关。
+- **尚未运行**：最终版本的默认 startup-only 流程及跨产物实际工具描述/Schema 全量比较、修改显式音频选项后的实机流程、最终 Release EXE 再次冷启动及正式客户端状态复核、GitHub Actions 本身。中断前的已完成日志不能代替这些延期检查。
+- **按用户游戏期间约束未重启客户端**。旧正式 PID17140 在开始构建前已停止；此前只读快照保存于 `%TEMP%/jeek-build-isolation-20261023/user-before.json`：暂停、145 首队列、索引 94、设备音量约 26%、应用/端点/会话均未静音。测试使用独立数据，不操作正式队列；禁止启动后未通过 MCP 再读正式状态。后续会话必须继续禁止客户端启动/MCP 冷启动和真实音频测试，直至用户或主对话明确解除。

@@ -19,6 +19,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 发布包使用解压后的 `JeekMusic.exe` 路径；保留其旁边的 DLL、模型等完整文件。接口不需要 Python、Node.js、管理员权限或额外安装服务。
 
+日常 `output/JeekMusic.exe` 由普通无 RID build 自动同步，为依赖系统 x64 .NET 10 的版本；RID/自包含构建和 NativeAOT 发布不会覆盖它。验证发布版本时显式指定发布目录的 EXE，不合并目录。产物隔离和旧 hostfxr 自动迁移规则见 [开发说明](../README.md#开发与验证)。
+
 `--mcp` 启动轻量 stdio 转发进程，通过命名管道连接当前 Windows 用户的播放器。播放器没有启动时，会自动以 `--tray --background` 启动；默认不激活窗口。曲库及上次队列恢复后接受连接，连接超时为 30 秒。多个软件可同时连接，命令在播放器 UI 线程串行执行。关闭 MCP 的 stdin 会结束转发进程。若希望断开后持续播放，建议先正常启动播放器：部分 MCP 宿主在结束连接时会终止它启动的整个进程树，包括自动启动的播放器。
 
 管道按 Windows 用户和数据目录隔离，限制为当前用户，不监听 TCP 端口。同一用户启动的 MCP 客户端能够读取曲库路径、日志并修改播放器数据。使用独立数据目录测试时，在配置中增加环境变量，且所有需要连接这个实例的软件使用相同目录：
@@ -53,13 +55,15 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |
-| `get_diagnostics` | 无参数。应用/协议版本、进程 ID、数据/程序/日志目录、引擎状态、最近一次播放错误、状态和音频输出详情 |
+| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态和音频输出详情 |
 | `get_logs` | 可选 `kind`（`app` / `playback`）、`lines`（默认 50、最大 200）；读取日志尾部最多 64 KiB，不接受任意文件路径 |
 | `show_window` | 无参数。显示并激活主窗口 |
 
 播放、seek 和音频输出由 libmpv 异步完成；返回的状态是命令执行后的即时快照，应再次调用 `get_status` 确认实际播放状态。扫描、添加/移除文件夹通过现有后台曲库队列执行，`queued: true` 只表示已入队。通过快照版本、扫描状态、搜索结果和日志确认结果；扫描失败原因也进入正常应用日志。
 
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
+
+上述四个运行诊断字段为兼容性新增，开发版与正式版同时提供；NativeAOT 的 `dynamicCodeSupported` 为 `false`，启用 AOT 兼容开关的托管构建也可能为 `false`，不能单凭此字段判断发布类型。它们用于核对连接到的实际程序，不能将框架描述字符串当成部署类型枚举。工具数量仍为 21，参数 Schema 无变化。
 
 ### 音量输出语义
 
@@ -106,8 +110,22 @@ python desktop/tools/test-mcp.py
 python -m pip install mcp
 python desktop/tools/test-mcp.py --sdk
 
-# 对正式 Native AOT 包运行同样的端到端检查
+# 对正式 Native AOT 包运行相同的启动诊断（仍会启动真实客户端）
 python desktop/tools/test-mcp.py --exe desktop/artifacts/publish/JeekMusic.exe --sdk
+
+# 构建往返、旧运行时污染迁移及真正 EXE/发布包冷启动
+python desktop/tools/test-build-isolation.py
+
+# 显式选择真实共享音频/播放/队列验证（静音 WAV 也会占用设备）
+python desktop/tools/test-mcp.py --audio
+
+# 仅在允许中断其他程序声音时，额外验证真实独占切换
+python desktop/tools/test-mcp.py --audio --exclusive
+
+# 完全不启动客户端的构建与静态产物检查
+python desktop/tools/test-build-isolation.py --build-only
 ```
 
-端到端脚本自动使用临时数据目录和静音 WAV，验证冷启动、stdio 关闭、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、保留活动连接时正常退出和重启后应用静音恢复、当前端点读取、切换安全门控；不调高或恢复用户设备音量。结束后只清理它自己的测试播放器。脚本不激活窗口，也不使用正式曲库。`show_window` 的激活行为不在后台测试中调用。
+`test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、21 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
+
+**静音 WAV / 应用静音仍会打开 WASAPI 设备，独占能中断游戏等其他程序声音。** 独立数据目录只隔离曲库和单实例，不隔离物理音频设备。默认启动诊断也会启动 GUI 并读取系统音频状态；用户要求禁止启动或正在处理游戏失声时，不运行任何 EXE/MCP（包括 `--startup-only`、`mcp_client.py` 的只读命令）。仅可编译/静态检查和确认使用模拟端点的测试。测试结束后只清理自己的播放器，不激活窗口或使用正式曲库；`show_window` 的激活行为不在后台测试中调用。

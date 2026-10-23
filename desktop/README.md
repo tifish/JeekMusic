@@ -36,7 +36,7 @@ Both output modes control the current endpoint master volume; in shared mode thi
 
 需要 Windows、.NET 10 SDK、Git Bash，以及 Native AOT 链接所需的 Visual Studio C++ 工具。
 
-日常测试直接编译并运行仓库根目录的 `output/JeekMusic.exe`。Debug 和 Release 共用该目录，最后一次编译覆盖其中的程序；框架和运行时版本不再增加子目录。运行所需的 DLL、模型和许可证也会一并输出，复制测试版本时请复制整个 `output/` 目录。正在运行时，先退出客户端再重新编译。
+日常测试直接编译并运行仓库根目录的 `output/JeekMusic.exe`，需要系统已安装 x64 .NET 10 运行时。普通无 RID 的框架依赖 build 成功后会自动把完整运行文件同步到这里；Debug 和 Release 最后一次编译覆盖测试入口，包括增量构建。复制测试版本时请复制整个 `output/`。正在运行时，先退出客户端再重新编译。
 
 ```powershell
 dotnet build desktop/src/JeekMusic.App
@@ -49,6 +49,26 @@ dotnet test desktop/JeekMusic.slnx
 dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 -o desktop/artifacts/publish
 python desktop/tools/collect-licenses.py desktop/artifacts/publish
 ```
+
+编译与还原不直接使用 `output/`。App 工程的中间产物与 NuGet assets 位于 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/<Configuration>/<TFM>/`（SDK 可再追加 RID）；`bin/` 使用相同层级。空开关值表示 SDK 默认值；NuGet assets 位于配置子目录之前。操作、RID 和显式部署开关在 SDK 导入前隔离，避免还原缓存和编译文件混用。Core 是 RID 无关的类库，SDK 构建项目引用时会移除其 RID/SelfContained，故 Core 和测试工程保留 SDK 默认 `obj/`、`bin/<Configuration>/<TFM>/`；单元测试从各自 `bin/` 加载引用。
+
+带 RID、自包含 build 和所有 publish 均保留在自己的目录，不覆盖日常入口。NativeAOT 发布仍默认启用，正式包自包含、不依赖机器上的 .NET；默认 publish 目录在隔离的 `bin/` 下，也可使用上例的 `desktop/artifacts/publish`。`-o output`、`PublishDir=output` 及其子目录被拒绝，不能将发布包直接写进日常入口；测试发布包应运行发布目录内的 EXE。AOT 链接找不到 `vswhere` 时，仅为当前终端补入 `$env:PATH += ';C:\Program Files (x86)\Microsoft Visual Studio\Installer'`。
+
+build 和 publish 的缓存也相互隔离，发布请使用完整 `dotnet publish`，不能在普通 build 后用 `publish --no-build` 复用另一种操作的缓存。
+
+从旧版混用的 `output/` 迁移会自动发生：普通 build 按明确名单将 `hostfxr.dll`、`hostpolicy.dll`、`coreclr.dll`、`System.Private.CoreLib.dll` 等核心 .NET 运行时文件移至 `desktop/artifacts/legacy-output-runtime-<唯一ID>/`，然后同步框架依赖产物。脚本验证绝对源/目标路径并拒绝重解析点；不删除整个目录，不扫描曲库或正式数据目录，不按 `*.dll` 通配删除。旧版遗留的其他无害文件保留，完整旧目录备份也保留。不要手工把运行时或发布包合并进 `output/`。
+
+构建回归（先退出日常客户端，需要 AOT 工具链；默认仍会多次启动客户端）：
+
+```powershell
+python desktop/tools/test-build-isolation.py
+```
+
+它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、21 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
+
+`--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
+
+`python desktop/tools/test_build_workflow.py` 使用模拟客户端和模拟进程验证这些选项边界，不启动 JeekMusic 或访问真实音频。
 
 发布包需包含 `licenses/`、`Models/yamnet.onnx` 和原生 DLL。`collect-licenses.py` 从已还原的 NuGet 包收集许可证，不发送网络请求。LGPL DLL 的对应源码和编译参数随 [libmpv Release](https://github.com/tifish/JeekMusic/releases/tag/libmpv-lgpl-0.41.0-20261021-3) 提供；桌面 CI 下载失败时会停止，不能回退到 GPL 内核。
 

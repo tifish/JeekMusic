@@ -13,12 +13,12 @@ DEFAULT_EXE = Path(__file__).resolve().parents[2] / "output" / "JeekMusic.exe"
 
 
 class McpClient:
-    def __init__(self, exe=DEFAULT_EXE, data=None, timeout=40):
+    def __init__(self, exe=DEFAULT_EXE, data=None, timeout=40, env=None):
         self.timeout = timeout
         self.messages = queue.Queue()
         self.errors = collections.deque(maxlen=20)
         self.next_id = 0
-        env = os.environ.copy()
+        env = {**os.environ, **(env or {})}
         if data is not None:
             env["JEEKMUSIC_DATA"] = str(Path(data).resolve())
         self.process = subprocess.Popen(
@@ -70,7 +70,9 @@ class McpClient:
             except queue.Empty as error:
                 raise TimeoutError(f"JeekMusic MCP timed out: {method}") from error
             if response is None:
-                raise ConnectionError("JeekMusic MCP disconnected. " + "\n".join(self.errors))
+                code = self.process.wait(timeout=5)
+                self.error_reader.join(timeout=2)
+                raise ConnectionError(f"JeekMusic MCP disconnected (exit={code}). " + "\n".join(self.errors))
             if isinstance(response, Exception):
                 raise response
             if response.get("id") != self.next_id:

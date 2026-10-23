@@ -202,7 +202,11 @@
                             <Button x:Name="NowArtist" Content="{Binding Artist}" Padding="0" MinHeight="0" Background="Transparent" BorderThickness="0" FontSize="12" MaxWidth="140" AutomationProperties.Name="{ui:Tr &apos;查看艺术家&apos;}" ToolTip.Tip="{ui:Tr &apos;查看艺术家&apos;}" />
                             <Button x:Name="NowAlbum" Content="{Binding Album}" Padding="0" MinHeight="0" Background="Transparent" BorderThickness="0" FontSize="12" MaxWidth="140" AutomationProperties.Name="{ui:Tr &apos;查看专辑&apos;}" ToolTip.Tip="{ui:Tr &apos;查看专辑&apos;}" />
                         </StackPanel>
-                        <TextBlock Text="{Binding FormatText}" Classes="secondary" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        <Button x:Name="OutputModeButton" Command="{Binding ToggleExclusiveCommand}" Padding="0" MinHeight="0"
+                                HorizontalAlignment="Left" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0"
+                                Cursor="Hand" AutomationProperties.Name="{Binding OutputModeTip}" ToolTip.Tip="{Binding OutputModeTip}">
+                            <TextBlock Text="{Binding FormatText}" Classes="secondary" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        </Button>
                     </StackPanel>
                 </Grid>
                 <!-- 播放控制和进度 -->

@@ -68,7 +68,7 @@ public sealed class PlayerService : IDisposable
     public event Action<Track?>? TrackChanged;
     /// <summary>跳转了（用户拖动、换歌后从头开始），进度显示要立即刷新。</summary>
     public event Action? Seeked;
-    /// <summary>格式、设备列表变了。</summary>
+    /// <summary>格式、设备列表或输出模式变了。</summary>
     public event Action? OutputChanged;
     /// <summary>出错的提示（"无法播放 xxx"）。</summary>
     public event Action<string>? Error;
@@ -236,9 +236,12 @@ public sealed class PlayerService : IDisposable
     {
         if (Exclusive == exclusive) return;
         Exclusive = exclusive;
-        if (_mpv is null) return;
-        if (IsPlaying) { _pendingExclusive = true; return; }
-        ApplyExclusiveNow();
+        if (_mpv is not null)
+        {
+            if (IsPlaying) _pendingExclusive = true;
+            else ApplyExclusiveNow();
+        }
+        OutputChanged?.Invoke();
     }
 
     void ApplyPendingExclusive()

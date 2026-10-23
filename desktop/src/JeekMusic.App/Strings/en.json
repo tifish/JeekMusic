@@ -58,6 +58,8 @@
   "全选": "Select all",
   "全部添加到队列": "Add all to queue",
   "共享": "Shared",
+  "点击切换为共享模式；播放中将在暂停或切歌时生效。": "Click to switch to shared mode. During playback, the change applies when paused or at a track change.",
+  "点击切换为 WASAPI 独占模式；播放中将在暂停或切歌时生效。": "Click to switch to WASAPI exclusive mode. During playback, the change applies when paused or at a track change.",
   "关于": "About",
   "关闭": "Close",
   "关闭主窗口时": "When closing the main window",

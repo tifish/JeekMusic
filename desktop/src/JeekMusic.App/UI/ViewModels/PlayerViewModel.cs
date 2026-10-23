@@ -31,7 +31,12 @@ public sealed partial class PlayerViewModel : ObservableObject
         player.StateChanged += OnState;
         player.TrackChanged += _ => OnTrack();
         player.Seeked += UpdatePosition;
-        player.OutputChanged += () => { OnPropertyChanged(nameof(FormatText)); OnPropertyChanged(nameof(VolumeAvailable)); };
+        player.OutputChanged += () =>
+        {
+            OnPropertyChanged(nameof(FormatText));
+            OnPropertyChanged(nameof(OutputModeTip));
+            OnPropertyChanged(nameof(VolumeAvailable));
+        };
         sleep.Changed += () => { OnPropertyChanged(nameof(SleepActive)); OnPropertyChanged(nameof(SleepText)); };
         _volume = settings.Current.Volume;
         _muted = settings.Current.Muted;
@@ -74,12 +79,17 @@ public sealed partial class PlayerViewModel : ObservableObject
         get
         {
             var f = _player.Format;
-            if (Track is null || f.DeviceRate is null) return Track?.FormatLabel ?? "";
-            var device = $"{f.DeviceRate / 1000.0:0.#}kHz";
             var mode = _player.Exclusive ? L.T("独占") : L.T("共享");
+            if (Track is null) return mode;
+            if (f.DeviceRate is null) return $"{Track.FormatLabel} {mode}";
+            var device = $"{f.DeviceRate / 1000.0:0.#}kHz";
             return f.Resampled ? L.F($"{Track.FormatLabel} → {device} {mode}（已重采样）") : $"{Track.FormatLabel} → {device} {mode}";
         }
     }
+
+    public string OutputModeTip => _player.Exclusive
+        ? L.T("点击切换为共享模式；播放中将在暂停或切歌时生效。")
+        : L.T("点击切换为 WASAPI 独占模式；播放中将在暂停或切歌时生效。");
 
     // ── 音量（需求 O-4）──
 
@@ -120,6 +130,14 @@ public sealed partial class PlayerViewModel : ObservableObject
     [RelayCommand] void Next() => _player.Next();
     [RelayCommand] void Previous() => _player.Previous();
     [RelayCommand] void ToggleMute() => Muted = !Muted;
+
+    [RelayCommand]
+    void ToggleExclusive()
+    {
+        _settings.Current.Exclusive = !_player.Exclusive;
+        _player.SetExclusive(_settings.Current.Exclusive);
+        _settings.Save("playback");
+    }
 
     [RelayCommand]
     void ToggleShuffle()

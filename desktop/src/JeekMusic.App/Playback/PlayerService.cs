@@ -265,6 +265,9 @@ public sealed class PlayerService : IDisposable
 
     TimeSpan? _pendingSeek;
     long _pendingSeekDeadline;
+    // Distinguish an accepted seek from its later PlaybackRestart acknowledgement
+    // (also raised for resume/buffering) without changing the existing Seeked event.
+    internal long SeekRevision { get; private set; }
 
     /// <summary>当前这首里的位置（CUE 虚拟歌曲从这首的开头算）。</summary>
     public TimeSpan Position
@@ -306,6 +309,7 @@ public sealed class PlayerService : IDisposable
         if (_mpv.TryRun("seek", Mpv.Num(target), "absolute+exact") < 0) return;
         _pendingSeek = position;
         _pendingSeekDeadline = Environment.TickCount64 + 2000;
+        SeekRevision++;
         Seeked?.Invoke();
     }
 

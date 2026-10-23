@@ -3,8 +3,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
+using Avalonia.Interactivity;
+using System.Text.Json.Nodes;
+using JeekMusic.Infrastructure;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using JeekMusic.Core.Lyrics;
 using JeekMusic.Library;
 using JeekMusic.Lyrics;
@@ -19,7 +22,6 @@ namespace JeekMusic.UI;
 /// </summary>
 public sealed class LyricsPanel : UserControl
 {
-    readonly AppServices _app;
     readonly PlayerViewModel _player;
     readonly LyricsService _lyrics;
     readonly Image _cover = new() { Stretch = Stretch.UniformToFill };
@@ -36,9 +38,18 @@ public sealed class LyricsPanel : UserControl
     Track? _track;
     FoundLyrics? _found;
     int _current = -1;
-    DateTime _manualUntil = DateTime.MinValue;
-    bool _programmaticScroll;
-    readonly DispatcherTimer _hideLocator;
+    readonly Func<Track, Task<FoundLyrics?>> _loadLyrics;
+    readonly TimeProvider _clock;
+    readonly Border _topSpace = new(), _bottomSpace = new();
+    readonly HashSet<IPointer> _pressed = [];
+    readonly HashSet<InputElement> _captureOwners = [];
+    readonly List<Visual> _visibilityAncestors = [];
+    readonly DispatcherTimer _resumeFollow;
+    long _lastInteraction;
+    long _seekRevision;
+    bool _manual, _centerPending;
+    int _loadVersion;
+    Size _lastViewport, _lastLinesSize;
 
     /// <summary>"搜索歌词"按钮（在线歌词做好后接上）。</summary>
     public event Action<Track>? SearchRequested;
@@ -47,9 +58,19 @@ public sealed class LyricsPanel : UserControl
     public event Action? FullPageToggled;
 
     public LyricsPanel(AppServices app, PlayerViewModel player, LyricsService lyrics)
+        : this(player, lyrics)
     {
-        _app = app;
+        app.LyricsPanel = this;
+    }
+
+    // The same control can be exercised with a simulated player and delayed lyric loads.
+    internal LyricsPanel(PlayerViewModel player, LyricsService lyrics,
+        Func<Track, Task<FoundLyrics?>>? loadLyrics = null, TimeProvider? clock = null)
+    {
+        _loadLyrics = loadLyrics ?? (t => Task.Run(() => lyrics.Load(t)));
+        _clock = clock ?? TimeProvider.System;
         _player = player;
+        _seekRevision = player.Service.SeekRevision;
         _lyrics = lyrics;
         _coverBox = new Border
         {
@@ -57,12 +78,41 @@ public sealed class LyricsPanel : UserControl
             Background = new SolidColorBrush(Color.FromArgb(30, 128, 128, 128)), Child = _cover,
         };
         _subtitle.PointerPressed += (_, _) => { if (_track is not null) AlbumRequested?.Invoke(_track); };
-        _scroll = new ScrollViewer { Content = new StackPanel { Children = { new Border { Height = 160 }, _lines, new Border { Height = 240 } } } };
+        _scroll = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = new StackPanel { Children = { _topSpace, _lines, _bottomSpace } },
+        };
         _scroll.ScrollChanged += OnScrollChanged;
-        _scroll.AddHandler(PointerWheelChangedEvent, (_, _) => Manual(), Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
-        _scroll.AddHandler(PointerPressedEvent, (_, _) => Manual(), Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        _scroll.AddHandler(PointerWheelChangedEvent, (_, _) => Manual(), RoutingStrategies.Tunnel, handledEventsToo: true);
+        _scroll.AddHandler(ScrollGestureEvent, (_, _) => Manual(), RoutingStrategies.Bubble, handledEventsToo: true);
+        // A touch recognizer can consume PointerReleased after taking capture.
+        // Its inertia/end events still mark the physical contact as released.
+        _scroll.AddHandler(ScrollGestureInertiaStartingEvent, (_, _) => ReleaseTouch(), RoutingStrategies.Bubble, handledEventsToo: true);
+        _scroll.AddHandler(ScrollGestureEndedEvent, (_, _) => ReleaseTouch(), RoutingStrategies.Bubble, handledEventsToo: true);
+        _scroll.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            if (!CanFollow) return;
+            _pressed.Add(e.Pointer);
+            // CaptureLost is direct, so observe the pressed template ancestry
+            // (including a scrollbar Thumb), rather than expecting it to bubble.
+            for (var visual = e.Source as Visual; visual is not null; visual = visual.GetVisualParent())
+            {
+                if (visual is InputElement input && _captureOwners.Add(input))
+                    input.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Direct);
+                if (visual == _scroll) break;
+            }
+            Manual();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        _scroll.AddHandler(PointerMovedEvent, (_, e) => { if (_pressed.Contains(e.Pointer)) Manual(); }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        _scroll.AddHandler(PointerReleasedEvent, (_, e) => Release(e.Pointer), RoutingStrategies.Tunnel, handledEventsToo: true);
+        _scroll.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End) Manual();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         var play = new Button { Content = Icons.Play, Classes = { "icon" }, Padding = new Thickness(6, 2) };
+        ToolTip.SetTip(play, L.T("跳转到此句并恢复跟随"));
         play.Click += (_, _) => SeekToCenter();
         _locator = new Border
         {
@@ -70,8 +120,23 @@ public sealed class LyricsPanel : UserControl
             BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 128, 128, 128)),
             Child = new DockPanel { Children = { Dock(play, Avalonia.Controls.Dock.Right), _locatorTime } },
         };
-        _hideLocator = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _hideLocator.Tick += (_, _) => { _hideLocator.Stop(); _locator.IsVisible = false; };
+        _resumeFollow = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _resumeFollow.Tick += (_, _) => ResumeFollowIfDue();
+        ToolTip.SetTip(_scroll, L.T("手动滚动后 3 秒恢复歌词跟随"));
+        LayoutUpdated += (_, _) => FollowLayout();
+        AttachedToVisualTree += (_, _) =>
+        {
+            _visibilityAncestors.Add(this);
+            _visibilityAncestors.AddRange(this.GetVisualAncestors());
+            foreach (var visual in _visibilityAncestors) visual.PropertyChanged += OnVisibilityProperty;
+            VisibilityChanged();
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            foreach (var visual in _visibilityAncestors) visual.PropertyChanged -= OnVisibilityProperty;
+            _visibilityAncestors.Clear();
+            ResetManual();
+        };
 
         _searchButton.Click += (_, _) => { if (_track is not null) SearchRequested?.Invoke(_track); };
         _empty = new StackPanel
@@ -108,6 +173,7 @@ public sealed class LyricsPanel : UserControl
 
         _player.TrackChanged += t => Load(t);
         _player.PositionUpdated += OnPosition;
+        _player.Service.Seeked += OnSeek;
         _player.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PlayerViewModel.Cover)) _cover.Source = _player.Cover; };
         _lyrics.Changed += t => { if (t.TrackKey == _track?.TrackKey) Load(t); };
         Load(_player.Track);
@@ -127,8 +193,10 @@ public sealed class LyricsPanel : UserControl
 
     public bool OnlineSearchAvailable { get; set; }
 
-    void Load(Track? t)
+    async void Load(Track? t)
     {
+        var version = ++_loadVersion;
+        ResetManual();
         _track = t;
         _title.Text = t?.Title ?? "";
         _subtitle.Text = t is null ? "" : (t.Album is { Length: > 0 } a ? $"{Text.Artist(t)} — {a}" : Text.Artist(t));
@@ -136,14 +204,23 @@ public sealed class LyricsPanel : UserControl
         _found = null;
         _current = -1;
         _lines.Children.Clear();
+        _scroll.Offset = default;
         _empty.IsVisible = false;
         if (t is null) return;
-        _ = Task.Run(() => _lyrics.Load(t)).ContinueWith(task =>
+        try
         {
-            if (_track != t) return;
-            _found = task.Result;
+            var found = await _loadLyrics(t);
+            // Version also protects reloads of the same song (offset/search changes).
+            if (version != _loadVersion) return;
+            _found = found;
             Render();
-        }, TaskScheduler.FromCurrentSynchronizationContext());
+        }
+        catch (Exception e)
+        {
+            if (version != _loadVersion) return;
+            Log.Warn("lyrics", "读取歌词失败", e);
+            Render();
+        }
     }
 
     void Render()
@@ -160,18 +237,18 @@ public sealed class LyricsPanel : UserControl
         _empty.IsVisible = false;
         foreach (var line in _found.Text.Lines)
         {
-            var panel = new StackPanel { Spacing = 2, Tag = line, HorizontalAlignment = HorizontalAlignment.Center };
+            var panel = new StackPanel { Spacing = 2, Tag = line, HorizontalAlignment = HorizontalAlignment.Stretch };
             panel.Children.Add(new TextBlock { Text = line.Text, FontSize = 16, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.7 });
             if (line.Translation is { Length: > 0 } tr)
                 panel.Children.Add(new TextBlock { Text = tr, FontSize = 13, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.55 });
             _lines.Children.Add(panel);
         }
-        OnPosition(_app.Player.Position);
+        OnPosition(_player.Service.Position);
     }
 
     void OnPosition(TimeSpan position)
     {
-        if (_found is not { Text.Synced: true } f || !IsEffectivelyVisible) return;
+        if (_found is not { Text.Synced: true } f || !CanFollow) return;
         var index = LrcParser.CurrentIndex(f.Text.Lines, (long)position.TotalMilliseconds - f.OffsetMs);
         if (index == _current) return;
         SetCurrent(index);
@@ -181,9 +258,8 @@ public sealed class LyricsPanel : UserControl
     {
         if (_current >= 0 && _current < _lines.Children.Count) Style(_lines.Children[_current], false);
         _current = index;
-        if (index < 0 || index >= _lines.Children.Count) return;
-        Style(_lines.Children[index], true);
-        if (DateTime.Now >= _manualUntil) CenterOn(_lines.Children[index]);
+        if (index >= 0 && index < _lines.Children.Count) Style(_lines.Children[index], true);
+        QueueCenter();
     }
 
     static void Style(Control c, bool current)
@@ -197,55 +273,191 @@ public sealed class LyricsPanel : UserControl
         if (p.Children.FirstOrDefault() is TextBlock main) main.FontSize = current ? 19 : 16;
     }
 
-    void CenterOn(Control line)
+    bool DisplayVisible => VisualRoot is not null && IsEffectivelyVisible && VisualRoot is not Window { WindowState: WindowState.Minimized };
+    bool CanFollow => DisplayVisible && _found is { Text.Synced: true };
+
+    void OnVisibilityProperty(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            var pos = line.TranslatePoint(new Point(0, line.Bounds.Height / 2), (Visual)_scroll.Content!);
-            if (pos is null) return;
-            _programmaticScroll = true;
-            _scroll.Offset = new Vector(0, Math.Max(0, pos.Value.Y - _scroll.Viewport.Height / 2));
-            _programmaticScroll = false;
-        }, DispatcherPriority.Background);
+        if (e.Property != IsVisibleProperty && e.Property != Window.WindowStateProperty) return;
+        ResetManual();
+        Dispatcher.UIThread.Post(VisibilityChanged, DispatcherPriority.Loaded);
     }
 
-    /// <summary>用户自己滚动：暂停跟随 3 秒，显示定位线（需求 LY-3、LY-12）。</summary>
-    void Manual() => _manualUntil = DateTime.Now.AddSeconds(3);
+    void QueueCenter()
+    {
+        if (!CanFollow || _manual || _centerPending) return;
+        _centerPending = true;
+        // Coalesce rapid positions/layouts. Resolve the current row at execution time,
+        // never retain a row from a previous song or an obsolete seek target.
+        Dispatcher.UIThread.Post(() =>
+        {
+            _centerPending = false;
+            if (!CanFollow || _manual || _lines.Children.Count == 0 || _current >= _lines.Children.Count || _scroll.Viewport.Height <= 0) return;
+            var line = _lines.Children[Math.Max(0, _current)];
+            var pos = line.TranslatePoint(new Point(0, line.Bounds.Height / 2), (Visual)_scroll.Content!);
+            if (pos is null) return;
+            var target = Math.Clamp(pos.Value.Y - _scroll.Viewport.Height / 2, 0, Math.Max(0, _scroll.Extent.Height - _scroll.Viewport.Height));
+            if (Math.Abs(_scroll.Offset.Y - target) > 0.5) _scroll.Offset = new Vector(0, target);
+        }, DispatcherPriority.Loaded);
+    }
+
+    void FollowLayout()
+    {
+        if (!DisplayVisible) return;
+        var viewport = _scroll.Viewport;
+        var size = _lines.Bounds.Size;
+        var space = _found is { Text.Synced: true } ? viewport.Height / 2 : 0;
+        if (viewport == _lastViewport && size == _lastLinesSize && _topSpace.Height == space) return;
+        _lastViewport = viewport;
+        _lastLinesSize = size;
+        // Enough room for the first and last bilingual/wrapped row to reach center.
+        _topSpace.Height = _bottomSpace.Height = space;
+        QueueCenter();
+    }
+
+    void VisibilityChanged()
+    {
+        ResetManual();
+        if (!DisplayVisible) return;
+        OnPosition(_player.Service.Position);
+        QueueCenter();
+    }
+
+    void OnSeek()
+    {
+        // An explicit external seek wins over manual browsing, including within one row.
+        // A delayed decoder acknowledgement/resume must not cancel newer user input.
+        if (_seekRevision != _player.Service.SeekRevision)
+        {
+            _seekRevision = _player.Service.SeekRevision;
+            ResetManual();
+        }
+        OnPosition(_player.Service.Position);
+        QueueCenter();
+    }
+
+    void ResetManual()
+    {
+        _manual = false;
+        _pressed.Clear();
+        ClearCaptureOwners();
+        _resumeFollow.Stop();
+        _locator.IsVisible = false;
+    }
+
+    void Release(IPointer pointer)
+    {
+        if (_pressed.Remove(pointer) && _manual) Manual();
+        if (_pressed.Count == 0) ClearCaptureOwners();
+    }
+
+    void ReleaseTouch()
+    {
+        if (_pressed.RemoveWhere(p => p.Type == PointerType.Touch) > 0 && _manual) Manual();
+        if (_pressed.Count == 0) ClearCaptureOwners();
+    }
+
+    void OnCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        // Touch release is reported by gesture end/inertia after the recognizer
+        // takes capture; losing capture to that recognizer is not a release.
+        if (e.Pointer.Type != PointerType.Touch && e.Pointer.Captured is null) Release(e.Pointer);
+    }
+
+    void ClearCaptureOwners()
+    {
+        foreach (var input in _captureOwners) input.RemoveHandler(PointerCaptureLostEvent, OnCaptureLost);
+        _captureOwners.Clear();
+    }
+
+    /// <summary>Only input starts manual browsing; deferred program/layout scroll events never do.</summary>
+    void Manual()
+    {
+        if (!CanFollow) return;
+        _manual = true;
+        _lastInteraction = _clock.GetTimestamp();
+        _resumeFollow.Stop();
+        _resumeFollow.Interval = TimeSpan.FromSeconds(3);
+        _resumeFollow.Start();
+        UpdateLocator();
+    }
+
+    internal void ResumeFollowIfDue()
+    {
+        _resumeFollow.Stop();
+        if (!_manual || !CanFollow) return;
+        if (_pressed.Count > 0) return; // Release starts a fresh three second interval.
+        var remaining = TimeSpan.FromSeconds(3) - _clock.GetElapsedTime(_lastInteraction);
+        if (remaining > TimeSpan.Zero)
+        {
+            _resumeFollow.Interval = remaining;
+            _resumeFollow.Start();
+            return;
+        }
+        ResetManual();
+        OnPosition(_player.Service.Position);
+        QueueCenter();
+    }
 
     void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_programmaticScroll || _found is not { Text.Synced: true }) return;
-        Manual();
-        if (CenterLine() is { } line)
-        {
-            _locator.IsVisible = true;
-            _locatorTime.Text = Text.Duration(Math.Max(0, line.TimeMs + (_found?.OffsetMs ?? 0)));
-            _hideLocator.Stop();
-            _hideLocator.Start();
-        }
+        // Offset changes may arrive after Offset was assigned or after a layout pass.
+        // They update the locator only while input has already suspended following.
+        if (!_manual || !CanFollow) return;
+        UpdateLocator();
     }
+
+    void UpdateLocator()
+    {
+        if (CenterLine() is not { } line) return;
+        _locator.IsVisible = true;
+        _locatorTime.Text = Text.Duration(Math.Max(0, line.TimeMs + (_found?.OffsetMs ?? 0)));
+    }
+
+    internal JsonObject Diagnostics() => new()
+    {
+        ["created"] = true, ["visible"] = DisplayVisible,
+        ["trackKey"] = _track?.TrackKey, ["loaded"] = _found is not null,
+        ["synced"] = _found?.Text.Synced ?? false, ["lineCount"] = _lines.Children.Count,
+        ["currentIndex"] = _current, ["offsetMs"] = _found?.OffsetMs,
+        ["following"] = CanFollow && !_manual, ["manualBrowsing"] = _manual,
+        ["pointerHeld"] = _pressed.Count > 0, ["locatorVisible"] = _locator.IsVisible,
+        ["resumeAfterMs"] = _manual ? Math.Max(0, 3000 - _clock.GetElapsedTime(_lastInteraction).TotalMilliseconds) : 0,
+        ["scrollOffsetY"] = _scroll.Offset.Y, ["viewportHeight"] = _scroll.Viewport.Height,
+        ["centerLineTimeMs"] = CenterLine()?.TimeMs,
+    };
 
     LyricLine? CenterLine()
     {
+        if (_found is not { Text.Synced: true } || _lines.Children.Count == 0) return null;
         var center = _scroll.Offset.Y + _scroll.Viewport.Height / 2;
-        LyricLine? best = null;
-        var bestDistance = double.MaxValue;
-        foreach (var c in _lines.Children)
+        double? RowCenter(int index)
         {
+            var c = _lines.Children[index];
             var pos = c.TranslatePoint(new Point(0, c.Bounds.Height / 2), (Visual)_scroll.Content!);
-            if (pos is null) continue;
-            var d = Math.Abs(pos.Value.Y - center);
-            if (d < bestDistance) { bestDistance = d; best = c.Tag as LyricLine; }
+            return pos?.Y;
         }
-        return best;
+        // StackPanel row centers are ordered even with wrapping/translations.
+        // Avoid scanning thousands of rows on every wheel/touch notification.
+        int low = 0, high = _lines.Children.Count;
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            if (RowCenter(mid) is not { } y) return null;
+            if (y < center) low = mid + 1; else high = mid;
+        }
+        var best = Math.Min(low, _lines.Children.Count - 1);
+        if (best > 0 && RowCenter(best - 1) is { } previous && RowCenter(best) is { } next &&
+            Math.Abs(previous - center) <= Math.Abs(next - center)) best--;
+        return _lines.Children[best].Tag as LyricLine;
     }
 
     void SeekToCenter()
     {
         if (CenterLine() is not { } line || _found is null) return;
-        _app.Player.Seek(TimeSpan.FromMilliseconds(Math.Max(0, line.TimeMs + _found.OffsetMs)));
-        _locator.IsVisible = false;
-        _manualUntil = DateTime.MinValue;
+        ResetManual();
+        _player.Service.Seek(TimeSpan.FromMilliseconds(Math.Max(0, line.TimeMs + _found.OffsetMs)));
+        OnSeek();
     }
 
     void ChangeOffset(int delta)

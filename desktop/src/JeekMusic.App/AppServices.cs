@@ -22,6 +22,7 @@ public sealed class AppServices : IDisposable
     public QueuePersistence QueuePersistence { get; }
     public SleepTimer SleepTimer { get; }
     public LyricsService Lyrics { get; }
+    internal UI.LyricsPanel? LyricsPanel { get; set; }
     public Automation.McpServer Mcp { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();

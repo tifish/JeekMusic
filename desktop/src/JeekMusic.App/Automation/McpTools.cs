@@ -30,8 +30,8 @@ public sealed class McpTools
         Tool("get_track", "Read a track's metadata, stable key, local file path and smart tags by local track ID.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
         Tool("play_tracks", "Play trackIds in order starting at startIndex (default 0). Preserves pending manually queued songs, like the UI. Validates all tracks before changing playback.",
             "\"trackIds\":" + Ids + ",\"startIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":999},\"shuffle\":{\"type\":\"boolean\"}", ["trackIds"]),
-        Tool("playback", "Control playback. seek uses seconds relative to the current track, including CUE tracks; requires a loaded seekable track and ready output. Preserves play/pause and clamps the endpoint to 1s before track end to avoid seeking into EOF. previous follows UI behavior: restart if past 3 seconds. Returns an immediate state snapshot.",
-            "\"action\":{\"type\":\"string\",\"enum\":[\"resume\",\"pause\",\"toggle\",\"next\",\"previous\",\"seek\"]},\"seconds\":{\"type\":\"number\",\"minimum\":0,\"maximum\":31536000,\"description\":\"Absolute seconds from the current track/CUE start; requires loaded seekable audio and ready output. Values beyond duration fail; the endpoint is clamped to max(0, duration - 1 second).\"}", ["action"]),
+        Tool("playback", "Control playback. seek uses seconds relative to the current track, including CUE tracks; requires a loaded seekable track and ready output. Preserves play/pause and clamps the endpoint to 1s before track end to avoid seeking into EOF. previous follows UI behavior: restart if past 3 seconds. Explicit seek also restores visible timed lyrics following, even during manual browsing. Returns an immediate state snapshot.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"resume\",\"pause\",\"toggle\",\"next\",\"previous\",\"seek\"]},\"seconds\":{\"type\":\"number\",\"minimum\":0,\"maximum\":31536000,\"description\":\"Absolute seconds from the current track/CUE start; requires loaded seekable audio and ready output. An accepted seek immediately restores visible timed lyrics following. Values beyond duration fail; the endpoint is clamped to max(0, duration - 1 second).\"}", ["action"]),
         Tool("get_queue", "Read the actual play order, zero-based indices, current index and manual entries. Paginated.", Page, [], true),
         Tool("edit_queue", "Edit the queue: add/next require trackIds, remove/jump require index, move requires index and toIndex; clear needs no other arguments. Indices are zero-based. Adding to an empty queue starts playback, like the UI.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"next\",\"remove\",\"jump\",\"move\",\"clear\"]},\"trackIds\":" + Ids + ",\"index\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647},\"toIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"]),
@@ -50,7 +50,7 @@ public sealed class McpTools
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
         Tool("remove_folder", "Schedule removing a folder from the library; never deletes music files. Response means queued, not completed.", "\"folderId\":{\"type\":\"integer\"}", ["folderId"], destructive: true),
         Tool("rescan_library", "Schedule incremental scan (default) or full rebuild (full=true) in the normal library work queue. Response means queued, not completed. Observe get_status and logs for scan progress/errors.", "\"full\":{\"type\":\"boolean\"}", []),
-        Tool("get_diagnostics", "Read version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state and latest playback error for development or release troubleshooting. No arguments.", "", [], true),
+        Tool("get_diagnostics", "Read version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state, lyricsPanel follow/manual/position/layout diagnostics (created=false before panel creation), and latest playback error for development or release troubleshooting. No arguments.", "", [], true),
         Tool("get_logs", "Read the tail of app or playback logs (default app, 50 lines, at most 200 lines / 64 KiB). No arbitrary file access.",
             "\"kind\":{\"type\":\"string\",\"enum\":[\"app\",\"playback\"]},\"lines\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200}", [], true),
         Tool("show_window", "Show and activate the main player window. Other MCP tools do not activate windows.", "", [])
@@ -203,7 +203,8 @@ public sealed class McpTools
                     ["dynamicCodeSupported"] = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported,
                     ["appDirectory"] = AppPaths.AppDir, ["logsDirectory"] = AppPaths.LogsDir,
                     ["engineReady"] = p.EngineReady, ["lastPlaybackError"] = _lastPlayerError,
-                    ["status"] = Status(), ["output"] = Output()
+                    ["status"] = Status(), ["output"] = Output(),
+                    ["lyricsPanel"] = app.LyricsPanel?.Diagnostics() ?? new JsonObject { ["created"] = false }
                 };
             case "get_logs": return Logs(a);
             case "show_window": Shell.Current.ShowMainWindow(); return new JsonObject { ["shown"] = true };

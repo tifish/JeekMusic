@@ -55,7 +55,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |
-| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态和音频输出详情 |
+| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情和 `lyricsPanel` 跟随诊断 |
 | `get_logs` | 可选 `kind`（`app` / `playback`）、`lines`（默认 50、最大 200）；读取日志尾部最多 64 KiB，不接受任意文件路径 |
 | `show_window` | 无参数。显示并激活主窗口 |
 
@@ -64,6 +64,19 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
 
 上述四个运行诊断字段为兼容性新增，开发版与正式版同时提供；NativeAOT 的 `dynamicCodeSupported` 为 `false`，启用 AOT 兼容开关的托管构建也可能为 `false`，不能单凭此字段判断发布类型。它们用于核对连接到的实际程序，不能将框架描述字符串当成部署类型枚举。工具数量仍为 21，参数 Schema 无变化。
+
+### 歌词跟随诊断
+
+`get_diagnostics.lyricsPanel` 为兼容性新增，同样适用于开发与正式版本，无额外开关。尚未创建歌词面板时仅返回 `created: false`，查询不会打开窗口、创建面板或读取歌词文件。创建后返回：
+
+- `created`、`visible`、`trackKey`、`loaded`、`synced`、`lineCount`、`offsetMs`。
+- `currentIndex`：已显示的零基高亮行，首句之前或纯文本为 -1；面板隐藏期间不刷新此 UI 值，实际进度请读取同次结果的 `status.positionSeconds`。
+- `following`、`manualBrowsing`、`pointerHeld`、`locatorVisible`；`resumeAfterMs` 为最后手动交互后的剩余等待时间，按住时即使为 0 也不回中。
+- `scrollOffsetY`、`viewportHeight`：Avalonia 逻辑像素；`centerLineTimeMs` 为视口中央最近的歌词行时间（未加歌曲偏移），纯文本/空态为 null。
+
+现有 `playback {"action":"seek","seconds":...}` 即为定位能力：与拖动进度条及左右 ±5 秒共用 PlayerService，显式 seek 立即退出手动浏览、同步可见的时间轴歌词，即使仍在同一句；保留原播放/暂停及 CUE 语义。无需新增歌词 seek 工具。纯文本不自动定位。输入 Schema 的字段、范围及空对象约束保持不变，seek 工具与 `seconds` 参数描述同步说明歌词行为。
+
+用户禁止启动客户端或正在进行游戏隔离验证时，**不要调用 MCP 客户端脚本，包括只读查询和 `--startup-only`**：stdio 桥接仍可能冷启动客户端。此时只运行明确注入模拟引擎/端点的测试；Headless 的内存业务调用不经过 stdio/管道，不启动客户端。
 
 ### 音量输出语义
 

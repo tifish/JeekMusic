@@ -178,3 +178,14 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - MCP 仍为 **21 工具**；`get_diagnostics` 兼容性新增 `processPath`、`frameworkDescription`、`processArchitecture`、`dynamicCodeSupported`，描述/文档和验证同步，无参数 Schema 保持空对象、拒绝额外参数。动态代码支持为 false 不单独证明 NativeAOT（AOT 兼容托管构建也可为 false）。没有新增工具或仅开发版开关。
 - **尚未运行**：最终版本的默认 startup-only 流程及跨产物实际工具描述/Schema 全量比较、修改显式音频选项后的实机流程、最终 Release EXE 再次冷启动及正式客户端状态复核、GitHub Actions 本身。中断前的已完成日志不能代替这些延期检查。
 - **按用户游戏期间约束未重启客户端**。旧正式 PID17140 在开始构建前已停止；此前只读快照保存于 `%TEMP%/jeek-build-isolation-20261023/user-before.json`：暂停、145 首队列、索引 94、设备音量约 26%、应用/端点/会话均未静音。测试使用独立数据，不操作正式队列；禁止启动后未通过 MCP 再读正式状态。后续会话必须继续禁止客户端启动/MCP 冷启动和真实音频测试，直至用户或主对话明确解除。
+
+## 歌词滚动与跟随恢复（2026-10-23）
+
+- 根因：原 `ScrollChanged` 不区分程序滚动/布局通知与用户输入，同步 `_programmaticScroll` 标志无法保护延迟通知；3 秒计时器只隐藏定位线，同句进度提前返回，因而暂停/同句不会主动回中；固定 160/240 留白不能适配视口，异步加载只比较 Track 对象也不能阻止同歌旧重载覆盖。
+- 修复：真实输入暂停跟随，最后输入/触摸惯性后 3 秒主动居中，按住拖动不抢回；程序/布局滚动不暂停也不延长等待。触摸识别器吞掉 PointerReleased 时以手势结束/惯性事件释放按住状态；滚动条捕获取消也可恢复。显式 seek（含同句、连续 ±5 秒、MCP、定位线）立即恢复跟随。定位回调合并并读取最新行，隐藏/最小化时停止，重开和布局变化重新定位；首尾句、原译文和长行作为一组居中。首个时间戳之前回到开头但不高亮。纯文本保持手动浏览。无持续动画或 60fps 计时器；定位线按已布局行中心二分查找。
+- 新增 **18 项 LyricsPanelTests**，只使用 Avalonia Headless、合成 LRC、内存 SQLite、显式注入的 FakeEngine/FakeEndpointVolume；没有默认 AppServices 构造、真实解码器、音频文件播放、真实端点或客户端启动。覆盖自动换行及延迟程序 ScrollChanged、暂停同句 3 秒真实 DispatcherTimer、最后交互计时、滚轮/触摸/滚动条拖动及捕获取消、外部 seek、隐藏/重开、侧栏/整页、尺寸和 100%–200% LayoutTransform 缩放、首尾句/双语长行、纯文本/空态/搜索开关、旧歌曲/同歌异步结果、同尺寸纯文本/时间轴重载留白、延迟解码器重启不覆盖新手动交互、真实 LyricsService 缓存/偏移后台重载及 MCP 诊断/seek。1500 行歌词经过 100 次同句进度刷新没有新增 ScrollChanged 或重建行；这不等同于实机帧率基准。
+- 最终限定回归使用临时 `JEEKMUSIC_DATA`：`dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -c Release --filter "FullyQualifiedName~LyricsPanelTests|FullyQualifiedName~PlaybackShortcutTests|FullyQualifiedName~McpSessionTests|FullyQualifiedName~LocalizationTests" --verbosity minimal`：**85 项通过，0 失败/跳过**。已核查该过滤集的播放引擎及端点均为模拟；未跑 solution/App 全集或 RealDecoder 测试。
+- `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release --no-restore --verbosity minimal`：**0 警告、0 错误**；普通 build 按既有机制同步根 `output/`，未修改产物隔离，也未运行生成的 EXE。`git diff --check` 通过。
+- MCP 保持 **21 工具**，兼容性新增 `get_diagnostics.lyricsPanel`（未创建面板时仅 `created: false`；查询不创建控件/读歌词）；报告可见性、歌词索引/偏移、跟随/手动/按住、恢复倒计时、定位线和逻辑像素布局。复用 `playback seek`，工具说明、seconds Schema 描述、中英文提示、需求/设计/使用文档和内存业务验证同步；输入字段/约束无破坏性变化，开发/正式同套代码，无测试专用开关。
+- **延期**：真实 Windows 窗口截图/交互及实际 DPI/多屏、正常播放观感、最终 EXE 冷启动/MCP 管道验证、NativeAOT 发布验证和真实音频设备测试。Headless 验证几何与事件，不能代替上述实机验收；本轮没有发布 AOT，也没有用既往日志冒充新版本运行结果。
+- **遵守游戏期间限制，未启动客户端/未访问真实音频设备/未重启**；没有改变用户音量、静音、输出模式或操作游戏。构建前后均未发现 JeekMusic 客户端进程，保持停止；须等待主对话明确解除后才可补充启动/UI/音频验收。

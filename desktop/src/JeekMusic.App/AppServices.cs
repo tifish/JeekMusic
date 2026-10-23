@@ -24,6 +24,8 @@ public sealed class AppServices : IDisposable
     public LyricsService Lyrics { get; }
     internal UI.LyricsPanel? LyricsPanel { get; set; }
     internal UI.ArtistListBox? ArtistList { get; set; }
+    internal UI.FolderExpansionState FolderExpansion { get; } = new();
+    internal UI.ViewModels.MainViewModel? Navigation { get; set; }
     public Automation.McpServer Mcp { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();

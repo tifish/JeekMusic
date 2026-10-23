@@ -201,3 +201,15 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - MCP 兼容性新增 `get_diagnostics.artistList`：实际分组及组首位置/数量、当前字母、可见艺术家范围、滚动偏移/视口高度、已实现容器数量与有限定位状态。窗口未创建/关闭为 `created: false`，查询不创建窗口；隐藏期间可见位置保留上次布局值，源变化清空旧值，重开重新读取。仍为 **21 工具**，input Schema 仍为空对象且拒绝额外参数；工具描述、使用文档、内存 McpTools 验证同步，开发/正式使用相同代码，无新增控制工具或开发开关。
 - **延期实机项**：真实 Windows 原生视觉截图、鼠标/触屏实际体验、系统 DPI 与多屏、最终 EXE 冷启动及 MCP stdio/管道验收。Headless DPI/几何/手势测试不能代替原生视觉与真实硬件验收。本任务未触及音频功能，无需真实音频验证；游戏限制解除前仍禁止所有启动/桥接与真实设备测试。
 - **本轮未启动客户端、未访问真实音频设备、未重启**，未改变设备音量/静音/输出模式、未操作游戏。进程只读检查确认无 JeekMusic 客户端，保持关闭；按用户指示延期 AGENTS.md 的重启惯例，等待主对话明确解除。
+
+## 文件夹默认展开与主动收起记忆（2026-10-24）
+
+- 文件夹导航分组及所有目录无偏好时默认展开，新目录也展开；艺术家/播放列表分组沿用原逻辑。主动收起只保存该节点，父目录隐藏子项不产生子目录偏好。主动展开清除该节点的收起记录。普通刷新、重新扫描结果替换、过滤隐藏/恢复、导航树/主题/窗口重建及正常重启保留偏好；恢复/普通导航到选中歌曲所在目录不打开已收起祖先。
+- 显式“定位正在播放”临时打开路径中的祖先，保留收起集合；下次树重建/刷新/重启恢复偏好。该行为对跨视图定位和歌曲已在当前表格内的定位一致。无新增设置开关、快捷键或 UI 字符串；中英文使用说明见 `mcp.md`。
+- 旧 `UiState.ExpandedNav` 经检索确认只有属性定义，没有持久化/恢复调用；旧字段未出现的节点不代表主动收起，全部按新默认处理。新增 `collapsedFolders` 通过原 `SaveWindow → SaveLayout → UiState.Save` 写入本设备 `snapshot.json`；Key 使用卷身份 + 规范化卷内完整目录，统一大小写、正反斜杠和末尾分隔符，不依赖显示名、盘符或数据库 ID。不写音乐文件、曲库业务身份或 Android 同步数据；点击只更新内存 HashSet，不增加磁盘保存次数。暂时隐藏/无歌曲的 Key 保留，偏好不会凭空生成不存在的节点。
+- 新增 **16 项 FolderNavigationTests**：内存 SQLite、临时 settings/序列化快照文件、注入 FakeEngine 工厂和 FakeEndpointVolume、Avalonia Headless 实际 MainWindow/TreeView/双向绑定。覆盖首次全展开及新目录、箭头鼠标点击/键盘左右/标题双击、主动收起再展开、父子独立、文件夹分组收起及选中、模拟扫描结果替换/刷新/筛选、目录暂时消失后恢复、同名不同根及路径、正式 source-generated JSON 序列化和布局保存/恢复钩子的重启序列、旧空设置及旧 expandedNav、Key 的 ID/盘符/大小写/末尾分隔符兼容、主题及窗口重建/隐藏选中路径、模型和控件程序赋值不改偏好、显式定位两种路径、非文件夹分组/导航顺序/固定艺术家业务身份，以及 10,000 个偏好节点只保存 3 个明确例外。该规模测试只验证状态算法，不代表原生大目录渲染帧率验收。
+- MCP 兼容新增 `get_diagnostics.folderNavigation` 的默认策略、本地保存、自动导航/显式定位策略及偏好/树节点/临时展开计数。查询复用现有集合和当前树；窗口未创建/关闭为 `created: false`，不创建窗口、导航、展开或启动音频，不输出目录路径。工具描述/使用文档/内存调用验证同步；仍为 **21 工具**、空对象输入 Schema（拒绝额外参数），无额外控制工具或开发开关。模拟验证确认重复查询不改选择、当前视图、队列、偏好或引擎状态。
+- 最终限定回归：设置 `$env:JEEKMUSIC_DATA = Join-Path $env:TEMP 'jeek-folder-navigation-verification'` 后执行 `dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~FolderNavigationTests|FullyQualifiedName~ArtistListTests|FullyQualifiedName~PlaybackShortcutTests|FullyQualifiedName~McpSessionTests|FullyQualifiedName~LocalizationTests" --verbosity minimal`，**93 项通过，0 失败/跳过**（含全部 16 项文件夹专项）。已核对这些夹具仅使用模拟引擎/端点、内存协议或资源检查；专项夹具逐项断言未创建任何解码引擎且模拟端点无音量写入。没有运行 App/solution 全集、RealDecoder、真实 scanner、音频文件或 MCP stdio/管道桥接。
+- 普通 `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release --no-restore`：**0 警告、0 错误**。现有 build 流程同步 `output/`，未运行产物、未重复 AOT/publish。`git diff --check` 通过。
+- **延期实机项**：原生 Windows 窗口的展开视觉/鼠标键盘体验、真实曲库的大目录渲染与扫描后状态、真实正常退出/最终 EXE 冷启动恢复、发布包及 MCP stdio/管道诊断。Headless 重启序列与主题重建测试不代替原生窗口/最终启动验收；本功能无需新增真实音频测试。游戏期间禁止启动/后台/托盘/独立数据/桥接/`--startup-only` 的约束继续有效，等待主对话明确解除。
+- **本轮未启动客户端、未访问真实音频、未重启**；未修改设备音量/静音/输出模式，未操作游戏。提交前只读进程检查为 **0 个 JeekMusic 客户端**，保持关闭；用户运行限制优先 AGENTS.md 自动重启惯例。

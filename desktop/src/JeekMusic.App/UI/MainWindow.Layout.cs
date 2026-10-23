@@ -9,6 +9,8 @@ public partial class MainWindow
 {
     public void RestoreLayout(UiState ui)
     {
+        _app.FolderExpansion.Restore(ui);
+        _vm.ApplyFolderExpansion();
         MainArea.ColumnDefinitions[0].Width = new GridLength(Math.Clamp(ui.NavWidth, 160, 480));
         // 按保存的顺序恢复现有列，跳过已移除的列，避免旧位置留下空档。
         var columnOrder = 0;
@@ -30,6 +32,7 @@ public partial class MainWindow
 
     public void SaveLayout(UiState ui)
     {
+        _app.FolderExpansion.Save(ui);
         ui.NavWidth = MainArea.ColumnDefinitions[0].ActualWidth;
         ui.Columns = Table.Columns.Select(c => new ColumnState
         {

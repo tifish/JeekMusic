@@ -19,6 +19,8 @@ public sealed partial class NavNode : ObservableObject
     /// <summary>文件夹节点：所在的音乐文件夹和目录。</summary>
     public long FolderId { get; init; }
     public string Dir { get; init; } = "";
+    /// <summary>本机展开偏好的身份，与选择/曲库业务 Key 分开。</summary>
+    internal string? FolderExpansionKey { get; init; }
     public long PlaylistId { get; init; }
     /// <summary>固定的艺术家：艺术家的 NameKey。</summary>
     public string ArtistKey { get; init; } = "";

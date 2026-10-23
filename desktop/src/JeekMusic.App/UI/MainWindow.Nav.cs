@@ -22,6 +22,7 @@ public partial class MainWindow
 
     void InitNav()
     {
+        FolderNavigationInput.Attach(NavTree, _app.FolderExpansion);
         NavCollapse.Click += (_, _) => SetNavCollapsed(!_navCollapsed);
         NavTree.ContextRequested += OnNavContextRequested;
         // 拖动排序：只有顶层的内置项和固定的艺术家可以拖（同移动端 T-5）

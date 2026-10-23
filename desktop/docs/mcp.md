@@ -55,7 +55,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |
-| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情、`lyricsPanel` 跟随诊断和 `artistList` 分组/可见位置诊断 |
+| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情、`lyricsPanel` 跟随诊断、`artistList` 分组/可见位置诊断和 `folderNavigation` 文件夹展开策略/收起偏好统计 |
 | `get_logs` | 可选 `kind`（`app` / `playback`）、`lines`（默认 50、最大 200）；读取日志尾部最多 64 KiB，不接受任意文件路径 |
 | `show_window` | 无参数。显示并激活主窗口 |
 
@@ -90,6 +90,23 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 工具数量仍为 21，`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，没有新增控制工具。Headless 测试直接调用注入模拟服务的内存 McpTools，不连接 stdio 或命名管道；游戏期间仍禁止任何可能冷启动的 MCP 桥接。
 
 使用：艺术家栏按 A–Z / # 显示组标题；滚轮、触摸、拖动滚动条或键盘导航时查看顶部“当前字母 / Current letter”和右侧高亮。点击右侧字母尽量将组标题置顶；末尾内容不足一屏时，高亮显示真实顶部的组。索引跳转和普通滚动不会改变当前选择或播放。数字、符号与未知艺术家遵循现有规则归 #；搜索仍使用原搜索页，智能筛选会刷新艺术家及索引。
+
+### 文件夹展开诊断
+
+`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；21 个工具和空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
+
+- `defaultExpanded: true`、`persistence: "device-local-ui-snapshot"`、`keyVersion: 1`。
+- `automaticNavigation: "preserve-collapsed"`：恢复选中项、普通导航/历史、刷新/扫描不打开已主动收起的文件夹祖先。
+- `explicitLocate: "temporary-reveal"`：显式“定位正在播放”临时打开所需祖先，不删除收起偏好；下次树重建/重启重新应用。
+- `collapsedPreferenceCount`：所有已记录收起的节点数，包含文件夹分组，以及因筛选/无歌曲/离线暂时没有显示的目录；不因隐藏丢失偏好。
+- `nodeCount`、`expandedNodeCount`：当前过滤后的文件夹树逻辑节点总数/展开数，包含分组及叶节点，**包括被收起祖先遮住的子节点**；不是屏幕可见或已实现容器数。
+- `temporarilyExpandedCount`：有收起记录但当前临时展开的节点数。输出不含目录路径或额外音乐身份。
+
+使用：文件夹分组和各层目录默认展开，新扫描目录同样展开；点击箭头、标题双击或键盘展开/收起只更新操作的节点。主动收起后，正常退出并重启仍保留。先前旧版 `expandedNav` 未记录明确收起意图，不据其缺项推断收起；旧目录采用新的默认展开。偏好保存在本机 `snapshot.json.collapsedFolders`，不写音乐目录或 Android 同步数据；不新增开关或 UI 提示字符串。
+
+English: Folders expand by default, including newly discovered directories. Your explicit collapses are remembered on this device across refresh, filtering and normal restarts. Parent and child preferences are independent. Locate playing temporarily reveals ancestors without clearing those preferences; the next tree rebuild restores them. Artist and playlist groups keep their existing behavior.
+
+Headless 模拟验证直接调用内存 McpTools；禁止客户端启动期间，不执行 stdio/命名管道桥接，即使只是 `get_diagnostics`。
 
 ### 音量输出语义
 

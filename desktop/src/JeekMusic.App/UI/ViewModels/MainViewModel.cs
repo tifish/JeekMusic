@@ -71,7 +71,6 @@ public sealed partial class MainViewModel : ObservableObject
         switch (value.Kind)
         {
             case NavKind.Folders:
-                value.IsExpanded = true;
                 if (value.Children.FirstOrDefault() is { } first) SelectedNav = first;
                 break;
             case NavKind.Folder: Navigate(new NavTarget.Folder(value.FolderId, value.Dir)); break;
@@ -99,7 +98,7 @@ public sealed partial class MainViewModel : ObservableObject
     void RebuildNav()
     {
         var selectedKey = SelectedNav?.Key;
-        var expanded = Nav.SelectMany(Flatten).Where(n => n.IsExpanded).Select(n => n.Key).ToHashSet();
+        var expanded = Nav.SelectMany(Flatten).Where(n => n.Kind is not (NavKind.Folders or NavKind.Folder) && n.IsExpanded).Select(n => n.Key).ToHashSet();
         var filter = ListBuilder.FilterOf(Snapshot, S.TagFilter);
         _navigating = true;
         try
@@ -131,7 +130,10 @@ public sealed partial class MainViewModel : ObservableObject
                 }
             }
             foreach (var n in Nav.SelectMany(Flatten))
+            {
+                _app.FolderExpansion.Apply(n);
                 if (expanded.Contains(n.Key)) n.IsExpanded = true;
+            }
             SelectedNav = selectedKey is null ? null : Nav.SelectMany(Flatten).FirstOrDefault(n => n.Key == selectedKey);
         }
         finally { _navigating = false; }
@@ -149,6 +151,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Kind = NavKind.Folder, Title = dir.Name, Icon = dir.Dir.Length == 0 ? Icons.Music : Icons.Folder,
             FolderId = dir.Folder.Id, Dir = dir.Dir, CountText = count.ToString("N0"),
+            FolderExpansionKey = FolderExpansionState.DirectoryKey(dir.Folder, dir.Dir),
         };
         foreach (var c in dir.Children)
             if (FolderNode(c, filter) is { } child) node.Children.Add(child);
@@ -156,7 +159,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>选中导航栏里对应的项（导航历史、"查看艺术家"等跳转时）。</summary>
-    void SelectNavFor(NavTarget target)
+    void SelectNavFor(NavTarget target, bool revealFolderPath = false)
     {
         var key = target switch
         {
@@ -169,18 +172,32 @@ public sealed partial class MainViewModel : ObservableObject
         if (key is null) return;
         var node = Nav.SelectMany(Flatten).FirstOrDefault(n => n.Key == key);
         if (node is null) return;
-        // 展开它的所有上级
-        foreach (var root in Nav) ExpandPath(root, node);
+        // 普通选中/恢复保留文件夹收起偏好；显式定位只临时显示路径。
+        foreach (var root in Nav) ExpandPath(root, node, revealFolderPath);
         _navigating = true;
         try { SelectedNav = node; } finally { _navigating = false; }
     }
 
-    static bool ExpandPath(NavNode current, NavNode target)
+    static bool ExpandPath(NavNode current, NavNode target, bool revealFolderPath)
     {
         if (current == target) return true;
         foreach (var c in current.Children)
-            if (ExpandPath(c, target)) { current.IsExpanded = true; return true; }
+            if (ExpandPath(c, target, revealFolderPath))
+            {
+                if (revealFolderPath || current.Kind is not (NavKind.Folders or NavKind.Folder)) current.IsExpanded = true;
+                return true;
+            }
         return false;
+    }
+
+    internal void ApplyFolderExpansion()
+    {
+        foreach (var node in Nav.SelectMany(Flatten)) _app.FolderExpansion.Apply(node);
+    }
+
+    internal void RevealCurrentFolderPath()
+    {
+        if (Current is NavTarget.Folder) SelectNavFor(Current, revealFolderPath: true);
     }
 
     // ── 艺术家栏（需求 W-4）──

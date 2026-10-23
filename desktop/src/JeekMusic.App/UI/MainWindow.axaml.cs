@@ -59,7 +59,9 @@ public partial class MainWindow : Window
         ArtistList.ContextRequested += OnArtistContextRequested;
         LetterIndex.PointerPressed += OnLetterIndexPressed;
         _app.ArtistList = ArtistList;
+        _app.Navigation = _vm;
         Closed += (_, _) => { if (ReferenceEquals(_app.ArtistList, ArtistList)) _app.ArtistList = null; };
+        Closed += (_, _) => { if (ReferenceEquals(_app.Navigation, _vm)) _app.Navigation = null; };
 
         InitExtras();
         InitNav();
@@ -212,6 +214,7 @@ public partial class MainWindow : Window
             }
             return;
         }
+        _vm.RevealCurrentFolderPath();
         Table.SelectedItem = row;
         Table.ScrollIntoView(row, null);
     }

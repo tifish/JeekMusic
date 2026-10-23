@@ -34,6 +34,8 @@ public sealed class UiState
     public double? LyricsBarWidth { get; set; }
 
     public List<string> ExpandedNav { get; set; } = [];
+    /// <summary>只有主动收起的文件夹分组/目录；缺项默认展开。旧 ExpandedNav 不表示收起意图。</summary>
+    public List<string> CollapsedFolders { get; set; } = [];
 
     public static UiState Load()
     {

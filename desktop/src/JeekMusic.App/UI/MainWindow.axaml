@@ -13,6 +13,10 @@
         <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="Transparent" />
     </Window.Resources>
     <Window.Styles>
+        <Style Selector="WindowDrawnDecorations /template/ Button#PART_FullScreenButton">
+            <Setter Property="IsVisible" Value="False" />
+            <Setter Property="Width" Value="0" />
+        </Style>
         <Style Selector="WindowDrawnDecorations /template/ Panel#PART_TitleTextPanel > TextBlock">
             <Setter Property="IsVisible" Value="False" />
         </Style>

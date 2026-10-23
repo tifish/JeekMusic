@@ -18,6 +18,13 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 需要 Windows、.NET 10 SDK、Git Bash，以及 Native AOT 链接所需的 Visual Studio C++ 工具。
 
+日常测试直接编译并运行仓库根目录的 `output/JeekMusic.exe`。Debug 和 Release 共用该目录，最后一次编译覆盖其中的程序；框架和运行时版本不再增加子目录。运行所需的 DLL、模型和许可证也会一并输出，复制测试版本时请复制整个 `output/` 目录。正在运行时，先退出客户端再重新编译。
+
+```powershell
+dotnet build desktop/src/JeekMusic.App
+./output/JeekMusic.exe
+```
+
 ```powershell
 & 'C:/Program Files/Git/bin/bash.exe' desktop/tools/get-libmpv.sh --lgpl
 dotnet test desktop/JeekMusic.slnx
@@ -30,9 +37,10 @@ python desktop/tools/collect-licenses.py desktop/artifacts/publish
 后台运行测试使用独立的临时数据目录：
 
 ```powershell
-pwsh desktop/tools/test-app.ps1 -Exe desktop/artifacts/publish/JeekMusic.exe `
-  -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -GracefulExit
+pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -GracefulExit
 ```
+
+测试脚本默认运行 `output/JeekMusic.exe`；验证发布包时可用 `-Exe desktop/artifacts/publish/JeekMusic.exe` 指定程序。
 
 `--background` 不激活窗口，截图通过 PrintWindow 获取；测试脚本检测到抢占焦点会失败。`JEEKMUSIC_DATA` 覆盖数据目录，单实例通信也按此目录隔离。正式数据默认放在 `%LOCALAPPDATA%/JeekMusic`。
 

@@ -8,7 +8,7 @@
 #   pwsh tools/test-app.ps1 -Seconds 15 -Shot app.png -AppArgs 'D:\Mobile\Song;--autoplay'
 #   pwsh tools/test-app.ps1 -Fresh -Seconds 20        # 用全新的数据目录
 param(
-    [string]$Exe = "$PSScriptRoot\..\src\JeekMusic.App\bin\Debug\net10.0-windows10.0.19041.0\JeekMusic.exe",
+    [string]$Exe = "$PSScriptRoot\..\..\output\JeekMusic.exe",
     [string]$Data = "$env:TEMP\jm-test",
     [switch]$Fresh,
     [int]$Seconds = 10,

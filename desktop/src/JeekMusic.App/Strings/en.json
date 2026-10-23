@@ -58,8 +58,8 @@
   "全选": "Select all",
   "全部添加到队列": "Add all to queue",
   "共享": "Shared",
-  "点击切换为共享模式；播放中将在暂停或切歌时生效。": "Click to switch to shared mode. During playback, the change applies when paused or at a track change.",
-  "点击切换为 WASAPI 独占模式；播放中将在暂停或切歌时生效。": "Click to switch to WASAPI exclusive mode. During playback, the change applies when paused or at a track change.",
+  "点击切换为共享模式，并从当前位置继续播放。": "Click to switch to shared mode and continue from the current position.",
+  "点击切换为 WASAPI 独占模式，并从当前位置继续播放。": "Click to switch to WASAPI exclusive mode and continue from the current position.",
   "关于": "About",
   "关闭": "Close",
   "关闭主窗口时": "When closing the main window",
@@ -140,7 +140,7 @@
   "已被其他程序占用": "Used by another application",
   "年份": "Year",
   "应用内缓存": "App cache",
-  "开启后设备使用文件自己的采样率和位深，不经过系统混音器、不重采样；这时其他程序没有声音，音量条调的是设备音量（设备不支持时不可调）。正在播放时切换会在这首歌结束、暂停或跳转时生效（需求 O-3、O-4）。": "Uses the file’s sample rate and bit depth without the system mixer or resampling. Other apps cannot play audio through this device. The volume slider controls hardware volume where supported. Changes apply at a playback boundary.",
+  "独占模式不经过系统混音器，音量条调节设备音量。切换模式会重新加载当前歌曲，从原位置继续，并保留暂停和静音状态；恢复音量后才出声，无法确认音量时保持暂停。": "Exclusive mode bypasses the system mixer and controls device volume. Switching reloads the current track at the same position, preserving pause and mute. Playback resumes only after volume is restored; if volume cannot be verified, playback remains paused.",
   "开始": "Start",
   "开放的歌词库，国内访问不稳定": "Open lyrics database; connectivity varies by region.",
   "开机时启动（隐藏在托盘里）": "Start with Windows (in the system tray)",
@@ -411,5 +411,7 @@
   "歌词已保存到应用缓存": "Lyrics saved to the app cache",
   "转到后台": "Continue in background",
   "清除歌词缓存": "Clear lyrics cache",
-  "清除应用内的歌词缓存和未找到记录？音乐文件夹中的歌词文件将保留。": "Clear cached lyrics and unsuccessful lookup records? Lyrics files in music folders will be kept."
+  "清除应用内的歌词缓存和未找到记录？音乐文件夹中的歌词文件将保留。": "Clear cached lyrics and unsuccessful lookup records? Lyrics files in music folders will be kept.",
+  "无法安全切换输出模式，播放已暂停。": "The output mode could not be switched safely. Playback has been paused.",
+  "无法恢复输出音量，已保持暂停和静音。请切回共享模式或检查设备音量控制。": "Output volume could not be restored. Playback remains paused and muted. Switch back to shared mode or check device volume control."
 }

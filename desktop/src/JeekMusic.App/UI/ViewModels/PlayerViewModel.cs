@@ -33,6 +33,15 @@ public sealed partial class PlayerViewModel : ObservableObject
         player.Seeked += UpdatePosition;
         player.OutputChanged += () =>
         {
+            var volumeChanged = SetProperty(ref _volume, player.Volume, nameof(Volume));
+            var muteChanged = SetProperty(ref _muted, player.Muted, nameof(Muted));
+            if (volumeChanged || muteChanged)
+            {
+                _settings.Current.Volume = _volume;
+                _settings.Current.Muted = _muted;
+                _settings.Save("playback");
+                OnPropertyChanged(nameof(VolumeIcon));
+            }
             OnPropertyChanged(nameof(FormatText));
             OnPropertyChanged(nameof(OutputModeTip));
             OnPropertyChanged(nameof(VolumeAvailable));
@@ -88,8 +97,8 @@ public sealed partial class PlayerViewModel : ObservableObject
     }
 
     public string OutputModeTip => _player.Exclusive
-        ? L.T("点击切换为共享模式；播放中将在暂停或切歌时生效。")
-        : L.T("点击切换为 WASAPI 独占模式；播放中将在暂停或切歌时生效。");
+        ? L.T("点击切换为共享模式，并从当前位置继续播放。")
+        : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。");
 
     // ── 音量（需求 O-4）──
 

@@ -9,6 +9,9 @@ using JeekMusic.UI;
 
 namespace JeekMusic.App.Tests;
 
+[CollectionDefinition("Avalonia UI")]
+public sealed class AvaloniaUiCollection;
+
 public sealed class ShortcutTestApplication : Application
 {
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<ShortcutTestApplication>()
@@ -24,6 +27,7 @@ public sealed class ShortcutTestApplication : Application
     }
 }
 
+[Collection("Avalonia UI")]
 public sealed class PlaybackShortcutTests
 {
     [Theory]

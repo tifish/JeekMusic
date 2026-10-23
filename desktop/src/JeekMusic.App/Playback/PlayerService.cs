@@ -28,14 +28,16 @@ public sealed record AudioFormatInfo(string? Codec, int? FileRate, string? FileF
 public sealed class PlayerService : IDisposable
 {
     readonly ITrackSource _tracks;
-    Mpv? _mpv;
+    IPlaybackEngine? _mpv;
+    readonly Func<IEnumerable<(string, string)>, IPlaybackEngine> _createEngine;
 
     /// <summary>mpv 播放列表里的条目：条目 ID → 队列位置对应的歌曲。</summary>
     long _currentEntry = -1, _nextEntry = -1;
     long _nextTrackId = -1;
     int _consecutiveErrors;
-    bool _pendingExclusive;
+    bool _restoringOutput, _outputFileLoaded, _outputRestoreFailed;
     bool _wantPlaying;
+    double _fadeVolume = 100;
 
     public PlayQueue Queue { get; } = new();
 
@@ -75,9 +77,12 @@ public sealed class PlayerService : IDisposable
     /// <summary>一首歌自然播完（睡眠定时"播完 N 首"计数用，需求 P-8）。</summary>
     public event Action? TrackCompleted;
 
-    public PlayerService(ITrackSource tracks)
+    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn")) { }
+
+    internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine)
     {
         _tracks = tracks;
+        _createEngine = createEngine;
         Queue.Changed += OnQueueChanged;
     }
 
@@ -88,13 +93,17 @@ public sealed class PlayerService : IDisposable
     public void EnsureEngine()
     {
         if (_mpv is not null) return;
+        _restoringOutput = true;
+        _outputFileLoaded = _outputRestoreFailed = false;
         try
         {
-            _mpv = new Mpv(Mpv.BaseOptions().Concat([
+            _mpv = _createEngine(Mpv.BaseOptions().Concat([
                 ("ao", "wasapi"), ("gapless-audio", "weak"), ("prefetch-playlist", "yes"),
                 ("audio-exclusive", Exclusive ? "yes" : "no"), ("audio-device", Device ?? "auto"),
                 ("keep-open", "no"), ("pause", "yes"),
-            ]), "warn");
+                ("mute", _restoringOutput || Muted ? "yes" : "no"),
+                ("volume", Mpv.Num(_fadeVolume)),
+            ]));
         }
         catch (Exception e) when (e is DllNotFoundException or InvalidOperationException or EntryPointNotFoundException)
         {
@@ -109,10 +118,19 @@ public sealed class PlayerService : IDisposable
                      "audio-device-list",
                  })
             _mpv.Observe(p);
-        _mpv.PropertyChanged += (name, value) => Dispatcher.UIThread.Post(() => OnProperty(name, value));
-        _mpv.FileStarted += id => Dispatcher.UIThread.Post(() => OnFileStarted(id));
-        _mpv.FileEnded += (id, reason, error) => Dispatcher.UIThread.Post(() => OnFileEnded(id, reason, error));
-        _mpv.Notified += e => Dispatcher.UIThread.Post(() => OnEvent(e));
+        var engine = _mpv;
+        // 被替换的引擎可能已有事件排进 UI 队列，不能让它们恢复新引擎的播放。
+        void Dispatch(Action action) => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(_mpv, engine)) action(); });
+        engine.PropertyChanged += (name, value) => Dispatch(() => OnProperty(name, value));
+        engine.FileStarted += id => Dispatch(() => OnFileStarted(id));
+        engine.FileLoaded += id => Dispatch(() =>
+        {
+            if (id != _currentEntry || id < 0) return;
+            _outputFileLoaded = true;
+            TryFinishOutputRestore();
+        });
+        engine.FileEnded += (id, reason, error) => Dispatch(() => OnFileEnded(id, reason, error));
+        engine.Notified += e => Dispatch(() => OnEvent(e));
         _mpv.Log += (prefix, level, text) => Log.Playback($"mpv [{prefix}] {level}: {text}");
     }
 
@@ -141,13 +159,14 @@ public sealed class PlayerService : IDisposable
 
     public void PlayPause()
     {
+        if (_restoringOutput) { if (_wantPlaying) Pause(); else Resume(); return; }
         if (CurrentTrack is null)
         {
             if (Queue.Items.Count > 0) LoadCurrent(play: true);
             return;
         }
         EnsureEngine();
-        if (IsIdle) { LoadCurrent(play: true); return; }
+        if (IsIdle) { LoadCurrent(play: true, start: _restoringOutput ? _restorePosition : null); return; }
         if (IsPlaying) Pause(); else Resume();
     }
 
@@ -155,15 +174,20 @@ public sealed class PlayerService : IDisposable
     {
         _wantPlaying = false;
         _mpv?.TrySet("pause", "yes");
-        ApplyPendingExclusive();
     }
 
     public void Resume()
     {
         if (CurrentTrack is null) return;
         EnsureEngine();
-        if (IsIdle) { LoadCurrent(play: true); return; }
+        if (IsIdle) { LoadCurrent(play: true, start: _restoringOutput ? _restorePosition : null); return; }
         _wantPlaying = true;
+        if (_restoringOutput)
+        {
+            _outputRestoreFailed = false;
+            TryFinishOutputRestore();
+            return;
+        }
         _mpv?.TrySet("pause", "no");
     }
 
@@ -205,7 +229,7 @@ public sealed class PlayerService : IDisposable
     {
         get
         {
-            if (_mpv is null || IsIdle || CurrentTrack is null) return _restorePosition;
+            if (_mpv is null || IsIdle || CurrentTrack is null || _restoringOutput) return _restorePosition;
             var pos = _mpv.GetDouble("time-pos") ?? 0;
             return TimeSpan.FromSeconds(Math.Max(0, pos - (CurrentTrack.StartMs ?? 0) / 1000.0));
         }
@@ -219,7 +243,7 @@ public sealed class PlayerService : IDisposable
         if (_mpv is null || IsIdle) { _restorePosition = position; LoadCurrent(play: _wantPlaying, start: position); return; }
         var target = position.TotalSeconds + (CurrentTrack.StartMs ?? 0) / 1000.0;
         _mpv.TryRun("seek", Mpv.Num(target), "absolute+exact");
-        ApplyPendingExclusive();
+        if (_restoringOutput) _restorePosition = position;
         Seeked?.Invoke();
     }
 
@@ -231,32 +255,110 @@ public sealed class PlayerService : IDisposable
         _mpv?.TrySet("audio-device", device ?? "auto");
     }
 
-    /// <summary>独占模式：正在播放时只记下来，等暂停、切歌、跳转、自动换到下一首时再切换（设计 §7.4）。</summary>
+    /// <summary>重建输出及解码器，从当前歌曲的位置恢复；确认音量以前始终暂停并静音。</summary>
     public void SetExclusive(bool exclusive)
     {
         if (Exclusive == exclusive) return;
+        var position = Position;
+        var play = _restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no";
+        var oldEngine = _mpv;
         Exclusive = exclusive;
-        if (_mpv is not null)
+        _restorePosition = position;
+        _restoringOutput = oldEngine is not null && CurrentTrack is not null;
+        _outputFileLoaded = _outputRestoreFailed = false;
+        if (oldEngine is not null)
         {
-            if (IsPlaying) _pendingExclusive = true;
-            else ApplyExclusiveNow();
+            // 外部音量合成器可能已把实际音量调低，不用旧设置把它重新抬高。
+            if (oldEngine.GetDouble("ao-volume") is { } actual && double.IsFinite(actual) && actual >= 0)
+                Volume = Math.Min(Volume, actual);
+            if (oldEngine.Get("ao-mute") == "yes") Muted = true;
+            var muted = oldEngine.TrySet("mute", "yes") >= 0;
+            var paused = oldEngine.TrySet("pause", "yes") >= 0;
+            if (!muted || !paused)
+            {
+                _wantPlaying = false;
+                // 停止旧引擎而非继续在无法静音的状态下切换。
+                _mpv = null;
+                oldEngine.Dispose();
+                IsPlaying = false;
+                IsIdle = true;
+                Error?.Invoke(L.T("无法安全切换输出模式，播放已暂停。"));
+                OutputChanged?.Invoke();
+                StateChanged?.Invoke();
+                return;
+            }
+            _mpv = null;
+            oldEngine.Dispose();
         }
+        _currentEntry = _nextEntry = _nextTrackId = -1;
+        IsIdle = true;
+        IsPlaying = false;
+        Format = new(null, null, null, null, null, null, null);
+        if (oldEngine is not null && CurrentTrack is not null)
+        {
+            _restoringOutput = true;
+            _outputFileLoaded = _outputRestoreFailed = false;
+            LoadCurrent(play, position);
+        }
+        Log.Playback($"切换独占模式 {(Exclusive ? "开" : "关")}，保留位置 {position.TotalSeconds:F3}s");
         OutputChanged?.Invoke();
+        StateChanged?.Invoke();
     }
 
-    void ApplyPendingExclusive()
+    void TryFinishOutputRestore()
     {
-        if (!_pendingExclusive) return;
-        _pendingExclusive = false;
-        ApplyExclusiveNow();
+        if (!_restoringOutput || !_outputFileLoaded || _outputRestoreFailed || _mpv is null) return;
+        if (string.IsNullOrEmpty(_mpv.Get("current-ao"))) return;
+        var actual = _mpv.GetDouble("ao-volume");
+        if (actual is null || !double.IsFinite(actual.Value) || actual < 0)
+        {
+            BlockOutputRestore();
+            return;
+        }
+        // 新后端的设备音量和旧后端的会话音量含义不同，切换不能把新设备的既有音量调高。
+        Volume = Math.Min(Volume, Math.Clamp(actual.Value, 0, 100));
+        if (_mpv.TrySet("ao-volume", Mpv.Num(Volume)) < 0 ||
+            _mpv.GetDouble("ao-volume") is not { } restored || !double.IsFinite(restored) ||
+            Math.Abs(restored - Volume) > 0.5)
+        {
+            BlockOutputRestore();
+            return;
+        }
+        if (_mpv.Get("ao-mute") == "yes") Muted = true;
+        _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
+        if (_mpv.TrySet("mute", Muted ? "yes" : "no") < 0 ||
+            _mpv.TrySet("pause", _wantPlaying ? "no" : "yes") < 0)
+        {
+            BlockOutputRestore();
+            return;
+        }
+        _restoringOutput = false;
+        IsPlaying = _wantPlaying;
+        Log.Playback($"输出模式切换完成，音量 {Volume:F1}%，{(_wantPlaying ? "继续播放" : "保持暂停")}");
+        OutputChanged?.Invoke();
+        StateChanged?.Invoke();
+        Seeked?.Invoke();
     }
 
-    void ApplyExclusiveNow()
+    void BlockOutputRestore()
     {
-        if (_mpv is null) return;
-        _mpv.TrySet("audio-exclusive", Exclusive ? "yes" : "no");
-        _mpv.TryRun("ao-reload");
-        Log.Playback($"独占模式 {(Exclusive ? "开" : "关")}");
+        if (_mpv is { } engine)
+        {
+            var muted = engine.TrySet("mute", "yes") >= 0;
+            var paused = engine.TrySet("pause", "yes") >= 0;
+            if (!muted || !paused)
+            {
+                _mpv = null;
+                engine.Dispose();
+                IsIdle = true;
+            }
+        }
+        _wantPlaying = false;
+        IsPlaying = false;
+        _outputRestoreFailed = true;
+        Error?.Invoke(L.T("无法恢复输出音量，已保持暂停和静音。请切回共享模式或检查设备音量控制。"));
+        OutputChanged?.Invoke();
+        StateChanged?.Invoke();
     }
 
     /// <summary>音量：mpv 的 ao-volume，共享模式下是会话音量，独占模式下是设备音量；mpv 自己的软件音量始终是 100（需求 O-4）。</summary>
@@ -264,7 +366,7 @@ public sealed class PlayerService : IDisposable
     {
         Volume = Math.Clamp(volume, 0, 100);
         Muted = muted;
-        ApplyVolume();
+        if (!_restoringOutput) ApplyVolume();
     }
 
     /// <summary>独占模式下设备不支持调音量时 ao-volume 不可用（需求 O-4）。</summary>
@@ -275,10 +377,15 @@ public sealed class PlayerService : IDisposable
         if (_mpv is null) return;
         _mpv.TrySet("ao-volume", Mpv.Num(Volume));
         _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
+        _mpv.TrySet("mute", Muted ? "yes" : "no");
     }
 
     /// <summary>睡眠定时渐弱用的软件音量（唯一允许改动样本的情况，需求 §4.1）。</summary>
-    public void SetFadeVolume(double percent) => _mpv?.TrySet("volume", Mpv.Num(Math.Clamp(percent, 0, 100)));
+    public void SetFadeVolume(double percent)
+    {
+        _fadeVolume = Math.Clamp(percent, 0, 100);
+        _mpv?.TrySet("volume", Mpv.Num(_fadeVolume));
+    }
 
     // ── 断点续播 ──
 
@@ -310,6 +417,7 @@ public sealed class PlayerService : IDisposable
         var track = entry is { } e ? _tracks.ById(e.TrackId) : null;
         if (track is null)
         {
+            _restoringOutput = _outputRestoreFailed = false;
             CurrentTrack = null;
             _mpv?.TryRun("stop");
             IsIdle = true;
@@ -325,10 +433,13 @@ public sealed class PlayerService : IDisposable
             SkipBroken(track, L.T("文件不存在或所在的盘不可用"));
             return;
         }
-        ApplyPendingExclusive();
         CurrentTrack = track;
         _restorePosition = start ?? TimeSpan.Zero;
-        _mpv.TrySet("pause", play ? "no" : "yes");
+        _restoringOutput = true;
+        _outputFileLoaded = _outputRestoreFailed = false;
+        var muted = _mpv.TrySet("mute", "yes") >= 0;
+        var paused = _mpv.TrySet("pause", "yes") >= 0;
+        if (!muted || !paused) { BlockOutputRestore(); return; }
         _mpv.TrySet("loop-file", Queue.Repeat == RepeatMode.One ? "inf" : "no");
         _mpv.TryRun("playlist-clear");
         _mpv.TryRun("loadfile", path, "replace", "-1", FileOptions(track, start));
@@ -336,6 +447,16 @@ public sealed class PlayerService : IDisposable
         _nextEntry = -1;
         _nextTrackId = -1;
         IsIdle = false;
+        if (_restoringOutput)
+        {
+            var engine = _mpv;
+            var entryId = _currentEntry;
+            DispatcherTimer.RunOnce(() =>
+            {
+                if (ReferenceEquals(_mpv, engine) && _currentEntry == entryId && _restoringOutput && !_outputRestoreFailed)
+                    BlockOutputRestore();
+            }, TimeSpan.FromSeconds(5));
+        }
         Log.Playback($"播放 {track.RelativePath}{(track.IsCue ? $" #{track.CueTrackNo}" : "")} 从 {(start ?? TimeSpan.Zero).TotalSeconds:F1}s{(play ? "" : "（暂停）")}");
         SyncNext();
         TrackChanged?.Invoke(track);
@@ -428,7 +549,6 @@ public sealed class PlayerService : IDisposable
             var oldIndex = IndexOfEntry(previous);
             if (oldIndex >= 0) _mpv!.TryRun("playlist-remove", oldIndex.ToString());
             _consecutiveErrors = 0;
-            ApplyPendingExclusive();
             Log.Playback($"自动换到 {CurrentTrack?.RelativePath}");
         }
         finally { _inFileStarted = false; }
@@ -485,8 +605,7 @@ public sealed class PlayerService : IDisposable
         switch (name)
         {
             case "pause":
-                IsPlaying = value == "no" && !IsIdle;
-                if (!IsPlaying) ApplyPendingExclusive();
+                IsPlaying = value == "no" && !IsIdle && !_restoringOutput;
                 StateChanged?.Invoke();
                 break;
             case "idle-active":
@@ -518,7 +637,7 @@ public sealed class PlayerService : IDisposable
         switch (e)
         {
             case Mpv.EventId.AudioReconfig:
-                ApplyVolume();
+                if (_restoringOutput) TryFinishOutputRestore(); else ApplyVolume();
                 break;
             case Mpv.EventId.PlaybackRestart:
                 Seeked?.Invoke();

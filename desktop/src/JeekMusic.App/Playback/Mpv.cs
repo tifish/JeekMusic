@@ -7,7 +7,7 @@ namespace JeekMusic.Playback;
 /// libmpv 的封装（C API，P/Invoke；验证工程 spike-audio/Mpv.cs 发展而来，设计 §7.1）。
 /// 事件在单独的线程上用 mpv_wait_event 读取，回调也在那个线程上触发，使用者自己转到 UI 线程。
 /// </summary>
-public sealed partial class Mpv : IDisposable
+public sealed partial class Mpv : IPlaybackEngine
 {
     const string Lib = "libmpv-2.dll";
 
@@ -62,9 +62,11 @@ public sealed partial class Mpv : IDisposable
     public event Action<string, string?>? PropertyChanged;
     /// <summary>开始播放播放列表里的某一条（事件线程）。</summary>
     public event Action<long>? FileStarted;
+    /// <summary>文件加载完成（带对应条目 ID，避免旧文件的异步事件影响新的加载）。</summary>
+    public event Action<long>? FileLoaded;
     /// <summary>某一条结束（事件线程）：条目 ID、原因、出错时的错误文字。</summary>
     public event Action<long, EndReason, string?>? FileEnded;
-    /// <summary>其他事件（PlaybackRestart、AudioReconfig、FileLoaded、Seek）。</summary>
+    /// <summary>其他事件（PlaybackRestart、AudioReconfig、Seek）。</summary>
     public event Action<EventId>? Notified;
     public event Action<string, string, string>? Log;
 
@@ -149,6 +151,7 @@ public sealed partial class Mpv : IDisposable
 
     void EventLoop()
     {
+        long startedEntry = -1;
         while (true)
         {
             var e = Marshal.PtrToStructure<RawEvent>(WaitEvent(_handle, -1));
@@ -170,7 +173,11 @@ public sealed partial class Mpv : IDisposable
                         PropertyChanged?.Invoke(Marshal.PtrToStringUTF8(prop.Name)!, value);
                         break;
                     case EventId.StartFile:
-                        FileStarted?.Invoke(Marshal.PtrToStructure<StartFileEvent>(e.Data).PlaylistEntryId);
+                        startedEntry = Marshal.PtrToStructure<StartFileEvent>(e.Data).PlaylistEntryId;
+                        FileStarted?.Invoke(startedEntry);
+                        break;
+                    case EventId.FileLoaded:
+                        FileLoaded?.Invoke(startedEntry);
                         break;
                     case EventId.EndFile:
                         var end = Marshal.PtrToStructure<EndFileEvent>(e.Data);

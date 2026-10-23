@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using JeekMusic.Core.Queue;
 using JeekMusic.Infrastructure;
 using JeekMusic.Library;
+using JeekMusic.Platform;
 
 namespace JeekMusic.Playback;
 
@@ -30,6 +31,10 @@ public sealed class PlayerService : IDisposable
     readonly ITrackSource _tracks;
     IPlaybackEngine? _mpv;
     readonly Func<IEnumerable<(string, string)>, IPlaybackEngine> _createEngine;
+    readonly IEndpointVolume? _endpointVolume;
+    readonly Dictionary<string, double> _sharedDeviceVolumes = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>独占输出修改过的设备，其原系统主音量待切回共享时恢复。</summary>
+    public IReadOnlyDictionary<string, double> SharedDeviceVolumes => _sharedDeviceVolumes;
 
     /// <summary>mpv 播放列表里的条目：条目 ID → 队列位置对应的歌曲。</summary>
     long _currentEntry = -1, _nextEntry = -1;
@@ -67,13 +72,18 @@ public sealed class PlayerService : IDisposable
     public bool Muted { get; private set; }
 
     /// <summary>启动时恢复音量记录；旧版本的单个音量仅作为首次初始化的参考。</summary>
-    internal void RestoreVolumeSettings(bool exclusive, double volume, double? sharedVolume, double? exclusiveVolume, bool muted)
+    internal void RestoreVolumeSettings(bool exclusive, double volume, double? sharedVolume, double? exclusiveVolume, bool muted,
+        IReadOnlyDictionary<string, double>? sharedDeviceVolumes = null)
     {
         Exclusive = exclusive;
         SharedVolume = ValidVolume(sharedVolume);
         ExclusiveVolume = ValidVolume(exclusiveVolume);
         Volume = (exclusive ? ExclusiveVolume : SharedVolume) ?? ValidVolume(volume) ?? 100;
         Muted = muted;
+        if (sharedDeviceVolumes is not null)
+            foreach (var (id, saved) in sharedDeviceVolumes)
+                if (!string.IsNullOrWhiteSpace(id) && double.IsFinite(saved) && saved is >= 0 and <= 100)
+                    _sharedDeviceVolumes[id] = saved;
     }
 
     static double? ValidVolume(double? value) => value is { } v && double.IsFinite(v) ? Math.Clamp(v, 0, 100) : null;
@@ -97,12 +107,13 @@ public sealed class PlayerService : IDisposable
     /// <summary>一首歌自然播完（睡眠定时"播完 N 首"计数用，需求 P-8）。</summary>
     public event Action? TrackCompleted;
 
-    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn")) { }
+    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume()) { }
 
-    internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine)
+    internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine, IEndpointVolume? endpointVolume = null)
     {
         _tracks = tracks;
         _createEngine = createEngine;
+        _endpointVolume = endpointVolume;
         Queue.Changed += OnQueueChanged;
     }
 
@@ -319,6 +330,8 @@ public sealed class PlayerService : IDisposable
         IsIdle = true;
         IsPlaying = false;
         Format = new(null, null, null, null, null, null, null);
+        // 独占引擎完全关闭后才恢复系统主音量，避免原独占音频以共享模式的音量出声。
+        if (!Exclusive && !RestoreSharedDeviceVolumes()) { BlockOutputRestore(); return; }
         if (oldEngine is not null && CurrentTrack is not null)
         {
             _restoringOutput = true;
@@ -334,6 +347,11 @@ public sealed class PlayerService : IDisposable
     {
         if (!_restoringOutput || !_outputFileLoaded || _outputRestoreFailed || _mpv is null) return;
         if (string.IsNullOrEmpty(_mpv.Get("current-ao"))) return;
+        if (Exclusive ? !CaptureSharedDeviceVolume() : !RestoreSharedDeviceVolumes())
+        {
+            BlockOutputRestore();
+            return;
+        }
         var actual = _mpv.GetDouble("ao-volume");
         if (actual is null || !double.IsFinite(actual.Value) || actual < 0)
         {
@@ -369,6 +387,7 @@ public sealed class PlayerService : IDisposable
 
     void BlockOutputRestore()
     {
+        _restoringOutput = CurrentTrack is not null;
         if (_mpv is { } engine)
         {
             var muted = engine.TrySet("mute", "yes") >= 0;
@@ -405,9 +424,35 @@ public sealed class PlayerService : IDisposable
     void ApplyVolume()
     {
         if (_mpv is null) return;
+        if (Exclusive && !CaptureSharedDeviceVolume()) { BlockOutputRestore(); return; }
         _mpv.TrySet("ao-volume", Mpv.Num(Volume));
         _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
         _mpv.TrySet("mute", Muted ? "yes" : "no");
+    }
+
+    bool CaptureSharedDeviceVolume()
+    {
+        if (_endpointVolume is null) return true;
+        if (_endpointVolume.Capture(Device) is not { } snapshot) return false;
+        if (_sharedDeviceVolumes.TryAdd(snapshot.DeviceId, snapshot.Volume))
+        {
+            Log.Playback($"保存共享模式系统主音量 {snapshot.Volume:F1}%，设备 {snapshot.DeviceId}");
+            OutputChanged?.Invoke();
+        }
+        return true;
+    }
+
+    bool RestoreSharedDeviceVolumes()
+    {
+        if (_endpointVolume is null) return _sharedDeviceVolumes.Count == 0;
+        var restored = true;
+        foreach (var (id, volume) in _sharedDeviceVolumes.ToArray())
+        {
+            if (!_endpointVolume.Restore(new(id, volume))) { restored = false; continue; }
+            _sharedDeviceVolumes.Remove(id);
+            Log.Playback($"恢复共享模式系统主音量 {volume:F1}%，设备 {id}");
+        }
+        return restored;
     }
 
     /// <summary>睡眠定时渐弱用的软件音量（唯一允许改动样本的情况，需求 §4.1）。</summary>
@@ -692,5 +737,7 @@ public sealed class PlayerService : IDisposable
     {
         _mpv?.Dispose();
         _mpv = null;
+        RestoreSharedDeviceVolumes();
+        OutputChanged?.Invoke();
     }
 }

@@ -141,7 +141,7 @@
   "已被其他程序占用": "Used by another application",
   "年份": "Year",
   "应用内缓存": "App cache",
-  "独占模式不经过系统混音器，音量条调节设备音量。共享和独占模式分别记住音量，切换时恢复各自的设置。切换模式会重新加载当前歌曲，从原位置继续，并保留暂停和静音状态；恢复音量后才出声，无法确认音量时保持暂停。": "Exclusive mode bypasses the system mixer and controls device volume. Shared and exclusive modes remember their volumes separately and restore them when switching. Switching reloads the current track at the same position, preserving pause and mute. Playback resumes only after volume is restored; if volume cannot be verified, playback remains paused.",
+  "独占模式不经过系统混音器，音量条调节设备音量。共享和独占模式分别记住音量，切换时恢复各自的设置；切回共享或退出软件时，还会恢复进入独占前的 Windows 系统主音量。切换模式会重新加载当前歌曲，从原位置继续，并保留暂停和静音状态；恢复音量后才出声，无法确认音量时保持暂停。": "Exclusive mode bypasses the system mixer and controls device volume. Shared and exclusive modes remember their volumes separately. Returning to shared mode or exiting also restores the Windows system volume from before exclusive playback. Switching reloads the current track at the same position, preserving pause and mute. Playback resumes only after volume is restored; if volume cannot be verified, playback remains paused.",
   "开始": "Start",
   "开放的歌词库，国内访问不稳定": "Open lyrics database; connectivity varies by region.",
   "开机时启动（隐藏在托盘里）": "Start with Windows (in the system tray)",

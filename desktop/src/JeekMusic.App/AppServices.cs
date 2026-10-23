@@ -56,8 +56,8 @@ public sealed class AppServices : IDisposable
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception e) { Log.Warn("app", "停止后台服务失败", e); }
         try { QueuePersistence.SaveQueue(); } catch (Exception e) { Log.Warn("app", "保存队列失败", e); }
-        Settings.WriteNow();
         Player.Dispose();
+        Settings.WriteNow();
         Library.Dispose();
         Db.Dispose();
         Instance?.Dispose();

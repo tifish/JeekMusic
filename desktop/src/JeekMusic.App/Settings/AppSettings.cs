@@ -71,6 +71,8 @@ public sealed class AppSettings
     /// <summary>各输出模式上次的音量；null 表示尚未初始化，首次出声前保守确认。</summary>
     public double? SharedVolume { get; set; }
     public double? ExclusiveVolume { get; set; }
+    /// <summary>独占输出使用过的设备，其原系统主音量；退出独占后恢复并移除。</summary>
+    public Dictionary<string, double> SharedDeviceVolumes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool Muted { get; set; }
     public bool TaskbarProgress { get; set; } = true;
     public SleepPrefs Sleep { get; set; } = new();

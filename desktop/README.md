@@ -44,4 +44,16 @@ pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -G
 
 `--background` 不激活窗口，截图通过 PrintWindow 获取；测试脚本检测到抢占焦点会失败。`JEEKMUSIC_DATA` 覆盖数据目录，单实例通信也按此目录隔离。正式数据默认放在 `%LOCALAPPDATA%/JeekMusic`。
 
+## MCP 接口
+
+开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、扫描、音频输出和日志诊断，共 21 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
+
+仓库提供只依赖 Python 标准库的调试客户端：
+
+```powershell
+python desktop/tools/mcp_client.py --list
+python desktop/tools/mcp_client.py get_status
+python desktop/tools/mcp_client.py search_tracks '{"query":"周杰伦"}'
+```
+
 `tools/prepare-benchmark.py` 可生成独立的五万首合成曲库。`spike/` 和 `spike-audio/` 保留早期技术验证工程，不是正式播放器。

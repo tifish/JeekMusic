@@ -17,6 +17,8 @@ static class Program
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         // 自动更新：新版本以这个参数启动，把自己复制到程序目录（设计 §15.2）
         if (args.Length >= 3 && args[0] == "--apply-update") return Update.Updater.ApplyUpdate(args[1], args[2]);
+        // MCP 子进程只转发标准输入输出，不创建窗口，也不触发单实例窗口激活。
+        if (args is ["--mcp"]) return Automation.McpBridge.RunAsync().GetAwaiter().GetResult();
 
         // 单实例（需求 PC-7）：已经在运行时把参数交给它，然后退出
         Instance = new SingleInstance();

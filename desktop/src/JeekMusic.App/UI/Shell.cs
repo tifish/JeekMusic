@@ -183,6 +183,8 @@ public sealed partial class Shell
         _restored = true;
         _app.QueuePersistence.Restore(_app.Library.Snapshot);
         if (_app.Player.EngineReady) _app.Player.PrepareRestored();
+        // 只有曲库和保存的队列就绪后才接受外部控制，避免启动恢复覆盖 MCP 命令。
+        _app.Mcp.Start();
     }
 
     // ── SMTC、任务栏、托盘提示（需求 O-1、PC-6、W-5）──

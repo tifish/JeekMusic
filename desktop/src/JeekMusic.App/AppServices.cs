@@ -22,6 +22,7 @@ public sealed class AppServices : IDisposable
     public QueuePersistence QueuePersistence { get; }
     public SleepTimer SleepTimer { get; }
     public LyricsService Lyrics { get; }
+    public Automation.McpServer Mcp { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();
     public Hotkeys Hotkeys { get; } = new();
@@ -48,10 +49,12 @@ public sealed class AppServices : IDisposable
         QueuePersistence = new QueuePersistence(Db, Player);
         SleepTimer = new SleepTimer(Player);
         Lyrics = new LyricsService(Library);
+        Mcp = new Automation.McpServer(new Automation.McpTools(this));
     }
 
     public void Dispose()
     {
+        Mcp.Dispose();
         if (OnExit is { } handlers)
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception e) { Log.Warn("app", "停止后台服务失败", e); }

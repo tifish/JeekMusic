@@ -11,7 +11,7 @@ namespace JeekMusic.Platform;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    static readonly string Id = "JeekMusic-" + (WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName) + DataSuffix();
+    internal static readonly string Id = "JeekMusic-" + (WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName) + DataSuffix();
     static string DataSuffix() => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JEEKMUSIC_DATA")) ? "" :
         "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(AppPaths.DataDir).TrimEnd('\\').ToUpperInvariant())))[..16];
     readonly Mutex _mutex;

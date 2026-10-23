@@ -274,7 +274,7 @@ public sealed class SettingsWindow : Window
 
         panel.Children.Add(SubHeading(L.T("音质")));
         panel.Children.Add(Toggle(L.T("WASAPI 独占模式"), c.S.Exclusive, v => { c.S.Exclusive = v; c.Save("playback"); p.SetExclusive(v); }));
-        panel.Children.Add(Note(L.T("独占模式不经过系统混音器，音量条调节设备音量。切换模式会重新加载当前歌曲，从原位置继续，并保留暂停和静音状态；恢复音量后才出声，无法确认音量时保持暂停。")));
+        panel.Children.Add(Note(L.T("独占模式不经过系统混音器，音量条调节设备音量。共享和独占模式分别记住音量，切换时恢复各自的设置。切换模式会重新加载当前歌曲，从原位置继续，并保留暂停和静音状态；恢复音量后才出声，无法确认音量时保持暂停。")));
         panel.Children.Add(Note(L.F($"当前：{c.Main.ViewModel.Player.FormatText}")));
 
         panel.Children.Add(SubHeading(L.T("其他")));

@@ -62,7 +62,27 @@ public sealed class PlayerService : IDisposable
     public bool Exclusive { get; private set; }
     public string? Device { get; private set; }
     public double Volume { get; private set; } = 100;
+    public double? SharedVolume { get; private set; }
+    public double? ExclusiveVolume { get; private set; }
     public bool Muted { get; private set; }
+
+    /// <summary>启动时恢复音量记录；旧版本的单个音量仅作为首次初始化的参考。</summary>
+    internal void RestoreVolumeSettings(bool exclusive, double volume, double? sharedVolume, double? exclusiveVolume, bool muted)
+    {
+        Exclusive = exclusive;
+        SharedVolume = ValidVolume(sharedVolume);
+        ExclusiveVolume = ValidVolume(exclusiveVolume);
+        Volume = (exclusive ? ExclusiveVolume : SharedVolume) ?? ValidVolume(volume) ?? 100;
+        Muted = muted;
+    }
+
+    static double? ValidVolume(double? value) => value is { } v && double.IsFinite(v) ? Math.Clamp(v, 0, 100) : null;
+
+    void RememberVolume()
+    {
+        if (Exclusive) ExclusiveVolume = Volume;
+        else SharedVolume = Volume;
+    }
 
     /// <summary>播放状态变了（播放 / 暂停、换歌）。</summary>
     public event Action? StateChanged;
@@ -262,15 +282,20 @@ public sealed class PlayerService : IDisposable
         var position = Position;
         var play = _restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no";
         var oldEngine = _mpv;
+        // 先保存离开模式的实际音量；重载中的后端还未应用音量，不能用于覆盖记录。
+        if (oldEngine is not null && !_restoringOutput && !IsIdle)
+        {
+            if (oldEngine.GetDouble("ao-volume") is { } actual && double.IsFinite(actual) && actual >= 0)
+                Volume = Math.Min(Volume, Math.Clamp(actual, 0, 100));
+            RememberVolume();
+        }
         Exclusive = exclusive;
+        Volume = (exclusive ? ExclusiveVolume : SharedVolume) ?? Volume;
         _restorePosition = position;
         _restoringOutput = oldEngine is not null && CurrentTrack is not null;
         _outputFileLoaded = _outputRestoreFailed = false;
         if (oldEngine is not null)
         {
-            // 外部音量合成器可能已把实际音量调低，不用旧设置把它重新抬高。
-            if (oldEngine.GetDouble("ao-volume") is { } actual && double.IsFinite(actual) && actual >= 0)
-                Volume = Math.Min(Volume, actual);
             if (oldEngine.Get("ao-mute") == "yes") Muted = true;
             var muted = oldEngine.TrySet("mute", "yes") >= 0;
             var paused = oldEngine.TrySet("pause", "yes") >= 0;
@@ -315,8 +340,9 @@ public sealed class PlayerService : IDisposable
             BlockOutputRestore();
             return;
         }
-        // 新后端的设备音量和旧后端的会话音量含义不同，切换不能把新设备的既有音量调高。
-        Volume = Math.Min(Volume, Math.Clamp(actual.Value, 0, 100));
+        // 已记录的模式恢复自己的音量；未初始化的模式不抬高新设备既有音量。
+        if ((Exclusive ? ExclusiveVolume : SharedVolume) is null)
+            Volume = Math.Min(Volume, Math.Clamp(actual.Value, 0, 100));
         if (_mpv.TrySet("ao-volume", Mpv.Num(Volume)) < 0 ||
             _mpv.GetDouble("ao-volume") is not { } restored || !double.IsFinite(restored) ||
             Math.Abs(restored - Volume) > 0.5)
@@ -324,6 +350,7 @@ public sealed class PlayerService : IDisposable
             BlockOutputRestore();
             return;
         }
+        RememberVolume();
         if (_mpv.Get("ao-mute") == "yes") Muted = true;
         _mpv.TrySet("ao-mute", Muted ? "yes" : "no");
         if (_mpv.TrySet("mute", Muted ? "yes" : "no") < 0 ||
@@ -364,9 +391,12 @@ public sealed class PlayerService : IDisposable
     /// <summary>音量：mpv 的 ao-volume，共享模式下是会话音量，独占模式下是设备音量；mpv 自己的软件音量始终是 100（需求 O-4）。</summary>
     public void SetVolume(double volume, bool muted)
     {
-        Volume = Math.Clamp(volume, 0, 100);
+        if (ValidVolume(volume) is not { } valid) return;
+        Volume = valid;
+        RememberVolume();
         Muted = muted;
         if (!_restoringOutput) ApplyVolume();
+        OutputChanged?.Invoke();
     }
 
     /// <summary>独占模式下设备不支持调音量时 ao-volume 不可用（需求 O-4）。</summary>

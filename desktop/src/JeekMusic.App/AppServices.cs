@@ -43,8 +43,7 @@ public sealed class AppServices : IDisposable
         Playlists = new PlaylistService(Library);
         Player = new PlayerService(Library);
         var s = Settings.Current;
-        Player.SetVolume(s.Volume, s.Muted);
-        Player.SetExclusive(s.Exclusive);
+        OutputSettingsBinding.Attach(Player, Settings);
         Player.SetDevice(s.OutputDevice);
         QueuePersistence = new QueuePersistence(Db, Player);
         SleepTimer = new SleepTimer(Player);

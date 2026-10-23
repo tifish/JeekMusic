@@ -37,9 +37,6 @@ public sealed partial class PlayerViewModel : ObservableObject
             var muteChanged = SetProperty(ref _muted, player.Muted, nameof(Muted));
             if (volumeChanged || muteChanged)
             {
-                _settings.Current.Volume = _volume;
-                _settings.Current.Muted = _muted;
-                _settings.Save("playback");
                 OnPropertyChanged(nameof(VolumeIcon));
             }
             OnPropertyChanged(nameof(FormatText));
@@ -47,8 +44,8 @@ public sealed partial class PlayerViewModel : ObservableObject
             OnPropertyChanged(nameof(VolumeAvailable));
         };
         sleep.Changed += () => { OnPropertyChanged(nameof(SleepActive)); OnPropertyChanged(nameof(SleepText)); };
-        _volume = settings.Current.Volume;
-        _muted = settings.Current.Muted;
+        _volume = player.Volume;
+        _muted = player.Muted;
         OnTrack();
         OnState();
     }
@@ -110,8 +107,6 @@ public sealed partial class PlayerViewModel : ObservableObject
         {
             if (!SetProperty(ref _volume, Math.Clamp(value, 0, 100))) return;
             _player.SetVolume(_volume, Muted);
-            _settings.Current.Volume = _volume;
-            _settings.Save("playback");
             OnPropertyChanged(nameof(VolumeIcon));
         }
     }
@@ -124,8 +119,6 @@ public sealed partial class PlayerViewModel : ObservableObject
         {
             if (!SetProperty(ref _muted, value)) return;
             _player.SetVolume(Volume, _muted);
-            _settings.Current.Muted = _muted;
-            _settings.Save("playback");
             OnPropertyChanged(nameof(VolumeIcon));
         }
     }

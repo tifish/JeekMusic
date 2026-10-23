@@ -68,6 +68,9 @@ public sealed class AppSettings
     public bool Exclusive { get; set; }
     /// <summary>输出音量 0–100（mpv 的 ao-volume，需求 O-4）。</summary>
     public double Volume { get; set; } = 100;
+    /// <summary>各输出模式上次的音量；null 表示尚未初始化，首次出声前保守确认。</summary>
+    public double? SharedVolume { get; set; }
+    public double? ExclusiveVolume { get; set; }
     public bool Muted { get; set; }
     public bool TaskbarProgress { get; set; } = true;
     public SleepPrefs Sleep { get; set; } = new();

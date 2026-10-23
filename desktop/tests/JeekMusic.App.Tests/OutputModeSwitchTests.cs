@@ -1,15 +1,139 @@
 using System.Globalization;
+using System.Text.Json;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using JeekMusic.Core.Queue;
 using JeekMusic.Library;
 using JeekMusic.Playback;
+using JeekMusic.Settings;
 
 namespace JeekMusic.App.Tests;
 
 [Collection("Avalonia UI")]
 public sealed class OutputModeSwitchTests
 {
+    [Fact]
+    public Task ModesRememberTheirVolumesAndRestoreHigherSavedValuesBeforePlaying() => Run(f =>
+    {
+        f.Player.SetVolume(65, false);
+        f.Player.SetExclusive(true);
+        f.Ready();
+        f.Player.SetVolume(18, false);
+        for (var i = 0; i < 3; i++)
+        {
+            f.Player.SetExclusive(false);
+            f.Current.Properties["ao-volume"] = "18";
+            Assert.Equal(65, f.Player.Volume);
+            Assert.Equal("yes", f.Current.Properties["mute"]);
+            f.Ready();
+            Assert.Equal("65", f.Current.Properties["ao-volume"]);
+            Assert.True(f.Current.Operations.IndexOf("set ao-volume=65") < f.Current.Operations.IndexOf("set pause=no"));
+            f.Player.SetExclusive(true);
+            f.Ready();
+            Assert.Equal(18, f.Player.Volume);
+            Assert.Equal("18", f.Current.Properties["ao-volume"]);
+            Assert.Equal(65, f.Player.SharedVolume);
+            Assert.Equal(18, f.Player.ExclusiveVolume);
+        }
+        Assert.Empty(f.Errors);
+    });
+
+    [Fact]
+    public Task RapidSwitchDoesNotReplaceSavedVolumeWithAnUninitializedBackendValue() => Run(f =>
+    {
+        f.Player.SetVolume(65, false);
+        f.Player.SetExclusive(true);
+        f.Ready();
+        f.Player.SetVolume(18, false);
+        f.Player.SetExclusive(false);
+        f.Current.Properties["ao-volume"] = "2";
+        f.Player.SetExclusive(true);
+        f.Ready();
+        f.Player.SetExclusive(false);
+        f.Ready();
+        Assert.Equal(65, f.Player.Volume);
+        Assert.Equal(18, f.Player.ExclusiveVolume);
+    });
+
+    [Theory]
+    [InlineData("rejected")]
+    [InlineData("ignored")]
+    public Task SavedHigherVolumeStillRequiresSuccessfulReadback(string failure) => Run(f =>
+    {
+        f.Player.SetVolume(65, false);
+        f.Player.SetExclusive(true);
+        f.Ready();
+        f.Player.SetVolume(18, false);
+        f.Player.SetExclusive(false);
+        f.Current.Properties["ao-volume"] = "18";
+        f.Current.RejectVolume = failure == "rejected";
+        f.Current.IgnoreVolume = failure == "ignored";
+        f.Ready();
+        Assert.False(f.Player.IsPlaying);
+        Assert.DoesNotContain("set mute=no", f.Current.Operations);
+        Assert.DoesNotContain("set pause=no", f.Current.Operations);
+        Assert.Equal(65, f.Player.SharedVolume);
+        Assert.Single(f.Errors);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeparateVolumesPersistAcrossRestartAndLegacyVolumeIsSafelyInitialized(bool exclusive)
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        var path = Path.Combine(Path.GetTempPath(), "jeek-volume-settings-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            // 原版本只有一个音量；不能把它误当成另一种模式已确认的音量。
+            File.WriteAllText(path, $$"""{"exclusive":{{exclusive.ToString().ToLowerInvariant()}},"volume":100}""");
+            await session.Dispatch(() =>
+            {
+                var settings = new SettingsStore(path);
+                using (var f = new Fixture(settings, initialNativeVolume: "30"))
+                {
+                    Assert.Equal(exclusive, f.Player.Exclusive);
+                    Assert.Equal(30, f.Player.Volume);
+                    Assert.Null(exclusive ? f.Player.SharedVolume : f.Player.ExclusiveVolume);
+                    f.Player.SetExclusive(false);
+                    f.Ready();
+                    f.Player.SetVolume(65, false);
+                    f.Player.SetExclusive(true);
+                    f.Ready();
+                    f.Player.SetVolume(18, true);
+                    settings.WriteNow();
+                }
+                var reloaded = new SettingsStore(path);
+                using (var f = new Fixture(reloaded, initialNativeVolume: "5"))
+                {
+                    Assert.True(f.Player.Exclusive);
+                    Assert.Equal(18, f.Player.Volume);
+                    Assert.True(f.Player.Muted);
+                    Assert.Equal(65, reloaded.Current.SharedVolume);
+                    Assert.Equal(18, reloaded.Current.ExclusiveVolume);
+                    f.Player.SetExclusive(false);
+                    f.Ready();
+                    Assert.Equal(65, f.Player.Volume);
+                    Assert.Equal(65, reloaded.Current.Volume);
+                    f.Player.SetVolume(42, true);
+                    Assert.Equal(42, reloaded.Current.SharedVolume);
+                    Assert.Equal(18, reloaded.Current.ExclusiveVolume);
+                    reloaded.WriteNow();
+                }
+                var saved = JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.AppSettings)!;
+                Assert.False(saved.Exclusive);
+                Assert.Equal(42, saved.SharedVolume);
+                Assert.Equal(18, saved.ExclusiveVolume);
+            }, CancellationToken.None);
+        }
+        finally
+        {
+            // 等防抖写入结束后再清理，避免计时器重建已删掉的临时文件。
+            await Task.Delay(1300);
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public Task RecreatesDecoderAtCuePositionAndRestoresVolumeBeforePlaying() => Run(f =>
     {
@@ -236,18 +360,20 @@ public sealed class OutputModeSwitchTests
         public List<string> Errors { get; } = [];
         public FakeEngine Current => Engines[^1];
 
-        public Fixture()
+        public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100")
         {
             _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000 };
             _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000 };
             Player = new PlayerService(this, options =>
             {
                 var engine = new FakeEngine(options);
+                if (Engines.Count == 0) engine.Properties["ao-volume"] = initialNativeVolume;
                 Engines.Add(engine);
                 return engine;
             });
             Player.Error += Errors.Add;
-            Player.SetVolume(23, false);
+            if (settings is null) Player.SetVolume(23, false);
+            else OutputSettingsBinding.Attach(Player, settings);
             Player.Restore([new(1, false), new(2, true)], 0, true, RepeatMode.All, null, TimeSpan.FromSeconds(12.345));
             Player.PrepareRestored();
             Current.Emit(Mpv.EventId.FileLoaded);

@@ -189,3 +189,15 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - MCP 保持 **21 工具**，兼容性新增 `get_diagnostics.lyricsPanel`（未创建面板时仅 `created: false`；查询不创建控件/读歌词）；报告可见性、歌词索引/偏移、跟随/手动/按住、恢复倒计时、定位线和逻辑像素布局。复用 `playback seek`，工具说明、seconds Schema 描述、中英文提示、需求/设计/使用文档和内存业务验证同步；输入字段/约束无破坏性变化，开发/正式同套代码，无测试专用开关。
 - **延期**：真实 Windows 窗口截图/交互及实际 DPI/多屏、正常播放观感、最终 EXE 冷启动/MCP 管道验证、NativeAOT 发布验证和真实音频设备测试。Headless 验证几何与事件，不能代替上述实机验收；本轮没有发布 AOT，也没有用既往日志冒充新版本运行结果。
 - **遵守游戏期间限制，未启动客户端/未访问真实音频设备/未重启**；没有改变用户音量、静音、输出模式或操作游戏。构建前后均未发现 JeekMusic 客户端进程，保持停止；须等待主对话明确解除后才可补充启动/UI/音频验收。
+
+
+## 艺术家分组与可见字母（2026-10-24）
+
+- 艺术家栏按现有 `ArtistInfo.IndexLetter` 排为 A–Z / #，组内稳定沿用快照排序；将数字、符号和未知艺术家合成末尾 #。首行附字母标题与分隔，不添加选择项；头像/数量/右键/固定艺术家仍使用原 ArtistInfo 和导航业务。保留 VirtualizingStackPanel。
+- 顶部固定“当前字母 / Current letter”与右侧索引同步。索引与滚动条分列、索引只含存在的组。当前字母读取 ScrollContentPresenter 中顶部实际可见容器（含组标题），剩余不超过 0.5 个逻辑像素的上一行不计；与选中项及滚动百分比无关。索引点击实现目标后按真实坐标最多校正 4 次；末组不能顶齐时高亮实际顶部的组。直接输入/源刷新取消旧目标，正常滚动不改选择或播放。
+- 新增 **10 项 ArtistListTests**：内存 SQLite、模拟 FakeEndpointVolume、显式注入 FakeEngine 工厂、Avalonia Headless 实际 MainWindow XAML/主题/控件布局。每项断言没有创建任何解码引擎且没有模拟端点音量写入；没有调用默认 AppServices、Program、Shell、MCP 管道或音频文件。覆盖中文拼音/英文/数字符号/未知、标题非选择项、键盘选择和导航、240 A / 2 B / 75 M / 极短 Z/#、首中尾索引真实点击及几何、末组夹紧、滚轮/滚动条 Value/实际 Thumb 拖动/触摸手势、边界部分行、选择独立性、快速连续点击/旧回调取消、筛选/刷新/清空/单组、搜索隐藏/重开，以及全部 27 组在深浅主题、760/1300 窗宽、480/900 窗高、100%/150%/200% LayoutTransform 和 Headless DPI 变化下的提示/索引/滚动条几何。未实现行不参与可见范围，测试验证实际容器数量远小于艺术家总数。
+- 已核查限定回归夹具：PlaybackShortcutTests 使用模拟引擎/端点，McpSessionTests 只使用内存协议委托，LocalizationTests 仅检查资源。最终命令（设置临时 `JEEKMUSIC_DATA`）：`dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -c Release --filter "FullyQualifiedName~ArtistListTests|FullyQualifiedName~PlaybackShortcutTests|FullyQualifiedName~McpSessionTests|FullyQualifiedName~LocalizationTests" --no-restore --verbosity minimal`：**77 项通过，0 失败/跳过**。未运行 solution/App 全集或 RealDecoder。
+- `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release --no-restore`：**0 警告、0 错误**；普通 build 按现有流程同步 `output/`，未运行 EXE、未额外发布 AOT。`git diff --check` 通过。
+- MCP 兼容性新增 `get_diagnostics.artistList`：实际分组及组首位置/数量、当前字母、可见艺术家范围、滚动偏移/视口高度、已实现容器数量与有限定位状态。窗口未创建/关闭为 `created: false`，查询不创建窗口；隐藏期间可见位置保留上次布局值，源变化清空旧值，重开重新读取。仍为 **21 工具**，input Schema 仍为空对象且拒绝额外参数；工具描述、使用文档、内存 McpTools 验证同步，开发/正式使用相同代码，无新增控制工具或开发开关。
+- **延期实机项**：真实 Windows 原生视觉截图、鼠标/触屏实际体验、系统 DPI 与多屏、最终 EXE 冷启动及 MCP stdio/管道验收。Headless DPI/几何/手势测试不能代替原生视觉与真实硬件验收。本任务未触及音频功能，无需真实音频验证；游戏限制解除前仍禁止所有启动/桥接与真实设备测试。
+- **本轮未启动客户端、未访问真实音频设备、未重启**，未改变设备音量/静音/输出模式、未操作游戏。进程只读检查确认无 JeekMusic 客户端，保持关闭；按用户指示延期 AGENTS.md 的重启惯例，等待主对话明确解除。

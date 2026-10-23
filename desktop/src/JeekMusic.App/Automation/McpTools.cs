@@ -50,7 +50,7 @@ public sealed class McpTools
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
         Tool("remove_folder", "Schedule removing a folder from the library; never deletes music files. Response means queued, not completed.", "\"folderId\":{\"type\":\"integer\"}", ["folderId"], destructive: true),
         Tool("rescan_library", "Schedule incremental scan (default) or full rebuild (full=true) in the normal library work queue. Response means queued, not completed. Observe get_status and logs for scan progress/errors.", "\"full\":{\"type\":\"boolean\"}", []),
-        Tool("get_diagnostics", "Read version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state, lyricsPanel follow/manual/position/layout diagnostics (created=false before panel creation), and latest playback error for development or release troubleshooting. No arguments.", "", [], true),
+        Tool("get_diagnostics", "Read version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state, lyricsPanel follow/manual/position/layout diagnostics (created=false before panel creation), artistList groups/current letter/visible range diagnostics (created=false before window creation), and latest playback error for development or release troubleshooting. No arguments.", "", [], true),
         Tool("get_logs", "Read the tail of app or playback logs (default app, 50 lines, at most 200 lines / 64 KiB). No arbitrary file access.",
             "\"kind\":{\"type\":\"string\",\"enum\":[\"app\",\"playback\"]},\"lines\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200}", [], true),
         Tool("show_window", "Show and activate the main player window. Other MCP tools do not activate windows.", "", [])
@@ -204,7 +204,8 @@ public sealed class McpTools
                     ["appDirectory"] = AppPaths.AppDir, ["logsDirectory"] = AppPaths.LogsDir,
                     ["engineReady"] = p.EngineReady, ["lastPlaybackError"] = _lastPlayerError,
                     ["status"] = Status(), ["output"] = Output(),
-                    ["lyricsPanel"] = app.LyricsPanel?.Diagnostics() ?? new JsonObject { ["created"] = false }
+                    ["lyricsPanel"] = app.LyricsPanel?.Diagnostics() ?? new JsonObject { ["created"] = false },
+                    ["artistList"] = app.ArtistList?.Diagnostics() ?? new JsonObject { ["created"] = false }
                 };
             case "get_logs": return Logs(a);
             case "show_window": Shell.Current.ShowMainWindow(); return new JsonObject { ["shown"] = true };

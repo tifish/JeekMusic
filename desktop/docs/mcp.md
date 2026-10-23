@@ -55,7 +55,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |
-| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情和 `lyricsPanel` 跟随诊断 |
+| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情、`lyricsPanel` 跟随诊断和 `artistList` 分组/可见位置诊断 |
 | `get_logs` | 可选 `kind`（`app` / `playback`）、`lines`（默认 50、最大 200）；读取日志尾部最多 64 KiB，不接受任意文件路径 |
 | `show_window` | 无参数。显示并激活主窗口 |
 
@@ -77,6 +77,19 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 现有 `playback {"action":"seek","seconds":...}` 即为定位能力：与拖动进度条及左右 ±5 秒共用 PlayerService，显式 seek 立即退出手动浏览、同步可见的时间轴歌词，即使仍在同一句；保留原播放/暂停及 CUE 语义。无需新增歌词 seek 工具。纯文本不自动定位。输入 Schema 的字段、范围及空对象约束保持不变，seek 工具与 `seconds` 参数描述同步说明歌词行为。
 
 用户禁止启动客户端或正在进行游戏隔离验证时，**不要调用 MCP 客户端脚本，包括只读查询和 `--startup-only`**：stdio 桥接仍可能冷启动客户端。此时只运行明确注入模拟引擎/端点的测试；Headless 的内存业务调用不经过 stdio/管道，不启动客户端。
+
+### 艺术家分组诊断
+
+`get_diagnostics.artistList` 是兼容性新增，开发/正式版本同样提供。窗口未创建或已关闭时仅返回 `created: false`；查询不创建窗口或控件。窗口已创建后返回：
+
+- `created`、`visible`、`artistCount`；`groups` 按显示顺序给出 `letter`、`firstIndex`、`count`，索引均为过滤后的零基艺术家位置，不计标题。
+- `currentLetter`：视口顶部第一条仍可见的艺术家（含其组标题）的现有 `IndexLetter`，空表/尚无布局为 null。仅余 0.5 个逻辑像素及以下的行不计入顶部；末组无法顶齐时仍以实际顶部为准，不代表所选艺术家或上次点击目标。
+- `firstVisibleIndex`、`lastVisibleIndex`：实际已布局且与视口相交的艺术家范围；无布局/空表为 -1。`realizedCount` 是虚拟化实现的容器数量，不是全库数量。
+- `scrollOffsetY`、`viewportHeight`：Avalonia 逻辑像素；`positionPending` 表示索引点击后的有限布局校正尚未完成。隐藏期间不主动滚动/刷新可见范围，这些位置字段保留上次布局值；源变化清空旧位置，重新显示后按新布局更新。
+
+工具数量仍为 21，`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，没有新增控制工具。Headless 测试直接调用注入模拟服务的内存 McpTools，不连接 stdio 或命名管道；游戏期间仍禁止任何可能冷启动的 MCP 桥接。
+
+使用：艺术家栏按 A–Z / # 显示组标题；滚轮、触摸、拖动滚动条或键盘导航时查看顶部“当前字母 / Current letter”和右侧高亮。点击右侧字母尽量将组标题置顶；末尾内容不足一屏时，高亮显示真实顶部的组。索引跳转和普通滚动不会改变当前选择或播放。数字、符号与未知艺术家遵循现有规则归 #；搜索仍使用原搜索页，智能筛选会刷新艺术家及索引。
 
 ### 音量输出语义
 

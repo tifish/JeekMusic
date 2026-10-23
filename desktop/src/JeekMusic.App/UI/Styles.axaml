@@ -6,8 +6,8 @@
     </Styles.Resources>
 
     <Style Selector="ListBox.artist-list > ListBoxItem">
-        <Setter Property="Padding" Value="8,10" />
-        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Margin" Value="0" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
@@ -27,11 +27,19 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="TextBlock.artist-index">
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Opacity" Value="0.55" />
     </Style>
     <Style Selector="TextBlock.artist-index:pointerover">
         <Setter Property="Opacity" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.artist-index.current">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
+        <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
     </Style>
 
     <!-- 列表模板从所属控件读取此附加属性；统一让滚动区域为完整宽度的滚动条留出空间。 -->

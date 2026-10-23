@@ -198,7 +198,9 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var filter = ListBuilder.FilterOf(Snapshot, S.TagFilter);
         // 筛选时没有这类歌的艺术家不显示（需求 M-6）
-        Artists = filter is null ? Snapshot.Artists : Snapshot.Artists.Where(a => a.Tracks.Any(filter)).ToList();
+        // Keep snapshot SortKey order within each group; symbols/digits and unknown share one final # group.
+        Artists = Snapshot.Artists.Where(a => filter is null || a.Tracks.Any(filter))
+            .OrderBy(a => a.IndexLetter == "#" ? "[" : a.IndexLetter, StringComparer.Ordinal).ToList();
     }
 
     // ── 内容区 ──

@@ -58,10 +58,8 @@ public partial class MainWindow : Window
         OutputButton.Click += (_, _) => ShowOutputMenu();
         ArtistList.ContextRequested += OnArtistContextRequested;
         LetterIndex.PointerPressed += OnLetterIndexPressed;
-        _vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(MainViewModel.Artists)) LetterIndex.ItemsSource = _vm.Artists.Select(a => a.IndexLetter).Distinct().ToList();
-        };
+        _app.ArtistList = ArtistList;
+        Closed += (_, _) => { if (ReferenceEquals(_app.ArtistList, ArtistList)) _app.ArtistList = null; };
 
         InitExtras();
         InitNav();
@@ -222,9 +220,9 @@ public partial class MainWindow : Window
 
     void OnLetterIndexPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.Source is not TextBlock { Text: { } letter }) return;
-        var artist = _vm.Artists.FirstOrDefault(a => a.IndexLetter == letter);
-        if (artist is not null) ArtistList.ScrollIntoView(artist);
+        if ((e.Source as Visual)?.FindAncestorOfType<TextBlock>(includeSelf: true)?.DataContext is not ArtistLetter group) return;
+        ArtistList.NavigateToLetter(group.Letter);
+        e.Handled = true;
     }
 
     void OnSearchArtistClick(object? sender, RoutedEventArgs e)

@@ -139,3 +139,13 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - 全功能键盘与辅助技术验收，以及长时间播放与大曲库连续文件变更压力测试。
 
 本机生成物位于 `desktop/artifacts/JeekMusic-desktop-preview-win-x64.zip`，解压后运行 `JeekMusic/JeekMusic.exe`。Android 调试 APK 位于 `mobile/app/build/outputs/apk/debug/`。生成物不纳入源码提交。
+
+
+## 方向键进度与音量回归（2026-10-23）
+
+- `dotnet test desktop/JeekMusic.slnx --verbosity minimal`：177 项通过（Core 63、App 114），包含 38 项 `PlaybackShortcutTests`。使用独立 `JEEKMUSIC_DATA`；音量操作用模拟端点，不调节真实系统音量。
+- 覆盖主窗口/迷你播放器真实构造与事件接入、歌曲表格隧道路由、左右 5 秒、上下 5 个百分点、Z/X、编辑/菜单/列表/树/滑块焦点保护、修饰键及 Alt 导航、连续 seek、CUE 偏移、暂停/队列/输出门控、设备外部音量更新、0/100 和静音保留。
+- `dotnet build desktop/src/JeekMusic.App -c Release --verbosity minimal`：0 警告、0 错误；清理混用输出产物后，`python desktop/tools/test-mcp.py` 通过真正 `output/JeekMusic.exe` 完成冷启动、多客户端、播放/队列、输入校验、正常退出与重启持久化回归。新增曲尾/起点 seek 检查，等待 2.2 秒后确认真实暂停位置及队列不变。
+- 真实 mpv/WASAPI 静音 WAV 测试发现曲尾前 100ms 仍可能提前换歌，终点因此统一保护到 `max(0, duration - 1s)`；正常播放自然到尾仍继续队列。另以独立 6 分钟静音 WAV/CUE 验证第二分轨的 0/20 秒请求落在分轨相对 0/19 秒，保留暂停及当前曲目。没有解除系统或用户客户端静音。
+- MCP 保持 21 个工具，复用已有 `playback seek` 和 `set_volume`；没有增加相对参数或键盘专用工具。seek 描述、seconds Schema 说明和使用文档同步；未加载、不可 seek 或输出保护中返回业务错误。
+- 限制：本轮未重新发布 Native AOT，也未完成 Windows 原生按键/截图目测（Computer Use 返回 `native pipe is unavailable`）；主/迷你窗口已由 Avalonia Headless 验证。构建目录中旧的 app-local `hostfxr.dll` 曾导致框架依赖 EXE 错认 .NET 根目录，已备份旧输出并干净重建恢复；长期产物隔离另项处理。

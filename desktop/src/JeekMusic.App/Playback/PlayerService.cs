@@ -263,6 +263,9 @@ public sealed class PlayerService : IDisposable
 
     public void SetShuffle(bool enabled) => Queue.SetShuffle(enabled);
 
+    TimeSpan? _pendingSeek;
+    long _pendingSeekDeadline;
+
     /// <summary>当前这首里的位置（CUE 虚拟歌曲从这首的开头算）。</summary>
     public TimeSpan Position
     {
@@ -270,19 +273,39 @@ public sealed class PlayerService : IDisposable
         {
             if (_mpv is null || IsIdle || CurrentTrack is null || _restoringOutput) return _restorePosition;
             var pos = _mpv.GetDouble("time-pos") ?? 0;
-            return TimeSpan.FromSeconds(Math.Max(0, pos - (CurrentTrack.StartMs ?? 0) / 1000.0));
+            var position = TimeSpan.FromSeconds(Math.Max(0, pos - (CurrentTrack.StartMs ?? 0) / 1000.0));
+            // mpv 的 seek 异步完成。连续按键从已接受的目标累加，而不是旧的 time-pos。
+            if (_pendingSeek is { } pending)
+            {
+                if (Environment.TickCount64 >= _pendingSeekDeadline ||
+                    _mpv.Get("seeking") == "no" && Math.Abs((position - pending).TotalSeconds) < 0.1)
+                    _pendingSeek = null;
+                else return pending;
+            }
+            return position;
         }
     }
 
     public TimeSpan Duration => TimeSpan.FromMilliseconds(CurrentTrack?.DurationMs ?? 0);
 
+    public bool CanSeek => CurrentTrack is not null && Duration > TimeSpan.Zero && _mpv is not null &&
+        !IsIdle && !_restoringOutput && _mpv.Get("seekable") == "yes";
+
+    public void SeekBy(TimeSpan offset) => Seek(Position + offset);
+
     public void Seek(TimeSpan position)
     {
-        if (CurrentTrack is null) return;
-        if (_mpv is null || IsIdle) { _restorePosition = position; LoadCurrent(play: _wantPlaying, start: position); return; }
-        var target = position.TotalSeconds + (CurrentTrack.StartMs ?? 0) / 1000.0;
-        _mpv.TryRun("seek", Mpv.Num(target), "absolute+exact");
-        if (_restoringOutput) _restorePosition = position;
+        if (!CanSeek) return;
+        var start = (CurrentTrack!.StartMs ?? 0) / 1000.0;
+        var duration = Duration.TotalSeconds;
+        if (_mpv!.GetDouble("duration") is { } fileDuration && fileDuration > 0)
+            duration = Math.Min(duration, Math.Max(0, fileDuration - start));
+        // 留出 1s，避免直接跳到 EOF / CUE end 导致换歌；自然播放到尾仍按队列规则结束。
+        position = TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, Math.Max(0, duration - 1)));
+        var target = position.TotalSeconds + start;
+        if (_mpv.TryRun("seek", Mpv.Num(target), "absolute+exact") < 0) return;
+        _pendingSeek = position;
+        _pendingSeekDeadline = Environment.TickCount64 + 2000;
         Seeked?.Invoke();
     }
 
@@ -414,6 +437,14 @@ public sealed class PlayerService : IDisposable
     public bool VolumeAvailable => _endpoint?.Volume is not null && (!Exclusive || HardwareVolume == true) &&
         !OutputPending && _boundDeviceId is not null;
 
+    /// <summary>相对调节先读取设备实时值；不可调时无操作，始终保留本播放器和系统静音。</summary>
+    public void AdjustVolume(double percentagePoints)
+    {
+        RefreshOutput();
+        if (!VolumeAvailable || !double.IsFinite(percentagePoints)) return;
+        SetVolume(Math.Clamp(Volume + percentagePoints, 0, 100), Muted);
+    }
+
     /// <summary>显式音量操作写当前绑定端点；muted 始终只控制 mpv 软件静音。</summary>
     public bool SetVolume(double volume, bool muted)
     {
@@ -536,6 +567,7 @@ public sealed class PlayerService : IDisposable
 
     void LoadCurrent(bool play, TimeSpan? start = null)
     {
+        _pendingSeek = null;
         _wantPlaying = play;
         var entry = Queue.Current;
         var track = entry is { } e ? _tracks.ById(e.TrackId) : null;
@@ -667,6 +699,7 @@ public sealed class PlayerService : IDisposable
     void OnFileStarted(long entryId)
     {
         if (entryId != _nextEntry || entryId < 0) return;
+        _pendingSeek = null;
         // mpv 自动播到了下一首：队列前进一首，删掉播完的那条，再放新的下一首
         _inFileStarted = true;
         try

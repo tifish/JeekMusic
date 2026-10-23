@@ -494,7 +494,7 @@ public sealed class OutputModeSwitchTests
         }, CancellationToken.None);
     }
 
-    sealed class FakeEndpointVolume : IEndpointVolume
+    internal sealed class FakeEndpointVolume : IEndpointVolume
     {
         public readonly Dictionary<string, double> Volumes = new() { ["render-device"] = 55 };
         public readonly List<(string, double)> Writes = [];
@@ -521,7 +521,7 @@ public sealed class OutputModeSwitchTests
         }
     }
 
-    sealed class Fixture : ITrackSource, IDisposable
+    internal sealed class Fixture : ITrackSource, IDisposable
     {
         readonly string _path = Path.GetTempFileName();
         readonly Track _track;
@@ -568,12 +568,12 @@ public sealed class OutputModeSwitchTests
         public void Dispose() { Player.Dispose(); File.Delete(_path); }
     }
 
-    sealed class FakeEngine : IPlaybackEngine
+    internal sealed class FakeEngine : IPlaybackEngine
     {
-        public Dictionary<string, string> Properties { get; } = new() { ["ao-volume"] = "100", ["ao-mute"] = "no", ["current-ao"] = "wasapi", ["playlist-count"] = "0" };
+        public Dictionary<string, string> Properties { get; } = new() { ["seekable"] = "yes", ["seeking"] = "no", ["ao-volume"] = "100", ["ao-mute"] = "no", ["current-ao"] = "wasapi", ["playlist-count"] = "0" };
         public List<string[]> Commands { get; } = [];
         public List<string> Operations { get; } = [];
-        public bool Disposed, RejectMute;
+        public bool Disposed, RejectMute, RejectSeek;
         public FakeEngine(IEnumerable<(string, string)> options)
         {
             foreach (var (key, value) in options) Properties[key] = value;
@@ -604,6 +604,7 @@ public sealed class OutputModeSwitchTests
         public int TryRun(params string[] args)
         {
             Commands.Add(args);
+            if (args[0] == "seek") return RejectSeek ? -1 : 0;
             if (args[0] == "loadfile")
             {
                 var count = args[2] == "replace" ? 1 : (int)GetLong("playlist-count")! + 1;

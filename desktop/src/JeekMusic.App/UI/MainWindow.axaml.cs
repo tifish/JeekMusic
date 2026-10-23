@@ -65,7 +65,7 @@ public partial class MainWindow : Window
 
         InitExtras();
         InitNav();
-        PlaybackShortcuts.Attach(this, _app.Player.Previous, _app.Player.Next);
+        PlaybackShortcuts.Attach(this, _app.Player, Progress, VolumeSlider);
         KeyDown += OnWindowKeyDown;
         AddHandler(PointerPressedEvent, OnMouseButtons, RoutingStrategies.Tunnel);
         PropertyChanged += (_, e) =>
@@ -249,7 +249,6 @@ public partial class MainWindow : Window
     {
         var inText = FocusManager?.GetFocusedElement() is TextBox;
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         switch (e.Key)
         {
             case Key.Space when !inText:
@@ -265,11 +264,11 @@ public partial class MainWindow : Window
                 LocatePlaying();
                 e.Handled = true;
                 break;
-            case Key.Left when alt:
+            case Key.Left when e.KeyModifiers == KeyModifiers.Alt:
                 _vm.GoBackCommand.Execute(null);
                 e.Handled = true;
                 break;
-            case Key.Right when alt:
+            case Key.Right when e.KeyModifiers == KeyModifiers.Alt:
                 _vm.GoForwardCommand.Execute(null);
                 e.Handled = true;
                 break;

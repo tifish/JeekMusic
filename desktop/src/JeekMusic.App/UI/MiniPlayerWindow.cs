@@ -17,7 +17,7 @@ public partial class MiniPlayerWindow : Window
     public MiniPlayerWindow(PlayerViewModel vm, bool topmost) : this()
     {
         DataContext = vm;
-        PlaybackShortcuts.Attach(this, vm.Service.Previous, vm.Service.Next);
+        PlaybackShortcuts.Attach(this, vm.Service);
         Topmost = topmost;
         PinButton.IsChecked = topmost;
         PinButton.IsCheckedChanged += (_, _) => { Topmost = PinButton.IsChecked == true; TopmostChanged?.Invoke(Topmost); };

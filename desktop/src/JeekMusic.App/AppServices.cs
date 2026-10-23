@@ -33,16 +33,19 @@ public sealed class AppServices : IDisposable
     /// <summary>启动参数：--tray 表示开机启动时直接隐藏到托盘；其余是要打开的文件。</summary>
     public IReadOnlyList<string> Args { get; set; } = [];
 
-    public AppServices()
+    public AppServices() : this(null, null, null) { }
+
+    // 窗口集成测试注入临时数据库和模拟音频设备，避免修改真实曲库或系统音量。
+    internal AppServices(SettingsStore? settings, LibraryDb? db, Func<ITrackSource, PlayerService>? createPlayer)
     {
         Current = this;
         TagReader.Configure();
-        Settings = new SettingsStore();
+        Settings = settings ?? new SettingsStore();
         L.Initialize(Settings.Current.Language);
-        Db = new LibraryDb(AppPaths.Database);
+        Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
         Playlists = new PlaylistService(Library);
-        Player = new PlayerService(Library);
+        Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
         var s = Settings.Current;
         OutputSettingsBinding.Attach(Player, Settings);
         Player.SetDevice(s.OutputDevice);

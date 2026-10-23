@@ -191,6 +191,19 @@ def main():
                 wait_for(other, "get_status", lambda s: not s["playing"])
                 call(client, "playback", action="seek", seconds=5)
                 wait_for(other, "get_status", lambda s: abs(s["positionSeconds"] - 5) < 0.3)
+                # Shared seek service clamps EOF without advancing a paused queue.
+                call(client, "playback", action="seek", seconds=30)
+                time.sleep(2.2)  # Exceed the optimistic seek target timeout; check real decoder position.
+                end = call(other, "get_status")
+                assert abs(end["positionSeconds"] - 29) < 0.05 and not end["playing"], end
+                assert end["track"]["id"] == ids[0] and end["queueIndex"] == 0, end
+                assert client.call("playback", {"action": "seek", "seconds": 31})["isError"]
+                assert client.call("playback", {"action": "seek", "seconds": -1})["isError"]
+                call(client, "playback", action="seek", seconds=0)
+                time.sleep(0.2)
+                start = call(other, "get_status")
+                assert start["positionSeconds"] < 0.05 and not start["playing"], start
+                call(client, "playback", action="seek", seconds=5)
                 call(client, "playback", action="resume")
                 wait_for(other, "get_status", lambda s: s["playing"])
                 call(client, "playback", action="next")

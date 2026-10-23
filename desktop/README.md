@@ -14,6 +14,16 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 需求：[requirements.md](docs/requirements.md)。设计：[design.md](docs/design.md)。当前验证结果及未验收项：[validation.md](docs/validation.md)。性能目标和设备兼容性仍以验证报告为准。
 
+## 窗口方向键
+
+主窗口和迷你播放器：← / → 快退 / 快进 5 秒，↑ / ↓ 设备主音量增减 5 个百分点，Z / X 上一首 / 下一首。仅无修饰键生效；Alt+← / → 导航、Ctrl+Alt+← / → 全局切歌保持不变。
+
+歌曲表格普通选中时左右键调整进度，上下键仍选择歌曲。输入/编辑控件与菜单不触发这些快捷键；导航树保留方向键，其他列表保留上下键。进度滑块左右键统一为 5 秒跳转，上下键调音量；音量滑块上下键统一为 5 个百分点，左右键保留滑块原有步进。每次事件只执行一次。
+
+跳转使用当前分轨位置，暂停时仍保持暂停。不可 seek、未加载或输出保护中无操作；终点最多到曲尾前 1s，避免直接跳至 EOF，正常播放到尾仍按队列规则继续。音量先读取设备实时值，限制 0–100；不可调时无操作，不解除应用或系统静音。
+
+In both windows, Left/Right seek by 5 seconds and Up/Down adjust the current endpoint volume by 5 percentage points. Z/X select previous/next. Editing, menus and list/tree navigation keep their own keys. The progress slider uses Left/Right to seek and Up/Down for volume; the volume slider keeps its normal Left/Right step and uses Up/Down for 5-point changes. Seeking preserves pause and CUE boundaries; volume changes preserve mute and output safety gates.
+
 ## 音量与独占输出
 
 共享与独占都使用当前播放设备的端点主音量，共享下也影响同设备其他程序。外部系统音量会同步到滑块；启动、切换设备/模式和退出都不恢复旧音量。静音按钮只静音 JeekMusic，系统静音独立显示。

@@ -170,8 +170,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     {
         _userSeeking = false;
         _player.Seek(TimeSpan.FromSeconds(seconds));
-        PositionSeconds = seconds;
-        PositionText = Text.Duration(TimeSpan.FromSeconds(seconds));
+        UpdatePosition();
     }
 
     public void SeekTo(double seconds) => EndSeek(seconds);

@@ -30,8 +30,8 @@ public sealed class McpTools
         Tool("get_track", "Read a track's metadata, stable key, local file path and smart tags by local track ID.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
         Tool("play_tracks", "Play trackIds in order starting at startIndex (default 0). Preserves pending manually queued songs, like the UI. Validates all tracks before changing playback.",
             "\"trackIds\":" + Ids + ",\"startIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":999},\"shuffle\":{\"type\":\"boolean\"}", ["trackIds"]),
-        Tool("playback", "Control playback. seek uses seconds relative to the current track, including CUE tracks. previous follows UI behavior: restart if past 3 seconds. Returns an immediate state snapshot.",
-            "\"action\":{\"type\":\"string\",\"enum\":[\"resume\",\"pause\",\"toggle\",\"next\",\"previous\",\"seek\"]},\"seconds\":{\"type\":\"number\",\"minimum\":0,\"maximum\":31536000}", ["action"]),
+        Tool("playback", "Control playback. seek uses seconds relative to the current track, including CUE tracks; requires a loaded seekable track and ready output. Preserves play/pause and clamps the endpoint to 1s before track end to avoid seeking into EOF. previous follows UI behavior: restart if past 3 seconds. Returns an immediate state snapshot.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"resume\",\"pause\",\"toggle\",\"next\",\"previous\",\"seek\"]},\"seconds\":{\"type\":\"number\",\"minimum\":0,\"maximum\":31536000,\"description\":\"Absolute seconds from the current track/CUE start; requires loaded seekable audio and ready output. Values beyond duration fail; the endpoint is clamped to max(0, duration - 1 second).\"}", ["action"]),
         Tool("get_queue", "Read the actual play order, zero-based indices, current index and manual entries. Paginated.", Page, [], true),
         Tool("edit_queue", "Edit the queue: add/next require trackIds, remove/jump require index, move requires index and toIndex; clear needs no other arguments. Indices are zero-based. Adding to an empty queue starts playback, like the UI.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"next\",\"remove\",\"jump\",\"move\",\"clear\"]},\"trackIds\":" + Ids + ",\"index\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647},\"toIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"]),
@@ -110,6 +110,7 @@ public sealed class McpTools
                         var seconds = Required(a, "seconds").GetValue<double>();
                         if (p.CurrentTrack is null) throw new ArgumentException("No current track");
                         if (p.Duration.TotalSeconds > 0 && seconds > p.Duration.TotalSeconds) throw new ArgumentException("seconds exceeds track duration");
+                        if (!p.CanSeek) throw new ArgumentException("Current track is not seekable or output is not ready");
                         p.Seek(TimeSpan.FromSeconds(seconds)); break;
                 }
                 return Status();

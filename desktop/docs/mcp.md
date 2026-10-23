@@ -39,7 +39,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `search_tracks` | `query` 可省略或留空以浏览全库；支持界面相同的标题、艺术家、专辑、文件名和拼音首字母搜索；可按 `folderId`、`artistKey`、`albumKey` 同时筛选；支持分页。结果包含 `artistKeys`、`albumKey` |
 | `get_track` | `trackId`。详细元数据、音频文件路径、稳定键和智能标签，包括 CUE 分轨 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
-| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点。上一首遵循播放超过 3 秒先回到开头的规则 |
+| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲且输出已就绪，否则返回业务错误。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。上一首遵循播放超过 3 秒先回到开头的规则 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |

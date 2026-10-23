@@ -343,8 +343,8 @@ public sealed class SettingsWindow : Window
                 : box));
         }
         panel.Children.Add(SubHeading(L.T("窗口里的快捷键")));
-        panel.Children.Add(Note(L.T("空格 播放 / 暂停　← / → 或 Z / X 上一首 / 下一首　Ctrl+F 搜索　Ctrl+L 定位到正在播放\nAlt+← / → 后退 / 前进　F5 重新扫描　回车 播放选中的歌　F2 改名　Delete 删除")));
-        panel.Children.Add(Note(L.T("输入文字时不切歌；方向键用于调节进度、音量或展开文件夹时，可用 Z / X 切歌。")));
+        panel.Children.Add(Note(L.T("空格 播放 / 暂停　← / → 快退 / 快进 5 秒　↑ / ↓ 设备音量增减 5 个百分点　Z / X 上一首 / 下一首　Ctrl+F 搜索　Ctrl+L 定位到正在播放\nAlt+← / → 后退 / 前进　F5 重新扫描　回车 播放选中的歌　F2 改名　Delete 删除")));
+        panel.Children.Add(Note(L.T("输入/编辑控件和菜单保留原按键；列表上下键仍选择条目，导航树保留方向键。进度滑块左右调进度、上下调音量；音量滑块上下增减 5 个百分点，左右保留原步进。")));
         return panel;
     }
 

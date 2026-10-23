@@ -1,5 +1,39 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Styles.Resources>
+        <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
+        <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
+    </Styles.Resources>
+
+    <Style Selector="ListBox.artist-list > ListBoxItem">
+        <Setter Property="Padding" Value="8,10" />
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.artist-list > ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
+    </Style>
+    <Style Selector="Border.artist-selection">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ListBox.artist-list > ListBoxItem:selected Border.artist-selection">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.artist-name">
+        <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="ListBox.artist-list > ListBoxItem:selected TextBlock.artist-name">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.artist-index">
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="TextBlock.artist-index:pointerover">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
+    </Style>
+
     <!-- 列表模板从所属控件读取此附加属性；统一让滚动区域为完整宽度的滚动条留出空间。 -->
     <Style Selector=":is(Control)">
         <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />

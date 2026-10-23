@@ -86,26 +86,51 @@
             <GridSplitter Grid.Column="1" x:Name="NavSplitter" Width="4" Background="Transparent" ResizeDirection="Columns" />
 
             <!-- 艺术家栏：只在选中"艺术家"时出现（需求 W-4） -->
-            <Grid Grid.Column="2" Width="230" IsVisible="{Binding ShowArtistPane}" ColumnDefinitions="*,Auto">
-                <ListBox x:Name="ArtistList" ItemsSource="{Binding Artists}" SelectedItem="{Binding SelectedArtist}" Background="Transparent">
+            <Border Grid.Column="2" Width="230" IsVisible="{Binding ShowArtistPane}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto">
+                <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="14,14,12,12">
+                    <TextBlock Text="{ui:Tr &apos;艺术家&apos;}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Border Grid.Column="1" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}" CornerRadius="10" Padding="8,3" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Artists.Count}" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                </Grid>
+                <ListBox Grid.Row="1" x:Name="ArtistList" Classes="artist-list" ItemsSource="{Binding Artists}" SelectedItem="{Binding SelectedArtist}"
+                         Background="Transparent" BorderThickness="0" Padding="0" Margin="6,0,0,8">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="lib:ArtistInfo">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" x:Name="ArtistName" />
-                                <TextBlock Grid.Column="1" Text="{Binding Tracks.Count}" Classes="secondary" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            <Grid ToolTip.Tip="{Binding DisplayName}">
+                                <Border Classes="artist-selection" Width="3" Height="26" CornerRadius="2" HorizontalAlignment="Left" Margin="-8,0,0,0"
+                                        Background="{DynamicResource ArtistAccentBrush}" />
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Border Width="38" Height="38" CornerRadius="19" ClipToBounds="True" Background="{DynamicResource ArtistAccentSubtleBrush}">
+                                        <Panel>
+                                            <TextBlock Text="{Binding AvatarText}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource ArtistAccentBrush}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Image x:Name="ArtistAvatarImage" Stretch="UniformToFill" Loaded="OnArtistAvatarLoaded" Unloaded="OnArtistAvatarUnloaded"
+                                                   DataContextChanged="OnArtistAvatarDataContextChanged" />
+                                        </Panel>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayName}" Classes="artist-name" FontSize="13" TextTrimming="CharacterEllipsis" x:Name="ArtistName" />
+                                        <TextBlock Text="{Binding TrackCountText}" Classes="secondary" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <!-- 字母索引（同移动端 A-1） -->
-                <ItemsControl Grid.Column="1" x:Name="LetterIndex" Margin="0,4,2,4" VerticalAlignment="Center">
+                <Viewbox Grid.Row="1" Grid.Column="1" Margin="2,4,4,4" VerticalAlignment="Center" Stretch="Uniform" StretchDirection="DownOnly">
+                <ItemsControl x:Name="LetterIndex">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                            <TextBlock Text="{Binding}" FontSize="10" Classes="secondary" Padding="4,1" HorizontalAlignment="Center" Background="Transparent" />
+                            <TextBlock Text="{Binding}" FontSize="10" Classes="artist-index" Padding="3,2" HorizontalAlignment="Center" Background="Transparent" Cursor="Hand" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </Viewbox>
             </Grid>
+            </Border>
 
             <!-- 内容区 -->
             <Grid Grid.Column="3" Margin="8,0,8,0">

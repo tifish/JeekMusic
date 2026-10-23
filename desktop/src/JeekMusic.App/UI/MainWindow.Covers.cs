@@ -20,6 +20,7 @@ public partial class MainWindow
         {
             if (_covers is not null) _covers.Changed -= RefreshRowCovers;
             foreach (var container in _rowCoverRequests.Keys.ToList()) CancelRowCover(container);
+            foreach (var image in _artistAvatarRequests.Keys.ToList()) CancelArtistAvatar(image);
         };
         _covers = covers;
         _covers.Changed += RefreshRowCovers;
@@ -28,6 +29,7 @@ public partial class MainWindow
 
     void RefreshRowCovers(string? key)
     {
+        RefreshArtistAvatars();
         foreach (var container in Table.GetVisualDescendants().OfType<DataGridRow>())
             if (container.Tag is SongRow { Track: { } track } row && (key is null || CoverService.CacheKey(track) == key))
                 LoadRowCover(container, row);

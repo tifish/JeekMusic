@@ -27,6 +27,7 @@
   "{0} 首": "{0} tracks",
   "{0} 首将在下一首播放": "{0} tracks will play next",
   "{0} 首歌": "{0} tracks",
+  "{0:N0} 首歌": "{0:N0} tracks",
   "「{0}」已经添加过了": "“{0}” has already been added",
   "一首歌的艺术家标签里有这些符号时拆成多个艺术家（需求 A-3）。& 和 , 默认不拆，因为会把\"小娟&山谷里的居民\"这类组合名拆坏。": "Split artist tags at these separators. Ampersands and commas are excluded by default to preserve band names.",
   "上一首": "Previous",

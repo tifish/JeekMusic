@@ -1,3 +1,4 @@
+using System.Globalization;
 using JeekMusic.Core.Library;
 using JeekMusic.Core.Text;
 
@@ -13,6 +14,9 @@ public sealed class ArtistInfo
     public required string IndexLetter { get; init; }
     public required IReadOnlyList<Track> Tracks { get; init; }
     public bool IsUnknown => NameKey.Length == 0;
+    public string DisplayName => IsUnknown ? L.T("未知艺术家") : Name;
+    public string AvatarText => IsUnknown || string.IsNullOrWhiteSpace(Name) ? "?" : StringInfo.GetNextTextElement(Name.Trim()).ToUpperInvariant();
+    public string TrackCountText => L.F($"{Tracks.Count:N0} 首歌");
 }
 
 /// <summary>文件夹树的一个节点（需求 W-3）：一个音乐文件夹的根，或其中的一个子目录。</summary>

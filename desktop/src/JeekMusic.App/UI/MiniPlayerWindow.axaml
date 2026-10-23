@@ -23,9 +23,9 @@
             <ProgressBar Height="3" MinHeight="3" Margin="0,6,0,0" Maximum="{Binding DurationSeconds}" Value="{Binding PositionSeconds}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首&apos;}" />
+            <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（← / Z）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（← / Z）&apos;}" />
             <Button Classes="icon" FontSize="20" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" AutomationProperties.Name="{ui:Tr &apos;播放 / 暂停&apos;}" ToolTip.Tip="{ui:Tr &apos;播放 / 暂停&apos;}" />
-            <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首&apos;}" />
+            <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（→ / X）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（→ / X）&apos;}" />
             <ToggleButton x:Name="PinButton" Classes="icon" Content="{x:Static ui:Icons.Pin}" AutomationProperties.Name="{ui:Tr &apos;总在最前&apos;}" ToolTip.Tip="{ui:Tr &apos;总在最前&apos;}" />
             <Button x:Name="RestoreButton" Classes="icon" Content="{x:Static ui:Icons.Expand}" AutomationProperties.Name="{ui:Tr &apos;回到主窗口&apos;}" ToolTip.Tip="{ui:Tr &apos;回到主窗口&apos;}" />
         </StackPanel>

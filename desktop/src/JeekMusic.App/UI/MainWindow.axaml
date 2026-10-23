@@ -209,9 +209,9 @@
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
                         <ToggleButton Classes="icon" Content="{x:Static ui:Icons.Shuffle}" IsChecked="{Binding Shuffle, Mode=OneWay}" Command="{Binding ToggleShuffleCommand}" AutomationProperties.Name="{ui:Tr &apos;随机播放&apos;}" ToolTip.Tip="{ui:Tr &apos;随机播放&apos;}" />
-                        <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（Ctrl+←）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（Ctrl+←）&apos;}" />
+                        <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（← / Z）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（← / Z）&apos;}" />
                         <Button Classes="icon large" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" AutomationProperties.Name="{Binding PlayTip}" ToolTip.Tip="{Binding PlayTip}" />
-                        <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（Ctrl+→）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（Ctrl+→）&apos;}" />
+                        <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（→ / X）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（→ / X）&apos;}" />
                         <ToggleButton Classes="icon" Content="{Binding RepeatIcon}" IsChecked="{Binding RepeatOn, Mode=OneWay}" Command="{Binding CycleRepeatCommand}" AutomationProperties.Name="{Binding RepeatTip}" ToolTip.Tip="{Binding RepeatTip}" />
                     </StackPanel>
                     <Grid ColumnDefinitions="Auto,*,Auto">

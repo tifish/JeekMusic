@@ -65,6 +65,7 @@ public partial class MainWindow : Window
 
         InitExtras();
         InitNav();
+        PlaybackShortcuts.Attach(this, _app.Player.Previous, _app.Player.Next);
         KeyDown += OnWindowKeyDown;
         AddHandler(PointerPressedEvent, OnMouseButtons, RoutingStrategies.Tunnel);
         PropertyChanged += (_, e) =>
@@ -262,14 +263,6 @@ public partial class MainWindow : Window
                 break;
             case Key.L when ctrl:
                 LocatePlaying();
-                e.Handled = true;
-                break;
-            case Key.Left when ctrl && !inText:
-                _app.Player.Previous();
-                e.Handled = true;
-                break;
-            case Key.Right when ctrl && !inText:
-                _app.Player.Next();
                 e.Handled = true;
                 break;
             case Key.Left when alt:

@@ -71,6 +71,20 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 English: `playback` with `action: "toggle"` shares the main/mini player's unmodified Space service, retaining track, queue and position and the existing pause/release/rematch lifecycle. A held Space triggers once without clicking the focused control. Editing, IME, menus, dialogs and modified Space keep their normal behavior. No keyboard-specific tool or schema field is added.
 
+### 播放时当前歌曲可见性
+
+`play_tracks`、`playback` 的恢复/切换播放/上一首/下一首，以及 `edit_queue` 的跳转或空队列开始播放，与双击、菜单、快捷键共用 `PlayerService.PlaybackStarted`。成功开始、恢复、当前曲重播或自然换歌后，只发出一次定位请求；内部输出重建不会新增请求，也不改变显式暂停释放音频、续播保留位置的行为。
+
+当前可见歌曲表格含目标歌曲时，复用 DataGrid 虚拟化滚动，让该行完整进入视口；已完整可见就不滚动。打开的队列弹层同样在打开和开始播放时确保当前行可见。不会改排序、筛选、多选、焦点或文件夹展开状态，也不会自动导航离开当前视图。当前视图不含歌曲（包括筛选排除、搜索结果上限等情况）时保留原视图。普通进度、队列编辑、输出状态刷新不发起定位，完成定位后用户可继续浏览其他歌曲。
+
+`get_diagnostics.songVisibility` 和 `queueVisibility` 是兼容性新增，只读取既有控件状态；未创建或已关闭时返回 `created: false`。开发版与正式版同样提供，查询不创建窗口、计算列表、滚动或启动音频。
+
+- `visible`、`currentTrackId`、`containsCurrent`、`currentFullyVisible`：当前控件状态；完整可见按真实行与数据行视口的纵向边界判断，0.5 逻辑像素容差，不要求歌曲表格横向展示所有列。
+- `requestedTrackId`、`requestVersion`、`positionPending`、`layoutPasses`、`rowsReady`：最近请求、代次、是否等待异步列表/布局、有限校正次数和列表是否就绪。快速切歌只处理最新请求，视图重算/切换、用户输入、关闭窗口会取消旧请求。
+- `result`：`no-request`、`pending`、`already-visible`、`revealed`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
+
+工具数量仍为 21，播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
+
 ### 歌曲修改时间与排序
 
 所有歌曲对象（包括 `get_track`、`search_tracks`、队列和播放列表中的歌曲）兼容新增：`mtimeUtcTicks` 为缓存音频文件 mtime 的 .NET UTC ticks 原值；`modifiedUtc` 为带 `Z` 的 ISO 8601 UTC 字符串，未知为 null；`modifiedLocal` 为客户端本地 `yyyy-MM-dd HH:mm`，未知为“—”。CUE 分轨共享源音频 mtime，不使用 CUE 文件、扫描或入库时间。查询不重新读取文件元数据、不扫描、不创建窗口、不启动音频。

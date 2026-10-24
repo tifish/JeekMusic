@@ -583,7 +583,8 @@ public sealed class OutputModeSwitchTests
             foreach (var (key, value) in options) Properties[key] = value;
         }
         public event Action<string, string?>? PropertyChanged;
-        public event Action<long>? FileStarted { add { } remove { } }
+        public event Action<long>? FileStarted;
+        public void StartEntry(int index) => FileStarted?.Invoke(GetLong($"playlist/{index}/id") ?? -1);
         public event Action<long>? FileLoaded;
         public event Action<long, Mpv.EndReason, string?>? FileEnded;
         public event Action<Mpv.EventId>? Notified;

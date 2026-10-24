@@ -1,20 +1,22 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using JeekMusic.Library;
 
 namespace JeekMusic.UI;
 
 /// <summary>
 /// 播放队列（需求 P-6、P-15）：当前歌曲后面分"手动添加的"和"来自「列表名」"两段；点一首播放，× 移除，拖动右边的手柄调整顺序。
-/// 打开时当前歌曲在正中间（同移动端 P-10）。
+/// 打开与开始播放时将当前行一次性滚入视口，已完整可见则保持位置。
 /// </summary>
 public static class QueueFlyout
 {
-    public static void Show(Control anchor, AppServices app, Control target)
+    public static Flyout Show(Control anchor, AppServices app, Control target)
     {
         var flyout = new Flyout { Placement = PlacementMode.TopEdgeAlignedRight, ShowMode = FlyoutShowMode.Standard };
         var list = new StackPanel { Spacing = 0 };
@@ -25,9 +27,14 @@ public static class QueueFlyout
         flyout.Content = new StackPanel { Children = { new Grid { Children = { header, clear } }, scroll } };
 
         Control? currentRow = null;
+        var generation = 0;
+        PlayingRowVisibility? visibility = null;
         int dragFrom = -1;
         void Fill()
         {
+            generation++;
+            visibility?.Cancel("queue-changed");
+            currentRow = null;
             list.Children.Clear();
             var q = app.Player.Queue;
             var snapshot = app.Library.Snapshot;
@@ -81,17 +88,33 @@ public static class QueueFlyout
             return grid;
         }
 
+        visibility = new PlayingRowVisibility(scroll,
+            () => scroll.GetVisualDescendants().OfType<ScrollContentPresenter>().FirstOrDefault(),
+            id => app.Player.Queue.Current?.TrackId == id && currentRow is not null,
+            id => app.Player.Queue.Current?.TrackId == id ? currentRow : null,
+            _ =>
+            {
+                var viewport = scroll.GetVisualDescendants().OfType<ScrollContentPresenter>().FirstOrDefault();
+                if (currentRow is null || viewport is null || currentRow.TranslatePoint(default, viewport) is not { } p) return;
+                var dy = p.Y < 0 ? p.Y : Math.Max(0, p.Y + currentRow.Bounds.Height - viewport.Bounds.Height);
+                scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, scroll.Offset.Y + dy));
+            }, () => true, () => generation, () => app.Player.CurrentTrack?.Id);
+        app.QueueVisibility = visibility;
+        void OnStarted(Track track) => visibility.Request(track.Id);
         void OnChanged() => Fill();
         app.Player.Queue.Changed += OnChanged;
-        flyout.Closed += (_, _) => app.Player.Queue.Changed -= OnChanged;
+        app.Player.PlaybackStarted += OnStarted;
+        flyout.Closed += (_, _) =>
+        {
+            app.Player.Queue.Changed -= OnChanged;
+            app.Player.PlaybackStarted -= OnStarted;
+            visibility.Dispose();
+            currentRow = null;
+            if (ReferenceEquals(app.QueueVisibility, visibility)) app.QueueVisibility = null;
+        };
         Fill();
         flyout.ShowAt(target);
-        // 当前歌曲在正中间
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            if (currentRow is null) return;
-            var y = currentRow.Bounds.Top - scroll.Viewport.Height / 2 + currentRow.Bounds.Height / 2;
-            scroll.Offset = new Vector(0, Math.Max(0, y));
-        }, Avalonia.Threading.DispatcherPriority.Background);
+        if (app.Player.CurrentTrack is { } current) visibility.Request(current.Id);
+        return flyout;
     }
 }

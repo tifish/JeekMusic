@@ -156,6 +156,23 @@ public sealed class TemporaryDeviceFormatTests
     });
 
     [Fact]
+    public Task PlaybackRevealSurvivesReleasedPauseButDoesNotRepeatForInternalOutputRebuilds()=>Run((f,service)=>
+    {
+        var started=new List<long>();f.Player.PlaybackStarted+=track=>started.Add(track.Id);
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();Assert.Empty(started);
+        var queue=f.Player.Queue.Items.ToArray();var position=f.Player.Position;
+        f.Player.Pause();Assert.Empty(started);Assert.False(f.Player.EngineReady);
+        f.Player.Resume();Assert.Empty(started);f.Ready();
+        Assert.Equal(new[]{f.Player.CurrentTrack!.Id},started);
+        Assert.Equal(queue,f.Player.Queue.Items);Assert.Equal(position,f.Player.Position);
+        f.Player.SetAutomaticAudioFormat(false);f.Ready();
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();
+        Assert.Single(started);
+        f.Player.Pause();f.Player.Resume();f.Player.Pause();f.Ready();
+        Assert.Single(started);Assert.False(f.Player.IsPlaying); // Cancel before FileLoaded cannot reveal later.
+    });
+
+    [Fact]
     public Task PausedUserSystemEditsBecomeTheNextPlayBaseline()=>Run((f,service)=>
     {
         f.Player.SetAutomaticAudioFormat(true);f.Ready();f.Player.Pause();

@@ -88,6 +88,8 @@ public sealed class PlayerService : IDisposable
     int _consecutiveErrors;
     bool _restoringOutput, _outputFileLoaded, _outputRestoreFailed;
     bool _wantPlaying;
+    long? _revealOnPlayback;
+    bool _currentFileStarted;
     double _fadeVolume = 100;
 
     public PlayQueue Queue { get; } = new();
@@ -128,6 +130,9 @@ public sealed class PlayerService : IDisposable
     public event Action? StateChanged;
     /// <summary>换了一首歌（包括自动播到下一首）。</summary>
     public event Action<Track?>? TrackChanged;
+    /// <summary>一次有效的开始/恢复/重播或自然换歌。内部输出重建不产生新的定位请求。</summary>
+    public event Action<Track>? PlaybackStarted;
+
     /// <summary>跳转了（用户拖动、换歌后从头开始），进度显示要立即刷新。</summary>
     public event Action? Seeked;
     /// <summary>格式、设备列表或输出模式变了。</summary>
@@ -136,6 +141,13 @@ public sealed class PlayerService : IDisposable
     public event Action<string>? Error;
     /// <summary>一首歌自然播完（睡眠定时"播完 N 首"计数用，需求 P-8）。</summary>
     public event Action? TrackCompleted;
+
+    void RevealStartedPlayback()
+    {
+        if (!IsPlaying || CurrentTrack is not { } track || _revealOnPlayback != track.Id) return;
+        _revealOnPlayback = null;
+        PlaybackStarted?.Invoke(track);
+    }
 
     public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume(), new ExclusiveAudioFormat(), new DeviceAudioFormat()) { }
 
@@ -220,21 +232,21 @@ public sealed class PlayerService : IDisposable
     public void Play(QueueContext? context, IReadOnlyList<long> ids, int? startIndex, bool? shuffle = null)
     {
         Queue.Play(context, ids, startIndex, shuffle);
-        LoadCurrent(play: true);
+        LoadCurrent(play: true, reveal: true);
     }
 
     public void PlayNext(IReadOnlyList<long> ids)
     {
         var wasEmpty = Queue.Items.Count == 0;
         Queue.PlayNext(ids);
-        if (wasEmpty) LoadCurrent(play: true);
+        if (wasEmpty) LoadCurrent(play: true, reveal: true);
     }
 
     public void AddToQueue(IReadOnlyList<long> ids)
     {
         var wasEmpty = Queue.Items.Count == 0;
         Queue.AddToQueue(ids);
-        if (wasEmpty) LoadCurrent(play: true);
+        if (wasEmpty) LoadCurrent(play: true, reveal: true);
     }
 
     public void PlayPause()
@@ -242,16 +254,17 @@ public sealed class PlayerService : IDisposable
         if (_restoringOutput) { if (_wantPlaying) Pause(); else Resume(); return; }
         if (CurrentTrack is null)
         {
-            if (Queue.Items.Count > 0) LoadCurrent(play: true);
+            if (Queue.Items.Count > 0) LoadCurrent(play: true, reveal: true);
             return;
         }
         EnsureEngine();
-        if (IsIdle) { LoadCurrent(play: true, start: _pausedOutputReleased || _restoringOutput ? _restorePosition : null); return; }
+        if (IsIdle) { LoadCurrent(play: true, start: _pausedOutputReleased || _restoringOutput ? _restorePosition : null, reveal: true); return; }
         if (IsPlaying) Pause(); else Resume();
     }
 
     public void Pause()
     {
+        _revealOnPlayback = null;
         if (_deviceAudioFormat is not null)
         {
             ReleasePlaybackOutput("pause");
@@ -274,6 +287,7 @@ public sealed class PlayerService : IDisposable
     /// <summary>显式暂停/结束的边界；内部加载和重建绝不调用此方法。</summary>
     void ReleasePlaybackOutput(string reason, bool resetPosition = false, bool notify = true, bool releaseFailed = false)
     {
+        _revealOnPlayback = null;
         var position = resetPosition ? TimeSpan.Zero : Position;
         _wantPlaying = false;
         if (_mpv is { } engine)
@@ -306,6 +320,7 @@ public sealed class PlayerService : IDisposable
     void Resume(bool confirmHardwareVolume)
     {
         if (CurrentTrack is null) return;
+        _revealOnPlayback = CurrentTrack.Id;
         EnsureEngine();
         if (IsIdle) { LoadCurrent(play: true, start: _pausedOutputReleased || _restoringOutput ? _restorePosition : null); return; }
         if (!_restoringOutput && !IsPlaying && AutomaticAudioFormat && !Exclusive && _deviceAudioFormat is not null)
@@ -324,7 +339,7 @@ public sealed class PlayerService : IDisposable
             return;
         }
         if (!CheckOutputSafety()) { BlockOutputRestore(OutputBlockReason); return; }
-        _mpv?.TrySet("pause", "no");
+        if (_mpv?.TrySet("pause", "no") >= 0) RevealStartedPlayback();
     }
 
     public void Next()
@@ -357,7 +372,7 @@ public sealed class PlayerService : IDisposable
         try
         {
             Queue.MoveTo(index);
-            LoadCurrent(play: true);
+            LoadCurrent(play: true, reveal: true);
         }
         finally { _navigating = false; }
     }
@@ -366,7 +381,7 @@ public sealed class PlayerService : IDisposable
     public void JumpTo(int queueIndex)
     {
         Queue.MoveTo(queueIndex);
-        LoadCurrent(play: true);
+        LoadCurrent(play: true, reveal: true);
     }
 
     public void SetRepeat(RepeatMode mode)
@@ -625,6 +640,7 @@ public sealed class PlayerService : IDisposable
         }
         _restoringOutput = false;
         IsPlaying = _wantPlaying;
+        RevealStartedPlayback();
         Log.Playback($"输出模式切换完成，端点 {ActualDeviceFormat}，流 {Format.DeviceRate}Hz；音量 {Volume:F1}%，{(_wantPlaying ? "继续播放" : "保持暂停")}");
         OutputChanged?.Invoke();
         StateChanged?.Invoke();
@@ -633,6 +649,7 @@ public sealed class PlayerService : IDisposable
 
     void BlockOutputRestore(string? reason = null)
     {
+        _revealOnPlayback = null;
         _restorePosition = Position;
         OutputBlockReason = reason ?? "output-restore-failed";
         Log.Playback($"输出保护：{OutputBlockReason}；设备 {_boundDeviceId}；{VolumeDiagnostic}");
@@ -805,12 +822,14 @@ public sealed class PlayerService : IDisposable
 
     // ── mpv 播放列表：当前这首 + 下一首 ──
 
-    void LoadCurrent(bool play, TimeSpan? start = null)
+    void LoadCurrent(bool play, TimeSpan? start = null, bool reveal = false)
     {
         _pendingSeek = null;
         _wantPlaying = play;
         var entry = Queue.Current;
         var track = entry is { } e ? _tracks.ById(e.TrackId) : null;
+        if (_revealOnPlayback != track?.Id || !play) _revealOnPlayback = null;
+        if (play && reveal) _revealOnPlayback = track?.Id;
         if (track is null)
         {
             ReleasePlaybackOutput("queue-clear", resetPosition: true, notify: false);
@@ -843,6 +862,7 @@ public sealed class PlayerService : IDisposable
         _mpv.TrySet("loop-file", Queue.Repeat == RepeatMode.One ? "inf" : "no");
         // A rejected replacement must not accept late FileLoaded for the old song.
         _currentEntry = _nextEntry = _nextTrackId = -1;
+        _currentFileStarted = false;
         _mpv.TryRun("playlist-clear");
         if (_mpv.TryRun("loadfile", path, "replace", "-1", FileOptions(track, start)) < 0)
         {
@@ -940,7 +960,7 @@ public sealed class PlayerService : IDisposable
         if (CurrentTrack is not null && current != CurrentTrack.Id)
         {
             if (current < 0) { LoadCurrent(play: false); return; }
-            LoadCurrent(play: IsPlaying || _wantPlaying);
+            LoadCurrent(play: IsPlaying || _wantPlaying, reveal: true);
             return;
         }
         SyncNext();
@@ -951,7 +971,18 @@ public sealed class PlayerService : IDisposable
 
     void OnFileStarted(long entryId)
     {
+        if (entryId >= 0 && entryId == _currentEntry)
+        {
+            // The first start belongs to LoadCurrent (including an internal rebuild).
+            // Later starts of the same entry are mpv's single-track repeats.
+            if (_currentFileStarted && IsPlaying && Queue.Repeat == RepeatMode.One && CurrentTrack is { } repeated)
+                PlaybackStarted?.Invoke(repeated);
+            _currentFileStarted = true;
+            return;
+        }
         if (entryId != _nextEntry || entryId < 0) return;
+        _currentFileStarted = true;
+        _revealOnPlayback = null;
         _pendingSeek = null;
         // mpv 自动播到了下一首：队列前进一首，删掉播完的那条，再放新的下一首
         _inFileStarted = true;
@@ -973,6 +1004,8 @@ public sealed class PlayerService : IDisposable
         SyncNext();
         TrackChanged?.Invoke(CurrentTrack);
         StateChanged?.Invoke();
+        _revealOnPlayback = CurrentTrack?.Id;
+        RevealStartedPlayback();
         TrackCompleted?.Invoke();
     }
 
@@ -1012,7 +1045,7 @@ public sealed class PlayerService : IDisposable
             return;
         }
         Queue.MoveTo(next);
-        LoadCurrent(play: _wantPlaying || IsPlaying);
+        LoadCurrent(play: _wantPlaying || IsPlaying, reveal: true);
     }
 
     void OnProperty(string name, string? value)
@@ -1021,6 +1054,7 @@ public sealed class PlayerService : IDisposable
         {
             case "pause":
                 IsPlaying = value == "no" && !IsIdle && !_restoringOutput;
+                RevealStartedPlayback();
                 StateChanged?.Invoke();
                 break;
             case "idle-active":

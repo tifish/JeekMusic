@@ -247,6 +247,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     public NavTarget? Current { get; private set; }
     public QueueSource? CurrentSource { get; private set; }
+    internal int RowsGeneration { get; private set; }
+    internal bool ComputingRows { get; private set; }
+    internal event Action? RowsInvalidated;
 
     public string? CurrentArtistKey => Current switch
     {
@@ -346,6 +349,9 @@ public sealed partial class MainViewModel : ObservableObject
     public void Recompute()
     {
         _computeCts?.Cancel();
+        RowsGeneration++;
+        ComputingRows = false;
+        RowsInvalidated?.Invoke();
         if (Snapshot.Folders.Count == 0) { Show(ContentKind.Welcome, "", ""); return; }
         var target = Current;
         if (target is null) return;
@@ -396,6 +402,7 @@ public sealed partial class MainViewModel : ObservableObject
         ContentTitle = title;
         CurrentSource = source;
         var cts = _computeCts = new CancellationTokenSource();
+        ComputingRows = true;
         var snapshot = Snapshot;
         var settings = S;
         var playlistId = (target as NavTarget.Playlist)?.PlaylistId;
@@ -410,6 +417,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 if (cts.IsCancellationRequested) return;
                 Rows = rows;
+                ComputingRows = false;
                 if (!_firstContentLogged && rows.Count > 0)
                 {
                     _firstContentLogged = true;

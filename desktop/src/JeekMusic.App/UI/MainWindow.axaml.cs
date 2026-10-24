@@ -40,7 +40,8 @@ public partial class MainWindow : Window
         Table.UnloadingRow += OnUnloadingRow;
         Table.ContextRequested += OnTableContextRequested;
         _vm.RowsChanged += UpdateSortHeaders;
-        _vm.Navigated += () => { if (Table.ItemsSource is not null) Dispatcher.UIThread.Post(() => ScrollToTop(), DispatcherPriority.Background); };
+        InitPlayingVisibility();
+        _vm.Navigated += OnSongsNavigated;
 
         Progress.AddHandler(PointerPressedEvent, (_, _) => _vm.Player.BeginSeek(), RoutingStrategies.Tunnel, handledEventsToo: true);
         Progress.AddHandler(PointerReleasedEvent, (_, _) => _vm.Player.EndSeek(Progress.Value), RoutingStrategies.Tunnel, handledEventsToo: true);

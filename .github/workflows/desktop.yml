@@ -104,7 +104,7 @@ jobs:
         if: env.PUBLISH == 'true'
         with:
           tag_name: desktop-v${{ env.VERSION }}
-          name: JeekMusic 桌面端 ${{ env.VERSION }}
+          name: Jeek Music 桌面端 ${{ env.VERSION }}
           body_path: release-notes.md
           files: JeekMusic-desktop-${{ env.VERSION }}-win-x64.zip
           make_latest: false

@@ -49,7 +49,7 @@ public sealed partial class Shell
         _main.ViewModel.InitialTarget = InitialTarget();
         _main.Opened += (_, _) => OnFirstShown();
         _main.ViewModel.SnapshotApplied += OnSnapshotApplied;
-        _main.TrayHint += () => _main.ViewModel.ShowToast(L.T("JeekMusic 仍在后台播放，可以从任务栏右下角的托盘图标退出"));
+        _main.TrayHint += () => _main.ViewModel.ShowToast(L.T("Jeek Music 仍在后台播放，可以从任务栏右下角的托盘图标退出"));
         CreateTray();
 
         _app.Instance?.Received += args => Dispatcher.UIThread.Post(() => OnInstanceArgs(args));
@@ -236,7 +236,7 @@ public sealed partial class Shell
             }
         }
         _app.Taskbar.SetPlaying(p.IsPlaying);
-        if (_tray is not null) _tray.ToolTipText = t is null ? "JeekMusic" : $"{t.Title} — {Text.Artist(t)}";
+        if (_tray is not null) _tray.ToolTipText = t is null ? "Jeek Music" : $"{t.Title} — {Text.Artist(t)}";
         UpdateTaskbarProgress();
         // 任务栏进度每 2 秒更新一次，只在播放中（窗口最小化时也要更新）
         if (p.IsPlaying && _app.Settings.Current.TaskbarProgress) _progressTimer?.Start(); else _progressTimer?.Stop();
@@ -268,7 +268,7 @@ public sealed partial class Shell
         _tray = new TrayIcon
         {
             Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://JeekMusic/Assets/JeekMusic.ico"))),
-            ToolTipText = "JeekMusic",
+            ToolTipText = "Jeek Music",
             IsVisible = true,
         };
         _tray.Clicked += (_, _) => ToggleMainWindow();

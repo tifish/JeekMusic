@@ -34,7 +34,7 @@ internal static class McpBridge
                 };
                 start.ArgumentList.Add("--tray");
                 start.ArgumentList.Add("--background");
-                using var process = Process.Start(start) ?? throw new IOException("无法启动 JeekMusic");
+                using var process = Process.Start(start) ?? throw new IOException("无法启动 Jeek Music");
                 process.StandardInput.Close();
                 await pipe.ConnectAsync(timeout.Token);
             }
@@ -54,7 +54,7 @@ internal static class McpBridge
         {
             // WinExe 没有控制台时 Console.Error 可能是空流；重定向时仍必须只向 stderr 写诊断。
             using var error = new StreamWriter(Console.OpenStandardError()) { AutoFlush = true };
-            await error.WriteLineAsync("JeekMusic MCP: " + e.Message);
+            await error.WriteLineAsync("Jeek Music MCP: " + e.Message);
             return 1;
         }
     }

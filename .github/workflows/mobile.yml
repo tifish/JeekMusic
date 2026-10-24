@@ -95,7 +95,7 @@ jobs:
         if: env.PUBLISH == 'true'
         with:
           tag_name: v${{ env.VERSION }}
-          name: JeekMusic ${{ env.VERSION }}
+          name: Jeek Music ${{ env.VERSION }}
           body_path: release-notes.md
           files: JeekMusic-${{ env.VERSION }}.apk
           make_latest: true

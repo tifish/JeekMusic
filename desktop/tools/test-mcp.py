@@ -58,7 +58,7 @@ def close_player(player_pid):
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         title = ctypes.create_unicode_buffer(256)
         user32.GetWindowTextW(hwnd, title, len(title))
-        if pid.value == player_pid and title.value == "JeekMusic":
+        if pid.value == player_pid and title.value == "Jeek Music":
             found.append(hwnd)
         return True
 

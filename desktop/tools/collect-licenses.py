@@ -38,7 +38,7 @@ def collect(publish_directory, assets_path):
     shutil.copytree(desktop / "licenses", destination / "upstream", dirs_exist_ok=True)
     assets = json.loads(assets_path.read_text(encoding="utf-8"))
     package_roots = [Path(p) for p in assets["packageFolders"]]
-    index = ["JeekMusic third-party dependencies", "", "Package versions and licenses from the restored NuGet graph.",
+    index = ["Jeek Music third-party dependencies", "", "Package versions and licenses from the restored NuGet graph.",
              "Some packages below contain build tools or assets for other platforms; they are not all included in the Windows binary.",
              "Full upstream notices are in upstream/, NuGet notices in nuget/, and libmpv source provenance in libmpv/.",
              "", "YAMNet: Copyright 2019 The TensorFlow Authors. Apache-2.0.",

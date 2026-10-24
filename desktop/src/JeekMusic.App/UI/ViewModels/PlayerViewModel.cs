@@ -56,7 +56,7 @@ public sealed partial class PlayerViewModel : ObservableObject
 
     public Track? Track => _player.CurrentTrack;
     public bool HasTrack => Track is not null;
-    public string Title => Track?.Title ?? "JeekMusic";
+    public string Title => Track?.Title ?? "Jeek Music";
     public string Artist => Track is { } t ? Text.Artist(t) : "";
     public string Album => Track?.Album ?? "";
     public string ArtistAlbum => Track is { } t ? (t.Album is { Length: > 0 } a ? $"{Text.Artist(t)} — {a}" : Text.Artist(t)) : "";
@@ -122,8 +122,8 @@ public sealed partial class PlayerViewModel : ObservableObject
         : _player.EndpointVolumeValue is null ? L.T("设备音量读取失败")
         : _player.Exclusive && _player.HardwareVolume == false ? L.T("请使用硬件旋钮")
         : _player.EndpointMuted == true ? L.T("系统设备已静音")
-        : _player.SessionMuted == true ? L.T("Windows 合成器已静音 JeekMusic")
-        : _player.SessionVolume is < 99.999 ? L.T("Windows 合成器已调低 JeekMusic 音量") : "";
+        : _player.SessionMuted == true ? L.T("Windows 合成器已静音 Jeek Music")
+        : _player.SessionVolume is < 99.999 ? L.T("Windows 合成器已调低 Jeek Music 音量") : "";
 
     // ── 命令 ──
 

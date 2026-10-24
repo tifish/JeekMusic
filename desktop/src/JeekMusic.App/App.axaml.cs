@@ -14,6 +14,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var services = new AppServices { Instance = Program.Instance, Args = Program.Args };
+            Platform.FileAssociations.RefreshRegisteredDisplayNames();
             var shell = new Shell(services, desktop);
             shell.Start();
         }

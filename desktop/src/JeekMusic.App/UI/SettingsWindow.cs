@@ -321,7 +321,7 @@ public sealed class SettingsWindow : Window
         }));
         panel.Children.Add(Toggle(L.T("迷你播放器总在最前"), c.S.MiniPlayerTopmost, v => { c.S.MiniPlayerTopmost = v; c.Save("mini"); }));
         panel.Children.Add(SubHeading(L.T("文件关联")));
-        panel.Children.Add(Note(L.T("把 JeekMusic 加入音频文件的“打开方式”。默认播放器由你在 Windows 设置中选择；移动程序目录后可再次注册。")));
+        panel.Children.Add(Note(L.T("把 Jeek Music 加入音频文件的“打开方式”。默认播放器由你在 Windows 设置中选择；移动程序目录后可再次注册。")));
         var status = Note(FileAssociations.Registered ? L.T("已注册当前程序位置") : L.T("当前程序位置尚未注册"));
         void RunAssociation(Action action)
         {

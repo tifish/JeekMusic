@@ -389,7 +389,7 @@ public sealed class PlayerService : IDisposable
         if (exclusive && (!ReadEndpoint(_boundDeviceId ?? Device) || !SessionAllowsExclusive()))
         {
             OutputBlockReason = "session-attenuated-or-unreadable";
-            Error?.Invoke(L.T("Windows 音量合成器中的 JeekMusic 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"));
+            Error?.Invoke(L.T("Windows 音量合成器中的 Jeek Music 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"));
             OutputChanged?.Invoke();
             return;
         }
@@ -596,7 +596,7 @@ public sealed class PlayerService : IDisposable
     public string OutputSafetyMessage => OutputBlockReason switch
     {
         "hardware-volume-confirmation" => L.T("独占模式无法使用设备的软件音量或静音。请先用硬件旋钮确认安全音量，再按播放继续。"),
-        "session-attenuated-or-unreadable" => L.T("Windows 音量合成器中的 JeekMusic 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"),
+        "session-attenuated-or-unreadable" => L.T("Windows 音量合成器中的 Jeek Music 音量低于 100%、已静音或无法读取。请先在合成器中检查并解除，再切换独占。"),
         _ => L.T("无法确认输出设备或音量，已保持暂停和本播放器静音。请检查设备后按播放重试。")
     };
 

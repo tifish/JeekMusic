@@ -1,4 +1,4 @@
-<p>JeekMusic is a simple music player for the music files on your phone. It is built around the folders you choose, works completely offline by default, and doesn't track you.</p>
+<p>Jeek Music is a simple music player for the music files on your phone. It is built around the folders you choose, works completely offline by default, and doesn't track you.</p>
 
 <p><b>Library</b></p>
 <ul>

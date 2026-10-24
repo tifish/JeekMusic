@@ -347,7 +347,7 @@ public sealed class SyncFeature : IFeature
     Control BuildSettings(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(Note(L.T("同步工具负责传输音乐文件夹，JeekMusic 合并其中的用户数据。每台设备只写自己的同步文件。")));
+        panel.Children.Add(Note(L.T("同步工具负责传输音乐文件夹，Jeek Music 合并其中的用户数据。每台设备只写自己的同步文件。")));
         var name = new TextBox { Text = Str(_device["name"]), Width = 280 };
         name.LostFocus += (_, _) => { if (!string.IsNullOrWhiteSpace(name.Text)) { _device["name"] = name.Text.Trim(); File.WriteAllText(AppPaths.Device, _device.ToJsonString()); _lastWritten.Clear(); Schedule(); } };
         panel.Children.Add(Labeled(L.T("本机名称"), name));

@@ -72,7 +72,7 @@ while ((Get-Date) -lt $deadline -and -not $p.HasExited) {
 "exited: $($p.HasExited)  foreground samples owned by app: $stole / $samples"
 if (-not $p.HasExited) { $p.Refresh(); "private memory MB: $([Math]::Round($p.PrivateMemorySize64 / 1MB, 1)); final idle CPU ms: $([Math]::Round($p.TotalProcessorTime.TotalMilliseconds - $idleCpu, 1))" }
 if (-not $p.HasExited -and $Shot) {
-    $main = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'JeekMusic' } | Select-Object -First 1
+    $main = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'Jeek Music' } | Select-Object -First 1
     if ($main) {
         $r = New-Object JmTest+RECT; [JmTest]::GetWindowRect($main, [ref]$r) | Out-Null
         $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
@@ -81,7 +81,7 @@ if (-not $p.HasExited -and $Shot) {
     } else { "no main window found" }
 }
 if ($GracefulExit -and -not $KeepRunning -and -not $p.HasExited) {
-    $closeTarget = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'JeekMusic' } | Select-Object -First 1
+    $closeTarget = [JmTest]::Windows($p.Id) | Where-Object { [JmTest]::Title($_) -eq 'Jeek Music' } | Select-Object -First 1
     if ($closeTarget) { [JmTest]::PostMessage($closeTarget, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
     "graceful exit: $($p.WaitForExit(5000))"
 }

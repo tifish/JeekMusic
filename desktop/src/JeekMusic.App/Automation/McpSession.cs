@@ -47,8 +47,8 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
             {
                 ["protocolVersion"] = Versions.Contains(version) ? version : ProtocolVersion,
                 ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
-                ["serverInfo"] = new JsonObject { ["name"] = "JeekMusic", ["version"] = typeof(McpSession).Assembly.GetName().Version?.ToString() ?? "1.0.0" },
-                ["instructions"] = "Controls the local Windows JeekMusic player. Track IDs and queue indices are local; indices are zero-based. Use get_status to observe asynchronous playback and library work."
+                ["serverInfo"] = new JsonObject { ["name"] = "JeekMusic", ["title"] = "Jeek Music", ["version"] = typeof(McpSession).Assembly.GetName().Version?.ToString() ?? "1.0.0" },
+                ["instructions"] = "Controls the local Windows Jeek Music player. Track IDs and queue indices are local; indices are zero-based. Use get_status to observe asynchronous playback and library work."
             });
         }
         if (!_ready) return Error(id, -32600, "Initialize the session and send notifications/initialized first");
@@ -86,7 +86,7 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     Infrastructure.Log.Warn("mcp", "工具执行失败：" + name, e);
-                    return Error(id, -32603, "Internal error; see JeekMusic app log");
+                    return Error(id, -32603, "Internal error; see Jeek Music app log");
                 }
             default: return Error(id, -32601, "Method not found: " + method);
         }

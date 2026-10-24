@@ -34,14 +34,11 @@ public static partial class FileAssociations
     // 接受一个隔离的根键，以便测试注册和注销而不触碰真实文件关联。
     internal static void Register(RegistryKey root, string executable)
     {
-        Set(root, ApplicationKey, "FriendlyAppName", "JeekMusic");
+        SetDisplayNames(root);
         Set(root, ApplicationKey + @"\shell\open\command", "", Command(executable));
         Set(root, ApplicationKey + @"\DefaultIcon", "", $"\"{executable}\",0");
-        Set(root, @"Software\Classes\" + ProgId, "", "JeekMusic Audio");
         Set(root, @"Software\Classes\" + ProgId + @"\shell\open\command", "", Command(executable));
         Set(root, @"Software\Classes\" + ProgId + @"\DefaultIcon", "", $"\"{executable}\",0");
-        Set(root, Capabilities, "ApplicationName", "JeekMusic");
-        Set(root, Capabilities, "ApplicationDescription", "JeekMusic local music player");
         Set(root, Capabilities, "ApplicationIcon", $"\"{executable}\",0");
         foreach (var ext in Scanner.AudioExtensions)
         {
@@ -51,6 +48,41 @@ public static partial class FileAssociations
             key.SetValue(ProgId, Array.Empty<byte>(), RegistryValueKind.None);
         }
         Set(root, @"Software\RegisteredApplications", "JeekMusic", Capabilities);
+    }
+
+    static readonly (string Key, string Name, string Value)[] DisplayNames =
+    [
+        (ApplicationKey, "FriendlyAppName", "Jeek Music"),
+        (@"Software\Classes\" + ProgId, "", "Jeek Music Audio"),
+        (Capabilities, "ApplicationName", "Jeek Music"),
+        (Capabilities, "ApplicationDescription", "Jeek Music local music player")
+    ];
+
+    static void SetDisplayNames(RegistryKey root)
+    {
+        foreach (var (key, name, value) in DisplayNames) Set(root, key, name, value);
+    }
+
+    /// <summary>只刷新当前路径已注册应用的显示文本；不创建注册、不改关联或默认应用。</summary>
+    public static void RefreshRegisteredDisplayNames()
+    {
+        try
+        {
+            if (!Registered) return;
+            var changed = false;
+            foreach (var (path, name, value) in DisplayNames)
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(path);
+                if (key?.GetValue(name) as string == value) continue;
+                Set(Registry.CurrentUser, path, name, value);
+                changed = true;
+            }
+            if (changed) NotifyShell();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            JeekMusic.Infrastructure.Log.Warn("associations", "无法刷新应用显示名称", e);
+        }
     }
 
     public static void Unregister()

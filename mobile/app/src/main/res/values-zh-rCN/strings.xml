@@ -3,7 +3,7 @@
     <string name="sync_restore_title">发现同步数据</string>
     <string name="sync_restore_message">合并音乐文件夹中的播放列表、固定艺术家、标签修正和歌词偏移？</string>
     <string name="sync_merge">合并</string>
-    <string name="app_name">JeekMusic</string>
+    <string name="app_name">Jeek Music</string>
 
     <string name="tab_folders">文件夹</string>
     <string name="tab_artists">艺术家</string>
@@ -40,8 +40,8 @@
     <string name="disc_number">第 %d 碟</string>
 
     <string name="empty_library_title">添加你的音乐文件夹</string>
-    <string name="empty_library_message">JeekMusic 播放你所选文件夹中的音乐。可以添加多个文件夹，包括 SD 卡上的文件夹。</string>
-    <string name="permission_needed">JeekMusic 需要读取音频文件的权限。</string>
+    <string name="empty_library_message">Jeek Music 播放你所选文件夹中的音乐。可以添加多个文件夹，包括 SD 卡上的文件夹。</string>
+    <string name="permission_needed">Jeek Music 需要读取音频文件的权限。</string>
     <string name="scan_progress">正在扫描 %1$d / %2$d</string>
     <string name="folder_already_covered">这个文件夹已经包含在“%s”中。</string>
     <string name="folder_replace_title">替换子文件夹？</string>
@@ -229,7 +229,7 @@
         <item quantity="other">这个文件夹里有一份 %1$s 的备份，包含 %2$d 个播放列表。是否恢复？</item>
     </plurals>
     <string name="restore_done">已恢复（播放列表 / 歌曲 / 未找到）：%s</string>
-    <string name="restore_invalid">这不是 JeekMusic 的备份文件</string>
+    <string name="restore_invalid">这不是 Jeek Music 的备份文件</string>
 
     <string name="info_analysis">音频分析</string>
     <plurals name="mood_pending">

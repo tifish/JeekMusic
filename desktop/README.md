@@ -1,4 +1,4 @@
-# JeekMusic 桌面端
+# Jeek Music 桌面端
 
 Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则和同步协议。界面使用 Avalonia 12，发布为免安装的 Native AOT 程序；播放使用自行编译的音频版 LGPL libmpv。
 
@@ -26,11 +26,11 @@ In both windows, Left/Right seek by 5 seconds and Up/Down adjust the current end
 
 ## 音量与独占输出
 
-共享与独占都使用当前播放设备的端点主音量，共享下也影响同设备其他程序。外部系统音量会同步到滑块；启动、切换设备/模式和退出都不恢复旧音量。静音按钮只静音 JeekMusic，系统静音独立显示。
+共享与独占都使用当前播放设备的端点主音量，共享下也影响同设备其他程序。外部系统音量会同步到滑块；启动、切换设备/模式和退出都不恢复旧音量。静音按钮只静音 Jeek Music，系统静音独立显示。
 
-Windows 合成器的 JeekMusic 衰减/静音会保留；请在合成器恢复 100% 并取消静音后再进入独占。设备无硬件音量时，独占滑块不可调：先使用硬件旋钮确认安全音量，再按播放继续。设备或音量读取失败时保持暂停，修复后按播放重试。
+Windows 合成器的 Jeek Music 衰减/静音会保留；请在合成器恢复 100% 并取消静音后再进入独占。设备无硬件音量时，独占滑块不可调：先使用硬件旋钮确认安全音量，再按播放继续。设备或音量读取失败时保持暂停，修复后按播放重试。
 
-Both output modes control the current endpoint master volume; in shared mode this affects other apps on that device. External volume changes are reflected in the slider. Startup, switching and exit never restore historical volume. Mute affects JeekMusic only. Windows mixer attenuation/mute is preserved and must be cleared in the mixer before entering exclusive mode. Without hardware volume control, set a safe level with the physical knob, then press Play. Unreadable controls keep playback paused until a successful retry.
+Both output modes control the current endpoint master volume; in shared mode this affects other apps on that device. External volume changes are reflected in the slider. Startup, switching and exit never restore historical volume. Mute affects Jeek Music only. Windows mixer attenuation/mute is preserved and must be cleared in the mixer before entering exclusive mode. Without hardware volume control, set a safe level with the physical knob, then press Play. Unreadable controls keep playback paused until a successful retry.
 
 ## 开发与验证
 
@@ -69,7 +69,7 @@ python desktop/tools/test-build-isolation.py
 
 `--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
 
-`python desktop/tools/test_build_workflow.py` 使用模拟客户端和模拟进程验证这些选项边界，不启动 JeekMusic 或访问真实音频。
+`python desktop/tools/test_build_workflow.py` 使用模拟客户端和模拟进程验证这些选项边界，不启动 Jeek Music 或访问真实音频。
 
 发布包需包含 `licenses/`、`Models/yamnet.onnx` 和原生 DLL。`collect-licenses.py` 从已还原的 NuGet 包收集许可证，不发送网络请求。LGPL DLL 的对应源码和编译参数随 [libmpv Release](https://github.com/tifish/JeekMusic/releases/tag/libmpv-lgpl-0.41.0-20261021-3) 提供；桌面 CI 下载失败时会停止，不能回退到 GPL 内核。
 

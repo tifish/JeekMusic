@@ -3,7 +3,7 @@
     <string name="sync_restore_title">Sync data found</string>
     <string name="sync_restore_message">Merge playlists, pinned artists, tag corrections and lyric offsets from the music folders?</string>
     <string name="sync_merge">Merge</string>
-    <string name="app_name">JeekMusic</string>
+    <string name="app_name">Jeek Music</string>
 
     <string name="tab_folders">Folders</string>
     <string name="tab_artists">Artists</string>
@@ -41,8 +41,8 @@
     <string name="disc_number">Disc %d</string>
 
     <string name="empty_library_title">Add your music folders</string>
-    <string name="empty_library_message">JeekMusic plays the music in the folders you choose. You can add several folders, including ones on an SD card.</string>
-    <string name="permission_needed">JeekMusic needs permission to read audio files.</string>
+    <string name="empty_library_message">Jeek Music plays the music in the folders you choose. You can add several folders, including ones on an SD card.</string>
+    <string name="permission_needed">Jeek Music needs permission to read audio files.</string>
     <string name="scan_progress">Scanning %1$d / %2$d</string>
     <string name="folder_already_covered">This folder is already included in “%s”.</string>
     <string name="folder_replace_title">Replace subfolders?</string>
@@ -235,7 +235,7 @@
         <item quantity="other">This folder contains a backup from %1$s with %2$d playlists. Restore it?</item>
     </plurals>
     <string name="restore_done">Restored (playlists / songs / not found): %s</string>
-    <string name="restore_invalid">Not a JeekMusic backup file</string>
+    <string name="restore_invalid">Not a Jeek Music backup file</string>
 
     <string name="info_analysis">Audio analysis</string>
     <plurals name="mood_pending">
@@ -338,7 +338,7 @@
     <string name="lyrics_saved_after_playing">Lyrics saved; they will be written into the music file after this song finishes</string>
     <string name="lyrics_saved_embed">Lyrics saved into the music file</string>
     <string name="all_files_title">Allow access to all files?</string>
-    <string name="all_files_message">To keep the file’s modified time unchanged when writing into music files, JeekMusic needs “All files access”. Android doesn’t let apps change the modified time of other apps’ files without it. It is only used to restore the modified time after writing covers and lyrics.\n\nWithout it, music files are not changed and covers and lyrics are saved to the hidden folder instead.</string>
+    <string name="all_files_message">To keep the file’s modified time unchanged when writing into music files, Jeek Music needs “All files access”. Android doesn’t let apps change the modified time of other apps’ files without it. It is only used to restore the modified time after writing covers and lyrics.\n\nWithout it, music files are not changed and covers and lyrics are saved to the hidden folder instead.</string>
     <string name="all_files_grant">Allow</string>
     <string name="all_files_missing">“All files access” not allowed: saving to the hidden folder for now. Tap to allow</string>
     <string name="online_sources">Sources (tried from top to bottom)</string>

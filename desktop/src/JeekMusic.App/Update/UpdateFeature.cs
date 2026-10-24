@@ -52,7 +52,7 @@ public sealed class UpdateFeature : IFeature
     async Task Prompt(Shell shell, UpdateInfo info)
     {
         var owner = shell.Main.IsVisible ? (Window)shell.Main : shell.Main;
-        var choice = await Dialogs.Choose(owner, L.T("发现新版本"), L.F($"JeekMusic {info.VersionName}（当前 {UpdateService.CurrentVersionName}）\n\n{Trim(info.Notes)}"),
+        var choice = await Dialogs.Choose(owner, L.T("发现新版本"), L.F($"Jeek Music {info.VersionName}（当前 {UpdateService.CurrentVersionName}）\n\n{Trim(info.Notes)}"),
             [L.T("更新"), L.T("跳过此版本"), L.T("以后再说")]);
         if (choice == 1) { _service!.Skip(info); return; }
         if (choice != 0) return;
@@ -98,7 +98,7 @@ public sealed class UpdateFeature : IFeature
     {
         var panel = new StackPanel { Spacing = 6 };
         var status = new TextBlock { Opacity = 0.65, VerticalAlignment = VerticalAlignment.Center };
-        panel.Children.Add(new TextBlock { Text = L.F($"JeekMusic 桌面端 {UpdateService.CurrentVersionName}"), FontSize = 16, FontWeight = FontWeight.SemiBold });
+        panel.Children.Add(new TextBlock { Text = L.F($"Jeek Music 桌面端 {UpdateService.CurrentVersionName}"), FontSize = 16, FontWeight = FontWeight.SemiBold });
         panel.Children.Add(SettingsWindow.Row(SettingsWindow.Action(L.T("检查更新"), () => _ = Check(shell, manual: true, s => status.Text = s)), status));
         panel.Children.Add(SettingsWindow.Toggle(L.T("每天自动检查一次新版本"), c.S.AutoUpdateCheck, v => { c.S.AutoUpdateCheck = v; c.Save("update"); }));
         panel.Children.Add(SettingsWindow.Note(L.T("检查更新只请求 GitHub 上的版本信息，不发送任何其他数据。除此之外，默认不联网（在线歌词、封面要自己开启）。")));
@@ -106,7 +106,7 @@ public sealed class UpdateFeature : IFeature
         var link = SettingsWindow.Action("https://github.com/tifish/JeekMusic", () => Open("https://github.com/tifish/JeekMusic"));
         panel.Children.Add(link);
         panel.Children.Add(SettingsWindow.SubHeading(L.T("开源许可")));
-        panel.Children.Add(SettingsWindow.Note("JeekMusic：MIT\n" +
+        panel.Children.Add(SettingsWindow.Note("Jeek Music：MIT\n" +
             L.T("libmpv、FFmpeg：LGPL 2.1+（开发版附带的现成 libmpv 是 GPL）\n") +
             "Avalonia、SkiaSharp、HarfBuzzSharp、CommunityToolkit.Mvvm：MIT\n" +
             L.T("ATL .NET（标签读取）：MIT\n") +

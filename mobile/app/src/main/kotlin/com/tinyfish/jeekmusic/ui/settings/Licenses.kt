@@ -16,7 +16,7 @@ import com.tinyfish.jeekmusic.R
 
 /** 第三方库及其许可证（docs/design.md §13）。 */
 private val LICENSES = listOf(
-    "JeekMusic" to "MIT",
+    "Jeek Music" to "MIT",
     "Android Jetpack (AndroidX, Compose, Room, DataStore, WorkManager, Navigation 3)" to "Apache-2.0",
     "Media3 / ExoPlayer" to "Apache-2.0",
     "Kotlin, kotlinx.coroutines" to "Apache-2.0",

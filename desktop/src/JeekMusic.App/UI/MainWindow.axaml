@@ -5,7 +5,7 @@
         xmlns:ui="using:JeekMusic.UI"
         x:Class="JeekMusic.UI.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="JeekMusic" Width="1200" Height="760" MinWidth="760" MinHeight="480"
+        Title="Jeek Music" Width="1200" Height="760" MinWidth="760" MinHeight="480"
         Icon="avares://JeekMusic/Assets/JeekMusic.ico"
         TransparencyLevelHint="Mica" Background="Transparent"
         ExtendClientAreaToDecorationsHint="True" ExtendClientAreaTitleBarHeightHint="46">
@@ -155,7 +155,7 @@
                 <!-- 首次启动：引导添加音乐文件夹（同移动端 L-4） -->
                 <StackPanel IsVisible="{Binding IsWelcome}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
                     <Image Source="avares://JeekMusic/Assets/JeekMusic.png" Width="96" Height="96" />
-                    <TextBlock Text="{ui:Tr &apos;欢迎使用 JeekMusic&apos;}" Classes="title" HorizontalAlignment="Center" />
+                    <TextBlock Text="{ui:Tr &apos;欢迎使用 Jeek Music&apos;}" Classes="title" HorizontalAlignment="Center" />
                     <TextBlock Text="{ui:Tr &apos;添加存放音乐的文件夹，曲库就围绕这些文件夹组织。&apos;}" Classes="secondary" HorizontalAlignment="Center" />
                     <Button x:Name="WelcomeAddFolder" Content="{ui:Tr &apos;添加音乐文件夹&apos;}" HorizontalAlignment="Center" Classes="accent" Padding="20,8" />
                 </StackPanel>

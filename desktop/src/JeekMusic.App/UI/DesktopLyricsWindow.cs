@@ -43,7 +43,7 @@ public sealed class DesktopLyricsWindow : Window
         CanResize = false;
         SizeToContent = SizeToContent.Height;
         Width = 900;
-        Title = L.T("JeekMusic 桌面歌词");
+        Title = L.T("Jeek Music 桌面歌词");
 
         Button Tool(string glyph, string tip, Action action)
         {

@@ -4,7 +4,7 @@
         xmlns:ui="using:JeekMusic.UI"
         x:Class="JeekMusic.UI.MiniPlayerWindow"
         x:DataType="vm:PlayerViewModel"
-        Title="JeekMusic" Width="360" Height="112" CanResize="False"
+        Title="Jeek Music" Width="360" Height="112" CanResize="False"
         ExtendClientAreaToDecorationsHint="True"
         TransparencyLevelHint="Mica" Background="Transparent"
         Icon="avares://JeekMusic/Assets/JeekMusic.ico">

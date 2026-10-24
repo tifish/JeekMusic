@@ -226,7 +226,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 真实验收曾确认：Windows 设置在页面已打开时可显示旧采样率，重新打开后与 44.1 kHz 端点读回一致；另一次 48 kHz 偏离的真实原因是独立硬件测试恢复旧格式，不能混同为页面缓存。已增加真实测试的其他客户端运行拦截，并使普通单元测试默认写入临时数据/日志目录，避免模拟设备日志污染用户日志。
 
-验证命令（先关闭所有其他 JeekMusic 客户端；隔离数据并不隔离物理端点）：
+验证命令（先关闭所有其他 Jeek Music 客户端；隔离数据并不隔离物理端点）：
 
 ```powershell
 # 独立只读诊断，不启动客户端、不改变格式：
@@ -235,7 +235,10 @@ python desktop/tools/read-audio-format.py
 python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --exclusive
 ```
 
-脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，仅在没有其他 JeekMusic 客户端时恢复完整原端点/混音快照；若另一客户端已出现则拒绝覆盖其格式。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。
+脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，仅在没有其他 Jeek Music 客户端时恢复完整原端点/混音快照；若另一客户端已出现则拒绝覆盖其格式。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。
 
 
 本机 STAX S5 实测：精确驱动组合接受 44.1 kHz/16 位、48 kHz/16 位、48 kHz/24 位及 96 kHz/24 位；当前精确查询不接受 44.1 kHz/24 位或 24 有效位/32 位容器的 44.1 kHz 组合。程序在源率优先策略下对 44.1/24 源采用可用 44.1/16，并显示精度转换；48/24 源实际端点为 24 位，已用独立 Python IPropertyStore 和 IAudioClient 读回验证。同采样率 48/16 → 48/24 的自然换曲也通过，未被采样率相同的早退逻辑跳过。上述是此端点当次探测结果，不硬编码为所有设备的能力。
+
+
+显示名称统一为 **Jeek Music**。初始化的 `serverInfo.title` 使用该显示名称，稳定协议标识 `serverInfo.name` 仍为 `JeekMusic`；工具 ID、参数 Schema、管道名、数据目录、EXE 名称及已有连接配置不变。

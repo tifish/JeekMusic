@@ -15,6 +15,7 @@ public sealed class UiState
     public double Width { get; set; } = 1200;
     public double Height { get; set; } = 760;
     public bool Maximized { get; set; }
+    [JsonConverter(typeof(NavigationWidthConverter))]
     public double NavWidth { get; set; } = 230;
 
     /// <summary>上次的视图：folder / artist / pinned / playlist / album，加上参数。</summary>
@@ -79,3 +80,15 @@ public sealed class ColumnState
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(UiState))]
 internal partial class UiStateJson : JsonSerializerContext;
+
+// A bad navigation field must not discard the rest of a valid window snapshot.
+public sealed class NavigationWidthConverter : JsonConverter<double>
+{
+    public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetDouble(out var value)) return MainWindow.SafeNavWidth(value);
+        reader.Skip();
+        return 230;
+    }
+    public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options) => writer.WriteNumberValue(MainWindow.SafeNavWidth(value));
+}

@@ -22,7 +22,8 @@ public partial class MainWindow
 
     void InitNav()
     {
-        FolderNavigationInput.Attach(NavTree, _app.FolderExpansion);
+        InitMainLayout();
+        FolderNavigationInput.Attach(NavTree, _app.FolderExpansion, OnFolderExpansionWidth);
         NavCollapse.Click += (_, _) => SetNavCollapsed(!_navCollapsed);
         NavTree.ContextRequested += OnNavContextRequested;
         // 拖动排序：只有顶层的内置项和固定的艺术家可以拖（同移动端 T-5）
@@ -44,11 +45,11 @@ public partial class MainWindow
     void SetNavCollapsed(bool collapsed)
     {
         if (collapsed == _navCollapsed) return;
-        if (collapsed) _navWidth = MainArea.ColumnDefinitions[0].ActualWidth;
+        CancelAutomaticNavWidth();
         _navCollapsed = collapsed;
         NavTree.Classes.Set("collapsed", collapsed);
-        MainArea.ColumnDefinitions[0].Width = new GridLength(collapsed ? 56 : Math.Clamp(_navWidth, 160, 480));
         NavSplitter.IsVisible = !collapsed;
+        RefreshLayoutBudget();
     }
 
     static NavNode? NodeOf(object? source) =>

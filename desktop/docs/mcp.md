@@ -55,7 +55,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |
-| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情、`lyricsPanel` 跟随诊断、`artistList` 分组/可见位置诊断和 `folderNavigation` 文件夹展开策略/收起偏好统计 |
+| `get_diagnostics` | 无参数（input Schema 仍为空对象，拒绝额外参数）。应用/协议版本、进程 ID、实际 EXE 路径 `processPath`、运行框架 `frameworkDescription`、架构 `processArchitecture`、是否支持动态代码 `dynamicCodeSupported`，以及原有数据/程序/日志目录、引擎状态、最近一次播放错误、状态、音频输出详情、`lyricsPanel` 跟随诊断、`artistList` 分组/可见位置诊断、`folderNavigation` 文件夹展开策略/收起偏好统计和 `mainLayout` 实际面板宽度/可见性/自动增宽状态 |
 | `get_logs` | 可选 `kind`（`app` / `playback`）、`lines`（默认 50、最大 200）；读取日志尾部最多 64 KiB，不接受任意文件路径 |
 | `show_window` | 无参数。显示并激活主窗口 |
 
@@ -112,6 +112,22 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 用户禁止启动客户端或正在进行游戏隔离验证时，**不要调用 MCP 客户端脚本，包括只读查询和 `--startup-only`**：stdio 桥接仍可能冷启动客户端。此时只运行明确注入模拟引擎/端点的测试；Headless 的内存业务调用不经过 stdio/管道，不启动客户端。
 
 ### 艺术家分组诊断
+
+`get_diagnostics.mainLayout` 为兼容性新增，开发和正式版同一实现。窗口未创建或已关闭时仅返回 `created: false`；读取既有窗口的布局状态，不创建窗口、触发布局/展开/导航、访问目录或启动音频。工具总数仍为 21，输入 Schema 仍为空对象并拒绝额外参数，无新增控制工具或参数。
+
+- `windowWidth`、`renderScaling`：主内容区逻辑宽度与窗口实际渲染缩放；宽度单位均为 DIP。
+- `navigationWidth`、`navigationVisible`、`navigationCollapsed`、`preferredNavigationWidth`、`navigationMinWidth`、`navigationMaxWidth`：导航实际宽度、可见性、图标折叠状态、记忆的展开宽度及当前预算范围。
+- `contentWidth`、`songPanelWidth`、`songPanelVisible`、`songMinimumWidth`、`artistPanelWidth`、`artistPanelVisible`、`lyricsPanelWidth`、`lyricsPanelVisible`：右侧内容及各面板实际布局；隐藏控件的旧 Bounds 不代表当前占用，须结合 visible 字段读取。
+- `splitterWidth`、`splitterVisible`、`splitterDragging`：导航分割条实际命中宽度、可见性和拖动状态。
+- `automaticWidthPending`、`lastMeasuredContentWidth`、`lastMeasuredFolderCount`、`automaticWidthResult`：最近一次用户展开后的可见目录测量，不包含目录名或路径；结果为 `none` / `cancelled` / `stale-expansion` / `grown` / `grown-to-limit` / `at-limit` / `already-fits`。计数只含祖先已展开的文件夹节点，包含分组，与 folderNavigation 的全树统计不同。
+
+使用：导航与右内容之间有细线和六 DIP 拖动区，悬停/键盘焦点有反馈，可左右反复调整。展开目录后按实际字体、图标、计数和层级适度增宽，只增长且受窗口 45% 及歌曲空间预算限制；收起不强制缩窄，手工拖动取消待处理请求，普通布局更新不会重新抢占宽度。临时定位展开与恢复不修改收起偏好、不自动增宽。设置按钮位于主窗口顶栏右侧，系统窗口按钮保留独立预留区。
+
+导航展开最小宽度 160，歌曲区域至少 260（扣除左右边距后可用 244）；艺术家和歌词侧栏在小窗口分别可缩至 120 / 180，防止固定辅助宽度把主列表挤没。折叠为图标时仍保存展开宽度；0、负值、非有限值或非法 JSON 导航字段单独恢复为 230，过大值按窗口预算校正，不重置其余快照。有效自定义宽度保留；临时缩小窗口不覆盖记忆宽度，扩大后重新应用。
+
+English: The visible six-DIP navigation splitter resizes both ways. Expanding a folder can grow the pane once using the current font and only expanded visible branches, bounded by the window and song-area budget. Collapsing does not shrink it; manual resizing takes priority. Settings is in the main top-right toolbar. `mainLayout` reports existing geometry and fitting state without creating windows, changing layout, navigating, or starting audio; the 21-tool catalog and empty diagnostics input schema remain compatible.
+
+`MainWindowLayoutTests` uses actual Headless mouse down/move/up, real window scaling at 100/125/150/200%, JSON round trips, memory library/fake audio, and Skia renders in light/dark themes. No decoder or endpoint write is used. Set `JEEKMUSIC_TEST_ARTIFACTS` to save the four rendered layout PNGs; the test substrate substitutes for Windows Mica only during Headless rendering.
 
 `get_diagnostics.artistList` 是兼容性新增，开发/正式版本同样提供。窗口未创建或已关闭时仅返回 `created: false`；查询不创建窗口或控件。窗口已创建后返回：
 

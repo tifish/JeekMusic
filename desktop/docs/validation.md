@@ -1,5 +1,15 @@
 # 实现与验证记录
 
+## 2026-10-25：主窗口导航分割、展开增宽和设置位置
+
+- 基线 `20857466bfe1c0a91c3478a88ad75190c13bc273`。主区改为导航／分割条／星号右内容，右内容再布局艺术家、歌曲和歌词；修复原分割条右邻隐藏艺术家 Auto 列为 0 导致只能向左的问题。六 DIP 命中区、主题细线和悬停/焦点反馈；原生水平调整指针及 GridSplitter 拖动机制保留。
+- 统一导航最小 160、最大窗口 45% 和内容预算；歌曲列最小 260（内部可用 244），小窗口辅助栏按可用空间缩至艺术家 120／歌词 180。正常歌词分割仍双向可调，整页切回侧栏恢复有效布局。合法导航偏好在临时缩小窗口后保留；折叠保存展开记忆宽度。导航字段专用 JSON 容错保留其余快照，过大值按预算校正。
+- 实际用户展开一次性测量祖先已展开的目录，使用当前字体、字距、图标、计数、主题缩进和滚动条度量；不扫描目录或展开隐藏后代。收起不缩，手动拖动取消旧请求，异步回调读取当前树并验证身份/版本；程序恢复及定位临时展开不触发增宽或改写偏好。布局反馈只重新约束，不每帧按内容抢回宽度或写设置。
+- 原 `SettingsButton` 移至顶栏筛选右侧，保留系统按钮 150 DIP 独立区域、User 命中角色、原图标、回调、tooltip 和 Automation Name；不修改托盘／迷你播放器、字体、音频菜单或智能标签业务。
+- 新增 31 项 `MainWindowLayoutTests`：真实 Headless 鼠标 Down/Move/Up、反复两向、边界、760 小窗口各辅助栏组合、resize、无效数值/非法单字段 JSON、合法宽度/折叠 JSON 重启、短长名称与隐藏后代/层级/字体、收起稳定、手动优先/快速输入/树重建/关闭回调、歌词分割及整页恢复、空输入 Schema/21 工具/诊断生命周期、中英文顶栏、100/125/150/200% 实际 RenderScaling、Skia 实际字体浅深色 1200/760 渲染。内存 SQLite、模拟引擎和端点，逐项断言无解码引擎创建和端点写入。
+- MCP 兼容新增 `get_diagnostics.mainLayout`，未创建/关闭后 `created=false`，仅返回既有实际几何、约束和自动增宽状态，不创建窗口、布局、目录或音频；描述、中文/英文文档和输入 Schema/工具数量回归同步。
+- 最终限定回归 **239 通过，0 失败/跳过**，包括布局专项 **31 项**及 PlayingVisibility/PlayingAppearance/FolderNavigation/ArtistList/LyricsPanel/SpacePlaybackShortcut/PlaybackShortcut/TrackNavigation/McpSession/Localization；Release win-x64 构建无警告/错误，`git diff --check` 通过。四幅渲染 PNG 位于忽略目录 `desktop/artifacts/layout/`，Headless 使用模拟 Mica 背景，不代表 Windows 原生合成器验收。原生 computer-use 轻量枚举报 `Computer Use native pipe is unavailable`；Windows UI Automation 只读检查可用，客户端重启及发布状态另行实测。
+
 ## 2026-10-24：默认文件修改时间排序与时间列
 
 基线 `51ffe2cf250c8207aef093972893b8e1192226ba`；对应 G-1/G-2 和移动端 U-8。无排序键的新状态按文件 mtime 倒序，已有键及方向保留（旧版总会写默认 FileName，无法区分显式选择）。无偏好时手工播放列表与专辑保留曲序；显式排序仍全局生效。修改时间列默认显示，旧快照一次显示该列，保存 `songColumnsVersion=1` 后继续遵循隐藏、宽度和顺序；绝对列宽在未布局/隐藏时也能保存。

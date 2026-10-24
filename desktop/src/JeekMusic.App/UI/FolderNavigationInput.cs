@@ -14,7 +14,7 @@ namespace JeekMusic.UI;
 /// </summary>
 internal static class FolderNavigationInput
 {
-    public static void Attach(TreeView tree, FolderExpansionState state)
+    public static void Attach(TreeView tree, FolderExpansionState state, Action<NavNode, bool>? changed = null)
     {
         Observe(InputElement.PointerPressedEvent);
         Observe(InputElement.PointerReleasedEvent);
@@ -30,7 +30,11 @@ internal static class FolderNavigationInput
                 // 手势识别（如标题双击）可能在输入路由后才改变展开；等本次路由/手势结束再比较。
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (item.IsExpanded != before) state.RecordUserExpansion(node, item.IsExpanded);
+                    if (ReferenceEquals(item.DataContext, node) && item.IsExpanded != before)
+                    {
+                        state.RecordUserExpansion(node, item.IsExpanded);
+                        changed?.Invoke(node, item.IsExpanded);
+                    }
                 });
             }, RoutingStrategies.Tunnel, handledEventsToo: true);
         }

@@ -6,6 +6,25 @@
         <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
     </Styles.Resources>
 
+    <!-- A narrow visible rule, with a full-height six-DIP pointer target. -->
+    <Style Selector="GridSplitter.pane-splitter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}">
+                    <Border Width="1" HorizontalAlignment="Center" Margin="0,8"
+                            Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="GridSplitter.pane-splitter:pointerover, GridSplitter.pane-splitter:pressed">
+        <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
+    </Style>
+    <Style Selector="GridSplitter.pane-splitter:focus-visible">
+        <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
+    </Style>
+
     <Style Selector="ListBox.artist-list > ListBoxItem">
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="Margin" Value="0" />

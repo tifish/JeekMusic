@@ -28,6 +28,7 @@ public sealed class AppServices : IDisposable
     internal UI.PlayingRowVisibility? QueueVisibility { get; set; }
     internal UI.FolderExpansionState FolderExpansion { get; } = new();
     internal UI.ViewModels.MainViewModel? Navigation { get; set; }
+    internal Func<System.Text.Json.Nodes.JsonObject>? MainLayoutDiagnostics { get; set; }
     public Automation.McpServer Mcp { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();

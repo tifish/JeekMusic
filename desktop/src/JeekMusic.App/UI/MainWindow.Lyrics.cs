@@ -56,11 +56,9 @@ public partial class MainWindow
     void ApplyLyricsLayout()
     {
         var full = _lyricsFullPage && LyricsHost.IsVisible;
-        // 整页：歌词占满导航栏右边的区域
-        MainArea.ColumnDefinitions[3].Width = full ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        MainArea.ColumnDefinitions[5].Width = full ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-        LyricsHost.Width = full ? double.NaN : Math.Clamp(_lyricsWidth, 260, 720);
+        SongPanel.IsVisible = !full;
         LyricsSplitter.IsVisible = LyricsHost.IsVisible && !full;
+        RefreshLayoutBudget();
         if (_lyricsPanel is not null) _lyricsPanel.FullPage = full;
     }
 
@@ -77,6 +75,6 @@ public partial class MainWindow
     {
         ui.LyricsPanel = LyricsHost.IsVisible;
         ui.LyricsFullPage = _lyricsFullPage;
-        if (LyricsHost.IsVisible && !_lyricsFullPage) ui.LyricsWidth = LyricsHost.Bounds.Width;
+        if (LyricsHost.IsVisible && !_lyricsFullPage) ui.LyricsWidth = double.IsFinite(_lyricsWidth) ? Math.Clamp(_lyricsWidth, 180, 720) : 360;
     }
 }

@@ -11,7 +11,9 @@ public partial class MainWindow
     {
         _app.FolderExpansion.Restore(ui);
         _vm.ApplyFolderExpansion();
-        MainArea.ColumnDefinitions[0].Width = new GridLength(Math.Clamp(ui.NavWidth, 160, 480));
+        _navWidth = SafeNavWidth(ui.NavWidth);
+        RefreshLayoutBudget();
+        _navWidth = MainArea.ColumnDefinitions[0].Width.Value;
         // 按保存的顺序恢复现有列，跳过已移除的列，避免旧位置留下空档。
         var columnOrder = 0;
         foreach (var state in ui.Columns.OrderBy(c => c.Order))
@@ -41,7 +43,7 @@ public partial class MainWindow
     {
         _app.FolderExpansion.Save(ui);
         ui.SongColumnsVersion = 1;
-        ui.NavWidth = MainArea.ColumnDefinitions[0].ActualWidth;
+        ui.NavWidth = SafeNavWidth(_navWidth);
         ui.Columns = Table.Columns.Select(c => new ColumnState
         {
             Tag = c.Tag as string ?? "", Width = c.Width.IsAbsolute ? c.Width.Value : c.ActualWidth, Order = c.DisplayIndex, Visible = c.IsVisible,

@@ -154,7 +154,7 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             var menu=window.CreateOutputMenu();
             Assert.All(menu.Items.OfType<MenuItem>(),i=>Assert.Empty(i.Items));
             Assert.Contains(menu.Items.OfType<MenuItem>(),i=>Equals(i.Header,L.T("自动匹配歌曲格式"))&&i.IsChecked);
-            Assert.Contains(menu.Items.OfType<MenuItem>(),i=>i.Header?.ToString()?.Contains("24")==true);
+            Assert.Contains(menu.Items.OfType<MenuItem>(),i=>i.Header is TextBlock text&&text.Text?.Contains("24")==true&&text.MaxWidth==480);
             Assert.Equal("44.1 kHz → 44.1 kHz",window.ViewModel.Player.FormatText);
             formats.Actual=Pcm(48000,24,32);f.Player.RefreshOutput(forceRateRefresh:true);
             Assert.Equal("44.1 kHz → 48 kHz",window.ViewModel.Player.FormatText);

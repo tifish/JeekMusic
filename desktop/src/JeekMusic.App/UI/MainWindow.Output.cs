@@ -36,10 +36,12 @@ public partial class MainWindow
         automatic.Click += (_, _) => p.SetAutomaticAudioFormat(!p.AutomaticAudioFormat);
         menu.Items.Add(automatic);
         menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = AudioFormatDisplay.Source(p), IsEnabled = false });
-        menu.Items.Add(new MenuItem { Header = AudioFormatDisplay.Device(p), IsEnabled = false });
+        void Info(string text) => menu.Items.Add(new MenuItem { Header = new TextBlock
+            { Text = text, MaxWidth = 480, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
+        Info(AudioFormatDisplay.Source(p));
+        Info(AudioFormatDisplay.Device(p));
         if ((p.SampleRateDiagnostic ?? p.FormatConversion ?? (!p.Exclusive ? p.RateCapabilities.Diagnostic : null)) is { } diagnostic)
-            menu.Items.Add(new MenuItem { Header = diagnostic, IsEnabled = false });
+            Info(diagnostic);
         return menu;
     }
 }

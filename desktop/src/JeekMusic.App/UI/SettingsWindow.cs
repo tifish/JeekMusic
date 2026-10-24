@@ -296,7 +296,7 @@ public sealed class SettingsWindow : Window
         p.OutputChanged += OutputChanged;
         formats.DetachedFromVisualTree += (_, _) => p.OutputChanged -= OutputChanged;
         panel.Children.Add(formats);
-        panel.Children.Add(Note(L.T("共享模式切换会实际修改 Windows 当前设备的混音采样率，也影响其他程序。候选采样率经驱动精确探测；不支持或切换失败会保留可用格式并提示。跨采样率自动切换需要重开输出，可能有短暂间隔。")));
+        panel.Children.Add(Note(L.T("自动匹配会修改此设备的 Windows 音频格式，也影响同设备其他程序；切换时可能有短暂间隔。失败时保留可用格式并显示原因。")));
         panel.Children.Add(Note(L.T("共享和独占模式都调节当前设备主音量，共享下也会影响同设备的其他程序；切换、启动和退出不恢复历史音量。静音按钮只影响本播放器。Windows 合成器中的衰减或静音会保留，解除后才能进入独占。独占设备无硬件音量时，请先用硬件旋钮确认安全音量，再按播放继续；读取失败时保持暂停。")));
 
         panel.Children.Add(SubHeading(L.T("其他")));

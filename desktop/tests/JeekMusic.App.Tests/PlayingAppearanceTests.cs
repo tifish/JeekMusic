@@ -3,28 +3,14 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
-using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
-using Avalonia.Themes.Fluent;
 using Avalonia.VisualTree;
 using JeekMusic.UI;
 using JeekMusic.UI.ViewModels;
 
 namespace JeekMusic.App.Tests;
-
-public sealed class PlayingAppearanceTestApplication : Application
-{
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<PlayingAppearanceTestApplication>()
-        .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
-    public override void Initialize()
-    {
-        Styles.Add(new FluentTheme());
-        Styles.Add(new StyleInclude(new Uri("avares://Avalonia.Controls.DataGrid/"))
-        { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml") });
-    }
-}
 
 [Collection("Avalonia UI")]
 public sealed class PlayingAppearanceTests
@@ -34,7 +20,7 @@ public sealed class PlayingAppearanceTests
     [InlineData(true)]
     public async Task CurrentPlayingPausedAndSelectedStatesRemainDistinctWithStableLayout(bool dark)
     {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(PlayingAppearanceTestApplication));
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(() =>
         {
             using var h = new PlayingVisibilityTests.Harness();
@@ -98,7 +84,7 @@ public sealed class PlayingAppearanceTests
     [Fact]
     public async Task QueueSharesTheCurrentTrackMarkerAndPauseUpdatesItWithoutRebuildingRows()
     {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(PlayingAppearanceTestApplication));
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(() =>
         {
             using var h = new PlayingVisibilityTests.Harness();

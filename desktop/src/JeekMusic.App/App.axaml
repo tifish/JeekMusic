@@ -3,6 +3,10 @@
              x:Class="JeekMusic.App"
              RequestedThemeVariant="Default"
              Name="Jeek Music">
+    <Application.Resources>
+        <!-- FluentTheme 与显式 FontFamily.Default / 自绘歌词共用 FontManager 的字体链。 -->
+        <FontFamily x:Key="ContentControlThemeFontFamily">$Default</FontFamily>
+    </Application.Resources>
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />

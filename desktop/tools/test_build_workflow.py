@@ -74,6 +74,9 @@ class WorkflowGuards(unittest.TestCase):
                     value = dict(processId=12345, dataDirectory=str(self.data), processPath=str(self.exe),
                                  processArchitecture="X64", dynamicCodeSupported=False,
                                  frameworkDescription=".NET test")
+                    value["typography"] = dict(initialized=True, defaultFamilyChain="Microsoft YaHei, Segoe UI",
+                        effectiveDefaultFamily="Microsoft YaHei, Segoe UI", microsoftYaHeiAvailable=True,
+                        normalFamilies=["Microsoft YaHei"], boldFamilies=["Microsoft YaHei"])
                 elif name == "get_status":
                     value = {"trackCount": 0}
                 else:
@@ -82,7 +85,8 @@ class WorkflowGuards(unittest.TestCase):
 
             def request(self, method):
                 calls.append(method)
-                return {"tools": [{} for _ in range(22)]}
+                return {"tools": [{"name": "get_diagnostics", "inputSchema": {
+                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(21)]}
 
         with patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
              patch.object(mcp, "McpClient", Client), \

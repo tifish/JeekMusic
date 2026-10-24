@@ -259,6 +259,13 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - MCP 保持 **21 工具**，沿用 `playback` 的 `toggle`；工具及 action 参数描述、中英文使用说明、PC-8 和兼容 Schema 断言同步，无新增键盘工具、参数或开发专用分支。
 
 
+## Windows 微软雅黑字体（2026-10-25）
+
+- Windows FontManager 默认字体链明确为 `Microsoft YaHei, Segoe UI`，FluentTheme 的实际 `ContentControlThemeFontFamily` 资源接到 `$Default`。普通继承文本、显式 `FontFamily.Default` 和桌面歌词自绘 Typeface 共享此链；图标保留 Segoe Fluent Icons / Segoe MDL2 Assets。不修改 Android、不下载或打包商业字体，不新增字体设置。
+- 真实 Skia/HarfBuzz 排版验证代表中文“中文歌曲歌词”的常规/粗体 GlyphRun 实际家族均为 **Microsoft YaHei**，字形编号非零；首选字体不存在时后续字体与系统中文回退可用，图标私用区字形仍来自 Segoe 图标家族。`get_diagnostics.typography` 同步提供配置/有效字体链、准确家族安装情况及代表中文常规/粗体的实际排版结果；开发/正式版同一实现，维持 22 工具、空参数 Schema，无新增控制工具或查询窗口。
+- UI 测试统一使用 Skia 与 Headless 窗口，避免 Avalonia GlyphRun 进程级绘图后端缓存导致真假字体混用。生产 MainWindow 的自动增宽/展开、760–1500 宽布局、设置右上角/分隔条、侧栏/歌词、表格/当前曲标记回归及 SmartTagDialog 中英文窄布局和键盘操作通过。新增真实字体断言、菜单/设置字体继承、迷你 112 高度在 100%/125%/150%/200% 缩放下文本边界、10–22 字号中英文和桌面歌词 14–72 字号描边几何边界检查。图片位于本地 `desktop/artifacts/typography/`，已目检代表样张；不代表 Windows 原生 Mica、全部多屏/DPI 或真实 IME 候选窗验收。
+- `dotnet test desktop/tests/JeekMusic.App.Tests -c Release -r win-x64 --no-restore --filter 'FullyQualifiedName!~RealDecoderReloadsSilentAudioAtTheSavedPositionWithoutUsingAudioHardware'`：358 通过、1 项真实端点用例跳过。音频相关回归为 fake 引擎/端点；未进行真实音频播放测试。字体最终诊断显示格式调整后重新执行真实 EXE/MCP startup-only：22 工具、准确字体家族、Schema、GUI 正常退出及桥接零退出通过。Release RID build 零警告/错误。
+
 ## 智能标签浅层编辑与 MCP（2026-10-25）
 
 - 歌曲右键一级「修正智能标签…」直接打开紧凑对话框；运动、人声、曲风三个分类及各自保持不变／两个值／恢复自动同时可见。显示当前值和自动／手动来源，分别识别混合值和混合来源。默认保持不变、无改动禁用应用；取消、Esc、关闭不写入。选具体值即手动覆盖，包括与自动结果相同的情况。控件继承字体，支持英文窄窗口换行、Tab／方向键／Space／Enter。

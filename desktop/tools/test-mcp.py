@@ -135,9 +135,19 @@ def main():
                 if expected_dynamic:
                     assert diagnostics["dynamicCodeSupported"] == (expected_dynamic == "true"), diagnostics
                 assert diagnostics["frameworkDescription"].startswith(".NET")
+                typography = diagnostics["typography"]
+                assert typography["initialized"]
+                assert typography["effectiveDefaultFamily"] == typography["defaultFamilyChain"] == "Microsoft YaHei, Segoe UI"
+                assert typography["normalFamilies"] and typography["boldFamilies"]
+                if typography["microsoftYaHeiAvailable"]:
+                    assert typography["normalFamilies"] == ["Microsoft YaHei"], typography
+                    assert typography["boldFamilies"] == ["Microsoft YaHei"], typography
+                print("Typography: " + json.dumps(typography, ensure_ascii=True), flush=True)
                 assert call(first, "get_status")["trackCount"] == 0
                 catalog = first.request("tools/list")
                 assert len(catalog["tools"]) == 22
+                schema = next(t for t in catalog["tools"] if t["name"] == "get_diagnostics")["inputSchema"]
+                assert schema["properties"] == {} and schema["additionalProperties"] is False
                 if args.catalog:
                     args.catalog.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
                 print("Runtime: " + json.dumps({k: diagnostics[k] for k in (

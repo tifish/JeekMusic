@@ -1,6 +1,7 @@
 using Avalonia;
 using JeekMusic.Infrastructure;
 using JeekMusic.Platform;
+using JeekMusic.UI;
 
 namespace JeekMusic;
 
@@ -42,5 +43,5 @@ static class Program
     }
 
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+        AppBuilder.Configure<App>().UsePlatformDetect().With(Typography.FontOptions()).LogToTrace();
 }

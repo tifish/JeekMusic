@@ -19,10 +19,14 @@ public sealed class AvaloniaUiCollection;
 public sealed class ShortcutTestApplication : Application
 {
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<ShortcutTestApplication>()
-        .UseHeadless(new AvaloniaHeadlessPlatformOptions());
+        // GlyphRun caches its rendering backend process-wide: use Skia consistently
+        // with the real-font/layout fixtures, while keeping windows and audio simulated.
+        .UseSkia().With(Typography.FontOptions())
+        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 
     public override void Initialize()
     {
+        Resources["ContentControlThemeFontFamily"] = Avalonia.Media.FontFamily.Default;
         Styles.Add(new FluentTheme());
         Styles.Add(new StyleInclude(new Uri("avares://Avalonia.Controls.DataGrid/"))
         {

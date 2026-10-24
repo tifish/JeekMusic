@@ -296,7 +296,7 @@ public sealed class MainWindowLayoutTests
     static UiState RoundTrip(UiState state) => JsonSerializer.Deserialize(JsonSerializer.Serialize(state, UiStateJson.Default.UiState), UiStateJson.Default.UiState)!;
     static async Task Run(Action action)
     {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(action, CancellationToken.None);
     }
 
@@ -382,14 +382,17 @@ public sealed class MainWindowLayoutTests
     }
 }
 
-public sealed class LayoutRenderingApplication : Application
+public class LayoutRenderingApplication : Application
 {
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<LayoutRenderingApplication>().UseSkia()
-        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
+        .With(Typography.FontOptions()).UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
     public override void Initialize()
     {
+        Resources["ContentControlThemeFontFamily"] = FontFamily.Default;
         Styles.Add(new FluentTheme());
         Styles.Add(new StyleInclude(new Uri("avares://Avalonia.Controls.DataGrid/"))
             { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml") });
+        Styles.Add(new StyleInclude(new Uri("avares://JeekMusic/"))
+            { Source = new Uri("avares://JeekMusic/UI/Styles.axaml") });
     }
 }

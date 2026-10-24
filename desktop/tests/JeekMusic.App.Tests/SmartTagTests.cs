@@ -169,6 +169,8 @@ public sealed class SmartTagTests
         try
         {
             Assert.Contains(L.T("自动"), Find<TextBlock>(dialog, "CurrentVOICE")!.Text);
+            dialog.SetRenderScaling(1.5); Pump(dialog);
+            TypographyTests.Save(dialog, $"smart-tags-{language}-{width}");
             var radios = dialog.GetLogicalDescendants().OfType<RadioButton>().ToArray();
             var scroll = dialog.GetLogicalDescendants().OfType<ScrollViewer>().First();
             foreach (var radio in radios)
@@ -255,7 +257,7 @@ public sealed class SmartTagTests
     }
     static async Task Run(Func<Task> test)
     {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(async () => { await test(); return 0; }, CancellationToken.None);
     }
 

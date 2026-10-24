@@ -74,6 +74,14 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
 
+### Windows 字体诊断
+
+`get_diagnostics.typography` 提供只读字体信息：`defaultFamilyChain` 是配置的 `Microsoft YaHei, Segoe UI`，`initialized` 表示已有 Avalonia 应用。初始化后另有 `effectiveDefaultFamily`、`microsoftYaHeiAvailable`（系统是否安装准确的 Microsoft YaHei 家族）、`sample`、`normalFamilies` 和 `boldFamilies`。后两个数组从代表性中文实际排版后的 GlyphRun 读取家族，不是把请求字体名当成命中结果。未安装微软雅黑时正常使用后续字体及系统缺字回退，诊断如实报告。
+
+查询不创建应用或窗口、不滚动、不播放。开发和正式版共用实现；工具仍为 22 个，`get_diagnostics` 仍无参数、空对象 Schema 并拒绝额外参数。
+
+English: `typography` reports the configured/effective default chain, exact Microsoft YaHei availability, and the families actually used to shape the Chinese sample in regular and bold weights. Missing fonts use normal fallback. This read-only addition creates no window and adds no tool or argument.
+
 ### 空格播放/暂停与焦点
 
 `playback {"action":"toggle"}` 与主窗口、迷你播放器的无修饰空格共用 `PlayerService.PlayPause()`：切换播放/暂停，保留曲目、队列及位置；暂停释放流并恢复本客户端拥有的临时端点格式，续播自动重新匹配并从保留位置继续。空队列仍为空操作，输出保护仍有效。沿用现有工具及参数，无新增键盘工具。

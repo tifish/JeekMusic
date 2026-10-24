@@ -155,9 +155,16 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             Assert.All(menu.Items.OfType<MenuItem>(),i=>Assert.Empty(i.Items));
             Assert.Contains(menu.Items.OfType<MenuItem>(),i=>Equals(i.Header,L.T("自动匹配歌曲格式"))&&i.IsChecked);
             Assert.Contains(menu.Items.OfType<MenuItem>(),i=>i.Header is TextBlock text&&text.Text?.Contains("24")==true&&text.MaxWidth==480);
-            Assert.Equal("44.1 kHz → 44.1 kHz",window.ViewModel.Player.FormatText);
+            Assert.Equal("WAV · 44.1 kHz → 44.1 kHz "+L.T("共享"),window.ViewModel.Player.FormatText);
+            Assert.False(f.Player.OutputResampled);
+            Assert.False(f.Player.HasOutputFormatWarning);
             formats.Actual=Pcm(48000,24,32);f.Player.RefreshOutput(forceRateRefresh:true);
-            Assert.Equal("44.1 kHz → 48 kHz",window.ViewModel.Player.FormatText);
+            Assert.Equal("WAV · 44.1 kHz → 48 kHz "+L.T("共享")+L.T("（已重采样）")+" ⚠",window.ViewModel.Player.FormatText);
+            Assert.Contains(window.ViewModel.Player.FormatText,window.ViewModel.Player.OutputModeTip);
+            var output=mcp.Call("get_output",new())["audioFormat"]!;
+            Assert.Equal(window.ViewModel.Player.FormatText,output["displaySummary"]!.GetValue<string>());
+            Assert.True(output["resampled"]!.GetValue<bool>());
+            Assert.True(output["hasWarning"]!.GetValue<bool>());
             Assert.Contains("24",AudioFormatDisplay.Device(f.Player));Assert.Contains("32",AudioFormatDisplay.Device(f.Player));
             Assert.Contains(L.T("位深未知 / 不适用"),AudioFormatDisplay.Source(f.Player));
             var automatic=window.CreateOutputMenu().Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("自动匹配歌曲格式")));
@@ -183,6 +190,42 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             settings.WriteNow();Assert.DoesNotContain("manualSampleRate",File.ReadAllText(path));File.Delete(path);
         },CancellationToken.None);
     }
+
+    [Fact]
+    public Task SummaryKeepsFilePrecisionModeAndSafetyWarningsDuringExclusiveReload()=>Run((f,formats)=>
+    {
+        Assert.Contains(f.Player.CurrentTrack!.FormatLabel,AudioFormatDisplay.Summary(f.Player));
+        Assert.Contains("24/44.1",AudioFormatDisplay.Summary(f.Player));
+        Assert.Contains(L.T("共享"),AudioFormatDisplay.Summary(f.Player));
+        f.Endpoint.HardwareVolume=false;
+        f.Player.SetExclusive(true);
+        Assert.Contains(L.T("独占"),AudioFormatDisplay.Summary(f.Player));
+        Assert.Contains("44.1 kHz → …",AudioFormatDisplay.Summary(f.Player));
+        Assert.DoesNotContain(L.T("（已重采样）"),AudioFormatDisplay.Summary(f.Player));
+        f.Current.Properties["audio-out-params/samplerate"]="44100";f.Ready();
+        Assert.True(f.Player.HasOutputFormatWarning);
+        Assert.Contains("⚠",AudioFormatDisplay.Summary(f.Player));
+        Assert.Equal(f.Player.OutputSafetyMessage,AudioFormatDisplay.Warning(f.Player));
+        f.Player.Resume();
+        Assert.Contains("44.1 kHz → 44.1 kHz",AudioFormatDisplay.Summary(f.Player));
+        Assert.Contains(L.T("独占"),AudioFormatDisplay.Summary(f.Player));
+        Assert.False(f.Player.OutputResampled);
+        Assert.False(f.Player.HasOutputFormatWarning);
+    },initialBits:24);
+
+    [Fact]
+    public Task SummaryReportsClientResamplingEvenWhenFinalDeviceRateMatchesTheSource()=>Run((f,formats)=>
+    {
+        formats.Actual=Pcm(44100,16,16);
+        f.Current.Properties["audio-params/samplerate"]="44100";
+        f.Current.Properties["audio-out-params/samplerate"]="48000";
+        f.Current.Emit(Mpv.EventId.AudioReconfig);Dispatcher.UIThread.RunJobs();
+        Assert.Equal(44100,f.Player.ActualSampleRate);
+        Assert.True(f.Player.OutputResampled);
+        Assert.Contains("44.1 kHz → 44.1 kHz",AudioFormatDisplay.Summary(f.Player));
+        Assert.Contains(L.T("（已重采样）"),AudioFormatDisplay.Summary(f.Player));
+        Assert.False(f.Player.HasOutputFormatWarning);
+    });
 
     [Fact]
     public async Task DecoderKnownSideLayoutReconfiguresBeforeUnmutingWithoutRepeatingTheReload()

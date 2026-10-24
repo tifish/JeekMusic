@@ -4,6 +4,15 @@ namespace JeekMusic.UI;
 
 internal static class AudioFormatDisplay
 {
+    public static string Summary(PlayerService p)
+    {
+        var file = p.CurrentTrack is { } track ? track.FormatLabel + " · " : "";
+        var rates = Rate(p.SourceFormat.SampleRate) + " → " + (p.OutputPending ? "…" : Rate(p.ActualSampleRate));
+        return file + rates + " " + (p.Exclusive ? L.T("独占") : L.T("共享")) +
+            (p.OutputResampled ? L.T("（已重采样）") : "") + (p.HasOutputFormatWarning ? " ⚠" : "");
+    }
+    public static string? Warning(PlayerService p) => p.SampleRateDiagnostic ?? p.FormatConversion ??
+        (p.OutputBlockReason is not null ? p.OutputSafetyMessage : !p.Exclusive ? p.RateCapabilities.Diagnostic : null);
     public static string Rate(int? rate) => rate is > 0 ? $"{rate / 1000.0:0.###} kHz" : "—";
     public static string Channels(int? count, string? layout) => count is > 0
         ? L.F($"{count} 声道") + (layout is null or "unknown" ? "" : $" ({layout})") : L.T("声道未知");

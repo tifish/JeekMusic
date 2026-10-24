@@ -40,7 +40,7 @@ public partial class MainWindow
             { Text = text, MaxWidth = 480, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
         Info(AudioFormatDisplay.Source(p));
         Info(AudioFormatDisplay.Device(p));
-        if ((p.SampleRateDiagnostic ?? p.FormatConversion ?? (!p.Exclusive ? p.RateCapabilities.Diagnostic : null)) is { } diagnostic)
+        if (AudioFormatDisplay.Warning(p) is { } diagnostic)
             Info(diagnostic);
         return menu;
     }

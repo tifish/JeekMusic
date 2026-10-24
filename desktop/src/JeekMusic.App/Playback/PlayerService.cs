@@ -53,6 +53,10 @@ public sealed class PlayerService : IDisposable
         RateCapabilities.MixFormat is { } mix && mix.SampleRate == SelectedDeviceFormat.SampleRate &&
         mix.Channels == SelectedDeviceFormat.Channels && mix.ChannelMask == SelectedDeviceFormat.ChannelMask);
     public bool SampleRateApplied => AudioFormatApplied && RequestedSampleRate == ActualSampleRate;
+    public bool OutputResampled => !OutputPending && (Format.Resampled ||
+        SourceFormat.SampleRate is { } source && ActualSampleRate is { } actual && source != actual);
+    public bool HasOutputFormatWarning => SampleRateDiagnostic is not null || FormatConversion is not null ||
+        OutputBlockReason is not null || !Exclusive && RateCapabilities.Diagnostic is not null;
     long _mixPoll;
     readonly DispatcherTimer _outputMonitor;
     EndpointVolumeSnapshot? _endpoint;

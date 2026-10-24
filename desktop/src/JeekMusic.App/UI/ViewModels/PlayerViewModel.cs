@@ -81,14 +81,13 @@ public sealed partial class PlayerViewModel : ObservableObject
     public bool SleepActive => _sleep.Active;
     public string SleepText => _sleep.Remaining is { } r ? Text.Duration(r) : _sleep.SongsLeft > 0 ? L.F($"{_sleep.SongsLeft} 首") : "";
 
-    public string FormatText => AudioFormatDisplay.Rate(_player.SourceFormat.SampleRate) + " → " +
-        (_player.OutputPending ? "…" : AudioFormatDisplay.Rate(_player.ActualSampleRate));
+    public string FormatText => AudioFormatDisplay.Summary(_player);
 
-    public string OutputModeTip => (_player.Exclusive
+    public string OutputModeTip => FormatText + "\n" + (_player.Exclusive
         ? L.T("点击切换为共享模式，并从当前位置继续播放。")
         : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。")) + "\n" +
         L.T("右键查看格式和自动匹配选项。") + "\n" + AudioFormatDisplay.Source(_player) + "\n" + AudioFormatDisplay.Device(_player) +
-        "\n" + (_player.SampleRateDiagnostic ?? _player.FormatConversion ?? "");
+        "\n" + (AudioFormatDisplay.Warning(_player) ?? "");
 
     // ── 音量（需求 O-4）──
 

@@ -449,5 +449,6 @@
   "有效位深未知（独占流）": "Effective bit depth unknown (exclusive stream)",
   "{0} 有效位 / {1} 位容器": "{0} valid bits / {1}-bit container",
   "{0} 位浮点": "{0}-bit float",
-  "自动匹配会修改此设备的 Windows 音频格式，也影响同设备其他程序；切换时可能有短暂间隔。失败时保留可用格式并显示原因。": "Automatic matching changes the Windows format for this device and affects other apps using it. Changes may cause a short gap. Failures keep usable playback and show the reason."
+  "自动匹配会修改此设备的 Windows 音频格式，也影响同设备其他程序；切换时可能有短暂间隔。失败时保留可用格式并显示原因。": "Automatic matching changes the Windows format for this device and affects other apps using it. Changes may cause a short gap. Failures keep usable playback and show the reason.",
+  "（已重采样）": " (resampled)"
 }

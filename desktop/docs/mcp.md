@@ -193,7 +193,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 ### 自动匹配音频格式
 
-最终交互仅共享/独占模式及共享“自动匹配歌曲格式”开关，不提供手动采样率、位深、声道列表。播放栏固定为“源采样率 → 实际设备采样率”，相同也显示两端；右键只读列出歌曲和设备的采样率、有效位深/容器位深、声道与可靠布局。输出重建和不可读状态使用占位，不用请求值充当实际值。
+最终交互仅共享/独占模式及共享“自动匹配歌曲格式”开关，不提供手动采样率、位深、声道列表。播放栏保留文件格式、共享/独占、已重采样和警告标记，其中采样率统一为“源采样率 → 实际设备采样率”，相同也显示两端；右键只读列出歌曲和设备的采样率、有效位深/容器位深、声道与可靠布局。输出重建和不可读状态使用占位，不用请求值充当实际值。
 
 推荐控制：
 
@@ -212,6 +212,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 `get_output.audioFormat` 与 `get_diagnostics.output.audioFormat` 使用同一业务状态，开发与 NativeAOT 正式版一致：
 
+- `displaySummary` 与播放栏完整文本一致；`resampled` 同时检查解码到客户端流及源到实际端点的采样率变化，输出重建时不提前宣称重采样；`hasWarning` 覆盖格式失败、转换/回退及输出安全门控，提示和右键保留详情。以上为兼容新增的查询字段，控制参数与工具数不变。
 - `automaticFormat` 为保存的共享偏好；`activePolicy` 为 windows-current/shared-automatic/exclusive-native。
 - `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；有损/浮点解码值不等于原始 PCM 位深。
 - `clientStream` 为 mpv 实际客户端流 rate/sampleFormat/channels，仅用于流诊断；float 不构成设备为 32 位的证据。

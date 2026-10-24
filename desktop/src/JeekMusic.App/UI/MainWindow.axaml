@@ -216,7 +216,7 @@
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;专辑&apos;}" Binding="{Binding Album}" Width="2*" Tag="Album" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;时长&apos;}" Binding="{Binding Duration}" Width="92" Tag="Duration" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;文件名&apos;}" Binding="{Binding FileName}" Width="2*" Tag="FileName" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;修改时间&apos;}" Binding="{Binding Modified}" Width="130" Tag="Modified" />
+                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;修改时间&apos;}" Binding="{Binding Modified}" Width="154" Tag="Modified" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;格式&apos;}" Binding="{Binding Format}" Width="96" Tag="Format" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;智能标签&apos;}" Binding="{Binding TagText}" Width="140" Tag="Tags" />
                         </DataGrid.Columns>

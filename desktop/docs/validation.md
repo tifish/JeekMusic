@@ -1,5 +1,23 @@
 # 实现与验证记录
 
+## 2026-10-24：默认文件修改时间排序与时间列
+
+基线 `51ffe2cf250c8207aef093972893b8e1192226ba`；对应 G-1/G-2 和移动端 U-8。无排序键的新状态按文件 mtime 倒序，已有键及方向保留（旧版总会写默认 FileName，无法区分显式选择）。无偏好时手工播放列表与专辑保留曲序；显式排序仍全局生效。修改时间列默认显示，旧快照一次显示该列，保存 `songColumnsVersion=1` 后继续遵循隐藏、宽度和顺序；绝对列宽在未布局/隐藏时也能保存。
+
+限定验证命令（不执行客户端、stdio/管道 MCP、扫描或解码）：
+
+```powershell
+dotnet build desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -r win-x64 -p:SelfContained=false -p:PublishAot=false
+$env:JEEKMUSIC_DATA = Join-Path $env:TEMP ('jeek-modified-tests-' + [guid]::NewGuid().ToString('N'))
+dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj --no-build --no-restore -r win-x64 -p:SelfContained=false -p:PublishAot=false --filter 'FullyQualifiedName~JeekMusic.App.Tests.SongModificationTests|FullyQualifiedName~JeekMusic.App.Tests.McpSessionTests|FullyQualifiedName~JeekMusic.App.Tests.LocalizationTests'
+```
+
+构建 0 警告/错误，38 项测试通过，0 失败/跳过。新测试覆盖真实 ticks（同一显示分钟内仍有精确排序）、本地时间格式、0/负数/1601/epoch/溢出值、双向未知排末、相同 mtime 和 CUE 曲序、无键保存后仍无偏好、所有旧排序及方向的 JSON 往返、手工列表/专辑默认、Headless 列迁移与隐藏/宽度/位置恢复、默认排序箭头与反向、MCP 排序后分页/日期字段/单次覆盖不改偏好、Schema 有效和错误参数。Headless 使用内存数据库与显式注入的 FakeEngine/FakeEndpointVolume，并断言没有创建引擎或写端点；未跑 App/solution 全集或 RealDecoder。
+
+MCP `search_tracks` 增加可选 sort/reverse，缺省复用 UI 搜索排序；歌曲 JSON 兼容新增 mtimeUtcTicks、modifiedUtc、modifiedLocal，工具数量仍为 21。文档与 Schema 同步更新。
+
+本轮不终止、启动、重启或连接任何桌面 JeekMusic（包括既有 PID26088、托盘、临时数据、`--mcp` 和 `--startup-only`），不操作游戏或真实音频/设备音量/静音/输出模式。所有构建带 RID，未触发 portable staging 或覆盖根 `output/`；新版本未部署到用户日常入口。真实窗口中英文/DPI/横向空间和交互、Native AOT 发布及真实 MCP 宿主连接均未验收，待限制解除后由主对话安排。
+
 更新：2026-10-21。当前为 Windows x64 本地预览构建（版本 1.0.0），不是所有验收指标均已达标的正式版本。对应需求见 [requirements.md](requirements.md)，实现设计见 [design.md](design.md)。
 
 ## 实现范围

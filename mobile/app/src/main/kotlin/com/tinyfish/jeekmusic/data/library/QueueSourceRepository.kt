@@ -49,7 +49,7 @@ class QueueSourceRepository @Inject constructor(
 
     /** 播放列表的条目（包括文件不可用的），按筛选和排序；按文件名（默认）时保持手动排的顺序（需求 U-8、PL-3）。 */
     fun playlistEntries(playlistId: Long): Flow<List<PlaylistEntry>> =
-        combine(playlists.entries(playlistId), tagFilters.allowedKeys, sorter.sort) { entries, allowed, sort ->
+        combine(playlists.entries(playlistId), tagFilters.allowedKeys, sorter.orderedViewSort) { entries, allowed, sort ->
             val filtered = entries.filterByTags(allowed) { it.track?.trackKey }
             if (sort == SongSort.FILE_NAME) filtered else sorter.sorted(filtered, sort) { it.track }
         }.flowOn(Dispatchers.Default)

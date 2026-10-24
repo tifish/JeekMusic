@@ -149,16 +149,16 @@ class LibraryRepository @Inject constructor(
 
     fun artist(nameKey: String): Flow<ArtistEntity?> = artistDao.observeByNameKey(nameKey)
 
-    /** 艺术家的全部歌曲，不分组，按全局排序（默认按文件名，需求 A-6、U-8）。 */
+    /** 艺术家的全部歌曲，不分组，默认修改时间倒序（需求 A-6、U-8）。 */
     fun artistTracks(nameKey: String): Flow<List<TrackEntity>> =
         combine(trackDao.observeByArtist(nameKey), tagFilter.allowedKeys, sorter.sort) { tracks, allowed, sort ->
             sorter.sorted(tracks.filterByTags(allowed) { it.trackKey }, sort) { it }
         }.flowOn(Dispatchers.Default)
 
-    /** 专辑的歌曲，按全局排序（默认按文件名；CUE 整轨里按音轨号）。 */
+    /** 专辑没有显式排序偏好时按碟号、音轨号，CUE 同源分轨按曲序。 */
     fun albumTracks(albumKey: String): Flow<List<TrackEntity>> =
-        combine(trackDao.observeByAlbum(albumKey), tagFilter.allowedKeys, sorter.sort) { tracks, allowed, sort ->
-            sorter.sorted(tracks.filterByTags(allowed) { it.trackKey }, sort) { it }
+        combine(trackDao.observeByAlbum(albumKey), tagFilter.allowedKeys, sorter.albumSort) { tracks, allowed, sort ->
+            sorter.albumSorted(tracks.filterByTags(allowed) { it.trackKey }, sort)
         }.flowOn(Dispatchers.Default)
 
     suspend fun tracksByIds(ids: List<Long>): List<TrackEntity> {

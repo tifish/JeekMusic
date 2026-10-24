@@ -25,9 +25,9 @@ public sealed class McpTools
 
     internal static JsonArray BuildCatalog() => new(
         Tool("get_status", "Read current playback, queue summary and library scan state. Playback commands are asynchronous; poll this tool to observe the result.", "", [], true),
-        Tool("search_tracks", "Search the library using the same title/artist/album/file name and Chinese initials matching as the UI. Empty query lists all tracks. Optional filters combine with AND; pages default to 50 and never exceed 200.",
-            "\"query\":{\"type\":\"string\",\"maxLength\":1000},\"folderId\":{\"type\":\"integer\"},\"artistKey\":{\"type\":\"string\"},\"albumKey\":{\"type\":\"string\"}," + Page, [], true),
-        Tool("get_track", "Read a track's metadata, stable key, local file path and smart tags by local track ID.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
+        Tool("search_tracks", "Search using the UI library matching and sorting services. Empty query lists all tracks. Uses saved sorting, or file modification time newest first without a preference; sort/reverse override this query only. Invalid dates stay last; equal dates keep file/CUE order. Filters combine with AND; sorting precedes pagination. Returns mtimeUtcTicks, modifiedUtc (ISO UTC or null) and modifiedLocal (local display or em dash). Pages default to 50, max 200.",
+            "\"query\":{\"type\":\"string\",\"maxLength\":1000},\"folderId\":{\"type\":\"integer\"},\"artistKey\":{\"type\":\"string\"},\"albumKey\":{\"type\":\"string\"},\"sort\":{\"type\":\"string\",\"enum\":[\"FileName\",\"Modified\",\"Title\",\"Artist\",\"Album\",\"Duration\",\"Format\"],\"description\":\"Optional per-query sort, same values as UI settings. Modified is file mtime newest first.\"},\"reverse\":{\"type\":\"boolean\",\"description\":\"Reverse base order; Modified becomes oldest first, unknown dates still last. Defaults to saved direction, or false when sort is supplied. Does not save a preference.\"}," + Page, [], true),
+        Tool("get_track", "Read metadata, stable key, path, tags and cached file mtime: mtimeUtcTicks (.NET UTC ticks), modifiedUtc (ISO UTC or null), modifiedLocal (local date/time or em dash). No file metadata read or rescan.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
         Tool("play_tracks", "Play trackIds in order starting at startIndex (default 0). Preserves pending manually queued songs, like the UI. Validates all tracks before changing playback.",
             "\"trackIds\":" + Ids + ",\"startIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":999},\"shuffle\":{\"type\":\"boolean\"}", ["trackIds"]),
         Tool("playback", "Control playback. seek uses seconds relative to the current track, including CUE tracks; requires a loaded seekable track and ready output. Preserves play/pause and clamps the endpoint to 1s before track end to avoid seeking into EOF. next/previous start playback even when paused, after a valid target or restart is accepted and output safety checks pass; they never acknowledge hardware-volume confirmation. previous restarts the current track if past 3 seconds. Explicit seek also restores visible timed lyrics following, even during manual browsing. Returns an immediate state snapshot.",
@@ -87,7 +87,7 @@ public sealed class McpTools
                     tracks = tracks.Where(t => artistIds.Contains(t.Id));
                 }
                 if (a["albumKey"] is { } album) tracks = tracks.Where(t => t.AlbumKey == album.GetValue<string>());
-                return Paginate(tracks.ToList(), a, TrackJson);
+                return Paginate(SortSearch(tracks, a, app.Settings.Current), a, TrackJson);
             case "get_track": return TrackJson(Track(Required(a, "trackId").GetValue<long>()));
             case "play_tracks":
                 var ids = TrackIds(a);
@@ -242,9 +242,16 @@ public sealed class McpTools
         ["trackNo"] = t.TrackNo, ["discNo"] = t.DiscNo, ["year"] = t.Year, ["genre"] = t.Genre,
         ["codec"] = t.Codec, ["sampleRate"] = t.SampleRate, ["bitsPerSample"] = t.BitsPerSample,
         ["channels"] = t.Channels, ["cueTrackNo"] = t.CueTrackNo,
+        ["mtimeUtcTicks"] = t.Mtime, ["modifiedUtc"] = FileModified.Utc(t.Mtime)?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+        ["modifiedLocal"] = Text.Modified(t.Mtime),
         ["tags"] = app.Library.Snapshot.Tags.TryGetValue(t.TrackKey, out var tags)
             ? new JsonObject { ["mood"] = tags.Mood, ["voice"] = tags.Voice, ["genre"] = tags.Genre } : null
     };
+
+    internal static List<Track> SortSearch(IEnumerable<Track> tracks, JsonObject args, Settings.AppSettings settings) =>
+        ListBuilder.Sort(tracks.ToList(), ListKind.Search,
+            args["sort"] is { } sort ? Enum.Parse<SongSort>(sort.GetValue<string>()) : settings.SongSort,
+            args["reverse"]?.GetValue<bool>() ?? (args.ContainsKey("sort") ? false : settings.SortDescending));
 
     JsonObject Queue(JsonObject a)
     {

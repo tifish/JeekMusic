@@ -63,7 +63,7 @@ public static class ListBuilder
         }
         if (filter is not null) items = items.Where(filter);
         var list = items.ToList();
-        return Sort(list, kind, settings.SongSort, settings.SortDescending);
+        return Sort(list, kind, settings.SortFor(kind is ListKind.Playlist or ListKind.Album), settings.SortDescending);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public static class ListBuilder
         var albumKeys = sort == SongSort.Album ? list.Select(t => t.Album).OfType<string>().Distinct().ToDictionary(a => a, Core.Text.SortKeys.SortKey) : null;
         Comparison<Track> cmp = sort switch
         {
-            SongSort.Modified => (a, b) => b.Mtime.CompareTo(a.Mtime) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
+            SongSort.Modified => (a, b) => FileModified.Compare(a.Mtime, b.Mtime, descending) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             SongSort.Title => (a, b) => SongOrder.CompareKey(a.SortTitle, a.Title, b.SortTitle, b.Title) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             SongSort.Artist => (a, b) => SongOrder.CompareArtist(a, b) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             SongSort.Album => (a, b) => SongOrder.CompareKey(a.Album is { } aa ? albumKeys![aa] : "￿", a.Album ?? "", b.Album is { } ba ? albumKeys![ba] : "￿", b.Album ?? "") is var c && c != 0 ? c
@@ -92,7 +92,8 @@ public static class ListBuilder
             SongSort.Format => (a, b) => string.CompareOrdinal(a.FormatLabel, b.FormatLabel) is var c && c != 0 ? c : SongOrder.CompareFile(a, b, kind),
             _ => (a, b) => SongOrder.CompareFile(a, b, kind),
         };
-        list.Sort(descending ? (a, b) => cmp(b, a) : cmp);
+        // Modified handles direction itself: unknown dates stay last and CUE ties stay in track order.
+        list.Sort(descending && sort != SongSort.Modified ? (a, b) => cmp(b, a) : cmp);
         return list;
     }
 

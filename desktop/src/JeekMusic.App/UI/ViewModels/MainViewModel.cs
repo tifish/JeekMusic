@@ -436,7 +436,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // 播放列表：按条目顺序（含不可用的），排序方式不是"文件名"时按排序后的顺序、不可用的排最后
             var entries = _playlists.Entries(pid);
-            if (S.SongSort == SongSort.FileName && !S.SortDescending)
+            if (S.SortFor(orderedView: true) == SongSort.FileName && !S.SortDescending)
             {
                 var allowed = list.Select(t => t.Id).ToHashSet();
                 foreach (var e in entries)
@@ -546,14 +546,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     // ── 排序（需求 G-2）──
 
-    public SongSort Sort => S.SongSort;
+    public SongSort Sort => S.SortFor(Current is NavTarget.Playlist or NavTarget.Album);
     public bool SortDescending => S.SortDescending;
 
     /// <summary>点表头：换成这一列排序；再点同一列反向。</summary>
     public void SetSort(SongSort sort)
     {
-        if (S.SongSort == sort) S.SortDescending = !S.SortDescending;
-        else { S.SongSort = sort; S.SortDescending = false; }
+        S.SortDescending = Sort == sort && !S.SortDescending;
+        S.SongSort = sort;
         _settings.Save("sort");
         OnPropertyChanged(nameof(Sort));
         OnPropertyChanged(nameof(SortDescending));

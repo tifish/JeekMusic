@@ -3,6 +3,8 @@ package com.tinyfish.jeekmusic.data.filter
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.scanner.SortKeys
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
+import com.tinyfish.jeekmusic.data.settings.Settings
+import com.tinyfish.jeekmusic.util.FileModified
 import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.util.NaturalOrderComparator
 import kotlinx.coroutines.flow.Flow
@@ -13,16 +15,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 全局的歌曲排序（需求 U-8）：标题栏菜单里选一次，所有歌曲列表都按它排，默认按文件名
+ * 全局的歌曲排序（需求 U-8）：标题栏菜单里选一次，所有歌曲列表都按它排，默认按修改时间倒序
  * （播放列表按文件名时保持手动排的顺序，由调用方处理）。
  * 修改时间新的在前；文件名、歌名、歌手从 A 到 Z，中文按拼音，数字按数值（"2" 在 "10" 前面）。
  */
 @Singleton
-class SongSorter @Inject constructor(settings: SettingsRepository) {
+class SongSorter internal constructor(settings: Flow<Settings>, createSortKeys: () -> SortKeys) {
+    @Inject constructor(settings: SettingsRepository) : this(settings.settings, { SortKeys.android() })
 
-    val sort: Flow<SongSort> = settings.settings.map { it.songSort }.distinctUntilChanged()
+    val sort: Flow<SongSort> = settings.map { it.songSort }.distinctUntilChanged()
+    /** No saved preference: keep playlist manual order and album track order. */
+    val orderedViewSort: Flow<SongSort> = settings.map {
+        if (it.hasSongSortPreference) it.songSort else SongSort.FILE_NAME
+    }.distinctUntilChanged()
+    val albumSort: Flow<SongSort?> = settings.map {
+        it.songSort.takeIf { _ -> it.hasSongSortPreference }
+    }.distinctUntilChanged()
 
-    private val sortKeys by lazy { SortKeys.android() }
+    private val sortKeys by lazy(createSortKeys)
 
     /** 拼音排序键的缓存：转写比较慢，长列表每次排序都重新算会卡。 */
     private val keyCache = ConcurrentHashMap<String, String>()
@@ -32,7 +42,9 @@ class SongSorter @Inject constructor(settings: SettingsRepository) {
 
     /** 按文件名（中文按拼音），CUE 整轨里的各首按音轨号。 */
     val byFileName: Comparator<TrackEntity> =
-        compareBy<TrackEntity, String>(NaturalOrderComparator) { key(it.fileName) }.thenBy { it.cueTrackNo ?: 0 }
+        compareBy<TrackEntity, String>(NaturalOrderComparator) { key(it.fileName) }
+            .thenBy(NaturalOrderComparator) { it.fileName }
+            .thenBy { it.fileKey }.thenBy { it.cueTrackNo ?: 0 }.thenBy { it.id }
 
     /** 按歌名（拼音），同名的按文件名。 */
     val byTitle: Comparator<TrackEntity> = compareBy<TrackEntity, String>(NaturalOrderComparator) { key(it.title) }.then(byFileName)
@@ -44,8 +56,15 @@ class SongSorter @Inject constructor(settings: SettingsRepository) {
         return present.sortedWith(compareBy(comparator) { track(it)!! }) + missing
     }
 
+    fun albumSorted(tracks: List<TrackEntity>, sort: SongSort?): List<TrackEntity> =
+        if (sort == null) tracks.sortedWith(compareBy<TrackEntity> { it.discNo ?: 1 }
+            .thenBy { it.trackNo ?: it.cueTrackNo ?: Int.MAX_VALUE }.then(byFileName))
+        else sorted(tracks, sort) { it }
+
     fun comparator(sort: SongSort): Comparator<TrackEntity> = when (sort) {
-        SongSort.MODIFIED -> compareByDescending<TrackEntity> { it.dateModified }.then(byFileName)
+        SongSort.MODIFIED -> compareBy<TrackEntity> { !FileModified.isValid(it.dateModified) }
+            .thenByDescending { if (FileModified.isValid(it.dateModified)) it.dateModified else 0 }
+            .then(byFileName)
         SongSort.FILE_NAME -> byFileName
         SongSort.TITLE -> byTitle
         // "未知艺术家"排在最后

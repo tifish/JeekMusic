@@ -15,7 +15,7 @@ public static class Text
 
     public static string Artist(Track t) => t.ArtistDisplay.Length == 0 ? UnknownArtist : t.ArtistDisplay;
 
-    public static string Modified(long ticks) => new DateTime(ticks, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+    public static string Modified(long ticks) => FileModified.Utc(ticks)?.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture) ?? "—";
 
     public static string Count(int n) => L.F($"{n:N0} 首");
 

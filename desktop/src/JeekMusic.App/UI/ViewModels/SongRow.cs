@@ -34,7 +34,7 @@ public sealed partial class SongRow : ObservableObject
     public string Album => Track?.Album ?? "";
     public string Duration => Track is { } t ? Text.Duration(t.DurationMs) : "";
     public string FileName => Track?.FileName ?? MissingRef ?? "";
-    public string Modified => Track is { } t ? Text.Modified(t.Mtime) : "";
+    public string Modified => Track is { } t ? Text.Modified(t.Mtime) : "—";
     public string Format => Track?.FormatLabel ?? "";
     public string TagText => Text.Tags(Tags);
     public double Opacity => Available ? 1 : 0.45;

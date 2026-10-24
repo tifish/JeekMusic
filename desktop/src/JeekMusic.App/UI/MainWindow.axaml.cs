@@ -157,7 +157,8 @@ public partial class MainWindow : Window
         {
             if (c.Tag is not string tag || !ColumnTitles.TryGetValue(tag, out var title)) continue;
             var sorted = SortOfColumn.TryGetValue(tag, out var s) && s == _vm.Sort;
-            c.Header = sorted ? title + (_vm.SortDescending ? " ↓" : " ↑") : title;
+            var descending = _vm.Sort == SongSort.Modified ? !_vm.SortDescending : _vm.SortDescending;
+            c.Header = sorted ? title + (descending ? " ↓" : " ↑") : title;
         }
     }
 

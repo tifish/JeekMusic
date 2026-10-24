@@ -70,6 +70,8 @@ public sealed class McpSessionTests
     [InlineData("search_tracks", "{\"offset\":-1}")]
     [InlineData("search_tracks", "{\"limit\":201}")]
     [InlineData("search_tracks", "{\"limit\":1.5}")]
+    [InlineData("search_tracks", "{\"sort\":\"bad\"}")]
+    [InlineData("search_tracks", "{\"reverse\":\"true\"}")]
     [InlineData("get_track", "{}")]
     [InlineData("get_track", "{\"trackId\":null}")]
     [InlineData("play_tracks", "{\"trackIds\":[]}")]
@@ -82,6 +84,24 @@ public sealed class McpSessionTests
         await Ready(session);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"NAME","arguments":ARGS}}""".Replace("NAME", name).Replace("ARGS", arguments));
         Assert.True(response!["result"]!["isError"]!.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData("Modified", false)]
+    [InlineData("FileName", true)]
+    public async Task SearchSortOverridesPassSchemaWithoutChangingTheToolContract(string sort, bool reverse)
+    {
+        JsonObject? received = null;
+        var session = Session((_, args) => { received = args; return Task.FromResult(new JsonObject()); });
+        await Ready(session);
+        var response = await session.HandleAsync(new JsonObject
+        {
+            ["jsonrpc"] = "2.0", ["id"] = 1, ["method"] = "tools/call",
+            ["params"] = new JsonObject { ["name"] = "search_tracks", ["arguments"] = new JsonObject { ["sort"] = sort, ["reverse"] = reverse } }
+        }.ToJsonString());
+        Assert.False(response!["result"]!["isError"]!.GetValue<bool>());
+        Assert.Equal(sort, received!["sort"]!.GetValue<string>());
+        Assert.Equal(reverse, received["reverse"]!.GetValue<bool>());
     }
 
     [Fact]

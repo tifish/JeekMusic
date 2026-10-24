@@ -102,6 +102,7 @@
     <string name="filter_clear">清除筛选</string>
     <string name="sort_group">排序</string>
     <string name="sort_modified">修改时间</string>
+    <string name="track_modified_at">修改：%1$s</string>
     <string name="sort_file_name">文件名</string>
     <string name="sort_title">歌名</string>
     <string name="sort_artist">歌手</string>

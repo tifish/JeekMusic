@@ -99,10 +99,20 @@ data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: T
 }
 
 /**
- * 歌曲列表的排序（需求 U-8），默认按文件名。播放列表按文件名时保持手动排的顺序。
- * 旧版本保存的 DEFAULT 读成 FILE_NAME（找不到这个值时用默认值）。
+ * 歌曲列表默认按修改时间倒序；没有用户偏好时，专辑和播放列表保留原有顺序。
+ * 已保存的 FILE_NAME 和旧 DEFAULT 保留为文件名排序，不能推断为未选择。
  */
-enum class SongSort { FILE_NAME, MODIFIED, TITLE, ARTIST }
+enum class SongSort {
+    FILE_NAME, MODIFIED, TITLE, ARTIST;
+
+    companion object {
+        fun fromSaved(value: String?): SongSort = when (value) {
+            "DEFAULT" -> FILE_NAME
+            else -> entries.firstOrNull { it.name == value } ?: MODIFIED
+        }
+        fun hasPreference(value: String?): Boolean = value == "DEFAULT" || entries.any { it.name == value }
+    }
+}
 
 /** 睡眠定时对话框里上次的选择（需求 P-8），下次打开时沿用。 */
 data class SleepPrefs(
@@ -135,7 +145,8 @@ data class Settings(
     val lyricsSources: Set<OnlineSource> = OnlineSource.FOR_LYRICS.toSet(),
     val sleep: SleepPrefs = SleepPrefs(),
     val tagFilter: TagFilter = TagFilter(),
-    val songSort: SongSort = SongSort.FILE_NAME,
+    val songSort: SongSort = SongSort.MODIFIED,
+    val hasSongSortPreference: Boolean = false,
     /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheck: Long = 0,
@@ -314,7 +325,8 @@ class SettingsRepository @Inject constructor(
             voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
         ),
-        songSort = this[Keys.SONG_SORT]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.FILE_NAME,
+        songSort = SongSort.fromSaved(this[Keys.SONG_SORT]),
+        hasSongSortPreference = SongSort.hasPreference(this[Keys.SONG_SORT]),
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,

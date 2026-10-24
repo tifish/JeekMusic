@@ -22,10 +22,17 @@ public partial class MainWindow
             column.IsVisible = state.Visible;
             if (state.Order >= 0) column.DisplayIndex = columnOrder++;
         }
-        // 默认隐藏的列：文件名、修改时间、智能标签（右键表头可以打开）
+        // 默认隐藏的列：文件名、智能标签（右键表头可以打开）
         if (ui.Columns.Count == 0)
             foreach (var c in Table.Columns)
-                if (c.Tag is "FileName" or "Modified" or "Tags") c.IsVisible = false;
+                if (c.Tag is "FileName" or "Tags") c.IsVisible = false;
+        // Older snapshots always recorded the hidden default, without recording user intent.
+        // Reveal once on upgrade; the versioned snapshot then respects show/hide, width and order.
+        if (ui.SongColumnsVersion < 1 && Table.Columns.FirstOrDefault(c => c.Tag is "Modified") is { } modified)
+        {
+            modified.IsVisible = true;
+            modified.Width = new DataGridLength(Math.Max(154, modified.Width.Value));
+        }
         Table.ColumnHeaderContextRequested();
         RestoreExtraLayout(ui);
     }
@@ -33,10 +40,11 @@ public partial class MainWindow
     public void SaveLayout(UiState ui)
     {
         _app.FolderExpansion.Save(ui);
+        ui.SongColumnsVersion = 1;
         ui.NavWidth = MainArea.ColumnDefinitions[0].ActualWidth;
         ui.Columns = Table.Columns.Select(c => new ColumnState
         {
-            Tag = c.Tag as string ?? "", Width = c.ActualWidth, Order = c.DisplayIndex, Visible = c.IsVisible,
+            Tag = c.Tag as string ?? "", Width = c.Width.IsAbsolute ? c.Width.Value : c.ActualWidth, Order = c.DisplayIndex, Visible = c.IsVisible,
         }).ToList();
         SaveExtraLayout(ui);
     }

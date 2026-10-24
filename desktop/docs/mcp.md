@@ -38,8 +38,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | 工具 | 参数与行为 |
 |---|---|
 | `get_status` | 无参数。当前歌曲、播放/暂停、秒数、音量、随机/循环、队列位置、曲库数量、扫描状态和快照版本 |
-| `search_tracks` | `query` 可省略或留空以浏览全库；支持界面相同的标题、艺术家、专辑、文件名和拼音首字母搜索；可按 `folderId`、`artistKey`、`albumKey` 同时筛选；支持分页。结果包含 `artistKeys`、`albumKey` |
-| `get_track` | `trackId`。详细元数据、音频文件路径、稳定键和智能标签，包括 CUE 分轨 |
+| `search_tracks` | `query` 可省略或留空浏览全库；沿用 UI 搜索和排序服务，可按 `folderId`、`artistKey`、`albumKey` 同时筛选；默认使用已保存排序，无偏好时文件修改时间倒序。可选 `sort`（`FileName` / `Modified` / `Title` / `Artist` / `Album` / `Duration` / `Format`）、`reverse` 仅覆盖本次查询，不保存设置；先排序再分页。结果包含 `artistKeys`、`albumKey` 和下述修改时间字段 |
+| `get_track` | `trackId`。详细元数据、音频文件路径、稳定键、智能标签和缓存修改时间，包括 CUE 分轨 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
 | `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲且输出已就绪，否则返回业务错误。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
@@ -62,6 +62,14 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 播放、seek 和音频输出由 libmpv 异步完成；返回的状态是命令执行后的即时快照，应再次调用 `get_status` 确认实际播放状态。扫描、添加/移除文件夹通过现有后台曲库队列执行，`queued: true` 只表示已入队。通过快照版本、扫描状态、搜索结果和日志确认结果；扫描失败原因也进入正常应用日志。
 
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
+
+### 歌曲修改时间与排序
+
+所有歌曲对象（包括 `get_track`、`search_tracks`、队列和播放列表中的歌曲）兼容新增：`mtimeUtcTicks` 为缓存音频文件 mtime 的 .NET UTC ticks 原值；`modifiedUtc` 为带 `Z` 的 ISO 8601 UTC 字符串，未知为 null；`modifiedLocal` 为客户端本地 `yyyy-MM-dd HH:mm`，未知为“—”。CUE 分轨共享源音频 mtime，不使用 CUE 文件、扫描或入库时间。查询不重新读取文件元数据、不扫描、不创建窗口、不启动音频。
+
+`search_tracks` 沿用搜索视图排序，即使带 `albumKey` 也作为搜索结果排序；无偏好默认 Modified（新到旧）。其他基准排序为升序。`reverse` 反转基准顺序，Modified 因此变为旧到新；无效日期双向排末，同时间仍按文件/CUE 分轨号稳定排序。未给 `sort` 时默认沿用保存的方向，显式给 `sort` 时方向默认 false。示例：`{"sort":"Modified","reverse":false,"limit":50}`。现有调用无需新参数，返回分页结构和工具数量（21）不变；搜索顺序现在明确与 UI 服务一致，而非数据库行序。
+
+客户端无排序偏好时，普通曲库采用新默认，手工播放列表与专辑保留曲序；已有保存值（包括旧版无条件写入的 FileName）一律保留。MCP 本次查询排序不改设置、播放队列或手工列表顺序，`get_playlist` 继续按手动顺序返回。
 
 上述四个运行诊断字段为兼容性新增，开发版与正式版同时提供；NativeAOT 的 `dynamicCodeSupported` 为 `false`，启用 AOT 兼容开关的托管构建也可能为 `false`，不能单凭此字段判断发布类型。它们用于核对连接到的实际程序，不能将框架描述字符串当成部署类型枚举。工具数量仍为 21，参数 Schema 无变化。
 

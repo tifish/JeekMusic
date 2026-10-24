@@ -1,5 +1,24 @@
 # 移动端验证记录
 
+## 2026-10-24：默认文件修改时间排序与紧凑时间显示
+
+基线 `51ffe2cf250c8207aef093972893b8e1192226ba`，对应 F-4、A-6、U-8。Settings 默认与 MainViewModel 初值均为 MODIFIED；DataStore 无键/未知值才用新默认，有效旧值及历史 DEFAULT→FILE_NAME 保留。只在用户 setSongSort 时写键；无偏好时播放列表保留手动顺序/拖动，专辑按碟号/音轨号，显式排序继续全局生效。来源队列复用同一管线，手动待播队列不变。
+
+修改时间取 TrackFactory 已写入的音频 MediaStore DATE_MODIFIED（Unix 秒，CUE 共用源文件），不读每行磁盘或触发重扫。共享 TrackRow 在艺术家/专辑下面增加 labelSmall“修改：yyyy-MM-dd HH:mm / Modified: …”，使用系统时区；≤0 或超出安全日期范围为“—”并排末，同时间按文件与同源 CUE 分轨号稳定排序。子文件夹名称排序不变。
+
+在 `mobile/` 执行：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain
+.\gradlew.bat :app:testDebugUnitTest --console=plain
+```
+
+- 75 项纯 JVM 测试，0 失败/错误/跳过；新增 SongSorterTest 3 项，覆盖无偏好/有效旧值/DEFAULT/未知值和 Flow 初值、显式排序、专辑默认曲序、有效/未知/溢出 mtime、秒与毫秒混淆、UTC/新加坡本地显示、相同显示分钟仍按秒排序、同时间/CUE 稳定顺序及不可用条目排末。DataStore 实际磁盘重开与 Android 进程恢复仍待设备验收；本轮旧值验证针对生产解析函数和排序 Flow。
+- Debug APK 构建成功，`app/build/outputs/apk/debug/app-debug.apk`，未安装或启动。
+- lint 0 错误、11 警告：依赖/Gradle 版本提示、原有复数字符串和 KTX 建议，均不位于本次改动行；另有既有 Gradle 弃用提示。
+
+按游戏隔离限制，未启动模拟器、连接/安装/启动任何手机客户端或真实播放，未操作桌面客户端、根 `output/`、游戏或真实音频设备。真实手机上的小屏/字体缩放/深浅主题排版、系统时区切换后的动态刷新、DataStore 进程恢复与真实来源队列同步均延期，由主对话验收。
+
 ## 2026-10-24：显式上一首 / 下一首后直接播放
 
 基于 `58214b87369a3f7e0a4fead74b47845fc5643961`，对应需求 P-1、P-11。

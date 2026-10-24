@@ -23,6 +23,8 @@ public sealed class UiState
     public string? ViewKey { get; set; }
 
     public List<ColumnState> Columns { get; set; } = [];
+    /// <summary>v1 reveals the formerly default-hidden modification date once; subsequent explicit hiding is retained.</summary>
+    public int SongColumnsVersion { get; set; }
     public bool LyricsPanel { get; set; }
     public double LyricsWidth { get; set; } = 360;
     public bool LyricsFullPage { get; set; }

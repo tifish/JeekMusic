@@ -518,7 +518,7 @@ albumDir = relative_path；如果最后一级目录名匹配 ^(cd|disc|disk)\s*\
 
 M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在 1 万首规模下足够快。
 
-排序：SQL 只负责匹配，不排序也不限制条数——`COLLATE NOCASE` 对中文是按 Unicode 码位排的（东 → 传 → 你 → 修），不是拼音。查出全部匹配的歌、按标签筛选后，在内存里用 `SongSorter` 按全局排序（默认按文件名，拼音排序键），再取前 200 首。先排序再截取，否则截到的是 SQL 顺序里的前 200 首。艺术家结果用 `artist.sort_key`（入库时算好的拼音键）在 SQL 里排序。如果性能不够或需要拼音搜索（S-2），再加 FTS4 表，并预存拼音全拼和首字母列。
+排序：SQL 只负责匹配，不排序也不限制条数——`COLLATE NOCASE` 对中文是按 Unicode 码位排的（东 → 传 → 你 → 修），不是拼音。查出全部匹配的歌、按标签筛选后，在内存里用 `SongSorter` 按全局排序（无偏好默认文件修改时间倒序，文本选项用拼音排序键），再取前 200 首。先排序再截取，否则截到的是 SQL 顺序里的前 200 首。艺术家结果用 `artist.sort_key`（入库时算好的拼音键）在 SQL 里排序。如果性能不够或需要拼音搜索（S-2），再加 FTS4 表，并预存拼音全拼和首字母列。
 
 ### 5.7 歌曲列表（TrackRow）
 
@@ -532,9 +532,9 @@ M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在
 
 ### 5.8 歌曲排序（SongSorter）
 
-- 全局设置 `SongSort { FILE_NAME, MODIFIED, TITLE, ARTIST }`（DataStore `song_sort`），默认 `FILE_NAME`，在标题栏的"筛选和排序"菜单里选（需求 U-8）。旧版本保存的 `DEFAULT` 在 `valueOf` 时找不到，回落到默认值 `FILE_NAME`
+- 全局设置 `SongSort { FILE_NAME, MODIFIED, TITLE, ARTIST }`（DataStore `song_sort`），无键默认 `MODIFIED`；StateFlow 初始值一致。有效旧值保留；`DEFAULT` 显式兼容为 `FILE_NAME`，未知值回落新默认。`hasSongSortPreference` 从键内容推导，其他设置写入不创建此键。`orderedViewSort` 在无偏好时为 FILE_NAME 以保留播放列表手动顺序/拖动；`albumSort` 无偏好时为 null，按碟号/音轨号排序，显式选择仍沿用原全局行为；两种视图及其来源队列共用管线。
 - 在内存里排序（`flowOn(Dispatchers.Default)`），不改 SQL：各列表先按筛选过滤，再交给 `SongSorter.sorted()`。按文件名时有三处特殊：文件夹里 CUE 虚拟歌曲排在普通歌曲后面；"播放全部（含子文件夹）"先按所在目录；播放列表保持手动顺序
-- 比较器：修改时间 = `date_modified` 降序；文件名 = 拼音排序键（文件名同样转拼音）+ 自然排序 + CUE 音轨号；子文件夹名也用拼音排序键（`FolderTree.children` 的 `sortKey`）；歌名 / 歌手 = 拼音排序键（`SortKeys`，ICU Han-Latin）+ 自然排序，同名再按文件名；"未知艺术家"排在最后；播放列表中不可用的条目排在最后
+- 比较器：修改时间 = 音频文件 MediaStore `date_modified` Unix **秒**降序（CUE 复用源音频），不使用加入/扫描时间；无效（≤0 或超出安全本地年份范围）排末。相同时间用文件名自然顺序、原名、源 fileKey、CUE 音轨号及 ID 稳定打破平局。标题和艺术家拼音规则保留；播放列表不可用条目排末。`TrackRow` 在原艺术家/专辑行下显示 labelSmall 紧凑“修改：yyyy-MM-dd HH:mm”，复用缓存字段、系统时区/语言，未知“—”；不在绑定时读盘或触发扫描。
 - 拼音转写较慢，排序键按字符串缓存（`ConcurrentHashMap`），长列表反复排序也不卡
 - 播放列表在不是按文件名排序或有筛选时隐藏拖动手柄
 

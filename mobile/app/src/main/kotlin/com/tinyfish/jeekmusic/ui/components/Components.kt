@@ -67,6 +67,8 @@ import coil3.compose.AsyncImage
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.playback.MediaItemMapper
+import com.tinyfish.jeekmusic.util.FileModified
+import androidx.compose.ui.platform.LocalConfiguration
 
 /**
  * 封面；没有封面时显示音符占位图。
@@ -162,6 +164,15 @@ fun TrackRow(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // A compact line within the existing row, leaving artist/album and duration readable.
+            val configuration = LocalConfiguration.current
+            val modified = remember(track.dateModified, configuration) { FileModified.format(track.dateModified) }
+            Text(
+                stringResource(R.string.track_modified_at, modified),
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.width(8.dp))

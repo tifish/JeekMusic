@@ -104,6 +104,7 @@
     <string name="filter_clear">Clear filter</string>
     <string name="sort_group">Sort</string>
     <string name="sort_modified">Date modified</string>
+    <string name="track_modified_at">Modified: %1$s</string>
     <string name="sort_file_name">File name</string>
     <string name="sort_title">Title</string>
     <string name="sort_artist">Artist</string>

@@ -69,7 +69,7 @@ jobs:
           dotnet publish desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 \
             -p:JeekVersion=$VERSION -o publish/JeekMusic
           assets=$(dotnet msbuild desktop/src/JeekMusic.App/JeekMusic.App.csproj -nologo \
-            -p:_IsPublishing=true -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -getProperty:ProjectAssetsFile)
+            -p:_IsPublishing=true -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -getProperty:ProjectAssetsFile | tr -d '\r')
           python desktop/tools/collect-licenses.py publish/JeekMusic --assets "$assets"
           rm -f publish/JeekMusic/*.pdb
           ls -la publish/JeekMusic

@@ -28,13 +28,13 @@ public partial class MainWindow
         var shared = new MenuItem { Header = L.T("共享模式"), ToggleType = MenuItemToggleType.Radio, IsChecked = !p.Exclusive };
         shared.Click += (_, _) => p.SetExclusive(false);
         menu.Items.Add(shared);
+        var automatic = new MenuItem { Header = L.T("共享模式自动匹配歌曲格式"), ToggleType = MenuItemToggleType.CheckBox,
+            Margin = new Avalonia.Thickness(20, 0, 0, 0), IsChecked = p.AutomaticAudioFormat, IsEnabled = !p.Exclusive };
+        automatic.Click += (_, _) => p.SetAutomaticAudioFormat(!p.AutomaticAudioFormat);
+        menu.Items.Add(automatic);
         var exclusive = new MenuItem { Header = L.T("WASAPI 独占模式"), ToggleType = MenuItemToggleType.Radio, IsChecked = p.Exclusive };
         exclusive.Click += (_, _) => p.SetExclusive(true);
         menu.Items.Add(exclusive);
-        var automatic = new MenuItem { Header = L.T("自动匹配歌曲格式"), ToggleType = MenuItemToggleType.CheckBox,
-            IsChecked = p.AutomaticAudioFormat, IsEnabled = !p.Exclusive };
-        automatic.Click += (_, _) => p.SetAutomaticAudioFormat(!p.AutomaticAudioFormat);
-        menu.Items.Add(automatic);
         menu.Items.Add(new Separator());
         void Info(string text) => menu.Items.Add(new MenuItem { Header = new TextBlock
             { Text = text, MaxWidth = 480, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });

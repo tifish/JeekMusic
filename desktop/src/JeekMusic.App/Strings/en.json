@@ -435,7 +435,6 @@
   "保留 Windows 混音格式": "Keep Windows mix format",
   "实际设备采样率：": "Actual device sample rate: ",
   "（正在切换）": " (switching)",
-  "自动匹配歌曲格式": "Automatically match song format",
   "右键查看格式和自动匹配选项。": "Right-click for format details and automatic matching.",
   "独占模式自动匹配歌曲格式；返回共享模式时恢复共享自动偏好。": "Exclusive mode automatically negotiates each song’s format. Returning to shared restores its automatic preference.",
   "设备音频格式切换失败，继续使用实际可用格式：": "Device format change failed; continuing with the actual available format: ",
@@ -450,5 +449,6 @@
   "{0} 有效位 / {1} 位容器": "{0} valid bits / {1}-bit container",
   "{0} 位浮点": "{0}-bit float",
   "自动匹配会修改此设备的 Windows 音频格式，也影响同设备其他程序；切换时可能有短暂间隔。失败时保留可用格式并显示原因。": "Automatic matching changes the Windows format for this device and affects other apps using it. Changes may cause a short gap. Failures keep usable playback and show the reason.",
-  "（已重采样）": " (resampled)"
+  "（已重采样）": " (resampled)",
+  "共享模式自动匹配歌曲格式": "Shared mode: automatically match song format"
 }

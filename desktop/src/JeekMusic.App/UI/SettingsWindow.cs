@@ -284,7 +284,7 @@ public sealed class SettingsWindow : Window
             formats.Children.Clear();
             formats.Children.Add(Toggle(L.T("WASAPI 独占模式"), p.Exclusive, p.SetExclusive));
             if (!p.Exclusive)
-                formats.Children.Add(Toggle(L.T("自动匹配歌曲格式"), p.AutomaticAudioFormat, enabled => p.SetAutomaticAudioFormat(enabled)));
+                formats.Children.Add(Toggle(L.T("共享模式自动匹配歌曲格式"), p.AutomaticAudioFormat, enabled => p.SetAutomaticAudioFormat(enabled)));
             else formats.Children.Add(Note(L.T("独占模式自动匹配歌曲格式；返回共享模式时恢复共享自动偏好。")));
             formats.Children.Add(Note(AudioFormatDisplay.Source(p)));
             formats.Children.Add(Note(AudioFormatDisplay.Device(p)));

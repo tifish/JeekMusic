@@ -153,7 +153,11 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
         {
             var menu=window.CreateOutputMenu();
             Assert.All(menu.Items.OfType<MenuItem>(),i=>Assert.Empty(i.Items));
-            Assert.Contains(menu.Items.OfType<MenuItem>(),i=>Equals(i.Header,L.T("自动匹配歌曲格式"))&&i.IsChecked);
+            var shared=menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式")));
+            var sharedAuto=menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式自动匹配歌曲格式")));
+            Assert.True(sharedAuto.IsChecked);Assert.True(sharedAuto.IsEnabled);
+            Assert.True(sharedAuto.Margin.Left>shared.Margin.Left);
+            Assert.Equal(menu.Items.IndexOf(shared)+1,menu.Items.IndexOf(sharedAuto));
             Assert.Contains(menu.Items.OfType<MenuItem>(),i=>i.Header is TextBlock text&&text.Text?.Contains("24")==true&&text.MaxWidth==480);
             Assert.Equal("WAV · 44.1 kHz → 44.1 kHz "+L.T("共享"),window.ViewModel.Player.FormatText);
             Assert.False(f.Player.OutputResampled);
@@ -167,11 +171,19 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             Assert.True(output["hasWarning"]!.GetValue<bool>());
             Assert.Contains("24",AudioFormatDisplay.Device(f.Player));Assert.Contains("32",AudioFormatDisplay.Device(f.Player));
             Assert.Contains(L.T("位深未知 / 不适用"),AudioFormatDisplay.Source(f.Player));
-            var automatic=window.CreateOutputMenu().Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("自动匹配歌曲格式")));
+            var automatic=window.CreateOutputMenu().Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式自动匹配歌曲格式")));
             automatic.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Assert.False(f.Player.AutomaticAudioFormat);
+            f.Player.SetAutomaticAudioFormat(true);f.Ready();
+            f.Player.SetExclusive(true);f.Current.Properties["audio-out-params/samplerate"]="44100";f.Ready();
+            var exclusiveMenu=window.CreateOutputMenu();
+            var inactiveSharedAuto=exclusiveMenu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式自动匹配歌曲格式")));
+            Assert.True(inactiveSharedAuto.IsChecked);Assert.False(inactiveSharedAuto.IsEnabled);
+            var sharedChoice=exclusiveMenu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式")));
+            sharedChoice.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));f.Ready();
+            Assert.False(f.Player.Exclusive);Assert.True(f.Player.AutomaticAudioFormat);
         }
         finally{window.Close();}
-        settings.WriteNow();Assert.False(new SettingsStore(path).Current.AutomaticAudioFormat);File.Delete(path);
+        settings.WriteNow();Assert.True(new SettingsStore(path).Current.AutomaticAudioFormat);File.Delete(path);
     });
 
     [Theory]
@@ -316,3 +328,4 @@ public sealed class RealAudioFactAttribute:FactAttribute
             Skip="Opt-in endpoint mutation requires no other JeekMusic client and JEEKMUSIC_TEST_REAL_AUDIO=1.";
     }
 }
+

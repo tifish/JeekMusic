@@ -75,15 +75,16 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 
 `play_tracks`、`playback` 的恢复/切换播放/上一首/下一首，以及 `edit_queue` 的跳转或空队列开始播放，与双击、菜单、快捷键共用 `PlayerService.PlaybackStarted`。成功开始、恢复、当前曲重播或自然换歌后，只发出一次定位请求；内部输出重建不会新增请求，也不改变显式暂停释放音频、续播保留位置的行为。
 
-当前可见歌曲表格含目标歌曲时，复用 DataGrid 虚拟化滚动，让该行完整进入视口；已完整可见就不滚动。打开的队列弹层同样在打开和开始播放时确保当前行可见。不会改排序、筛选、多选、焦点或文件夹展开状态，也不会自动导航离开当前视图。当前视图不含歌曲（包括筛选排除、搜索结果上限等情况）时保留原视图。普通进度、队列编辑、输出状态刷新不发起定位，完成定位后用户可继续浏览其他歌曲。
+当前可见歌曲表格含目标歌曲时，先记录定位请求起点的实际可见状态。该行原本已完整可见时只更新当前曲标记，不改纵向或横向滚动；原本屏外或部分露出时，先复用 DataGrid 虚拟化实现目标行，再在布局后将行中心尽量对齐实际数据行视口中心（排除表头）。首尾按合法滚动边界停靠，不添加留白。居中决策在请求期间保持，不因中间 ScrollIntoView 已将行带进视口而提前结束。异步替换列表时，等待新列表的可靠布局再判断。打开的队列弹层同样遵循已可见则保持、屏外则居中的规则。不会改排序、筛选、多选、焦点或文件夹展开状态，也不会自动导航离开当前视图。当前视图不含歌曲（包括筛选排除、搜索结果上限等情况）时保留原视图。普通进度、队列编辑、输出状态刷新不发起定位，完成定位后用户可继续浏览其他歌曲。
 
 歌曲表格的选择背景、悬浮和键盘焦点沿用主题；当前曲以封面上的独立强调色播放/暂停标记和标题加粗表示，两种状态可同时显示，标记不改变行高或已有列的显示偏好。队列复用同一标记。暂停时当前曲仍保留标记并显示暂停图标与“当前歌曲（已暂停）/ Current track (paused)”提示；真实播放状态仍读取现有 `get_status.playing`，当前曲读取 `get_status.track`，不新增视觉样式控制工具或参数。
 
 `get_diagnostics.songVisibility` 和 `queueVisibility` 是兼容性新增，只读取既有控件状态；未创建或已关闭时返回 `created: false`。开发版与正式版同样提供，查询不创建窗口、计算列表、滚动或启动音频。
 
 - `visible`、`currentTrackId`、`containsCurrent`、`currentFullyVisible`：当前控件状态；完整可见按真实行与数据行视口的纵向边界判断，0.5 逻辑像素容差，不要求歌曲表格横向展示所有列。
-- `requestedTrackId`、`requestVersion`、`positionPending`、`layoutPasses`、`rowsReady`：最近请求、代次、是否等待异步列表/布局、有限校正次数和列表是否就绪。快速切歌只处理最新请求，视图重算/切换、用户输入、关闭窗口会取消旧请求。
-- `result`：`no-request`、`pending`、`already-visible`、`revealed`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
+- `requestedTrackId`、`requestVersion`、`positionPending`、`layoutPasses`、`rowsReady`：最近请求、代次、是否等待异步列表/布局、有限校正次数（最多 6 次）和列表是否就绪。快速切歌只处理最新请求，视图重算/切换、用户输入、关闭窗口会取消旧请求。
+- `alignment` 为 `none`、`awaiting-layout`、`keep` 或 `center`；`initiallyFullyVisible` 在可靠布局前为 null，之后记录本次请求的原始判断，虚拟化实现行后也不改写；`centerErrorY` 为当前行中心相对实际数据视口中心的纵向差（逻辑像素），无行布局时为 null。首尾无法居中时可以非零，判断是否完整可见仍以 `currentFullyVisible` 为准。
+- `result`：`no-request`、`pending`、`already-visible`、`centered`、`clamped`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。原 `revealed` 结果随居中规则改为 `centered` 或 `clamped`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
 
 工具数量仍为 21，播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
 

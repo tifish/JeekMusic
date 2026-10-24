@@ -72,6 +72,54 @@ public sealed class PlayingVisibilityTests
     });
 
     [Fact]
+    public Task AlreadyVisiblePreservesBothScrollOffsetsAndSelection() => Run(() =>
+    {
+        using var h = new Harness();
+        foreach (var column in h.Table.Columns) column.Width = new DataGridLength(200);
+        h.Pump();
+        h.Viewport.RaiseEvent(new ScrollGestureEventArgs(ScrollGestureEventArgs.GetNextFreeId(), new Vector(120, 0))); h.Pump();
+        var horizontal = h.Table.GetVisualDescendants().OfType<ScrollBar>().Single(b => b.Orientation == Avalonia.Layout.Orientation.Horizontal);
+        var vertical = h.Table.GetVisualDescendants().OfType<ScrollBar>().Single(b => b.Orientation == Avalonia.Layout.Orientation.Vertical);
+        Assert.True(horizontal.Value > 0);
+        h.Table.SelectedItems.Add(h.Rows[1]); h.Table.SelectedItems.Add(h.Rows[2]); h.Pump();
+        var before = (horizontal.Value, vertical.Value, h.TopRowY(3));
+        h.Window.PlayFrom(h.Track(3)); h.Ready(); h.AssertVisible(3);
+        Assert.Equal(before, (horizontal.Value, vertical.Value, h.TopRowY(3)));
+        Assert.Equal(new[] { h.Rows[1], h.Rows[2] }, h.Table.SelectedItems.Cast<SongRow>());
+        Assert.True(h.Diagnostic["initiallyFullyVisible"]!.GetValue<bool>());
+        Assert.Equal("keep", h.Diagnostic["alignment"]!.GetValue<string>());
+    });
+
+    [Theory]
+    [InlineData(220, 0)]
+    [InlineData(30, 240)]
+    public Task OffscreenRequestsCenterInBothDirectionsAfterRealization(int target, int start) => Run(() =>
+    {
+        using var h = new Harness();
+        h.ScrollTo(start);
+        Assert.DoesNotContain(h.Realized, r => r.DataContext is SongRow row && row.Track?.Id == h.Track(target).Id);
+        h.Window.PlayFrom(h.Track(target)); h.Ready(); h.AssertCentered(target);
+        Assert.Equal("centered", h.Diagnostic["result"]!.GetValue<string>());
+        Assert.False(h.Diagnostic["initiallyFullyVisible"]!.GetValue<bool>());
+        Assert.InRange(h.Realized.Count, 1, 40);
+    });
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(259)]
+    public Task FirstAndLastRowsClampAtTheRealScrollBoundary(int target) => Run(() =>
+    {
+        using var h = new Harness(); h.ScrollTo(130);
+        h.Window.PlayFrom(h.Track(target)); h.Ready(); h.AssertVisible(target);
+        var bar = h.Table.GetVisualDescendants().OfType<ScrollBar>().Single(b => b.Orientation == Avalonia.Layout.Orientation.Vertical);
+        Assert.InRange(Math.Abs(bar.Value - (target == 0 ? bar.Minimum : bar.Maximum)), 0, .75);
+        var row = h.Realized.Single(r => ReferenceEquals(r.DataContext, h.Rows[target]));
+        var y = row.TranslatePoint(default, h.Viewport)!.Value.Y;
+        Assert.InRange(Math.Abs(target == 0 ? y : y + row.Bounds.Height - h.Viewport.Bounds.Height), 0, .75);
+        Assert.Equal("clamped", h.Diagnostic["result"]!.GetValue<string>());
+    });
+
+    [Fact]
     public Task PartlyClippedCurrentRowBecomesFullyVisibleAfterWheelScrolling() => Run(() =>
     {
         using var h = new Harness();
@@ -81,8 +129,8 @@ public sealed class PlayingVisibilityTests
         h.Pump();
         Assert.True(h.TopRowY(230) + row.Bounds.Height > h.Viewport.Bounds.Height + .5,
             $"Expected a clipped row, y={h.TopRowY(230)}, height={row.Bounds.Height}, viewport={h.Viewport.Bounds.Height}");
-        h.Window.PlayFrom(h.Track(230)); h.Ready(); h.AssertVisible(230);
-        Assert.Equal("revealed", h.Diagnostic["result"]!.GetValue<string>());
+        h.Window.PlayFrom(h.Track(230)); h.Ready(); h.AssertCentered(230);
+        Assert.Equal("centered", h.Diagnostic["result"]!.GetValue<string>());
     });
 
     [Fact]
@@ -140,13 +188,27 @@ public sealed class PlayingVisibilityTests
         Assert.Equal(h.Track(180).Id, h.Diagnostic["requestedTrackId"]!.GetValue<long>());
         h.ScrollTo(0);
         h.App.SongVisibility!.Request(h.Track(180).Id); // A UI callback is already posted for the old track.
-        h.Window.PlayFrom(h.Track(240)); h.Ready(); h.AssertVisible(240);
+        h.Window.PlayFrom(h.Track(240)); h.Ready(); h.AssertCentered(240);
         Assert.Equal(h.Track(240).Id, h.Diagnostic["requestedTrackId"]!.GetValue<long>());
         h.App.SongVisibility!.Request(h.Track(240).Id);
         h.Table.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.PageDown });
         h.Pump();
         Assert.False(h.Diagnostic["positionPending"]!.GetValue<bool>());
         Assert.Equal("user-input", h.Diagnostic["result"]!.GetValue<string>());
+    });
+
+    [Fact]
+    public Task VisibleRequestDuringAsyncRowReplacementWaitsForReliableLayoutAndKeepsPosition() => Run(() =>
+    {
+        using var h = new Harness();
+        h.Window.PlayFrom(h.Track(3)); h.Ready();
+        var y = h.TopRowY(3); var old = h.Rows;
+        h.Vm.Recompute(); Assert.True(h.Vm.ComputingRows);
+        h.Player.Resume();
+        h.Wait(() => !h.Vm.ComputingRows && !ReferenceEquals(old, h.Rows)); h.AssertVisible(3);
+        Assert.Equal(y, h.TopRowY(3));
+        Assert.Equal("already-visible", h.Diagnostic["result"]!.GetValue<string>());
+        Assert.True(h.Diagnostic["initiallyFullyVisible"]!.GetValue<bool>());
     });
 
     [Fact]
@@ -207,6 +269,7 @@ public sealed class PlayingVisibilityTests
         h.Tools.Call("edit_queue", new() { ["action"] = "jump", ["index"] = 230 });
         h.Ready();
         Assert.True(h.QueueDiagnostic["currentFullyVisible"]!.GetValue<bool>());
+        Assert.InRange(Math.Abs(h.QueueDiagnostic["centerErrorY"]!.GetValue<double>()), 0, .75);
         var scroll = ((Control)flyout.Content!).GetVisualDescendants().OfType<ScrollViewer>().Single();
         scroll.Offset = default; h.Pump(); var version = h.QueueDiagnostic["requestVersion"]!.GetValue<long>();
         h.Player.SetRepeat(RepeatMode.All); h.Pump();
@@ -214,6 +277,10 @@ public sealed class PlayingVisibilityTests
         Assert.Equal(0, scroll.Offset.Y);
         h.Player.Resume(); h.Pump();
         Assert.True(h.QueueDiagnostic["currentFullyVisible"]!.GetValue<bool>());
+        h.Tools.Call("edit_queue", new() { ["action"] = "jump", ["index"] = 259 }); h.Ready();
+        Assert.True(h.QueueDiagnostic["currentFullyVisible"]!.GetValue<bool>());
+        Assert.Equal("clamped", h.QueueDiagnostic["result"]!.GetValue<string>());
+        Assert.InRange(Math.Abs(scroll.Offset.Y - (scroll.Extent.Height - scroll.Viewport.Height)), 0, .75);
         h.App.QueueVisibility!.Request(h.Player.CurrentTrack!.Id);
         h.Player.Queue.Clear(); h.Pump();
         Assert.False(h.QueueDiagnostic["containsCurrent"]!.GetValue<bool>());
@@ -322,6 +389,12 @@ public sealed class PlayingVisibilityTests
                 $"song {index}: y={y}, height={row.Bounds.Height}, viewport={Viewport.Bounds.Height}, {Diagnostic}");
             Assert.True(Diagnostic["currentFullyVisible"]!.GetValue<bool>());
             Assert.False(Diagnostic["positionPending"]!.GetValue<bool>());
+        }
+        public void AssertCentered(int index)
+        {
+            AssertVisible(index);
+            Assert.InRange(Math.Abs(Diagnostic["centerErrorY"]!.GetValue<double>()), 0, .75);
+            Assert.Equal("center", Diagnostic["alignment"]!.GetValue<string>());
         }
         public void Dispose()
         {

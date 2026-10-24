@@ -16,20 +16,25 @@ internal sealed class PlayingRowVisibility : IDisposable
     readonly Func<long, bool> _contains;
     readonly Func<long, Control?> _row;
     readonly Action<long> _reveal;
+    readonly Func<double, bool> _scrollBy;
     readonly Func<bool> _ready;
     readonly Func<int> _generation;
     readonly Func<long?> _current;
     long? _target, _lastTrack;
     int _view, _passes, _layout, _lastLayout = -1;
     bool _queued, _disposed;
+    bool? _center;
+    int _decisionLayout;
     string _result = "no-request";
     public long RequestVersion { get; private set; }
 
     public PlayingRowVisibility(Control host, Func<Control?> viewport, Func<long, bool> contains,
-        Func<long, Control?> row, Action<long> reveal, Func<bool> ready, Func<int> generation, Func<long?> current)
+        Func<long, Control?> row, Action<long> reveal, Func<double, bool> scrollBy,
+        Func<bool> ready, Func<int> generation, Func<long?> current)
     {
         (_host, _viewport, _contains, _row, _reveal, _ready, _generation, _current) =
             (host, viewport, contains, row, reveal, ready, generation, current);
+        _scrollBy = scrollBy;
         host.LayoutUpdated += OnLayout;
         host.AddHandler(InputElement.PointerPressedEvent, OnPointer, RoutingStrategies.Tunnel, handledEventsToo: true);
         host.AddHandler(InputElement.PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -44,9 +49,16 @@ internal sealed class PlayingRowVisibility : IDisposable
         _view = _generation();
         _passes = 0;
         _lastLayout = -1;
+        // Freeze the original visibility decision before ScrollIntoView realizes/moves anything.
+        // For replacement rows, wait for a layout of the new source before deciding.
+        _decisionLayout = _layout;
+        _center = _ready() && HostLayoutValid() && _viewport() is { Bounds.Height: > 0 }
+            ? !FullyVisible(trackId) : null;
         _result = "pending";
         Refresh();
     }
+
+    bool HostLayoutValid() => _host.IsMeasureValid && _host.IsArrangeValid;
 
     public void Cancel(string reason)
     {
@@ -91,7 +103,12 @@ internal sealed class PlayingRowVisibility : IDisposable
         if (!_ready()) return; // RowsChanged wakes this request after the async computation.
         if (!_contains(id)) { Cancel("not-in-current-view"); return; }
         if (_viewport() is not { Bounds.Height: > 0 } viewport) return; // First layout wakes it.
-        if (FullyVisible(id)) { Cancel(_passes == 0 ? "already-visible" : "revealed"); return; }
+        if (_center is null)
+        {
+            if (_layout == _decisionLayout || !HostLayoutValid()) { _host.InvalidateMeasure(); return; }
+            _center = !FullyVisible(id);
+        }
+        if (_center == false) { Cancel("already-visible"); return; }
         if (_row(id) is { } row && row.Bounds.Height > viewport.Bounds.Height + .5)
         {
             _reveal(id);
@@ -99,10 +116,17 @@ internal sealed class PlayingRowVisibility : IDisposable
             return;
         }
         if (_passes > 0 && _lastLayout == _layout) return;
-        if (_passes >= 4) { Cancel("layout-limit"); return; }
+        if (_passes >= 6) { Cancel("layout-limit"); return; }
         _lastLayout = _layout;
         _passes++;
-        _reveal(id);
+        if (_row(id) is { Bounds.Height: > 0, IsEffectivelyVisible: true } realized &&
+            realized.TranslatePoint(default, viewport) is { } p)
+        {
+            var delta = p.Y + realized.Bounds.Height / 2 - viewport.Bounds.Height / 2;
+            if (Math.Abs(delta) <= .5) { Cancel("centered"); return; }
+            if (!_scrollBy(delta)) { Cancel(FullyVisible(id) ? "clamped" : "layout-limit"); return; }
+        }
+        else _reveal(id);
         // A virtualized row can be realized now and arranged in the following layout.
         Refresh();
     }
@@ -117,7 +141,12 @@ internal sealed class PlayingRowVisibility : IDisposable
             ["currentFullyVisible"] = !_disposed && _ready() && id is { } c && FullyVisible(c),
             ["requestedTrackId"] = _lastTrack, ["requestVersion"] = RequestVersion,
             ["positionPending"] = _target is not null, ["result"] = _result,
-            ["layoutPasses"] = _passes, ["rowsReady"] = _ready()
+            ["layoutPasses"] = _passes, ["rowsReady"] = _ready(),
+            ["alignment"] = _lastTrack is null ? "none" : _center is null ? "awaiting-layout" : _center.Value ? "center" : "keep",
+            ["initiallyFullyVisible"] = _center is null ? null : !_center.Value,
+            ["centerErrorY"] = id is { } song && _ready() && _viewport() is { Bounds.Height: > 0 } vp &&
+                _row(song) is { Bounds.Height: > 0 } r && r.TranslatePoint(default, vp) is { } point
+                    ? point.Y + r.Bounds.Height / 2 - vp.Bounds.Height / 2 : (double?)null
         };
     }
 

@@ -105,6 +105,12 @@ public static class QueueFlyout
                 if (currentRow is null || viewport is null || currentRow.TranslatePoint(default, viewport) is not { } p) return;
                 var dy = p.Y < 0 ? p.Y : Math.Max(0, p.Y + currentRow.Bounds.Height - viewport.Bounds.Height);
                 scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, scroll.Offset.Y + dy));
+            }, delta =>
+            {
+                var next = Math.Clamp(scroll.Offset.Y + delta, 0, Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height));
+                if (Math.Abs(next - scroll.Offset.Y) <= .5) return false;
+                scroll.Offset = new Vector(scroll.Offset.X, next);
+                return true;
             }, () => true, () => generation, () => app.Player.CurrentTrack?.Id);
         app.QueueVisibility = visibility;
         void OnStarted(Track track) => visibility.Request(track.Id);

@@ -85,6 +85,13 @@ public sealed class PlayingAppearanceTests
                 Assert.True(Contrast(accent, Colors.White) >= 3, $"Marker contrast: {accent}");
                 SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-{(playing ? "playing" : "paused")}-{(selectedCurrent ? "selected" : "unselected")}");
             }
+            ((IPseudoClasses)selected.Classes).Set(":pointerover", false);
+            var selection = h.Table.SelectedItems.Cast<SongRow>().ToArray();
+            h.Window.PlayFrom(h.Track(220)); h.Ready(); h.AssertCentered(220);
+            Assert.Equal(selection, h.Table.SelectedItems.Cast<SongRow>());
+            Assert.False(h.Rows[5].IsCurrent); Assert.True(h.Rows[220].IsCurrent);
+            Assert.True(Marker(Row(h, 220)).IsPlaying);
+            SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-offscreen-centered");
         }, CancellationToken.None);
     }
 

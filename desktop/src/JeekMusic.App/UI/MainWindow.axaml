@@ -205,9 +205,12 @@
                                                 <Panel>
                                                     <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="16" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                                                    <ui:CurrentTrackMarker IsVisible="{Binding IsCurrent}" IsPlaying="{Binding IsPlaying}"
+                                                                           HorizontalAlignment="Right" VerticalAlignment="Bottom" />
                                                 </Panel>
                                             </Border>
-                                            <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1" Classes="song-title" Classes.current="{Binding IsCurrent}"
+                                                       Text="{Binding Title}" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                         </Grid>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>

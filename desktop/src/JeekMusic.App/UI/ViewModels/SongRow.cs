@@ -24,6 +24,7 @@ public sealed partial class SongRow : ObservableObject
     public string? MissingRef { get; }
     public string? MissingKey { get; }
 
+    [ObservableProperty] private bool _isCurrent;
     [ObservableProperty] private bool _isPlaying;
     [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _cover;
 

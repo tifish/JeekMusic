@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="using:JeekMusic.UI">
     <Styles.Resources>
         <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
         <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
@@ -97,11 +98,12 @@
     <Style Selector="DataGridCell">
         <Setter Property="FontSize" Value="13" />
     </Style>
-    <!-- 正在播放的歌：整行加底色、标题加粗（需求 G-5、U-11） -->
-    <Style Selector="DataGridRow.playing">
-        <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark1}" />
+    <!-- 选中/悬浮/键盘焦点保留 DataGrid 主题状态。当前曲使用独立标记，不占用选择背景。 -->
+    <Style Selector="ui|CurrentTrackMarker">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark2}" />
+    </Style>
+    <Style Selector="TextBlock.song-title.current">
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="DataGridRow.missing">
         <Setter Property="Opacity" Value="0.45" />

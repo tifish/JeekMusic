@@ -169,7 +169,7 @@ public partial class MainWindow : Window
     void OnLoadingRow(object? sender, DataGridRowEventArgs e)
     {
         if (e.Row.DataContext is not SongRow row) return;
-        e.Row.Classes.Set("playing", row.IsPlaying);
+        UpdateRowPlaybackState(e.Row, row);
         e.Row.Classes.Set("missing", !row.Available);
         row.PropertyChanged += OnRowChanged;
         e.Row.Tag = row;
@@ -189,9 +189,17 @@ public partial class MainWindow : Window
 
     void OnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(SongRow.IsPlaying) || sender is not SongRow row) return;
+        if (e.PropertyName is not (nameof(SongRow.IsPlaying) or nameof(SongRow.IsCurrent)) || sender is not SongRow row) return;
         foreach (var r in Table.GetVisualDescendants().OfType<DataGridRow>())
-            if (r.DataContext == row) r.Classes.Set("playing", row.IsPlaying);
+            if (r.DataContext == row) UpdateRowPlaybackState(r, row);
+    }
+
+    static void UpdateRowPlaybackState(DataGridRow container, SongRow row)
+    {
+        container.Classes.Set("current", row.IsCurrent);
+        container.Classes.Set("playing", row.IsPlaying);
+        Avalonia.Automation.AutomationProperties.SetHelpText(container,
+            row.IsCurrent ? CurrentTrackMarker.Status(row.IsPlaying) : "");
     }
 
     void ScrollToTop()

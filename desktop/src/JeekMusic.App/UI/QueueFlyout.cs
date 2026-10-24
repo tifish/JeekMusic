@@ -27,6 +27,7 @@ public static class QueueFlyout
         flyout.Content = new StackPanel { Children = { new Grid { Children = { header, clear } }, scroll } };
 
         Control? currentRow = null;
+        CurrentTrackMarker? currentMarker = null;
         var generation = 0;
         PlayingRowVisibility? visibility = null;
         int dragFrom = -1;
@@ -35,6 +36,7 @@ public static class QueueFlyout
             generation++;
             visibility?.Cancel("queue-changed");
             currentRow = null;
+            currentMarker = null;
             list.Children.Clear();
             var q = app.Player.Queue;
             var snapshot = app.Library.Snapshot;
@@ -56,6 +58,9 @@ public static class QueueFlyout
 
         Control Row(int index, Track? track, bool current, bool played)
         {
+            var marker = new CurrentTrackMarker { IsVisible = current, IsPlaying = app.Player.IsPlaying,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            if (current) currentMarker = marker;
             var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
             var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.6, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
             var remove = new Button { Content = Icons.Close, Classes = { "icon" }, FontSize = 10, Padding = new Thickness(6) };
@@ -63,14 +68,16 @@ public static class QueueFlyout
             var handle = new TextBlock { Text = "", Classes = { "glyph" }, Opacity = 0.5, Margin = new Thickness(6, 0), Cursor = new Cursor(StandardCursorType.SizeNorthSouth) };
             var grid = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Background = current ? new SolidColorBrush(Color.FromArgb(60, 0, 120, 215)) : Brushes.Transparent,
+                ColumnDefinitions = new ColumnDefinitions("22,*,Auto,Auto"), Background = Brushes.Transparent,
                 Opacity = played ? 0.55 : 1, Tag = index,
             };
             var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, artist } };
+            grid.Children.Add(marker);
+            Grid.SetColumn(text, 1);
             grid.Children.Add(text);
-            Grid.SetColumn(remove, 1);
+            Grid.SetColumn(remove, 2);
             grid.Children.Add(remove);
-            Grid.SetColumn(handle, 2);
+            Grid.SetColumn(handle, 3);
             grid.Children.Add(handle);
             text.PointerReleased += (_, e) => { if (dragFrom < 0 && e.InitialPressMouseButton == MouseButton.Left) app.Player.JumpTo(index); };
             // 拖动手柄调整顺序
@@ -102,14 +109,18 @@ public static class QueueFlyout
         app.QueueVisibility = visibility;
         void OnStarted(Track track) => visibility.Request(track.Id);
         void OnChanged() => Fill();
+        void OnPlaybackState() { if (currentMarker is not null) currentMarker.IsPlaying = app.Player.IsPlaying; }
         app.Player.Queue.Changed += OnChanged;
         app.Player.PlaybackStarted += OnStarted;
+        app.Player.StateChanged += OnPlaybackState;
         flyout.Closed += (_, _) =>
         {
             app.Player.Queue.Changed -= OnChanged;
             app.Player.PlaybackStarted -= OnStarted;
+            app.Player.StateChanged -= OnPlaybackState;
             visibility.Dispose();
             currentRow = null;
+            currentMarker = null;
             if (ReferenceEquals(app.QueueVisibility, visibility)) app.QueueVisibility = null;
         };
         Fill();

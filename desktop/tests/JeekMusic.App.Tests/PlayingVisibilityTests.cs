@@ -251,7 +251,7 @@ public sealed class PlayingVisibilityTests
         await session.Dispatch(test, CancellationToken.None);
     }
 
-    sealed class Harness : IDisposable
+    internal sealed class Harness : IDisposable
     {
         readonly string _root = Path.Combine(Path.GetTempPath(), "jeek-visibility-" + Guid.NewGuid());
         readonly OutputModeSwitchTests.FakeEndpointVolume _endpoint = new();

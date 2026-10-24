@@ -52,6 +52,7 @@ public sealed partial class MainViewModel : ObservableObject
         _library.ScanProgress += (done, total) => ScanText = total == 0 ? "" : L.F($"正在扫描 {done:N0} / {total:N0}");
         _playlists.Changed += OnPlaylistsChanged;
         app.Player.TrackChanged += _ => MarkPlaying();
+        app.Player.StateChanged += OnPlaybackStateChanged;
         app.Player.Error += ShowToast;
         _includeSubfolders = _settings.Current.IncludeSubfolders;
     }
@@ -479,11 +480,22 @@ public sealed partial class MainViewModel : ObservableObject
         return string.Join(" · ", new[] { artist, year?.ToString(), Text.Count(tracks.Count) }.Where(s => !string.IsNullOrEmpty(s)));
     }
 
-    /// <summary>正在播放的行高亮（需求 G-5）。</summary>
+    bool _markedPlaying;
+    void OnPlaybackStateChanged()
+    {
+        if (_markedPlaying != _app.Player.IsPlaying) MarkPlaying();
+    }
+
+    /// <summary>当前曲标记独立于选择；播放/暂停图标跟随真实播放状态。</summary>
     void MarkPlaying()
     {
         var id = _app.Player.CurrentTrack?.Id;
-        foreach (var r in Rows) r.IsPlaying = r.Track?.Id == id;
+        _markedPlaying = _app.Player.IsPlaying;
+        foreach (var r in Rows)
+        {
+            r.IsCurrent = id.HasValue && r.Track?.Id == id;
+            r.IsPlaying = r.IsCurrent && _markedPlaying;
+        }
         PlayingChanged?.Invoke();
     }
 

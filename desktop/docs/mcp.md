@@ -77,6 +77,8 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 
 当前可见歌曲表格含目标歌曲时，复用 DataGrid 虚拟化滚动，让该行完整进入视口；已完整可见就不滚动。打开的队列弹层同样在打开和开始播放时确保当前行可见。不会改排序、筛选、多选、焦点或文件夹展开状态，也不会自动导航离开当前视图。当前视图不含歌曲（包括筛选排除、搜索结果上限等情况）时保留原视图。普通进度、队列编辑、输出状态刷新不发起定位，完成定位后用户可继续浏览其他歌曲。
 
+歌曲表格的选择背景、悬浮和键盘焦点沿用主题；当前曲以封面上的独立强调色播放/暂停标记和标题加粗表示，两种状态可同时显示，标记不改变行高或已有列的显示偏好。队列复用同一标记。暂停时当前曲仍保留标记并显示暂停图标与“当前歌曲（已暂停）/ Current track (paused)”提示；真实播放状态仍读取现有 `get_status.playing`，当前曲读取 `get_status.track`，不新增视觉样式控制工具或参数。
+
 `get_diagnostics.songVisibility` 和 `queueVisibility` 是兼容性新增，只读取既有控件状态；未创建或已关闭时返回 `created: false`。开发版与正式版同样提供，查询不创建窗口、计算列表、滚动或启动音频。
 
 - `visible`、`currentTrackId`、`containsCurrent`、`currentFullyVisible`：当前控件状态；完整可见按真实行与数据行视口的纵向边界判断，0.5 逻辑像素容差，不要求歌曲表格横向展示所有列。

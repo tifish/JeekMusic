@@ -63,8 +63,6 @@
   "全选": "Select all",
   "全部添加到队列": "Add all to queue",
   "共享": "Shared",
-  "点击切换为共享模式，并从当前位置继续播放。": "Click to switch to shared mode and continue from the current position.",
-  "点击切换为 WASAPI 独占模式，并从当前位置继续播放。": "Click to switch to WASAPI exclusive mode and continue from the current position.",
   "关于": "About",
   "关闭": "Close",
   "关闭主窗口时": "When closing the main window",
@@ -435,7 +433,6 @@
   "保留 Windows 混音格式": "Keep Windows mix format",
   "实际设备采样率：": "Actual device sample rate: ",
   "（正在切换）": " (switching)",
-  "右键查看格式和自动匹配选项。": "Right-click for format details and automatic matching.",
   "独占模式自动匹配歌曲格式；返回共享模式时恢复共享自动偏好。": "Exclusive mode automatically negotiates each song’s format. Returning to shared restores its automatic preference.",
   "设备音频格式切换失败，继续使用实际可用格式：": "Device format change failed; continuing with the actual available format: ",
   "歌曲：": "Song: ",
@@ -451,5 +448,6 @@
   "（已重采样）": " (resampled)",
   "共享模式自动匹配歌曲格式": "Shared mode: automatically match song format",
   "位深未知": "Bit depth unknown",
-  "位深不适用（有损编码）": "Bit depth not applicable (lossy encoding)"
+  "位深不适用（有损编码）": "Bit depth not applicable (lossy encoding)",
+  "点击或右键选择输出设备和模式，查看格式详情。": "Click or right-click to choose the output device and mode and view format details."
 }

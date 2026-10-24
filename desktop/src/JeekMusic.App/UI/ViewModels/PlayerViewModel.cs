@@ -83,10 +83,8 @@ public sealed partial class PlayerViewModel : ObservableObject
 
     public string FormatText => AudioFormatDisplay.Summary(_player);
 
-    public string OutputModeTip => FormatText + "\n" + (_player.Exclusive
-        ? L.T("点击切换为共享模式，并从当前位置继续播放。")
-        : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。")) + "\n" +
-        L.T("右键查看格式和自动匹配选项。") + "\n" + AudioFormatDisplay.Source(_player) + "\n" + AudioFormatDisplay.Device(_player) +
+    public string OutputModeTip => FormatText + "\n" + L.T("点击或右键选择输出设备和模式，查看格式详情。") + "\n" +
+        AudioFormatDisplay.Source(_player) + "\n" + AudioFormatDisplay.Device(_player) +
         "\n" + (AudioFormatDisplay.Warning(_player) ?? "");
 
     // ── 音量（需求 O-4）──
@@ -131,12 +129,6 @@ public sealed partial class PlayerViewModel : ObservableObject
     [RelayCommand] void Next() => _player.Next();
     [RelayCommand] void Previous() => _player.Previous();
     [RelayCommand] void ToggleMute() => Muted = !Muted;
-
-    [RelayCommand]
-    void ToggleExclusive()
-    {
-        _player.SetExclusive(!_player.Exclusive);
-    }
 
     [RelayCommand]
     void ToggleShuffle()

@@ -4,7 +4,16 @@ namespace JeekMusic.UI;
 
 public partial class MainWindow
 {
-    void ShowOutputMenu(Control? anchor = null) => CreateOutputMenu().Open(anchor ?? OutputButton);
+    internal ContextMenu? ActiveOutputMenu { get; private set; }
+
+    void ShowOutputMenu(Control? anchor = null)
+    {
+        ActiveOutputMenu?.Close();
+        var menu = CreateOutputMenu();
+        ActiveOutputMenu = menu;
+        menu.Closed += (_, _) => { if (ReferenceEquals(ActiveOutputMenu, menu)) ActiveOutputMenu = null; };
+        menu.Open(anchor ?? OutputButton);
+    }
 
     internal ContextMenu CreateOutputMenu()
     {

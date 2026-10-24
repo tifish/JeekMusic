@@ -46,8 +46,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
 | `set_volume` | 至少提供 `volume`（0–100）或 `muted`。两种模式都设置当前实际设备端点主音量，共享下影响同设备其他程序；不持久化音量。`muted` 只静音播放器。不可调/写入失败返回业务错误 |
-| `get_output` | 无参数。WASAPI 设备列表、所选设备/独占模式、文件与客户端流格式、`volumeState` 及下述 `sampleRate`（真实端点混音率、驱动探测能力、策略与失败原因） |
-| `set_output` | 至少提供 `device`、`exclusive`、`sampleRateMode` 或 `sampleRate`。`device` 来自设备列表；`auto` 跟随系统默认设备。采样率策略为 `system` / `auto` / `manual`；manual 必须同时提供以 Hz 为单位的 `sampleRate`，单独提供 sampleRate 等同 manual。system/auto 不允许同时提供 sampleRate。设置持久化，模式切换可能重建音频输出 |
+| `get_output` | 无参数。设备列表、共享/独占、音量安全、兼容的采样率摘要，以及完整 `audioFormat`（源、客户端流、真实端点、混音、精确组合能力与转换/失败原因） |
+| `set_output` | 至少提供 `device`、`exclusive` 或 `automaticFormat`。`device` 来自设备列表，`auto` 跟随系统默认端点。`automaticFormat` 为共享自动匹配完整歌曲格式的布尔开关，false 不改动系统当前格式；独占始终自动协商，不另设格式选项。已在独占时修改共享开关需先切共享，或同时给 exclusive=false。设置持久化，重建保留 CUE 位置与播放/暂停意图 |
 | `list_playlists` | 支持分页。播放列表 ID、UID、名称和时间戳 |
 | `get_playlist` | `playlistId`，支持分页。按手动顺序返回条目，保留不可用条目 |
 | `edit_playlist` | `action`：`create` 需 `name`；其余需 `playlistId`。`rename` 需 `name`，`delete` 删除列表，`add` 需 `trackIds`，`remove` 需 `positions`，`move` 需 `positions` 和 `target`（移动前的目标位置，可等于条目数）。触发正常持久化及同步事件，不删除音频文件 |
@@ -191,35 +191,47 @@ python desktop/tools/test-build-isolation.py --build-only
 **静音 WAV / 应用静音仍会打开 WASAPI 设备，独占能中断游戏等其他程序声音。** 独立数据目录只隔离曲库和单实例，不隔离物理音频设备。默认启动诊断也会启动 GUI 并读取系统音频状态；用户要求禁止启动或正在处理游戏失声时，不运行任何 EXE/MCP（包括 `--startup-only`、`mcp_client.py` 的只读命令）。仅可编译/静态检查和确认使用模拟端点的测试。测试结束后只清理自己的播放器，不激活窗口或使用正式曲库；`show_window` 的激活行为不在后台测试中调用。
 
 
-### 设备采样率控制
+### 自动匹配音频格式
 
-`get_output.sampleRate` 与 `get_diagnostics.output.sampleRate` 使用同一业务服务，开发版及 NativeAOT 正式版完全一致，原有 21 个工具和旧参数继续兼容。
+最终交互仅共享/独占模式及共享“自动匹配歌曲格式”开关，不提供手动采样率、位深、声道列表。播放栏固定为“源采样率 → 实际设备采样率”，相同也显示两端；右键只读列出歌曲和设备的采样率、有效位深/容器位深、声道与可靠布局。输出重建和不可读状态使用占位，不用请求值充当实际值。
 
-- `mode`：`system` 保留 Windows 当前混音格式（独占维持旧版原始采样率优先行为）；`auto` 每首歌曲自动跟随原采样率；`manual` 固定使用 `manualRate`。
-- `requestedRate`：当前歌曲/手动策略请求值；`actualRate`：共享时为新建 IAudioClient 读取的真实 Windows 混音率，独占时为实际 WASAPI 输出流采样率。未知为 null。`applied` 仅在请求与实际一致、输出初始化完成且没有格式诊断时为 true，不能将选中的策略当成已生效。
-- `mixRate` / `mixChannels`：Windows 当前混音格式；`canSetShared` 表示音频策略格式接口可查询，不保证驱动一定接受每次写入。
-- `sharedRates` / `exclusiveRates`：针对当前设备和声道布局、用 `IsFormatSupported(EXCLUSIVE)` 精确确认的候选采样率。共享候选针对当前混音声道，独占候选针对当前歌曲声道（空闲时双声道）。没有把共享模式下自动重采样接受的格式冒充硬件支持。
-- `discovery` 明确发现范围：Windows 没有通用的全部采样率枚举接口，探测 8–768 kHz 标准音乐/视频采样率，另加当前歌曲和混音采样率；非标准且尚未出现的自定义采样率不承诺穷尽。多声道按当前混音或标准布局探测，实际打开仍可能受驱动限制。
-- `sharedSemantics` 为 `windows-endpoint-mix-format; affects-other-apps`。共享切换通过 Windows 非公开 `IPolicyConfig.SetDeviceFormat` 修改系统端点/混音格式，优先保留原位深和布局，再由新 IAudioClient.GetMixFormat 读回确认。接口缺失、驱动拒绝、实际格式不匹配均报诊断；写入失败尝试恢复完整旧格式。操作影响同设备其他程序，跨采样率自动换曲会重开流，因此可能有短暂间隔。
-- `diagnostic` 为格式能力/应用失败原因（含 HRESULT 或实际值）。失败保留可用播放；手动共享写入失败不保存无效选择；独占手动新选择的初始化失败/实际率不匹配会恢复前一个策略与 CUE 位置。系统在外部改动混音率时更新实际读数并提示，不在轮询中抢写；下一首或显式选择时再次应用策略。设备改变后重新探测并应用配置，不支持的持久化选择会显示请求/实际差异，保留可用格式。
-
-示例：
+推荐控制：
 
 ```json
-{"sampleRateMode":"auto"}
-{"sampleRateMode":"manual","sampleRate":96000}
-{"exclusive":true,"sampleRate":48000}
-{"sampleRateMode":"system"}
+{"automaticFormat":true}
+{"automaticFormat":false}
+{"exclusive":true}
+{"exclusive":false}
 ```
 
-共享格式写入在调用内读回，但 libmpv 重建为异步；调用成功后继续读取 `sampleRate.applied`、`volumeState.outputPending` 和诊断。异步独占失败会在后续快照和正常错误提示中出现。多个参数按设备、模式、采样率顺序处理，前项成功不会因后项失败回滚；控制端需要一次变更一个参数时可分次调用。手动采样率须来自当前目标设备/模式的能力列表，不支持值返回业务错误。自动跟随遇到不支持的歌曲保留自动策略并明确报告当前实际输出，不静默显示为原采样率。
+开关开启后，共享模式按完整元组（采样率、样本类型、容器/有效位、声道数量、声道掩码）探测并选择，绝不将逐字段“支持”拼成未经驱动验证的组合。优先源采样率，再优先已知源布局，在可用组合中保留源精度：16 位整型有可行 16 位则使用；24/32 位整型优先不降低有效精度，24 有效位装在 32 位容器与真实 32 有效位明确区分。未知/有损/浮点源不编造原始 PCM 位深，默认优先设备可行的 24 位有效精度，必要时再转换并报告。
 
-验证：`dotnet test` 默认仅运行注入端点/引擎的模拟测试；真实格式测试需显式设置 `JEEKMUSIC_TEST_REAL_AUDIO=1`（会临时修改真实系统混音格式，finally 恢复完整原格式）。实际 EXE/MCP/WASAPI 自动换曲与暂停手动切换：
+声道布局来自已加载解码器的明确 `audio-params/channels`，mono/stereo 可安全识别；5.1 与 5.1(side) 区分。首次加载保持静音/暂停，拿到可靠布局后若有必要，再切换设备并重开流；确认完成才继续播放。只知道“6 声道”等数量时不推断通用掩码，保留当前扬声器布局，标明布局未知和必要声道转换。已知源布局直接输出不可行时，使用设备当前布局并报告转换；原采样率不可行时保留可用率并明确报告重采样/精度降低。独占仍交给播放内核自动协商，多声道未知布局不强套固定掩码。
+
+关闭开关仅停止自动匹配，不恢复任何旧系统快照；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，工具仍为 21 个。
+
+`get_output.audioFormat` 与 `get_diagnostics.output.audioFormat` 使用同一业务状态，开发与 NativeAOT 正式版一致：
+
+- `automaticFormat` 为保存的共享偏好；`activePolicy` 为 windows-current/shared-automatic/exclusive-native。
+- `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；有损/浮点解码值不等于原始 PCM 位深。
+- `clientStream` 为 mpv 实际客户端流 rate/sampleFormat/channels，仅用于流诊断；float 不构成设备为 32 位的证据。
+- `actualDevice`：共享使用独立 `IPropertyStore.PKEY_AudioEngine_DeviceFormat` 读回的真实端点 sampleRate/containerBits/validBits/sampleKind/channels/channelMask/layout；独占实际流率与声道可读，但播放内核不公开其最终有效位深/布局时为 null，UI 明确显示未知，不冒用共享默认值。
+- `windowsDeviceDefault` 为 Windows 端点持久格式，`windowsMix` 为新 IAudioClient.GetMixFormat 读取的当前混音格式，二者与客户端流分开。
+- `selected` 为自动策略选中且经过完整组合探测的目标；`supportedFormats` 为完整元组数组。范围是标准 8–768 kHz，另加源/当前率，只探测已知源布局和设备现有布局；Windows 没有通用的所有自定义采样率穷举接口。
+- `applied` 表示目标元组已通过实际端点及混音率/布局读回、流重建完成且无格式失败；`conversion` 说明重采样、精度或布局回退，`diagnostic` 为写入/读回失败，`capabilityDiagnostic` 为接口/设备查询限制。不能把开关已选中当成已生效。
+- 兼容摘要 `sampleRate` 保留 mode(auto/system/native)、requestedRate、actualRate、mixRate、applied 及能力率列表；完整位深与布局判断请使用 audioFormat。
+
+共享写入通过 Windows 非公开 IPolicyConfig.SetDeviceFormat 实际修改端点与混音格式，影响同端点其他应用；随后独立读取文档化 PKEY 设备格式与新客户端混音格式验证。失败尝试恢复完整旧格式，保留可用播放并显示实际状态。每首共享自动歌曲都核对完整格式，包括相同采样率但不同位深/布局，避免预加载绕过匹配；自动模式不跨曲预加载，因此可能有短暂间隔。外部更改只更新诊断，不在监视循环中无限抢写；下一首或显式重新开启/切换模式时重新匹配。
+
+真实验收曾确认：Windows 设置在页面已打开时可显示旧采样率，重新打开后与 44.1 kHz 端点读回一致；另一次 48 kHz 偏离的真实原因是独立硬件测试恢复旧格式，不能混同为页面缓存。已增加真实测试的其他客户端运行拦截，并使普通单元测试默认写入临时数据/日志目录，避免模拟设备日志污染用户日志。
+
+验证命令（先关闭所有其他 JeekMusic 客户端；隔离数据并不隔离物理端点）：
 
 ```powershell
-python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio
-# 另显式验证独占输出（会占用端点）：
+# 独立只读诊断，不启动客户端、不改变格式：
+python desktop/tools/read-audio-format.py
+# 显式真实硬件验证：共享 44.1/16 → 44.1/24 → 48/24 → 44.1/24 → 48/16，含暂停、关闭开关及独占返回：
 python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --exclusive
 ```
 
-脚本使用临时曲库和静音 WAV，记录输出快照到 `desktop/artifacts/sample-rate-verification/wasapi.json`，结束恢复原混音率并关闭其自己的测试客户端。静音仍会占用设备；禁止音频测试时不要运行这些 opt-in 验证。
+脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，仅在没有其他 JeekMusic 客户端时恢复完整原端点/混音快照；若另一客户端已出现则拒绝覆盖其格式。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。

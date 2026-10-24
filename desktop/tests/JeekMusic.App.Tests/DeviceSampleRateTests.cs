@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Interactivity;
@@ -11,294 +10,266 @@ using JeekMusic.Settings;
 using JeekMusic.UI;
 using Xunit.Abstractions;
 
-
 namespace JeekMusic.App.Tests;
 
 [Collection("Avalonia UI")]
 public sealed class DeviceSampleRateTests(ITestOutputHelper output)
 {
+    internal static EndpointAudioFormat Pcm(int rate, int valid = 24, int container = 24, int channels = 2, uint mask = 3) => new(rate, container, valid, channels, mask, "pcm");
     sealed class Formats : IDeviceAudioFormat, IExclusiveAudioFormat
     {
-        public int MixRate = 48000;
+        public EndpointAudioFormat Actual = Pcm(48000, 16, 16);
         public bool RejectWrite, SharedAvailable = true;
-        public List<(string, int)> Writes { get; } = [];
+        public List<EndpointAudioFormat> Supported = [Pcm(44100,16,16), Pcm(44100), Pcm(44100,24,32), Pcm(48000,16,16), Pcm(48000), Pcm(96000)];
+        public List<(string Device, EndpointAudioFormat Format)> Writes { get; } = [];
         public Action? BeforeWrite;
-        public DeviceAudioCapabilities Capture(string? device, int? sourceRate, int channels) =>
-            new(device?.Replace("wasapi/", "") ?? "render-device", MixRate, 2,
-                SharedAvailable ? [44100, 48000, 96000] : [], [44100, 48000, 96000], SharedAvailable,
-                SharedAvailable ? null : "IPolicyConfig unavailable");
-        public bool SetSharedRate(string device, int rate, out string? diagnostic)
+        public DeviceAudioCapabilities Capture(string? device, int? rate, int channels) => CaptureFormat(device, new(rate,null,channels,3,"stereo","unknown"));
+        public DeviceAudioCapabilities CaptureFormat(string? device, SourceAudioFormat source) => new(device?.Replace("wasapi/", "") ?? "render-device",
+            Actual.SampleRate, Actual.Channels, Supported.Select(f=>f.SampleRate).Distinct().ToArray(), Supported.Select(f=>f.SampleRate).Distinct().ToArray(),
+            SharedAvailable, SharedAvailable ? null : "IPolicyConfig unavailable", Actual, Actual with {ContainerBits=32,ValidBits=32,SampleKind="float"}, Supported);
+        public bool SetSharedRate(string device,int rate,out string? diagnostic) => SetSharedFormat(device, Actual with {SampleRate=rate},out diagnostic);
+        public bool SetSharedFormat(string device,EndpointAudioFormat format,out string? diagnostic)
         {
-            BeforeWrite?.Invoke();
-            Writes.Add((device, rate));
-            diagnostic = RejectWrite ? "SetDeviceFormat: 0x80004001" : null;
-            if (!RejectWrite) MixRate = rate;
+            BeforeWrite?.Invoke(); Writes.Add((device,format));
+            diagnostic=RejectWrite ? "SetDeviceFormat: 0x80004001" : null;
+            if(!RejectWrite) Actual=format;
             return !RejectWrite;
         }
-        public int? ReadMixRate(string device) => MixRate;
-        public string? Select(string? device, int sampleRate, int channels, int? sourceBits) => "s32";
+        public int? ReadMixRate(string device)=>Actual.SampleRate;
+        public string? Select(string? device,int sampleRate,int channels,int? sourceBits)=>"s32";
     }
-
-    static async Task Run(Action<OutputModeSwitchTests.Fixture, Formats> test)
+    static async Task Run(Action<OutputModeSwitchTests.Fixture,Formats> test,int? initialBits=null,int nextRate=96000)
     {
-        using var session = HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
-        await session.Dispatch(() =>
+        using var session=HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        await session.Dispatch(()=>
         {
-            var formats = new Formats();
-            using var f = new OutputModeSwitchTests.Fixture(formats: formats, deviceFormats: formats);
-            test(f, formats);
-        }, CancellationToken.None);
+            var formats=new Formats();
+            using var f=new OutputModeSwitchTests.Fixture(formats:formats,deviceFormats:formats,initialBits:initialBits,nextRate:nextRate);
+            test(f,formats);
+        },CancellationToken.None);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public Task SharedManualClosesStreamBeforeSystemWriteAndPreservesCuePositionAndPause(bool paused) => Run((f, format) =>
+    [InlineData(false)] [InlineData(true)]
+    public Task AutoClosesOwnStreamBeforeCompleteSystemWriteAndPreservesCuePositionAndPause(bool paused)=>Run((f,formats)=>
     {
-        if (paused) { f.Player.Pause(); Dispatcher.UIThread.RunJobs(); }
-        var old = f.Current;
-        format.BeforeWrite = () => Assert.True(old.Disposed);
-        Assert.True(f.Player.SetSampleRate("manual", 96000));
-        Assert.Equal(("render-device", 96000), Assert.Single(format.Writes));
-        Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
-        Assert.DoesNotContain(f.Current.Commands.Where(c => c[0] == "loadfile"), c => c[4].Contains("audio-samplerate"));
-        Assert.Equal(96000, f.Player.ActualSampleRate);
-        Assert.False(f.Player.SampleRateApplied); // initialized but not acknowledged by file-loaded
-        f.Ready();
+        if(paused){f.Player.Pause();Dispatcher.UIThread.RunJobs();}
+        var old=f.Current; formats.BeforeWrite=()=>Assert.True(old.Disposed);
+        Assert.True(f.Player.SetAutomaticAudioFormat(true)); f.Ready();
+        Assert.Equal(Pcm(44100),Assert.Single(formats.Writes).Format);
+        Assert.Equal(12.345,f.Player.Position.TotalSeconds,3);
+        Assert.Equal(!paused,f.Player.IsPlaying);
         Assert.True(f.Player.SampleRateApplied);
-        Assert.Equal(!paused, f.Player.IsPlaying);
-        Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
+        Assert.Equal(24,f.Player.ActualDeviceFormat!.ValidBits);
         Assert.Empty(f.Endpoint.Writes);
     });
 
     [Fact]
-    public Task SharedAutoDoesNotPrefetchOrChangeMixForNextSongUntilEof() => Run((f, format) =>
+    public Task SameRateDifferentBitDepthIsNotSkippedAndEverySongReconcilesExternalChanges()=>Run((f,formats)=>
     {
-        Assert.True(f.Player.SetSampleRate("auto"));
-        f.Ready();
-        Assert.Equal(44100, format.MixRate);
-        Assert.Single(f.Current.Commands, c => c[0] == "loadfile");
-        var completed = 0;
-        f.Player.TrackCompleted += () => completed++;
-        f.Current.EndCurrent(Mpv.EndReason.Eof);
-        Dispatcher.UIThread.RunJobs();
-        f.Ready();
-        Assert.Equal(2, f.Player.CurrentTrack!.Id);
-        Assert.Equal(new[] { 44100, 96000 }, format.Writes.Select(w => w.Item2));
-        Assert.Single(f.Current.Commands, c => c[0] == "loadfile");
-        Assert.Equal(1, completed);
-        Assert.True(f.Player.IsPlaying);
-        Assert.True(f.Player.SampleRateApplied);
-    });
-
-    [Fact]
-    public Task FailedSharedWriteKeepsActualRateUsablePlaybackAndRollsBackManualSelection() => Run((f, format) =>
-    {
-        format.RejectWrite = true;
-        Assert.False(f.Player.SetSampleRate("manual", 96000));
-        f.Ready();
-        Assert.Equal("system", f.Player.SampleRateMode);
-        Assert.Equal(48000, f.Player.ActualSampleRate);
-        Assert.True(f.Player.IsPlaying);
-        Assert.Contains("0x80004001", f.Player.SampleRateDiagnostic);
+        f.Player.SetAutomaticAudioFormat(true); f.Ready();
+        Assert.Equal(Pcm(44100,16,16),formats.Actual);
+        Assert.Single(f.Current.Commands,c=>c[0]=="loadfile");
+        formats.Actual=Pcm(48000,16,16); // a real external/test reset must not survive a same-rate next song
+        f.Player.RefreshOutput(forceRateRefresh:true);
         Assert.False(f.Player.SampleRateApplied);
-        Assert.Single(format.Writes);
-        Assert.NotEmpty(f.Errors);
-    });
-
-    [Fact]
-    public Task UnsupportedRatesAndPolicyUnavailableNeverWriteOrReplaceEngine() => Run((f, format) =>
-    {
-        var old = f.Current;
-        Assert.False(f.Player.SetSampleRate("manual", 12345));
-        format.SharedAvailable = false;
-        Assert.False(f.Player.SetSampleRate("auto"));
-        Assert.Equal("system", f.Player.SampleRateMode);
-        Assert.Same(old, f.Current);
-        Assert.Empty(format.Writes);
-        Assert.Contains("IPolicyConfig", f.Player.SampleRateDiagnostic);
-    });
-
-    [Fact]
-    public Task AutoFailureKeepsPolicyAndCanRecoverOnTheNextTrack() => Run((f, format) =>
-    {
-        format.RejectWrite = true;
-        Assert.False(f.Player.SetSampleRate("auto"));
-        f.Ready();
-        Assert.Equal("auto", f.Player.SampleRateMode);
-        Assert.Equal(48000, f.Player.ActualSampleRate);
-        Assert.False(f.Player.SampleRateApplied);
+        f.Current.EndCurrent(Mpv.EndReason.Eof);Dispatcher.UIThread.RunJobs();f.Ready();
+        Assert.Equal(2,f.Player.CurrentTrack!.Id);
+        Assert.Equal(Pcm(44100),formats.Actual);
+        Assert.True(f.Player.SampleRateApplied);
         Assert.True(f.Player.IsPlaying);
-        format.RejectWrite = false;
-        f.Player.Next(); f.Ready();
-        Assert.Equal(96000, f.Player.ActualSampleRate);
-        Assert.True(f.Player.SampleRateApplied);
-        Assert.Null(f.Player.SampleRateDiagnostic);
-    });
+        Assert.Equal(2,formats.Writes.Count);
+    },initialBits:16,nextRate:44100);
 
     [Fact]
-    public Task ExclusiveManualUsesFileOptionsForBothTracksWithoutWritingSystemMix() => Run((f, format) =>
+    public Task FailedWriteKeepsAutomaticPreferenceAndUsablePlaybackWithActualFormat()=>Run((f,formats)=>
     {
-        f.Player.SetExclusive(true); f.Ready();
-        Assert.True(f.Player.SetSampleRate("manual", 48000));
-        f.Current.Properties["audio-out-params/samplerate"] = "48000";
-        f.Ready();
-        Assert.All(f.Current.Commands.Where(c => c[0] == "loadfile"), c => Assert.Contains("audio-samplerate=48000", c[4]));
-        Assert.Empty(format.Writes);
-        Assert.Equal(48000, f.Player.ActualSampleRate);
-        Assert.True(f.Player.SampleRateApplied);
-    });
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public Task ExclusiveRateMismatchOrInitializationFailureRestoresPreviousChoiceAndCue(bool initializationFails) => Run((f, format) =>
-    {
-        f.Player.SetExclusive(true); f.Ready();
-        Assert.True(f.Player.SetSampleRate("manual", 96000));
-        if (initializationFails) { f.Current.EndCurrent(Mpv.EndReason.Error); Dispatcher.UIThread.RunJobs(); }
-        else { f.Current.Properties["audio-out-params/samplerate"] = "48000"; f.Ready(); }
-        Assert.Equal("system", f.Player.SampleRateMode);
-        Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
-        f.Ready();
+        formats.RejectWrite=true;
+        Assert.False(f.Player.SetAutomaticAudioFormat(true));f.Ready();
+        Assert.True(f.Player.AutomaticAudioFormat);
+        Assert.Equal(48000,f.Player.ActualSampleRate);
+        Assert.False(f.Player.SampleRateApplied);
         Assert.True(f.Player.IsPlaying);
         Assert.NotNull(f.Player.SampleRateDiagnostic);
-        Assert.Empty(format.Writes);
+        Assert.Single(formats.Writes);
+        formats.RejectWrite=false;
+        f.Player.Next();f.Ready();
+        Assert.Equal(Pcm(96000),formats.Actual);
+        Assert.True(f.Player.SampleRateApplied);
     });
 
     [Fact]
-    public Task ExternalSystemChangeReportsRealMixAndDoesNotFightTheSystem() => Run((f, format) =>
+    public Task DisablingDoesNotWriteRestoreSnapshotOrReloadPlayback()=>Run((f,formats)=>
     {
-        Assert.True(f.Player.SetSampleRate("manual", 44100)); f.Ready();
-        format.MixRate = 48000;
-        f.Player.RefreshOutput(forceRateRefresh: true);
-        Assert.Equal(48000, f.Player.ActualSampleRate);
-        Assert.False(f.Player.SampleRateApplied);
-        Assert.Single(format.Writes);
-        Assert.Contains("externally", f.Player.SampleRateDiagnostic);
-        var state = McpTools.SampleRateState(f.Player);
-        Assert.Equal(48000, state["actualRate"]!.GetValue<int>());
-        Assert.Equal(44100, state["requestedRate"]!.GetValue<int>());
-        Assert.False(state["applied"]!.GetValue<bool>());
-    });
-
-    [Fact]
-    public Task DeviceChangeReappliesManualRateToTheNewBoundEndpoint() => Run((f, format) =>
-    {
-        Assert.True(f.Player.SetSampleRate("manual", 96000)); f.Ready();
-        format.MixRate = 48000;
-        f.Endpoint.Volumes["second-device"] = 70;
-        f.Player.SetDevice("wasapi/second-device"); f.Ready();
-        Assert.Equal(("second-device", 96000), format.Writes[^1]);
-        Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();
+        var old=f.Current;var count=formats.Writes.Count;
+        Assert.True(f.Player.SetAutomaticAudioFormat(false));
+        Assert.Same(old,f.Current);Assert.False(old.Disposed);
+        Assert.Equal(count,formats.Writes.Count);
+        Assert.Equal(Pcm(44100),formats.Actual);
         Assert.True(f.Player.IsPlaying);
+    });
+
+    [Fact]
+    public Task ExclusiveAlwaysUsesEachNativeRateAndDoesNotChangeSharedAutomaticPreference()=>Run((f,formats)=>
+    {
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();var count=formats.Writes.Count;
+        f.Player.SetExclusive(true);f.Current.Properties["audio-out-params/samplerate"]="44100";f.Ready();
+        var loads=f.Current.Commands.Where(c=>c[0]=="loadfile").ToArray();
+        Assert.Contains("audio-samplerate=44100",loads[0][4]);
+        Assert.Contains("audio-samplerate=96000",loads[1][4]);
+        Assert.True(f.Player.AutomaticAudioFormat);Assert.Equal(count,formats.Writes.Count);
+        Assert.Null(f.Player.ActualDeviceFormat); // never call a float client stream hardware 32-bit
+        f.Player.SetExclusive(false);f.Ready();Assert.True(f.Player.SampleRateApplied);
+    });
+
+    [Fact]
+    public Task DeviceSwitchReprobesCompleteFormatsAndKeepsPosition()=>Run((f,formats)=>
+    {
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();
+        formats.Actual=Pcm(48000,16,16);f.Endpoint.Volumes["second-device"]=70;
+        f.Player.SetDevice("wasapi/second-device");f.Ready();
+        Assert.Equal("second-device",formats.Writes[^1].Device);
+        Assert.Equal(Pcm(44100),formats.Actual);
+        Assert.Equal(12.345,f.Player.Position.TotalSeconds,3);
         Assert.Empty(f.Endpoint.Writes);
     });
 
     [Fact]
-    public Task McpAndSettingsUseBusinessStateAndRejectInconsistentArguments() => Run((f, format) =>
+    public Task McpAndMenuExposeOnlyAutomaticControlsAndReadActualEffectiveBits()=>Run((f,formats)=>
     {
-        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
-        var settings = new SettingsStore(path);
-        OutputSettingsBinding.Attach(f.Player, settings);
-        using var app = new AppServices(settings, new LibraryDb(":memory:"), _ => f.Player);
-        var mcp = new McpTools(app);
-        Assert.Throws<ArgumentException>(() => mcp.Call("set_output", new() { ["sampleRateMode"] = "auto", ["sampleRate"] = 44100 }));
-        Assert.Throws<ArgumentException>(() => mcp.Call("set_output", new() { ["sampleRateMode"] = "manual" }));
-        var state = mcp.Call("set_output", new() { ["sampleRate"] = 96000 });
-        f.Ready();
-        Assert.Equal(96000, state["sampleRate"]!["actualRate"]!.GetValue<int>());
-        Assert.Equal("manual", settings.Current.SampleRateMode);
-        Assert.Equal(96000, settings.Current.ManualSampleRate);
-        Assert.Throws<InvalidOperationException>(() => mcp.Call("set_output", new() { ["sampleRate"] = 12345 }));
-        Assert.Equal(96000, settings.Current.ManualSampleRate);
-        settings.WriteNow();
-        Assert.Equal("manual", new SettingsStore(path).Current.SampleRateMode);
-        File.Delete(path);
-    });
-
-    [Fact]
-    public Task PlaybackMenuUsesProbedRatesAndSelectionReflectsAppliedOutput() => Run((f, format) =>
-    {
-        var settings = new SettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json"));
-        using var app = new AppServices(settings, new LibraryDb(":memory:"), _ => f.Player);
-        var window = new MainWindow(app) { ExitRequested = true };
-        window.ViewModel.Player.ProgressVisible = false;
+        var path=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");var settings=new SettingsStore(path);
+        OutputSettingsBinding.Attach(f.Player,settings);
+        using var app=new AppServices(settings,new LibraryDb(":memory:"),_=>f.Player);
+        var mcp=new McpTools(app);
+        mcp.Call("set_output",new(){["automaticFormat"]=true});f.Ready();
+        Assert.True(settings.Current.AutomaticAudioFormat);
+        var state=mcp.Call("get_output",new())["audioFormat"]!;
+        Assert.Equal(24,state["actualDevice"]!["validBits"]!.GetValue<int>());
+        Assert.Null(state["source"]!["bits"]);Assert.True(state["applied"]!.GetValue<bool>());
+        Assert.Throws<ArgumentException>(()=>mcp.Call("set_output",new(){["exclusive"]=true,["automaticFormat"]=false}));
+        var window=new MainWindow(app){ExitRequested=true};window.ViewModel.Player.ProgressVisible=false;
         try
         {
-            var menu = window.CreateOutputMenu();
-            var groups = menu.Items.OfType<MenuItem>().Where(i => i.Items.Count > 0).ToArray();
-            Assert.Equal(2, groups.Length);
-            Assert.Equal(5, groups[0].Items.Count); // system, auto, three real driver-probed rates
-            var manual = groups[0].Items.OfType<MenuItem>().Single(i => Equals(i.Header, "96 kHz"));
-            manual.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            f.Ready();
-            Assert.True(f.Player.SampleRateApplied);
-            Assert.Contains(window.CreateOutputMenu().Items.OfType<MenuItem>().First(i => i.Items.Count > 0).Items.OfType<MenuItem>(),
-                i => Equals(i.Header, "96 kHz") && i.IsChecked);
-            format.MixRate = 48000;
-            f.Player.RefreshOutput(forceRateRefresh: true);
-            Assert.DoesNotContain(window.CreateOutputMenu().Items.OfType<MenuItem>().First(i => i.Items.Count > 0).Items.OfType<MenuItem>(),
-                i => Equals(i.Header, "96 kHz") && i.IsChecked);
+            var menu=window.CreateOutputMenu();
+            Assert.All(menu.Items.OfType<MenuItem>(),i=>Assert.Empty(i.Items));
+            Assert.Contains(menu.Items.OfType<MenuItem>(),i=>Equals(i.Header,L.T("自动匹配歌曲格式"))&&i.IsChecked);
+            Assert.Contains(menu.Items.OfType<MenuItem>(),i=>i.Header?.ToString()?.Contains("24")==true);
+            Assert.Equal("44.1 kHz → 44.1 kHz",window.ViewModel.Player.FormatText);
+            formats.Actual=Pcm(48000,24,32);f.Player.RefreshOutput(forceRateRefresh:true);
+            Assert.Equal("44.1 kHz → 48 kHz",window.ViewModel.Player.FormatText);
+            Assert.Contains("24",AudioFormatDisplay.Device(f.Player));Assert.Contains("32",AudioFormatDisplay.Device(f.Player));
+            Assert.Contains(L.T("位深未知 / 不适用"),AudioFormatDisplay.Source(f.Player));
+            var automatic=window.CreateOutputMenu().Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("自动匹配歌曲格式")));
+            automatic.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Assert.False(f.Player.AutomaticAudioFormat);
         }
-        finally { window.Close(); }
+        finally{window.Close();}
+        settings.WriteNow();Assert.False(new SettingsStore(path).Current.AutomaticAudioFormat);File.Delete(path);
     });
 
-    [Fact]
-    public void LegacyAndInvalidSampleRatePreferencesKeepThePreviousSystemBehavior()
+    [Theory]
+    [InlineData("manual",false)] [InlineData("system",false)] [InlineData("auto",true)]
+    public async Task UnreleasedManualPreferencesMigrateWithoutWritingOldManualRate(string legacy,bool expected)
     {
-        Assert.Equal("system", new AppSettings().SampleRateMode);
-        using var player = new PlayerService(new EmptySource(), _ => throw new Exception("No engine expected"));
-        player.RestoreSampleRateSettings("unknown", -1);
-        Assert.Equal("system", player.SampleRateMode);
-        player.RestoreSampleRateSettings("manual", null);
-        Assert.Equal("system", player.SampleRateMode);
+        using var session=HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        await session.Dispatch(()=>
+        {
+            var path=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
+            File.WriteAllText(path,"{\"sampleRateMode\":\""+legacy+"\",\"manualSampleRate\":96000}");
+            var settings=new SettingsStore(path);
+            using var f=new OutputModeSwitchTests.Fixture(settings,deviceFormats:new Formats());
+            Assert.Equal(expected,f.Player.AutomaticAudioFormat);
+            Assert.Null(settings.Current.SampleRateMode);Assert.Null(settings.Current.ManualSampleRate);
+            settings.WriteNow();Assert.DoesNotContain("manualSampleRate",File.ReadAllText(path));File.Delete(path);
+        },CancellationToken.None);
     }
 
-    sealed class EmptySource : ITrackSource
+    [Fact]
+    public async Task DecoderKnownSideLayoutReconfiguresBeforeUnmutingWithoutRepeatingTheReload()
     {
-        public Track? ById(long id) => null;
-        public Track? ByKey(string key) => null;
-        public string? PathOf(Track track) => null;
+        using var session=HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        await session.Dispatch(()=>
+        {
+            var formats=new Formats();var side=Pcm(44100,24,32,6,0x60f);formats.Supported.Add(side);
+            var settings=new SettingsStore(Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json"));settings.Current.AutomaticAudioFormat=true;
+            using var f=new OutputModeSwitchTests.Fixture(settings,formats:formats,deviceFormats:formats,configureEngine:engine=>
+            {
+                engine.Properties["audio-params/channels"]="5.1(side)";
+                engine.Properties["audio-params/channel-count"]="6";
+            });
+            f.Ready();
+            Assert.Equal(side,formats.Actual);
+            Assert.Equal(2,formats.Writes.Count); // metadata stereo, then decoded exact side layout
+            Assert.Equal(0x60fu,f.Player.SourceFormat.ChannelMask);
+            Assert.True(f.Player.SampleRateApplied);
+            Assert.True(f.Player.IsPlaying);
+            Assert.Equal("auto-safe",f.Current.Properties["audio-channels"]);
+            f.Ready();Assert.Equal(2,formats.Writes.Count);
+        },CancellationToken.None);
+    }
+
+    [Fact]
+    public void PolicyProbesCompleteTuplesAndDistinguishesEffectiveFromContainerBits()
+    {
+        var current=Pcm(48000,16,16);
+        var source=new SourceAudioFormat(44100,24,2,3,"stereo","integer-metadata");
+        var valid24in32=Pcm(44100,24,32);
+        var supported=new[]{Pcm(44100,16,16),valid24in32,Pcm(96000,32,32)};
+        Assert.Equal(valid24in32,AudioFormatPolicy.Choose(source,current,supported).Target);
+        Assert.Equal(24,valid24in32.IntegerPrecision);
+        Assert.Equal(valid24in32,AudioFormatPolicy.Choose(source with{Bits=null,Precision="unknown"},current,supported).Target);
+        Assert.Equal(Pcm(44100,16,16),AudioFormatPolicy.Choose(source with{Bits=16},current,supported).Target);
+        var reduced=AudioFormatPolicy.Choose(source,current,[Pcm(44100,16,16)]);
+        Assert.Contains("Precision conversion",reduced.Conversion);
+    }
+
+    [Fact]
+    public void PolicyKeepsSideAndBackLayoutsDistinctAndUnknownLayoutsPreserveSpeakerConfiguration()
+    {
+        var current=Pcm(48000,24,24);
+        var source=new SourceAudioFormat(44100,24,6,0x60f,"5.1(side)","integer-metadata");
+        var side=Pcm(44100,24,32,6,0x60f);var back=Pcm(44100,24,24,6,0x3f);
+        Assert.Equal(side,AudioFormatPolicy.Choose(source,current,[side,back,Pcm(44100)]).Target);
+        var fallback=AudioFormatPolicy.Choose(source,current,[back,Pcm(44100)]);
+        Assert.Equal(Pcm(44100),fallback.Target);Assert.Contains("Channel conversion",fallback.Conversion);
+        var unknown=AudioFormatPolicy.Choose(source with{ChannelMask=null,Layout=null},current,[side,Pcm(44100)]);
+        Assert.Equal(Pcm(44100),unknown.Target);Assert.Contains("unknown",unknown.Conversion);
+        Assert.Null(ChannelLayouts.Mask("6 channels"));Assert.NotEqual(ChannelLayouts.Mask("5.1"),ChannelLayouts.Mask("5.1(side)"));
     }
 
     [RealAudioFact]
-    public void RealWindowsEndpointSharedFormatWriteIsReadBackAndOriginalRateIsRestored()
+    public void RealEndpointCompleteFormatIsIndependentlyReadBackAndFullOriginalRestored()
     {
-        var service = new DeviceAudioFormat();
-        var caps = service.Capture(null, 44100, 2);
+        Assert.Empty(System.Diagnostics.Process.GetProcessesByName("JeekMusic"));
+        var service=new DeviceAudioFormat();var source=new SourceAudioFormat(44100,null,2,3,"stereo","unknown");
+        var caps=service.CaptureFormat(null,source);
         output.WriteLine(System.Text.Json.JsonSerializer.Serialize(caps));
-        Assert.NotNull(caps.DeviceId);
-        Assert.NotNull(caps.MixRate);
-        Assert.True(caps.CanSetShared, caps.Diagnostic);
-        var original = service.CaptureSystemFormat(caps.DeviceId!);
-        var candidates = caps.SharedRates.Where(r => r != caps.MixRate).ToArray();
-        Assert.NotEmpty(candidates);
-        var target = candidates.Contains(44100) ? 44100 : candidates[0];
+        Assert.NotNull(caps.DeviceId);Assert.NotNull(caps.DeviceFormat);
+        var original=service.CaptureSystemFormat(caps.DeviceId!);
+        var plan=AudioFormatPolicy.Choose(source,caps.DeviceFormat!,caps.SupportedFormats!);Assert.NotNull(plan.Target);
         try
         {
-            var success = service.SetSharedRate(caps.DeviceId!, target, out var diagnostic);
-            output.WriteLine($"Set {target} Hz: success={success}; diagnostic={diagnostic}; readback={service.ReadMixRate(caps.DeviceId!)}");
-            Assert.True(success, diagnostic);
-            Assert.Equal(target, service.ReadMixRate(caps.DeviceId!));
+            Assert.True(service.SetSharedFormat(caps.DeviceId!,plan.Target!,out var diagnostic),diagnostic);
+            var actual=service.CaptureFormat(caps.DeviceId,source);
+            Assert.Equal(plan.Target,actual.DeviceFormat);
+            Assert.Equal(plan.Target!.SampleRate,actual.MixFormat!.SampleRate);
+            Assert.Equal(plan.Target.ChannelMask,actual.MixFormat.ChannelMask);
+            output.WriteLine($"Independent PKEY device readback: {actual.DeviceFormat}; client mix: {actual.MixFormat}");
         }
         finally
         {
-            service.RestoreSystemFormat(caps.DeviceId!, original);
-            output.WriteLine($"Restore original endpoint/mix format: readback={service.ReadMixRate(caps.DeviceId!)} Hz");
-            Assert.Equal(caps.MixRate, service.ReadMixRate(caps.DeviceId!));
-            Assert.Equal(original.Endpoint, service.CaptureSystemFormat(caps.DeviceId!).Endpoint);
-            Assert.Equal(original.Mix, service.CaptureSystemFormat(caps.DeviceId!).Mix);
+            service.RestoreSystemFormat(caps.DeviceId!,original);
+            var restored=service.CaptureSystemFormat(caps.DeviceId!);
+            Assert.Equal(original.Endpoint,restored.Endpoint);Assert.Equal(original.Mix,restored.Mix);
         }
     }
 }
 
-public sealed class RealAudioFactAttribute : FactAttribute
+public sealed class RealAudioFactAttribute:FactAttribute
 {
     public RealAudioFactAttribute()
     {
-        if (Environment.GetEnvironmentVariable("JEEKMUSIC_TEST_REAL_AUDIO") != "1")
-            Skip = "Opt-in Windows endpoint format mutation: set JEEKMUSIC_TEST_REAL_AUDIO=1.";
+        if(Environment.GetEnvironmentVariable("JEEKMUSIC_TEST_REAL_AUDIO")!="1")
+            Skip="Opt-in endpoint mutation requires no other JeekMusic client and JEEKMUSIC_TEST_REAL_AUDIO=1.";
     }
 }
-

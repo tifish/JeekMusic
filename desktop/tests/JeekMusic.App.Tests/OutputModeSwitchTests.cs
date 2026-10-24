@@ -534,14 +534,16 @@ public sealed class OutputModeSwitchTests
         public HashSet<long> MissingPaths { get; } = [];
 
         public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null,
-            IExclusiveAudioFormat? formats = null, IDeviceAudioFormat? deviceFormats = null)
+            IExclusiveAudioFormat? formats = null, IDeviceAudioFormat? deviceFormats = null,
+            int? initialBits = null, int nextRate = 96000, Action<FakeEngine>? configureEngine = null)
         {
             Endpoint = endpoint ?? new FakeEndpointVolume();
-            _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000, SampleRate = 44100, Channels = 2 };
-            _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000, SampleRate = 96000, BitsPerSample = 24, Channels = 2 };
+            _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000, SampleRate = 44100, BitsPerSample = initialBits, Channels = 2 };
+            _nextTrack = new Track { Id = 2, TrackKey = "next", Dir = "", FileName = "next.wav", Title = "Next", ArtistDisplay = "Test", DurationMs = 120000, SampleRate = nextRate, BitsPerSample = 24, Channels = 2 };
             Player = new PlayerService(this, options =>
             {
                 var engine = new FakeEngine(options);
+                configureEngine?.Invoke(engine);
                 if (Engines.Count == 0) engine.Properties["ao-volume"] = initialNativeVolume;
                 Engines.Add(engine);
                 return engine;

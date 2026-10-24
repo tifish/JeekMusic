@@ -21,9 +21,19 @@ def load(name, filename):
 mcp = load("mcp_workflow", "test-mcp.py")
 build = load("build_workflow", "test-build-isolation.py")
 licenses = load("collect_licenses", "collect-licenses.py")
+sample_rates = load("sample_rate_workflow", "test-sample-rates.py")
 
 
 class WorkflowGuards(unittest.TestCase):
+    def test_sample_rate_hardware_checks_refuse_other_clients_before_opening_any_client(self):
+        with patch.object(sys, "argv", ["test-sample-rates.py", "--audio"]), \
+             patch.object(sample_rates, "running_clients", return_value=[12345]), \
+             patch.object(sample_rates, "McpClient") as client, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                sample_rates.main()
+            self.assertEqual(error.exception.code, 2)
+            client.assert_not_called()
+
     def test_license_collector_uses_isolated_publish_graph_and_rejects_ambiguous_or_stale_graphs(self):
         with tempfile.TemporaryDirectory(prefix="jeek-license-graph-") as temp:
             project = Path(temp)

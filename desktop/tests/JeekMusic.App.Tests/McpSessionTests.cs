@@ -66,6 +66,8 @@ public sealed class McpSessionTests
     [Theory]
     [InlineData("set_volume", "{\"volume\":101}")]
     [InlineData("set_output", "{\"sampleRateMode\":\"invalid\"}")]
+    [InlineData("set_output", "{\"sampleRateMode\":\"auto\"}")]
+    [InlineData("set_output", "{\"automaticFormat\":\"true\"}")]
     [InlineData("set_output", "{\"sampleRate\":0}")]
     [InlineData("set_output", "{\"sampleRate\":44100.5}")]
     [InlineData("set_output", "{\"sampleRate\":1536001}")]

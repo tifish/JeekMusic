@@ -38,9 +38,9 @@ public sealed class McpTools
         Tool("set_play_mode", "Set shuffle and/or repeat (off, all, one).", "\"shuffle\":{\"type\":\"boolean\"},\"repeat\":{\"type\":\"string\",\"enum\":[\"off\",\"all\",\"one\"]}", []),
         Tool("set_volume", "Set the current physical endpoint master volume (0–100) in both modes, affecting other apps on that endpoint. Never persisted/restored. muted controls this player only. Unavailable endpoint writes fail; mute-only remains supported.",
             "\"volume\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100,\"description\":\"Current endpoint master volume; requires volumeAvailable. No saved mode value.\"},\"muted\":{\"type\":\"boolean\",\"description\":\"Mute only JeekMusic; never writes endpoint or session mute.\"}", []),
-        Tool("get_output", "Read WASAPI selection, actual bound endpoint, volume safety and audio format. sampleRate reports driver-probed supported shared/exclusive rates, real Windows mix rate, requested policy, applied state and failures. Shared client resampling is never reported as a system format change.", "", [], true),
-        Tool("set_output", "Select a device, exclusive mode and/or sample-rate policy. sampleRateMode: system preserves Windows mix format (exclusive prefers native); auto follows each song; manual requires sampleRate from get_output. sampleRate alone selects manual. Shared switching changes the actual Windows endpoint mix format and affects other apps; unsupported/failed changes report errors and keep usable playback. Changes persist and may rebuild output at the saved position. Exclusive still requires unattenuated mixer state and physical volume confirmation where necessary.",
-            "\"device\":{\"type\":\"string\",\"minLength\":1},\"exclusive\":{\"type\":\"boolean\"},\"sampleRateMode\":{\"type\":\"string\",\"enum\":[\"system\",\"auto\",\"manual\"]},\"sampleRate\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1536000,\"description\":\"Manual device rate in Hz, driver-probed in get_output; requires manual mode if sampleRateMode is supplied.\"}", []),
+        Tool("get_output", "Read output selection, volume safety and real audioFormat diagnostics: source precision/layout, client stream, actual endpoint valid/container bits and layout, Windows mix format, driver-supported complete tuples and conversion/failure details. Never infers device bits from a float client stream.", "", [], true),
+        Tool("set_output", "Select device and/or exclusive mode; automaticFormat controls SHARED automatic complete-format matching (rate, effective precision and known source layout). Disabled leaves the current Windows format unchanged. Exclusive has one mode and always negotiates automatically without changing the saved shared preference. Shared matching changes the actual endpoint format and affects other apps. Writes are independently read back through IPropertyStore and IAudioClient; failures preserve usable output and report diagnostics. Changes persist and retain the current position/pause state. Exclusive volume safety gates still apply.",
+            "\"device\":{\"type\":\"string\",\"minLength\":1},\"exclusive\":{\"type\":\"boolean\"},\"automaticFormat\":{\"type\":\"boolean\",\"description\":\"Shared automatic device format matching; false leaves Windows format untouched. In exclusive mode switch to shared first or include exclusive:false.\"}", []),
         Tool("list_playlists", "List playlists with local IDs, stable UIDs and names. Paginated.", Page, [], true),
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
         Tool("edit_playlist", "Create/rename/delete/add/remove/move a playlist. create requires name; other actions require playlistId; rename requires name; add requires trackIds; remove/move require positions; move also needs target (index before moving). Changes persist and use normal sync events. Deleting removes only the playlist, never music files.",
@@ -145,11 +145,9 @@ public sealed class McpTools
                 return Status();
             case "get_output": return Output();
             case "set_output":
-                RequireAny(a, "device", "exclusive", "sampleRateMode", "sampleRate");
-                var rateMode = a["sampleRateMode"]?.GetValue<string>();
-                var sampleRate = a["sampleRate"]?.GetValue<int>();
-                if (rateMode == "manual" && sampleRate is null || sampleRate is not null && rateMode is not (null or "manual"))
-                    throw new ArgumentException("manual mode requires sampleRate; sampleRate cannot be combined with system/auto.");
+                RequireAny(a, "device", "exclusive", "automaticFormat");
+                if (a["automaticFormat"] is not null && (a["exclusive"]?.GetValue<bool>() ?? p.Exclusive))
+                    throw new ArgumentException("automaticFormat applies to shared mode; switch to shared or include exclusive:false.");
                 if (a["device"] is { } deviceNode)
                 {
                     var device = deviceNode.GetValue<string>();
@@ -164,9 +162,8 @@ public sealed class McpTools
                     p.SetExclusive(exclusive.GetValue<bool>());
                     if (p.Exclusive != exclusive.GetValue<bool>()) throw new InvalidOperationException(p.OutputSafetyMessage);
                 }
-                if (rateMode is not null || sampleRate is not null)
-                    if (!p.SetSampleRate(rateMode ?? "manual", sampleRate))
-                        throw new InvalidOperationException(p.SampleRateDiagnostic);
+                if (a["automaticFormat"] is { } automatic)
+                    if (!p.SetAutomaticAudioFormat(automatic.GetValue<bool>())) throw new InvalidOperationException(p.SampleRateDiagnostic);
                 return Output();
             case "list_playlists": return Paginate(app.Playlists.All, a, PlaylistJson);
             case "get_playlist":
@@ -282,6 +279,7 @@ public sealed class McpTools
             ["device"] = p.Device ?? "auto", ["exclusive"] = p.Exclusive,
             ["volumeState"] = VolumeState(p),
             ["sampleRate"] = SampleRateState(p),
+            ["audioFormat"] = AudioFormatState(p),
             ["devices"] = new JsonArray(p.Devices.Select(d => (JsonNode)new JsonObject { ["id"] = d.name, ["description"] = d.description }).ToArray()),
             ["format"] = new JsonObject { ["codec"] = f.Codec, ["fileRate"] = f.FileRate, ["fileFormat"] = f.FileFormat,
                 ["deviceRate"] = f.DeviceRate, ["deviceFormat"] = f.DeviceFormat, ["deviceChannels"] = f.DeviceChannels, ["ao"] = f.Ao, ["resampled"] = f.Resampled }
@@ -290,7 +288,9 @@ public sealed class McpTools
 
     internal static JsonObject SampleRateState(Playback.PlayerService p) => new()
     {
-        ["mode"] = p.SampleRateMode, ["manualRate"] = p.ManualSampleRate, ["requestedRate"] = p.RequestedSampleRate,
+        ["mode"] = p.Exclusive ? "native" : p.SampleRateMode,
+        ["automaticFormat"] = p.AutomaticAudioFormat,
+        ["requestedRate"] = p.RequestedSampleRate,
         ["actualRate"] = p.ActualSampleRate, ["applied"] = p.SampleRateApplied,
         ["mixRate"] = p.RateCapabilities.MixRate, ["mixChannels"] = p.RateCapabilities.Channels,
         ["canSetShared"] = p.RateCapabilities.CanSetShared,
@@ -298,7 +298,37 @@ public sealed class McpTools
         ["exclusiveRates"] = new JsonArray(p.RateCapabilities.ExclusiveRates.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
         ["discovery"] = "driver-exact-standard-rates-plus-source-and-current; channel-layout-specific",
         ["sharedSemantics"] = "windows-endpoint-mix-format; affects-other-apps",
-        ["diagnostic"] = p.SampleRateDiagnostic ?? p.RateCapabilities.Diagnostic
+        ["diagnostic"] = p.SampleRateDiagnostic ?? p.FormatConversion ?? p.RateCapabilities.Diagnostic
+    };
+
+    internal static JsonObject AudioFormatState(Playback.PlayerService p)
+    {
+        var source = p.SourceFormat;
+        return new()
+        {
+            ["automaticFormat"] = p.AutomaticAudioFormat, ["activePolicy"] = p.Exclusive ? "exclusive-native" : p.AutomaticAudioFormat ? "shared-automatic" : "windows-current",
+            ["applied"] = p.AudioFormatApplied,
+            ["source"] = new JsonObject { ["sampleRate"] = source.SampleRate, ["bits"] = source.Bits, ["precision"] = source.Precision,
+                ["channels"] = source.Channels, ["channelMask"] = source.ChannelMask, ["layout"] = source.Layout, ["layoutKnown"] = source.ChannelMask is not null },
+            ["clientStream"] = new JsonObject { ["sampleRate"] = p.Format.DeviceRate, ["sampleFormat"] = p.Format.DeviceFormat,
+                ["channels"] = p.Format.DeviceChannels, ["semantics"] = "client-stream; not-device-effective-bit-depth" },
+            ["actualDevice"] = p.Exclusive ? new JsonObject { ["sampleRate"] = p.ActualSampleRate, ["containerBits"] = null, ["validBits"] = null,
+                ["channels"] = p.Format.DeviceChannels, ["layout"] = null, ["readback"] = "exclusive-stream-rate; backend-does-not-expose-negotiated-valid-bits" } : DeviceFormatJson(p.ActualDeviceFormat),
+            ["windowsDeviceDefault"] = DeviceFormatJson(p.RateCapabilities.DeviceFormat),
+            ["windowsMix"] = DeviceFormatJson(p.RateCapabilities.MixFormat),
+            ["selected"] = DeviceFormatJson(p.SelectedDeviceFormat),
+            ["supportedFormats"] = new JsonArray((p.RateCapabilities.SupportedFormats ?? []).Select(f => (JsonNode)DeviceFormatJson(f)!).ToArray()),
+            ["capabilityDiscovery"] = "exact-complete-tuples; standard-rates-plus-source/current; only-known-source-and-current-device-layouts",
+            ["deviceReadback"] = "IPropertyStore.PKEY_AudioEngine_DeviceFormat; independent-of-client-float-format",
+            ["conversion"] = p.FormatConversion, ["diagnostic"] = p.SampleRateDiagnostic,
+            ["capabilityDiagnostic"] = p.RateCapabilities.Diagnostic
+        };
+    }
+
+    internal static JsonObject? DeviceFormatJson(Playback.EndpointAudioFormat? f) => f is null ? null : new()
+    {
+        ["sampleRate"] = f.SampleRate, ["containerBits"] = f.ContainerBits, ["validBits"] = f.ValidBits,
+        ["sampleKind"] = f.SampleKind, ["channels"] = f.Channels, ["channelMask"] = f.ChannelMask, ["layout"] = f.Layout
     };
 
     internal static JsonObject VolumeState(Playback.PlayerService p) => new()

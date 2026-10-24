@@ -81,26 +81,14 @@ public sealed partial class PlayerViewModel : ObservableObject
     public bool SleepActive => _sleep.Active;
     public string SleepText => _sleep.Remaining is { } r ? Text.Duration(r) : _sleep.SongsLeft > 0 ? L.F($"{_sleep.SongsLeft} 首") : "";
 
-    /// <summary>播放栏显示的格式，如"FLAC 24/96 → 96kHz 独占"（需求 O-3）。</summary>
-    public string FormatText
-    {
-        get
-        {
-            var f = _player.Format;
-            var mode = _player.Exclusive ? L.T("独占") : L.T("共享");
-            if (Track is null) return mode;
-            var rate = _player.ActualSampleRate;
-            if (rate is null) return $"{Track.FormatLabel} {mode}";
-            var device = $"{rate / 1000.0:0.###}kHz";
-            var warning = _player.SampleRateDiagnostic is null ? "" : " ⚠";
-            return (Track.SampleRate != rate ? L.F($"{Track.FormatLabel} → {device} {mode}（已重采样）") : $"{Track.FormatLabel} → {device} {mode}") + warning;
-        }
-    }
+    public string FormatText => AudioFormatDisplay.Rate(_player.SourceFormat.SampleRate) + " → " +
+        (_player.OutputPending ? "…" : AudioFormatDisplay.Rate(_player.ActualSampleRate));
 
     public string OutputModeTip => (_player.Exclusive
         ? L.T("点击切换为共享模式，并从当前位置继续播放。")
         : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。")) + "\n" +
-        L.T("右键选择输出模式和采样率。") + "\n" + (_player.SampleRateDiagnostic ?? "");
+        L.T("右键查看格式和自动匹配选项。") + "\n" + AudioFormatDisplay.Source(_player) + "\n" + AudioFormatDisplay.Device(_player) +
+        "\n" + (_player.SampleRateDiagnostic ?? _player.FormatConversion ?? "");
 
     // ── 音量（需求 O-4）──
 

@@ -9,15 +9,17 @@ internal static class OutputSettingsBinding
     {
         var s = settings.Current;
         player.RestoreVolumeSettings(s.Exclusive, s.Muted);
-        player.RestoreSampleRateSettings(s.SampleRateMode, s.ManualSampleRate);
+        s.AutomaticAudioFormat ??= s.SampleRateMode == "auto";
+        s.SampleRateMode = null;
+        s.ManualSampleRate = null;
+        player.RestoreAutomaticFormat(s.AutomaticAudioFormat.Value);
         player.OutputChanged += () =>
         {
             if (s.Exclusive == player.Exclusive && s.Muted == player.Muted &&
-                s.SampleRateMode == player.SampleRateMode && s.ManualSampleRate == player.ManualSampleRate) return;
+                s.AutomaticAudioFormat == player.AutomaticAudioFormat) return;
             s.Exclusive = player.Exclusive;
             s.Muted = player.Muted;
-            s.SampleRateMode = player.SampleRateMode;
-            s.ManualSampleRate = player.ManualSampleRate;
+            s.AutomaticAudioFormat = player.AutomaticAudioFormat;
             settings.Save("playback");
         };
     }

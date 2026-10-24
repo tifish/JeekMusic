@@ -25,30 +25,20 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         var p = _app.Player;
         p.RefreshRateCapabilities();
-        foreach (var exclusive in new[] { false, true })
-        {
-            var group = new MenuItem { Header = exclusive ? L.T("WASAPI 独占模式") : L.T("共享模式"),
-                ToggleType = MenuItemToggleType.Radio, IsChecked = p.Exclusive == exclusive };
-            void Rate(string mode, int? rate, string label, bool enabled = true)
-            {
-                var item = new MenuItem { Header = label, IsEnabled = enabled, ToggleType = MenuItemToggleType.Radio,
-                    IsChecked = p.Exclusive == exclusive && p.SampleRateMode == mode && (mode != "manual" || p.ManualSampleRate == rate && p.SampleRateApplied) };
-                item.Click += (_, _) =>
-                {
-                    p.SetExclusive(exclusive);
-                    if (p.Exclusive == exclusive) p.SetSampleRate(mode, rate);
-                };
-                group.Items.Add(item);
-            }
-            Rate("system", null, exclusive ? L.T("原始采样率（兼容模式）") : L.T("保留 Windows 混音格式"));
-            Rate("auto", null, L.T("自动跟随歌曲"), exclusive || p.RateCapabilities.CanSetShared);
-            foreach (var rate in exclusive ? p.RateCapabilities.ExclusiveRates : p.RateCapabilities.SharedRates)
-                Rate("manual", rate, $"{rate / 1000.0:0.###} kHz");
-            menu.Items.Add(group);
-        }
+        var shared = new MenuItem { Header = L.T("共享模式"), ToggleType = MenuItemToggleType.Radio, IsChecked = !p.Exclusive };
+        shared.Click += (_, _) => p.SetExclusive(false);
+        menu.Items.Add(shared);
+        var exclusive = new MenuItem { Header = L.T("WASAPI 独占模式"), ToggleType = MenuItemToggleType.Radio, IsChecked = p.Exclusive };
+        exclusive.Click += (_, _) => p.SetExclusive(true);
+        menu.Items.Add(exclusive);
+        var automatic = new MenuItem { Header = L.T("自动匹配歌曲格式"), ToggleType = MenuItemToggleType.CheckBox,
+            IsChecked = p.AutomaticAudioFormat, IsEnabled = !p.Exclusive };
+        automatic.Click += (_, _) => p.SetAutomaticAudioFormat(!p.AutomaticAudioFormat);
+        menu.Items.Add(automatic);
         menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = L.T("实际设备采样率：") + (p.ActualSampleRate is { } actual ? $"{actual} Hz" : "—"), IsEnabled = false });
-        if ((p.SampleRateDiagnostic ?? p.RateCapabilities.Diagnostic) is { } diagnostic)
+        menu.Items.Add(new MenuItem { Header = AudioFormatDisplay.Source(p), IsEnabled = false });
+        menu.Items.Add(new MenuItem { Header = AudioFormatDisplay.Device(p), IsEnabled = false });
+        if ((p.SampleRateDiagnostic ?? p.FormatConversion ?? (!p.Exclusive ? p.RateCapabilities.Diagnostic : null)) is { } diagnostic)
             menu.Items.Add(new MenuItem { Header = diagnostic, IsEnabled = false });
         return menu;
     }

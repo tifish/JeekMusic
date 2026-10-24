@@ -24,77 +24,91 @@ internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
         public Guid Subtype;
     }
 
-    public DeviceAudioCapabilities Capture(string? device, int? sourceRate, int channels)
+    public DeviceAudioCapabilities CaptureFormat(string? device, SourceAudioFormat source)
     {
         try
         {
             using var access = new Access(device);
-            var mix = access.Mix();
-            var endpoint = mix;
-            var canSet = access.PolicyAvailable;
-            string? diagnostic = canSet ? null : "IPolicyConfig unavailable; Windows shared mix format cannot be changed on this system.";
-            if (canSet)
+            var mix = ToInfo(access.Mix());
+            EndpointAudioFormat? actual = null;
+            string? diagnostic = null;
+            try { actual = ToInfo(access.PropertyFormat()); }
+            catch (COMException e) { diagnostic = Failure("read endpoint device format", e); }
+            var layouts = new List<(int Channels, uint Mask)> { (actual?.Channels ?? mix.Channels, actual?.ChannelMask ?? mix.ChannelMask) };
+            if (source.ChannelMask is { } mask && source.Channels is > 0 && !layouts.Contains((source.Channels.Value, mask)))
+                layouts.Insert(0, (source.Channels.Value, mask));
+            var supported = new List<EndpointAudioFormat>();
+            foreach (var rate in ProbeRates.Concat(new[] { source.SampleRate ?? 0, mix.SampleRate }).Where(r => r is > 0 and <= 1536000).Distinct().Order())
+            foreach (var layout in layouts)
+            foreach (var precision in new[] { (16, 16, "pcm"), (24, 24, "pcm"), (32, 24, "pcm"), (32, 32, "pcm"), (32, 32, "float") })
             {
-                try { endpoint = MemoryMarshal.Read<WaveFormat>(access.DeviceBytes()); }
-                catch (COMException e) { canSet = false; diagnostic = Failure("query shared endpoint format", e); }
+                var candidate = new EndpointAudioFormat(rate, precision.Item1, precision.Item2, layout.Channels, layout.Mask, precision.Item3);
+                if (access.Supports(ToWave(candidate))) supported.Add(candidate);
             }
-            var shared = new List<int>();
-            var exclusive = new List<int>();
-            foreach (var rate in ProbeRates.Concat(new[] { sourceRate ?? 0, (int)mix.Rate }).Where(r => r is > 0 and <= 1536000).Distinct().Order())
-            {
-                if (access.Find(rate, mix.Channels, endpoint) is not null) shared.Add(rate);
-                if (access.Find(rate, channels) is not null) exclusive.Add(rate);
-            }
-            return new(access.Id, (int)mix.Rate, mix.Channels, canSet ? shared : [], exclusive, canSet,
-                diagnostic);
+            var canSet = access.PolicyAvailable && actual is not null;
+            if (!access.PolicyAvailable) diagnostic ??= "IPolicyConfig unavailable; the Windows endpoint format cannot be changed.";
+            var sharedRates = supported.Select(f => f.SampleRate).Distinct().Order().ToArray();
+            return new(access.Id, mix.SampleRate, mix.Channels, canSet ? sharedRates : [], sharedRates, canSet, diagnostic,
+                actual, mix, supported);
         }
-        catch (COMException e) { return new(null, null, null, [], [], false, Failure("query device formats", e)); }
+        catch (COMException e) { return new(null, null, null, [], [], false, Failure("query complete device formats", e)); }
     }
 
-    public int? ReadMixRate(string device)
-    {
-        try { using var access = new Access(device); return (int)access.Mix().Rate; }
-        catch (COMException) { return null; }
-    }
-
-    public bool SetSharedRate(string device, int rate, out string? diagnostic)
+    public bool SetSharedFormat(string device, EndpointAudioFormat format, out string? diagnostic)
     {
         diagnostic = null;
         try
         {
             using var access = new Access(device);
             var originalMix = access.MixBytes();
-            var mix = MemoryMarshal.Read<WaveFormat>(originalMix);
-            if (mix.Rate == rate) return true;
             var originalEndpoint = access.DeviceBytes();
-            var endpoint = access.Find(rate, mix.Channels, MemoryMarshal.Read<WaveFormat>(originalEndpoint));
-            if (endpoint is null) { diagnostic = $"Driver does not support {rate} Hz at {mix.Channels} channels."; return false; }
-            // 保留原混音格式的声道布局/位深/扩展字段，只修改采样率和每秒字节数。
-            var targetMix = (byte[])originalMix.Clone();
-            fixed (byte* buffer = targetMix)
-            {
-                var wave = (WaveFormat*)buffer;
-                wave->Rate = (uint)rate;
-                wave->Bytes = checked((uint)rate * wave->Align);
-            }
+            var accepted = access.Accept(ToWave(format));
+            if (accepted is null) { diagnostic = "Driver rejected the complete endpoint format tuple."; return false; }
+            var wave = accepted.Value;
+            var current = ToInfo(access.PropertyFormat());
+            var currentMix = ToInfo(MemoryMarshal.Read<WaveFormat>(originalMix));
+            if (current == format && MixMatches(currentMix, format)) return true;
+            var mix = ToWave(format with { ContainerBits = 32, ValidBits = 32, SampleKind = "float" });
+            var mixBytes = new byte[sizeof(WaveFormat)];
+            MemoryMarshal.Write(mixBytes, in mix);
             try
             {
-                access.Set(endpoint.Value, targetMix);
-                // 修改会使已激活的客户端失效，用新客户端读取系统实际混音格式。
-                if (ReadMixRate(device) != rate) throw new COMException("Windows mix format readback did not match the requested rate.");
+                access.Set(wave, mixBytes);
+                using var independent = new Access(device);
+                // Device bits/layout come from documented IPropertyStore PKEY_AudioEngine_DeviceFormat,
+                // independently of both mpv's client float stream and IPolicyConfig's write interface.
+                var actual = ToInfo(independent.PropertyFormat());
+                var actualMix = ToInfo(independent.Mix());
+                if (actual != format || !MixMatches(actualMix, format))
+                    throw new COMException($"Device/mix readback mismatch; device={actual}; mix={actualMix}.");
                 return true;
             }
             catch (COMException e)
             {
-                diagnostic = Failure("set shared mix format", e);
+                diagnostic = Failure("set complete shared format", e);
                 try { access.SetBytes(originalEndpoint, originalMix); }
-                catch (COMException rollback) { diagnostic += "; rollback failed: " + Failure("restore mix format", rollback); }
-                diagnostic += $"; actual mix rate: {ReadMixRate(device)?.ToString() ?? "unavailable"} Hz";
+                catch (COMException rollback) { diagnostic += "; rollback failed: " + Failure("restore complete format", rollback); }
                 return false;
             }
         }
-        catch (COMException e) { diagnostic = Failure("set shared mix format", e); return false; }
+        catch (COMException e) { diagnostic = Failure("set complete shared format", e); return false; }
     }
+
+    static bool MixMatches(EndpointAudioFormat mix, EndpointAudioFormat device) =>
+        mix.SampleRate == device.SampleRate && mix.Channels == device.Channels && mix.ChannelMask == device.ChannelMask;
+
+    static EndpointAudioFormat ToInfo(WaveFormat wave) => new((int)wave.Rate, wave.Bits,
+        wave.Tag == 0xfffe && wave.ValidBits > 0 ? wave.ValidBits : wave.Bits, wave.Channels,
+        wave.Tag == 0xfffe ? wave.Mask : wave.Channels == 1 ? 4u : wave.Channels == 2 ? 3u : 0,
+        wave.Tag == 3 || wave.Tag == 0xfffe && wave.Subtype == new Guid("00000003-0000-0010-8000-00aa00389b71") ? "float" : "pcm");
+
+    static WaveFormat ToWave(EndpointAudioFormat format) => new()
+    {
+        Tag = 0xfffe, Extra = 22, Rate = (uint)format.SampleRate, Channels = (ushort)format.Channels,
+        Bits = (ushort)format.ContainerBits, ValidBits = (ushort)format.ValidBits, Mask = format.ChannelMask,
+        Align = (ushort)(format.Channels * format.ContainerBits / 8), Bytes = (uint)(format.SampleRate * format.Channels * format.ContainerBits / 8),
+        Subtype = format.SampleKind == "float" ? new("00000003-0000-0010-8000-00aa00389b71") : new("00000001-0000-0010-8000-00aa00389b71")
+    };
 
     static string Failure(string stage, COMException e) => $"{stage}: 0x{e.HResult:X8} {e.Message}";
 
@@ -153,6 +167,36 @@ internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
             return CopyAndFree(pointer);
         }
         public WaveFormat Mix() => MemoryMarshal.Read<WaveFormat>(MixBytes());
+        [StructLayout(LayoutKind.Sequential)]
+        struct PropertyKey { public Guid Format; public uint Id; }
+        [StructLayout(LayoutKind.Explicit, Size = 24)]
+        struct PropVariant
+        {
+            [FieldOffset(0)] public ushort Type;
+            [FieldOffset(8)] public uint Size;
+            [FieldOffset(16)] public nint Data;
+        }
+        public WaveFormat PropertyFormat()
+        {
+            nint store = 0;
+            var value = new PropVariant();
+            try
+            {
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, uint, out nint, int>)(*(nint**)_device)[4])(_device, 0, out store));
+                var key = new PropertyKey { Format = new("f19f064d-082c-4e27-bc73-6882a1bb8e4c"), Id = 0 };
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, PropertyKey*, PropVariant*, int>)(*(nint**)store)[5])(store, &key, &value));
+                if (value.Type != 65 || value.Data == 0 || value.Size < 18) throw new COMException("Endpoint device format is not a WAVEFORMAT blob.");
+                var bytes = new byte[Math.Max((int)value.Size, sizeof(WaveFormat))];
+                Marshal.Copy(value.Data, bytes, 0, (int)value.Size);
+                return MemoryMarshal.Read<WaveFormat>(bytes);
+            }
+            finally
+            {
+                PropVariantClear((nint)(&value));
+                if (store != 0) Marshal.Release(store);
+            }
+        }
+
         public byte[] DeviceBytes()
         {
             if (_policy == 0) throw new COMException("IPolicyConfig is unavailable.", unchecked((int)0x80004002));
@@ -173,34 +217,17 @@ internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
             }
             finally { Marshal.FreeCoTaskMem(pointer); }
         }
-        public WaveFormat? Find(int rate, int channels, WaveFormat? preferred = null)
+        public bool Supports(WaveFormat wave) => Accept(wave) is not null;
+        public WaveFormat? Accept(WaveFormat wave)
         {
-            if (channels is < 1 or > 8) return null;
-            var mix = Mix();
             var query = (delegate* unmanaged[Stdcall]<nint, int, WaveFormat*, nint, int>)(*(nint**)_client)[7];
-            if (preferred is { } original && original.Channels == channels)
-            {
-                original.Rate = (uint)rate;
-                original.Bytes = checked((uint)rate * original.Align);
-                if (query(_client, 1, &original, 0) == 0) return original;
-            }
-            foreach (var (bits, valid, floating) in new[] { (32, 32, false), (32, 24, false), (24, 24, false), (16, 16, false), (32, 32, true) })
-            {
-                var wave = new WaveFormat
-                {
-                    Tag = 0xfffe, Channels = (ushort)channels, Rate = (uint)rate, Bytes = (uint)(rate * channels * bits / 8),
-                    Align = (ushort)(channels * bits / 8), Bits = (ushort)bits, Extra = 22, ValidBits = (ushort)valid,
-                    Mask = channels == mix.Channels && mix.Tag == 0xfffe ? mix.Mask : ChannelMask(channels),
-                    Subtype = floating ? new("00000003-0000-0010-8000-00aa00389b71") : new("00000001-0000-0010-8000-00aa00389b71")
-                };
-                if (query(_client, 1, &wave, 0) == 0) return wave;
-                if (bits != valid || channels > 2) continue;
-                wave.Tag = floating ? (ushort)3 : (ushort)1;
-                wave.Extra = 0;
-                if (query(_client, 1, &wave, 0) == 0) return wave;
-            }
-            return null;
+            if (query(_client, 1, &wave, 0) == 0) return wave;
+            if (wave.Channels > 2 || wave.Bits != wave.ValidBits) return null;
+            wave.Tag = wave.Subtype == new Guid("00000003-0000-0010-8000-00aa00389b71") ? (ushort)3 : (ushort)1;
+            wave.Extra = 0;
+            return query(_client, 1, &wave, 0) == 0 ? wave : null;
         }
+
         public void Set(WaveFormat endpoint, byte[] mix)
         {
             var bytes = new byte[sizeof(WaveFormat)];
@@ -225,11 +252,7 @@ internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
         }
     }
 
-    internal static uint ChannelMask(int channels) => channels switch
-    {
-        1 => 4, 2 => 3, 3 => 7, 4 => 0x33, 5 => 0x37, 6 => 0x3f, 7 => 0x70f, 8 => 0x63f, _ => 0
-    };
-
+    [LibraryImport("ole32.dll")] private static partial int PropVariantClear(nint value);
     [LibraryImport("ole32.dll")] private static partial int CoInitializeEx(nint reserved, uint model);
     [LibraryImport("ole32.dll")] private static partial void CoUninitialize();
     [LibraryImport("ole32.dll")] private static partial int CoCreateInstance(in Guid clsid, nint outer, uint context, in Guid iid, out nint result);

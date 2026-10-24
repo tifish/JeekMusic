@@ -125,7 +125,9 @@ def main():
             with McpClient(exe, data) as first:
                 diagnostics = call(first, "get_diagnostics")
                 player_pid = diagnostics["processId"]
-                assert Path(diagnostics["dataDirectory"]) == data
+                # McpClient resolves the supplied directory. Hosted Windows can use
+                # short TEMP paths / junction aliases; compare filesystem identity.
+                assert Path(diagnostics["dataDirectory"]).samefile(data), (diagnostics["dataDirectory"], str(data))
                 assert Path(diagnostics["processPath"]).samefile(exe)
                 assert diagnostics["processArchitecture"] == "X64"
                 assert isinstance(diagnostics["dynamicCodeSupported"], bool)

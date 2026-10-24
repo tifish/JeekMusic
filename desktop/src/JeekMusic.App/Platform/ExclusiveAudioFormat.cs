@@ -19,8 +19,8 @@ internal sealed unsafe partial class ExclusiveAudioFormat : IExclusiveAudioForma
 
     public string? Select(string? deviceName, int sampleRate, int channels, int? sourceBits)
     {
-        // 按标准声道布局探测，不把多声道歌曲强制混成双声道；实际输出仍须由播放内核确认。
-        if (sampleRate <= 0 || channels is < 1 or > 8) return null;
+        // Count alone does not identify a multichannel layout. Let mpv negotiate those layouts.
+        if (sampleRate <= 0 || channels is < 1 or > 2) return null;
         var initialized = CoInitializeEx(0, 0);
         nint enumerator = 0, device = 0, client = 0;
         try
@@ -72,7 +72,7 @@ internal sealed unsafe partial class ExclusiveAudioFormat : IExclusiveAudioForma
         {
             Tag = 0xfffe, Channels = (ushort)channels, Rate = (uint)rate, Bytes = (uint)(rate * channels * bits / 8),
             Align = (ushort)(channels * bits / 8), Bits = (ushort)bits, Extra = 22, ValidBits = (ushort)validBits,
-            Mask = DeviceAudioFormat.ChannelMask(channels),
+            Mask = channels == 1 ? 4u : 3u,
             Subtype = floating ? new("00000003-0000-0010-8000-00aa00389b71") : new("00000001-0000-0010-8000-00aa00389b71"),
         };
         // IAudioClient::IsFormatSupported(EXCLUSIVE)，不 Initialize / Start，不影响正在播放的音频。

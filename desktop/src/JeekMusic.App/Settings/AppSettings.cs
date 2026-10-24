@@ -73,8 +73,11 @@ public sealed class AppSettings
     public string? OutputDevice { get; set; }
     public string? OutputDeviceDescription { get; set; }
     public bool Exclusive { get; set; }
-    /// <summary>system 保留旧版行为；auto 跟随歌曲；manual 使用 ManualSampleRate。</summary>
-    public string SampleRateMode { get; set; } = "system";
+    public bool? AutomaticAudioFormat { get; set; }
+    // Unreleased preview migration only: auto is retained; manual never writes its old rate.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SampleRateMode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ManualSampleRate { get; set; }
     // Legacy volume/sharedVolume/exclusiveVolume/sharedDeviceVolumes are deliberately
     // absent: JSON migration ignores them and the next save removes historical snapshots.

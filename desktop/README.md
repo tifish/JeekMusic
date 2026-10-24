@@ -98,6 +98,6 @@ python desktop/tools/mcp_client.py search_tracks '{"query":"周杰伦"}'
 `tools/prepare-benchmark.py` 可生成独立的五万首合成曲库。`spike/` 和 `spike-audio/` 保留早期技术验证工程，不是正式播放器。
 
 
-设备采样率可在设置的“音质”中选择自动跟随歌曲或手动指定。播放栏采样率仍可单击切共享/独占，右键菜单集中提供两种模式及驱动实际支持的采样率。旧配置默认保留 Windows 混音格式。共享自动切换实际修改 Windows 当前端点的混音率，也影响同设备其他程序；失败会提示原因并显示实际格式。发现范围、MCP 参数与 opt-in 真实 WASAPI 验证见 [设备采样率控制](docs/mcp.md#设备采样率控制)。
+共享模式可开启“自动匹配歌曲格式”，将歌曲采样率、合理有效精度及可靠声道布局作为完整组合匹配到真实设备；关闭时沿用系统当前格式。独占仅一个选项，继续自动协商，保留共享开关偏好。播放栏显示“歌曲采样率 → 实际设备采样率”，单击切模式，右键查看源/设备位深和声道以及自动开关，无手动格式列表。失败和必要转换明确显示，不用客户端 float 冒充设备位深。详见 [自动匹配音频格式](docs/mcp.md#自动匹配音频格式)。
 
 许可证收集使用与 publish 配置一致的 `ProjectAssetsFile`，不再读取旧的 `obj/project.assets.json`。自定义 RID / AOT / SelfContained 时，查询 assets 路径须传入与 publish 相同的开关；未传 `--assets` 时只接受唯一的隔离 publish graph，多个配置时明确报错，不猜测旧缓存。

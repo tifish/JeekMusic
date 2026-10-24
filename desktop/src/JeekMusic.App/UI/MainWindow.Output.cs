@@ -6,16 +6,16 @@ public partial class MainWindow
 {
     internal ContextMenu? ActiveOutputMenu { get; private set; }
 
-    void ShowOutputMenu(Control? anchor = null)
+    void ShowOutputMenu(Control? anchor = null, bool includeDevices = true)
     {
         ActiveOutputMenu?.Close();
-        var menu = CreateOutputMenu();
+        var menu = CreateOutputMenu(includeDevices);
         ActiveOutputMenu = menu;
         menu.Closed += (_, _) => { if (ReferenceEquals(ActiveOutputMenu, menu)) ActiveOutputMenu = null; };
         menu.Open(anchor ?? OutputButton);
     }
 
-    internal ContextMenu CreateOutputMenu()
+    internal ContextMenu CreateOutputMenu(bool includeDevices = true)
     {
         var menu = new ContextMenu();
         var settings = _app.Settings.Current;
@@ -29,9 +29,12 @@ public partial class MainWindow
             };
             menu.Items.Add(item);
         }
-        Device(null, L.T("跟随 Windows 的默认设备"));
-        foreach (var device in _app.Player.Devices.Where(d => d.name != "auto")) Device(device.name, device.description);
-        menu.Items.Add(new Separator());
+        if (includeDevices)
+        {
+            Device(null, L.T("跟随 Windows 的默认设备"));
+            foreach (var device in _app.Player.Devices.Where(d => d.name != "auto")) Device(device.name, device.description);
+            menu.Items.Add(new Separator());
+        }
         var p = _app.Player;
         p.RefreshRateCapabilities();
         var shared = new MenuItem { Header = L.T("共享模式"), ToggleType = MenuItemToggleType.Radio, IsChecked = !p.Exclusive };

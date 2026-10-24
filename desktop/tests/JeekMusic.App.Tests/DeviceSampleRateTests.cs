@@ -23,6 +23,20 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
         public List<EndpointAudioFormat> Supported = [Pcm(44100,16,16), Pcm(44100), Pcm(44100,24,32), Pcm(48000,16,16), Pcm(48000), Pcm(96000)];
         public List<(string Device, EndpointAudioFormat Format)> Writes { get; } = [];
         public Action? BeforeWrite;
+        public bool RestoreFails { get; set; }
+        public List<string> Restores { get; } = [];
+        public IDisposable? TryAcquireControl(string device,out string? diagnostic) { diagnostic=null;return new Lease(); }
+        sealed class Lease:IDisposable { public void Dispose(){} }
+        public DeviceAudioSnapshot? CaptureSnapshot(string device,out string? diagnostic)
+        {
+            diagnostic=null;return new(device,Actual,Actual with{ContainerBits=32,ValidBits=32,SampleKind="float"},[],[]);
+        }
+        public DeviceFormatRestoreResult RestoreIfUnchanged(DeviceAudioSnapshot baseline,EndpointAudioFormat expectedDevice,EndpointAudioFormat expectedMix)
+        {
+            if(Actual!=expectedDevice)return new("external-change");
+            if(RestoreFails)return new("failed","test restore failure");
+            Actual=baseline.Device;Restores.Add(baseline.DeviceId);return new("restored");
+        }
         public DeviceAudioCapabilities Capture(string? device, int? rate, int channels) => CaptureFormat(device, new(rate,null,channels,3,"stereo","unknown"));
         public DeviceAudioCapabilities CaptureFormat(string? device, SourceAudioFormat source) => new(device?.Replace("wasapi/", "") ?? "render-device",
             Actual.SampleRate, Actual.Channels, Supported.Select(f=>f.SampleRate).Distinct().ToArray(), Supported.Select(f=>f.SampleRate).Distinct().ToArray(),
@@ -55,10 +69,17 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
     {
         if(paused){f.Player.Pause();Dispatcher.UIThread.RunJobs();}
         var old=f.Current; formats.BeforeWrite=()=>Assert.True(old.Disposed);
-        Assert.True(f.Player.SetAutomaticAudioFormat(true)); f.Ready();
+        Assert.True(f.Player.SetAutomaticAudioFormat(true));
+        if(paused)
+        {
+            Assert.Empty(formats.Writes);Assert.False(f.Player.IsPlaying);
+            Assert.Equal(48000,formats.Actual.SampleRate);
+            f.Player.Resume();
+        }
+        f.Ready();
         Assert.Equal(Pcm(44100),Assert.Single(formats.Writes).Format);
         Assert.Equal(12.345,f.Player.Position.TotalSeconds,3);
-        Assert.Equal(!paused,f.Player.IsPlaying);
+        Assert.True(f.Player.IsPlaying);
         Assert.True(f.Player.SampleRateApplied);
         Assert.Equal(24,f.Player.ActualDeviceFormat!.ValidBits);
         Assert.Empty(f.Endpoint.Writes);
@@ -279,12 +300,12 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             });
             f.Ready();
             Assert.Equal(side,formats.Actual);
-            Assert.Equal(2,formats.Writes.Count); // metadata stereo, then decoded exact side layout
+            Assert.Single(formats.Writes); // startup pause only reads metadata; first play uses the decoded side layout
             Assert.Equal(0x60fu,f.Player.SourceFormat.ChannelMask);
             Assert.True(f.Player.SampleRateApplied);
             Assert.True(f.Player.IsPlaying);
             Assert.Equal("auto-safe",f.Current.Properties["audio-channels"]);
-            f.Ready();Assert.Equal(2,formats.Writes.Count);
+            f.Ready();Assert.Single(formats.Writes);
         },CancellationToken.None);
     }
 

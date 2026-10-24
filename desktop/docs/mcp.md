@@ -41,7 +41,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `search_tracks` | `query` 可省略或留空浏览全库；沿用 UI 搜索和排序服务，可按 `folderId`、`artistKey`、`albumKey` 同时筛选；默认使用已保存排序，无偏好时文件修改时间倒序。可选 `sort`（`FileName` / `Modified` / `Title` / `Artist` / `Album` / `Duration` / `Format`）、`reverse` 仅覆盖本次查询，不保存设置；先排序再分页。结果包含 `artistKeys`、`albumKey` 和下述修改时间字段 |
 | `get_track` | `trackId`。详细元数据、音频文件路径、稳定键、智能标签和缓存修改时间，包括 CUE 分轨 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
-| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲且输出已就绪，否则返回业务错误。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
+| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲，或显式暂停释放后保留的歌曲（只改保存位置，不开启音频），否则返回业务错误。显式 pause/toggle 暂停先关闭流并恢复本客户端临时格式，保留歌曲/队列/位置；resume 先重新匹配共享自动格式，再从原位播放，内部切歌/重建暂停不恢复。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
@@ -208,11 +208,16 @@ python desktop/tools/test-build-isolation.py --build-only
 
 声道布局来自已加载解码器的明确 `audio-params/channels`，mono/stereo 可安全识别；5.1 与 5.1(side) 区分。首次加载保持静音/暂停，拿到可靠布局后若有必要，再切换设备并重开流；确认完成才继续播放。只知道“6 声道”等数量时不推断通用掩码，保留当前扬声器布局，标明布局未知和必要声道转换。已知源布局直接输出不可行时，使用设备当前布局并报告转换；原采样率不可行时保留可用率并明确报告重采样/精度降低。独占仍交给播放内核自动协商，多声道未知布局不强套固定掩码。
 
-关闭开关仅停止自动匹配，不恢复任何旧系统快照；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，工具仍为 21 个。
+关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，工具仍为 21 个。
+
+共享自动格式是临时配置：每个物理端点首次实际写入前，保存当时真实 Windows 设备默认格式与混音格式的完整原始结构，不使用 factory default、硬编码 48k/16/2 或其他端点快照。显式暂停（界面、媒体键、快捷键与 MCP 共用业务）先静音并关闭流，恢复基线，保留歌曲/队列/CUE 精确位置；暂停 seek 只更新保存位置。续播重新读取当前基线并匹配，确认真实输出后继续。切歌和内部重建不恢复；自然队列结束、清空、正常退出、释放旧设备和进入独占恢复。独占本身不改共享格式，暂停仅释放其流。
+
+恢复前设备与混音完整格式必须都等于本客户端最近成功写入值，否则保留外部修改并放弃旧基线；暂停期间的系统编辑成为下一次播放的新基线。每端点协作互斥租约阻止其他新版 Jeek Music 实例相互写入/回滚。恢复失败保留可重试基线并显示诊断，进程退出释放租约；异常崩溃/强制结束无法保证恢复。旧版本已经改过的历史原配置无法追溯，升级只从新功能首次写入前的实时配置捕获，不猜测旧默认。系统独立程序不遵循租约，检查与写入之间仍受 Windows 非公开接口的并发限制。
 
 `get_output.audioFormat` 与 `get_diagnostics.output.audioFormat` 使用同一业务状态，开发与 NativeAOT 正式版一致：
 
 - `displaySummary` 与播放栏完整文本一致；`resampled` 同时检查解码到客户端流及源到实际端点的采样率变化，输出重建时不提前宣称重采样；`hasWarning` 覆盖格式失败、转换/回退及输出安全门控，提示和右键保留详情。以上为兼容新增的查询字段，控制参数与工具数不变。
+- `temporaryFormat` 包含 pausedOutputReleased、restoreStatus（none/active/restored/external-change/failed）、restoreReason、diagnostic、ownershipPolicy，以及 owners 中每个端点的 baselineDevice/baselineMix/lastAppliedDevice/lastAppliedMix。`get_status.idle` 现在也可表示已释放输出但仍保留歌曲/队列/位置的暂停状态。
 - `automaticFormat` 为保存的共享偏好；`activePolicy` 为 windows-current/shared-automatic/exclusive-native。
 - `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；precision 对已知有损编码为 lossy-not-applicable，已确认的 PCM 浮点源为 float32/float64，无可靠整数位深为 unknown，整数源为 integer-metadata。MP3 源显示“位深不适用（有损编码）”，无损/PCM 读取不到位深才显示“位深未知”；解码器 floatp 不会被冒充为原始浮点源或设备位深。
 - `clientStream` 为 mpv 实际客户端流 rate/sampleFormat/channels，仅用于流诊断；float 不构成设备为 32 位的证据。
@@ -231,11 +236,11 @@ python desktop/tools/test-build-isolation.py --build-only
 ```powershell
 # 独立只读诊断，不启动客户端、不改变格式：
 python desktop/tools/read-audio-format.py
-# 显式真实硬件验证：共享 48/16 → 48/24 → 44.1/24 源（按驱动确认精度回退）→ 48/24 → 44.1/16，含暂停、关闭开关及独占返回：
+# 显式真实硬件验证：共享 48/16 → 48/24 → 44.1/24 源（按驱动确认精度回退）→ 48/24 → 44.1/16，含暂停恢复完整基线/原位续播、关闭开关及独占返回：
 python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --exclusive
 ```
 
-脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，仅在没有其他 Jeek Music 客户端时恢复完整原端点/混音快照；若另一客户端已出现则拒绝覆盖其格式。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。
+脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，检查客户端已恢复完整原端点/混音快照；失败清理仅在没有其他 Jeek Music 客户端且格式仍等于测试最后一次成功应用值时恢复，未知外部变更与新客户端均拒绝覆盖。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。
 
 
 本机 STAX S5 实测：精确驱动组合接受 44.1 kHz/16 位、48 kHz/16 位、48 kHz/24 位及 96 kHz/24 位；当前精确查询不接受 44.1 kHz/24 位或 24 有效位/32 位容器的 44.1 kHz 组合。程序在源率优先策略下对 44.1/24 源采用可用 44.1/16，并显示精度转换；48/24 源实际端点为 24 位，已用独立 Python IPropertyStore 和 IAudioClient 读回验证。同采样率 48/16 → 48/24 的自然换曲也通过，未被采样率相同的早退逻辑跳过。上述是此端点当次探测结果，不硬编码为所有设备的能力。

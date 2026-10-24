@@ -34,6 +34,13 @@ public sealed class PlayerService : IDisposable
     readonly IEndpointVolume? _endpointVolume;
     readonly IExclusiveAudioFormat? _exclusiveAudioFormat;
     readonly IDeviceAudioFormat? _deviceAudioFormat;
+    readonly TemporaryDeviceFormats? _temporaryFormats;
+    bool _pausedOutputReleased;
+    public bool PausedOutputReleased => _pausedOutputReleased;
+    public string FormatRestoreStatus => _temporaryFormats?.RestoreStatus ?? "none";
+    public string? FormatRestoreReason => _temporaryFormats?.RestoreReason;
+    public string? FormatRestoreDiagnostic => _temporaryFormats?.RestoreDiagnostic;
+    internal IReadOnlyList<OwnedDeviceFormatInfo> TemporaryFormats => _temporaryFormats?.Owners ?? [];
     public DeviceAudioCapabilities RateCapabilities { get; private set; } = new(null, null, null, [], [], false, null);
     public bool AutomaticAudioFormat { get; private set; }
     public string SampleRateMode => AutomaticAudioFormat ? "auto" : "system";
@@ -53,10 +60,10 @@ public sealed class PlayerService : IDisposable
         RateCapabilities.MixFormat is { } mix && mix.SampleRate == SelectedDeviceFormat.SampleRate &&
         mix.Channels == SelectedDeviceFormat.Channels && mix.ChannelMask == SelectedDeviceFormat.ChannelMask);
     public bool SampleRateApplied => AudioFormatApplied && RequestedSampleRate == ActualSampleRate;
-    public bool OutputResampled => !OutputPending && (Format.Resampled ||
+    public bool OutputResampled => !IsIdle && !OutputPending && (Format.Resampled ||
         SourceFormat.SampleRate is { } source && ActualSampleRate is { } actual && source != actual);
     public bool HasOutputFormatWarning => SampleRateDiagnostic is not null || FormatConversion is not null ||
-        OutputBlockReason is not null || !Exclusive && RateCapabilities.Diagnostic is not null;
+        OutputBlockReason is not null || FormatRestoreStatus == "failed" || !Exclusive && RateCapabilities.Diagnostic is not null;
     long _mixPoll;
     readonly DispatcherTimer _outputMonitor;
     EndpointVolumeSnapshot? _endpoint;
@@ -97,7 +104,7 @@ public sealed class PlayerService : IDisposable
             || _nextEntry >= 0 && _tracks.ById(_nextTrackId) is { } next && string.Equals(path, _tracks.PathOf(next), StringComparison.OrdinalIgnoreCase);
     }
     public bool IsPlaying { get; private set; }
-    /// <summary>mpv 还没加载任何歌（启动时、队列为空）。</summary>
+    /// <summary>没有已加载的音频流（启动、队列为空或显式暂停释放后）；可以保留歌曲与位置。</summary>
     public bool IsIdle { get; private set; } = true;
     public AudioFormatInfo Format { get; private set; } = new(null, null, null, null, null, null, null);
     public IReadOnlyList<(string name, string description)> Devices { get; private set; } = [];
@@ -140,6 +147,7 @@ public sealed class PlayerService : IDisposable
         _endpointVolume = endpointVolume;
         _exclusiveAudioFormat = exclusiveAudioFormat;
         _deviceAudioFormat = deviceAudioFormat;
+        _temporaryFormats = deviceAudioFormat is null ? null : new TemporaryDeviceFormats(deviceAudioFormat);
         Queue.Changed += OnQueueChanged;
         _outputMonitor = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background,
             (_, _) => RefreshOutput());
@@ -189,7 +197,7 @@ public sealed class PlayerService : IDisposable
         {
             if (id != _currentEntry || id < 0) return;
             _outputFileLoaded = true;
-            if (ReadDecodedSourceFormat() && !Exclusive && AutomaticAudioFormat && RateCapabilities.DeviceFormat is { } current)
+            if (ReadDecodedSourceFormat() && _wantPlaying && !Exclusive && AutomaticAudioFormat && RateCapabilities.DeviceFormat is { } current)
             {
                 var caps = _deviceAudioFormat?.CaptureFormat(_boundDeviceId ?? Device, SourceFormat);
                 var plan = AudioFormatPolicy.Choose(SourceFormat, current, caps?.SupportedFormats ?? []);
@@ -238,23 +246,73 @@ public sealed class PlayerService : IDisposable
             return;
         }
         EnsureEngine();
-        if (IsIdle) { LoadCurrent(play: true, start: _restoringOutput ? _restorePosition : null); return; }
+        if (IsIdle) { LoadCurrent(play: true, start: _pausedOutputReleased || _restoringOutput ? _restorePosition : null); return; }
         if (IsPlaying) Pause(); else Resume();
     }
 
     public void Pause()
     {
+        if (_deviceAudioFormat is not null)
+        {
+            ReleasePlaybackOutput("pause");
+            return;
+        }
         _wantPlaying = false;
         _mpv?.TrySet("pause", "yes");
     }
 
     public void Resume() => Resume(confirmHardwareVolume: true);
 
+    void RestoreTemporaryFormats(string reason, bool releaseFailed = false)
+    {
+        _temporaryFormats?.RestoreAll(reason, releaseFailed);
+        if (FormatRestoreStatus != "failed") return;
+        Log.Warn("player", "恢复设备原配置失败：" + FormatRestoreDiagnostic);
+        Error?.Invoke(L.T("恢复设备原配置失败：") + FormatRestoreDiagnostic);
+    }
+
+    /// <summary>显式暂停/结束的边界；内部加载和重建绝不调用此方法。</summary>
+    void ReleasePlaybackOutput(string reason, bool resetPosition = false, bool notify = true, bool releaseFailed = false)
+    {
+        var position = resetPosition ? TimeSpan.Zero : Position;
+        _wantPlaying = false;
+        if (_mpv is { } engine)
+        {
+            engine.TrySet("mute", "yes");
+            engine.TrySet("pause", "yes");
+            _mpv = null;
+            engine.Dispose();
+        }
+        _restorePosition = position;
+        _pendingSeek = null;
+        _currentEntry = _nextEntry = _nextTrackId = -1;
+        _restoringOutput = _outputFileLoaded = _outputRestoreFailed = false;
+        _pausedOutputReleased = CurrentTrack is not null;
+        IsIdle = true;
+        IsPlaying = false;
+        SelectedDeviceFormat = null;
+        FormatConversion = SampleRateDiagnostic = null;
+        OutputBlockReason = null;
+        Format = Format with { DeviceRate = null, DeviceFormat = null, DeviceChannels = null, Ao = null };
+        RestoreTemporaryFormats(reason, releaseFailed);
+        if (_deviceAudioFormat is not null)
+            RateCapabilities = _deviceAudioFormat.CaptureFormat(_boundDeviceId ?? Device, SourceFormat);
+        if (!notify) return;
+        OutputChanged?.Invoke();
+        StateChanged?.Invoke();
+        Seeked?.Invoke();
+    }
+
     void Resume(bool confirmHardwareVolume)
     {
         if (CurrentTrack is null) return;
         EnsureEngine();
-        if (IsIdle) { LoadCurrent(play: true, start: _restoringOutput ? _restorePosition : null); return; }
+        if (IsIdle) { LoadCurrent(play: true, start: _pausedOutputReleased || _restoringOutput ? _restorePosition : null); return; }
+        if (!_restoringOutput && !IsPlaying && AutomaticAudioFormat && !Exclusive && _deviceAudioFormat is not null)
+        {
+            RebuildOutput(resetHardwareConfirmation: false, playOverride: true);
+            return;
+        }
         _wantPlaying = true;
         // Explicit Play after the hardware warning acknowledges the physical knob. Never
         // acknowledge read failures, mixer attenuation, or automatic mode/device changes.
@@ -349,8 +407,8 @@ public sealed class PlayerService : IDisposable
 
     public TimeSpan Duration => TimeSpan.FromMilliseconds(CurrentTrack?.DurationMs ?? 0);
 
-    public bool CanSeek => CurrentTrack is not null && Duration > TimeSpan.Zero && _mpv is not null &&
-        !IsIdle && !_restoringOutput && _mpv.Get("seekable") == "yes";
+    public bool CanSeek => CurrentTrack is not null && Duration > TimeSpan.Zero && (_pausedOutputReleased ||
+        _mpv is not null && !IsIdle && !_restoringOutput && _mpv.Get("seekable") == "yes");
 
     public void SeekBy(TimeSpan offset) => Seek(Position + offset);
 
@@ -359,12 +417,19 @@ public sealed class PlayerService : IDisposable
         if (!CanSeek) return;
         var start = (CurrentTrack!.StartMs ?? 0) / 1000.0;
         var duration = Duration.TotalSeconds;
-        if (_mpv!.GetDouble("duration") is { } fileDuration && fileDuration > 0)
+        if (_mpv?.GetDouble("duration") is { } fileDuration && fileDuration > 0)
             duration = Math.Min(duration, Math.Max(0, fileDuration - start));
         // 留出 1s，避免直接跳到 EOF / CUE end 导致换歌；自然播放到尾仍按队列规则结束。
         position = TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, Math.Max(0, duration - 1)));
+        if (_pausedOutputReleased)
+        {
+            _restorePosition = position;
+            SeekRevision++;
+            Seeked?.Invoke();
+            return;
+        }
         var target = position.TotalSeconds + start;
-        if (_mpv.TryRun("seek", Mpv.Num(target), "absolute+exact") < 0) return;
+        if (_mpv!.TryRun("seek", Mpv.Num(target), "absolute+exact") < 0) return;
         _pendingSeek = position;
         _pendingSeekDeadline = Environment.TickCount64 + 2000;
         SeekRevision++;
@@ -378,7 +443,7 @@ public sealed class PlayerService : IDisposable
         device = device is "auto" ? null : device;
         if (Device == device && _boundDeviceId is not null) return;
         Device = device;
-        RebuildOutput();
+        RebuildOutput(releaseReason: "device-change");
     }
 
     public void SetExclusive(bool exclusive)
@@ -394,7 +459,7 @@ public sealed class PlayerService : IDisposable
             return;
         }
         Exclusive = exclusive;
-        RebuildOutput();
+        RebuildOutput(releaseReason: exclusive ? "exclusive" : null);
     }
 
     internal void RestoreAutomaticFormat(bool enabled) => AutomaticAudioFormat = enabled;
@@ -419,7 +484,7 @@ public sealed class PlayerService : IDisposable
         SampleRateDiagnostic = null;
         FormatConversion = null;
         SelectedDeviceFormat = null;
-        if (!Exclusive && enabled) RebuildOutput(resetHardwareConfirmation: false);
+        if (!Exclusive && enabled && (_restoringOutput ? _wantPlaying : IsPlaying)) RebuildOutput(resetHardwareConfirmation: false);
         else OutputChanged?.Invoke(); // Disabling never restores an old system snapshot or interrupts playback.
         return SampleRateDiagnostic is null;
     }
@@ -439,7 +504,7 @@ public sealed class PlayerService : IDisposable
         RateCapabilities = _deviceAudioFormat.CaptureFormat(_boundDeviceId ?? Device, SourceFormat);
         SelectedDeviceFormat = null;
         FormatConversion = null;
-        if (Exclusive || !AutomaticAudioFormat || track is null) { SampleRateDiagnostic = null; return true; }
+        if (Exclusive || !AutomaticAudioFormat || !_wantPlaying || track is null) { SampleRateDiagnostic = null; return true; }
         if (!RateCapabilities.CanSetShared || RateCapabilities.DeviceFormat is not { } current)
         {
             ReportRateFailure(RateCapabilities.Diagnostic ?? "Cannot read/change the actual Windows endpoint format.");
@@ -463,7 +528,7 @@ public sealed class PlayerService : IDisposable
             if (!muted || !paused) { BlockOutputRestore("quiesce-failed"); return false; }
         }
         string? error = null;
-        if (RateCapabilities.DeviceId is not { } id || !_deviceAudioFormat.SetSharedFormat(id, target, out error))
+        if (RateCapabilities.DeviceId is not { } id || _temporaryFormats is null || !_temporaryFormats.Apply(id, target, out error))
             ReportRateFailure(error ?? "Cannot resolve the endpoint for complete format switching.");
         else SampleRateDiagnostic = null;
         // Do not mistake our own successful write for an external change.
@@ -490,10 +555,10 @@ public sealed class PlayerService : IDisposable
     }
 
     /// <summary>绑定明确的物理端点后重建，保留队列、CUE 位置与播放意图；不向新端点写旧值。</summary>
-    void RebuildOutput(bool resetHardwareConfirmation = true)
+    void RebuildOutput(bool resetHardwareConfirmation = true, string? releaseReason = null, bool? playOverride = null)
     {
         var position = Position;
-        var play = _restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no";
+        var play = playOverride ?? (_restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no");
         var oldEngine = _mpv;
         _restorePosition = position;
         _restoringOutput = oldEngine is not null && CurrentTrack is not null;
@@ -522,9 +587,10 @@ public sealed class PlayerService : IDisposable
         IsIdle = true;
         IsPlaying = false;
         Format = new(null, null, null, null, null, null, null);
+        if (releaseReason is not null) RestoreTemporaryFormats(releaseReason);
         _boundDeviceId = null;
         ReadEndpoint(Device, bind: true);
-        if (oldEngine is not null && CurrentTrack is not null) LoadCurrent(play, position);
+        if ((oldEngine is not null || play) && CurrentTrack is not null) LoadCurrent(play, position);
         else PrepareSampleRate(CurrentTrack);
         Log.Playback($"重建输出：{(Exclusive ? "独占" : "共享")}，设备 {_boundDeviceId}，保留位置 {position.TotalSeconds:F3}s");
         OutputChanged?.Invoke();
@@ -537,7 +603,7 @@ public sealed class PlayerService : IDisposable
         if (string.IsNullOrEmpty(_mpv.Get("current-ao"))) return;
         if (_mpv.Get("current-ao") != "wasapi") { BlockOutputRestore("unexpected-audio-backend"); return; }
         ReadStreamFormat();
-        if (_deviceAudioFormat is not null)
+        if (_deviceAudioFormat is not null && _wantPlaying)
         {
             RefreshRateCapabilities();
             var actual = Exclusive ? (int?)_mpv.GetLong("audio-out-params/samplerate") : RateCapabilities.MixRate;
@@ -685,7 +751,7 @@ public sealed class PlayerService : IDisposable
             var desired = _endpointVolume?.Capture(null);
             if (desired is not null && desired.DeviceId != _boundDeviceId)
             {
-                RebuildOutput();
+                RebuildOutput(releaseReason: "default-device-change");
                 return;
             }
             if (desired is null)
@@ -747,9 +813,10 @@ public sealed class PlayerService : IDisposable
         var track = entry is { } e ? _tracks.ById(e.TrackId) : null;
         if (track is null)
         {
-            _restoringOutput = _outputRestoreFailed = false;
+            ReleasePlaybackOutput("queue-clear", resetPosition: true, notify: false);
             CurrentTrack = null;
-            _mpv?.TryRun("stop");
+            _pausedOutputReleased = false;
+            Format = new(null, null, null, null, null, null, null);
             IsIdle = true;
             IsPlaying = false;
             TrackChanged?.Invoke(null);
@@ -767,6 +834,7 @@ public sealed class PlayerService : IDisposable
         if (!PrepareSampleRate(track)) return;
         EnsureEngine();
         if (_mpv is null) return;
+        _pausedOutputReleased = false;
         _restoringOutput = true;
         _outputFileLoaded = _outputRestoreFailed = false;
         var muted = _mpv.TrySet("mute", "yes") >= 0;
@@ -924,7 +992,7 @@ public sealed class PlayerService : IDisposable
             TrackCompleted?.Invoke();
             _wantPlaying = false;
             if (Queue.NextIndex(user: false) is { } next) NavigateTo(next);
-            else LoadCurrent(play: false);
+            else ReleasePlaybackOutput("queue-end", resetPosition: true);
         }
     }
 
@@ -937,11 +1005,8 @@ public sealed class PlayerService : IDisposable
         if (_consecutiveErrors >= 3 || Queue.NextIndex(user: false) is not { } next || next == Queue.CurrentIndex)
         {
             _consecutiveErrors = 0;
-            _wantPlaying = false;
             CurrentTrack = track;
-            _mpv?.TryRun("stop");
-            IsIdle = true;
-            IsPlaying = false;
+            ReleasePlaybackOutput("playback-error", notify: false);
             TrackChanged?.Invoke(track);
             StateChanged?.Invoke();
             return;
@@ -1025,8 +1090,8 @@ public sealed class PlayerService : IDisposable
     public void Dispose()
     {
         _outputMonitor.Stop();
-        _mpv?.Dispose();
-        _mpv = null;
+        ReleasePlaybackOutput("exit", notify: false, releaseFailed: true);
+        _temporaryFormats?.Dispose();
         OutputChanged?.Invoke();
     }
 }

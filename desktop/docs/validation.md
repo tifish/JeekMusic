@@ -231,3 +231,10 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - 普通 `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release --no-restore`：**0 警告、0 错误**。现有 build 流程同步 `output/`，未运行产物、未重复 AOT/publish。`git diff --check` 通过。
 - **延期实机项**：原生 Windows 窗口的展开视觉/鼠标键盘体验、真实曲库的大目录渲染与扫描后状态、真实正常退出/最终 EXE 冷启动恢复、发布包及 MCP stdio/管道诊断。Headless 重启序列与主题重建测试不代替原生窗口/最终启动验收；本功能无需新增真实音频测试。游戏期间禁止启动/后台/托盘/独立数据/桥接/`--startup-only` 的约束继续有效，等待主对话明确解除。
 - **本轮未启动客户端、未访问真实音频、未重启**；未修改设备音量/静音/输出模式，未操作游戏。提交前只读进程检查为 **0 个 JeekMusic 客户端**，保持关闭；用户运行限制优先 AGENTS.md 自动重启惯例。
+
+
+### 2026-10-25 显式暂停恢复临时音频格式
+
+- `TemporaryDeviceFormatTests` 使用 fake 多端点/解码引擎，覆盖完整设备/混音快照（含 24 有效位/32 容器与 5.1(side)）、同率不同精度切歌不替换基线、显式暂停先关流后恢复、CUE 精确原位续播及暂停 seek、不因内部加载/下一首恢复、自然队列末尾、清空与退出、设备/独占转换、暂停期间外部修改成为新基线、播放时设备或混音外部修改不覆盖、第二控制器租约、写入拒绝与恢复失败重试/MCP 诊断。
+- 关闭共享自动只停止后续匹配，不立即恢复；下一次显式暂停/结束/释放恢复已有所有权配置。旧版历史基线不可追溯，首次写入前实时捕获。无新增按钮或控制参数，原 playback pause/toggle/resume 复用同一服务。
+- 默认测试不访问真实音频；`test-sample-rates.py` 另在明确关闭其他客户端的部署窗口执行独立原生读回，检查暂停/队列结束恢复及原位续播；清理不覆盖未知外部格式或其他客户端。

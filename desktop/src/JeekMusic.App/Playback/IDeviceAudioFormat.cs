@@ -10,4 +10,11 @@ internal interface IDeviceAudioFormat
     DeviceAudioCapabilities CaptureFormat(string? device, SourceAudioFormat source);
     // Caller closes its own stream first. Failure must attempt complete original-format rollback.
     bool SetSharedFormat(string device, EndpointAudioFormat format, out string? diagnostic);
+    IDisposable? TryAcquireControl(string device, out string? diagnostic);
+    DeviceAudioSnapshot? CaptureSnapshot(string device, out string? diagnostic);
+    DeviceFormatRestoreResult RestoreIfUnchanged(DeviceAudioSnapshot baseline, EndpointAudioFormat expectedDevice, EndpointAudioFormat expectedMix);
 }
+
+internal sealed record DeviceAudioSnapshot(string DeviceId, EndpointAudioFormat Device, EndpointAudioFormat Mix,
+    byte[] DeviceBytes, byte[] MixBytes);
+internal sealed record DeviceFormatRestoreResult(string Status, string? Diagnostic = null);

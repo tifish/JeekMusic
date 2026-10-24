@@ -10,6 +10,77 @@ namespace JeekMusic.Platform;
 /// </summary>
 internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
 {
+    public IDisposable? TryAcquireControl(string device, out string? diagnostic)
+    {
+        diagnostic = null;
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.Unicode.GetBytes(device)));
+        Mutex? mutex = null;
+        try
+        {
+            mutex = new Mutex(false, @"Local\JeekMusic.AudioFormat." + key);
+            bool acquired;
+            try { acquired = mutex.WaitOne(0); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (acquired) return new FormatControlLease(mutex);
+            diagnostic = "Another Jeek Music instance controls temporary formatting of this endpoint; keeping the actual Windows format.";
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        { diagnostic = "Cannot acquire endpoint format control: " + e.Message; }
+        mutex?.Dispose();
+        return null;
+    }
+
+    sealed class FormatControlLease(Mutex mutex) : IDisposable
+    {
+        bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            mutex.ReleaseMutex();
+            mutex.Dispose();
+        }
+    }
+
+    public DeviceAudioSnapshot? CaptureSnapshot(string device, out string? diagnostic)
+    {
+        diagnostic = null;
+        try
+        {
+            using var access = new Access(device);
+            var deviceBytes = access.DeviceBytes();
+            var mixBytes = access.MixBytes();
+            var currentDevice = ToInfo(access.PropertyFormat());
+            var currentMix = ToInfo(access.Mix());
+            if (currentDevice != ToInfo(MemoryMarshal.Read<WaveFormat>(deviceBytes)) || currentMix != ToInfo(MemoryMarshal.Read<WaveFormat>(mixBytes)))
+            {
+                diagnostic = "Windows format changed while capturing its baseline; no temporary format was applied.";
+                return null;
+            }
+            return new(access.Id, currentDevice, currentMix, deviceBytes, mixBytes);
+        }
+        catch (COMException e) { diagnostic = Failure("capture original Windows endpoint/mix format", e); return null; }
+    }
+
+    public DeviceFormatRestoreResult RestoreIfUnchanged(DeviceAudioSnapshot baseline, EndpointAudioFormat expectedDevice, EndpointAudioFormat expectedMix)
+    {
+        try
+        {
+            using var access = new Access(baseline.DeviceId);
+            var currentDevice = ToInfo(access.PropertyFormat());
+            var currentMix = ToInfo(access.Mix());
+            if (currentDevice != expectedDevice || currentMix != expectedMix)
+                return new("external-change", "Windows format changed externally; the old baseline was not restored.");
+            if (currentDevice == baseline.Device && currentMix == baseline.Mix) return new("restored");
+            access.SetBytes(baseline.DeviceBytes, baseline.MixBytes);
+            using var independent = new Access(baseline.DeviceId);
+            if (ToInfo(independent.PropertyFormat()) != baseline.Device || ToInfo(independent.Mix()) != baseline.Mix)
+                return new("failed", "Original Windows endpoint/mix format readback did not match after restoration.");
+            return new("restored");
+        }
+        catch (COMException e) { return new("failed", Failure("restore original Windows format", e)); }
+    }
+
     // Windows 没有通用的“枚举全部采样率”接口。探测标准音乐/视频采样率，另加歌曲与当前混音率。
     internal static readonly int[] ProbeRates = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
         64000, 88200, 96000, 128000, 176400, 192000, 256000, 352800, 384000, 705600, 768000];

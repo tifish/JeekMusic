@@ -449,5 +449,6 @@
   "共享模式自动匹配歌曲格式": "Shared mode: automatically match song format",
   "位深未知": "Bit depth unknown",
   "位深不适用（有损编码）": "Bit depth not applicable (lossy encoding)",
-  "点击或右键选择输出设备和模式，查看格式详情。": "Click or right-click to choose the output device and mode and view format details."
+  "点击或右键选择输出设备和模式，查看格式详情。": "Click or right-click to choose the output device and mode and view format details.",
+  "恢复设备原配置失败：": "Failed to restore the original device format: "
 }

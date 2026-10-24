@@ -11,7 +11,8 @@ internal static class AudioFormatDisplay
         return file + rates + " " + (p.Exclusive ? L.T("独占") : L.T("共享")) +
             (p.OutputResampled ? L.T("（已重采样）") : "") + (p.HasOutputFormatWarning ? " ⚠" : "");
     }
-    public static string? Warning(PlayerService p) => p.SampleRateDiagnostic ?? p.FormatConversion ??
+    public static string? Warning(PlayerService p) => p.SampleRateDiagnostic ??
+        (p.FormatRestoreStatus == "failed" ? p.FormatRestoreDiagnostic : null) ?? p.FormatConversion ??
         (p.OutputBlockReason is not null ? p.OutputSafetyMessage : !p.Exclusive ? p.RateCapabilities.Diagnostic : null);
     public static string Rate(int? rate) => rate is > 0 ? $"{rate / 1000.0:0.###} kHz" : "—";
     public static string Channels(int? count, string? layout) => count is > 0

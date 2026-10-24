@@ -1,7 +1,8 @@
 """Opt-in actual Windows WASAPI sample-rate checks with silent WAVs and isolated user data.
 
 Changes the real endpoint mix format (and with --exclusive opens exclusive output).
-Always attempts to restore the original mix rate and closes only its own test client.
+Checks full original device/mix restoration at explicit pause and closes only its own test client.
+Never restores an old snapshot over an unknown external format.
 """
 import argparse
 import csv
@@ -50,6 +51,7 @@ def main():
     records = [{"independentBefore": native.public(original)}]
     player_pid = None
     client = None
+    last_applied = None
     try:
         with tempfile.TemporaryDirectory(prefix="jeek-auto-format-") as temp:
             data, music = Path(temp) / "data", Path(temp) / "music"
@@ -59,22 +61,32 @@ def main():
             for index, (rate, bits) in enumerate(specs, 1):
                 with wave.open(str(music / f"{index:02d}-{rate}-{bits}.wav"), "wb") as wav:
                     wav.setparams((2, bits // 8, rate, 0, "NONE", "not compressed"))
-                    wav.writeframes(bytes(rate * 2 * (bits // 8) * 6))
+                    wav.writeframes(bytes(rate * 2 * (bits // 8) * 12))
             with McpClient(args.exe, data) as client:
                 def call(name, **arguments):
                     return helpers.call(client, name, **arguments)
                 def wait_format(rate, bits):
+                    nonlocal last_applied
                     result = helpers.wait_for(client, "get_output", lambda value:
                         value["audioFormat"]["applied"] and value["audioFormat"]["actualDevice"] is not None and
                         value["audioFormat"]["actualDevice"]["sampleRate"] == rate and
                         value["audioFormat"]["actualDevice"]["validBits"] == bits)
                     with native.AudioAccess(original["endpointId"]) as access:
-                        independent = native.public(access.capture())
+                        last_applied = access.capture()
+                        independent = native.public(last_applied)
                     assert independent["device"]["sampleRate"] == rate and independent["device"]["validBits"] == bits, independent
                     assert independent["mix"]["sampleRate"] == rate, independent
                     assert result["format"]["deviceRate"] == rate, result
                     records.append({"mcp": result, "independent": independent})
                     return result
+                def assert_baseline(reason):
+                    output = call("get_output")
+                    with native.AudioAccess(original["endpointId"]) as access:
+                        current = access.capture()
+                    assert current["device"] == original["device"] and current["mix"] == original["mix"], native.public(current)
+                    assert not call("get_status")["playing"], output
+                    assert not output["audioFormat"]["temporaryFormat"]["owners"], output
+                    records.append({"baselineReason": reason, "independentBaseline": native.public(current), "mcp": output})
                 player_pid = call("get_diagnostics")["processId"]
                 try:
                     call("add_folder", path=str(music))
@@ -87,16 +99,19 @@ def main():
                     helpers.wait_for(client, "get_status", lambda value: value["playing"])
                     call("playback", action="pause")
                     paused = helpers.wait_for(client, "get_status", lambda value: not value["playing"])
+                    assert_baseline("explicit-pause")
                     before = call("get_output")["audioFormat"]["actualDevice"]
                     call("set_output", automaticFormat=False)
                     assert call("get_output")["audioFormat"]["actualDevice"] == before
                     call("set_output", automaticFormat=True)
-                    wait_format(48000, 16)
+                    assert_baseline("auto-toggle-while-paused")
                     after = call("get_status")
                     assert not after["playing"] and abs(after["positionSeconds"] - paused["positionSeconds"]) < .3, (paused, after)
                     call("playback", action="resume")
-                    helpers.wait_for(client, "get_status", lambda value: value["playing"])
-                    call("playback", action="seek", seconds=4)
+                    resumed = helpers.wait_for(client, "get_status", lambda value: value["playing"])
+                    assert abs(resumed["positionSeconds"] - paused["positionSeconds"]) < 1.5, (paused, resumed)
+                    wait_format(48000, 16)
+                    call("playback", action="seek", seconds=10)
                     helpers.wait_for(client, "get_status", lambda value: value["track"]["id"] == ids[1] and value["playing"])
                     wait_format(48000, 24)  # same rate, changed effective precision, natural EOF
                     for rate, bits in specs[2:]:
@@ -107,6 +122,14 @@ def main():
                         result = wait_format(rate, expected_bits)
                         if expected_bits < bits:
                             assert "Precision conversion" in (result["audioFormat"]["conversion"] or ""), result
+                    for _ in range(2):
+                        call("playback", action="previous")  # restart current if >3s, then target fourth track
+                        status = call("get_status")
+                        if status["track"]["id"] == ids[4]:
+                            call("playback", action="previous")
+                        wait_format(48000, 24)
+                        call("playback", action="next")
+                        wait_format(44100, 16)
                     if args.exclusive:
                         call("set_output", exclusive=True)
                         time.sleep(.3)
@@ -118,20 +141,32 @@ def main():
                         records.append(result)
                         call("set_output", exclusive=False)
                         wait_format(44100, 16)
-                    print("PASS: independent endpoint/mix readback; 48/16 -> 48/24 -> 44.1/source24 (driver-verified precision fallback) -> 48/24 -> 44.1/16; pause/disable/resume; automatic exclusive/shared transition", flush=True)
+                    call("playback", action="seek", seconds=10)
+                    helpers.wait_for(client, "get_status", lambda value: value["idle"] and not value["playing"])
+                    assert_baseline("natural-queue-end")
+                    call("playback", action="resume")
+                    wait_format(44100, 16)
+                    call("playback", action="pause")
+                    assert_baseline("final-pause")
+                    print("PASS: independent endpoint/mix readback; 48/16 -> 48/24 -> 44.1/source24 (driver-verified precision fallback) -> 48/24 -> 44.1/16; pause full-baseline restore/exact-position resume; paused auto toggle; repeated 44.1/48 transitions; natural end restoration; automatic exclusive/shared transition", flush=True)
                 finally:
                     helpers.close_player(player_pid)
                     player_pid = None
             client = None
     finally:
-        # Full restore only after closing our own stream, and never over a newly started client.
+        # Normal exit must restore itself. Only repair a failed test's still-owned exact
+        # last application; never overwrite an unknown external edit with an old snapshot.
         if not running_clients():
             with native.AudioAccess(original["endpointId"]) as access:
-                access.restore(original)
-            with native.AudioAccess(original["endpointId"]) as access:
                 restored = access.capture()
-            assert restored["device"] == original["device"] and restored["mix"] == original["mix"], native.public(restored)
-            records.append({"independentRestored": native.public(restored)})
+                if (restored["device"], restored["mix"]) != (original["device"], original["mix"]):
+                    if last_applied is not None and (restored["device"], restored["mix"]) == (last_applied["device"], last_applied["mix"]):
+                        access.restore(original)
+                        restored = access.capture()
+                        records.append({"guardedFailureCleanup": True})
+                    else:
+                        records.append({"restoreSkipped": "Unknown external edit; refusing stale snapshot restoration.", "independentActual": native.public(restored)})
+            records.append({"independentAfterExit": native.public(restored)})
         else:
             records.append({"restoreSkipped": "Another JeekMusic client is now active; refusing to overwrite its format."})
         args.results.parent.mkdir(parents=True, exist_ok=True)

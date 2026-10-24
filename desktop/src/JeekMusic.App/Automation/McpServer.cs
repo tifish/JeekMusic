@@ -49,9 +49,10 @@ public sealed class McpServer(McpTools tools) : IDisposable
             var session = new McpSession(tools.Catalog, async (name, args) =>
             {
                 _stop.Token.ThrowIfCancellationRequested();
-                // 播放、队列、快照和播放列表和 UI 共用服务，所有访问在 UI 线程串行执行。
-                return await Dispatcher.UIThread.InvokeAsync(() => tools.Call(name, args),
+                // 工具在 UI 线程进入；异步标签事务在后台执行，不能同步等待阻塞 UI。
+                var pending = await Dispatcher.UIThread.InvokeAsync(() => tools.CallAsync(name, args),
                     DispatcherPriority.Normal, _stop.Token);
+                return await pending.ConfigureAwait(false);
             });
             try
             {

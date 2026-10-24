@@ -38,11 +38,10 @@ public sealed partial class LibraryDb
     /// <summary>用重算的结果替换全部物化标签（手动修正优先已经在调用方处理）。</summary>
     public void ReplaceAllTags(IEnumerable<(string trackKey, string dimension, string value, string source)> tags)
     {
-        lock (Gate)
+        InTransaction(() =>
         {
-            using var tx = Begin();
-            Exec("DELETE FROM track_tag", tx);
-            using var cmd = Command("INSERT OR REPLACE INTO track_tag(track_key, dimension, value, source) VALUES($k, $d, $v, $s)", tx);
+            Exec("DELETE FROM track_tag");
+            using var cmd = Command("INSERT OR REPLACE INTO track_tag(track_key, dimension, value, source) VALUES($k, $d, $v, $s)");
             var k = cmd.Parameters.Add("$k", Microsoft.Data.Sqlite.SqliteType.Text);
             var d = cmd.Parameters.Add("$d", Microsoft.Data.Sqlite.SqliteType.Text);
             var v = cmd.Parameters.Add("$v", Microsoft.Data.Sqlite.SqliteType.Text);
@@ -55,7 +54,6 @@ public sealed partial class LibraryDb
                 s.Value = source;
                 cmd.ExecuteNonQuery();
             }
-            tx.Commit();
-        }
+        });
     }
 }

@@ -82,7 +82,7 @@ class WorkflowGuards(unittest.TestCase):
 
             def request(self, method):
                 calls.append(method)
-                return {"tools": [{} for _ in range(21)]}
+                return {"tools": [{} for _ in range(22)]}
 
         with patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
              patch.object(mcp, "McpClient", Client), \

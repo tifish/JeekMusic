@@ -28,7 +28,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(21, tools.Count);
+        Assert.Equal(22, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }
@@ -80,6 +80,12 @@ public sealed class McpSessionTests
     [InlineData("search_tracks", "{\"reverse\":\"true\"}")]
     [InlineData("get_track", "{}")]
     [InlineData("get_track", "{\"trackId\":null}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[],\"mood\":\"SPORT\"}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[1]}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[1],\"mood\":\"VOCAL\"}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[1],\"voice\":null}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[1],\"genre\":\"POP\"}")]
+    [InlineData("set_smart_tags", "{\"trackIds\":[1],\"extra\":true}")]
     [InlineData("play_tracks", "{\"trackIds\":[]}")]
     [InlineData("play_tracks", "{\"trackIds\":[\"1\"]}")]
     [InlineData("playback", "{\"action\":\"stop_typo\"}")]

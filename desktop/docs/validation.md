@@ -257,3 +257,13 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - 临时 `JEEKMUSIC_DATA` 下执行 `dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -c Release -r win-x64 --no-restore --filter "FullyQualifiedName~SpacePlaybackShortcutTests|FullyQualifiedName~PlaybackShortcutTests|FullyQualifiedName~TemporaryDeviceFormatTests|FullyQualifiedName~McpSessionTests|FullyQualifiedName~OutputMenuInteractionTests|FullyQualifiedName~TrackNavigationTests" --verbosity minimal`：**165 项通过，0 失败/跳过**。未运行本机 solution/App 全集、RealDecoder 或真实设备测试；RID 构建避免测试期间覆盖正在运行的 `output/` 客户端。
 - `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 --no-restore -p:JeekVersion=1.0.147 --verbosity minimal`：**0 警告、0 错误**。`git diff --check` 通过。
 - MCP 保持 **21 工具**，沿用 `playback` 的 `toggle`；工具及 action 参数描述、中英文使用说明、PC-8 和兼容 Schema 断言同步，无新增键盘工具、参数或开发专用分支。
+
+
+## 智能标签浅层编辑与 MCP（2026-10-25）
+
+- 歌曲右键一级「修正智能标签…」直接打开紧凑对话框；运动、人声、曲风三个分类及各自保持不变／两个值／恢复自动同时可见。显示当前值和自动／手动来源，分别识别混合值和混合来源。默认保持不变、无改动禁用应用；取消、Esc、关闭不写入。选具体值即手动覆盖，包括与自动结果相同的情况。控件继承字体，支持英文窄窗口换行、Tab／方向键／Space／Enter。
+- UI、原 AnalysisFeature.Override 和新增 MCP set_smart_tags 共用 SmartTagService。保留旧单维入口；全部歌曲／维度验证后，覆盖与物化结果在同一 SQLite 事务内保存，一次重算和通知。离线歌曲仍可按 ID 修正。无效／替换歌曲、错维度、覆盖写入失败、物化结果写入失败均不留下部分改动。恢复自动保留 null 清除记录，明确修改的时间戳严格晚于旧覆盖（包括远端时钟领先），省略维度不动；不改变分类规则或文件元数据。
+- MCP 从 21 兼容增加到 22 个工具；旧输入 Schema 不变，get_track 保留 tags 并新增 tagSources，直接读取已提交结果。set_smart_tags 的 trackIds 限 1–1000，至少一个维度由描述、Schema（minProperties）及业务服务共同约束。异步事务在后台执行，UI 调度不做同步等待；开发与 NativeAOT 同一实现。
+- 新增 12 项 SmartTagTests（内存数据库、缓存虚拟分数、fake 引擎／端点及 Headless 界面）：单／多选、来源混合、仅改指定维度、同值转手动、恢复自动及真实 SyncMerge、两处数据库触发器故障回滚、未知／替换歌曲、错误参数、取消／Esc／关闭、保存错误界面、一级菜单打开、键盘应用及中文 560／英文 340 宽布局。Core 全集 63 项通过，App 全集 356 项通过／1 项真实端点测试跳过；最终时间戳补充后的 SmartTag/MCP/本地化针对性 57 项通过。Python 构建流程模拟 7 项通过。
+- 普通 Release build 0 警告／错误；本机 NativeAOT publish 成功，保留既有 DataGrid IL2104／IL3053 警告。真实日常 EXE 与 NativeAOT 的启动诊断、桥接正常退出及全部 22 个描述／Schema／annotations 完全一致。新增 test-smart-tags-mcp.py 在临时离线曲库验证真实异步调用、批量修正、同值手动、AUTO 清除记录、省略时间戳和数据库故障回滚；CI 对日常与发布 EXE 都执行该脚本。测试没有播放真实音频或打开物理输出流；全集中既有真实解码器用例仅使用合成静音 WAV 和 ao=null。
+- Windows 原生外观检查未完成：computer-use 返回 “Computer Use native pipe is unavailable: failed to connect native pipe: The system cannot find the file specified. (os error 2)”，重试及重置仍失败。已完成 Headless 交互／布局验证，Windows 真实显示缩放与屏幕阅读器仍需人工验收。

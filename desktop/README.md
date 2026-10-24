@@ -65,7 +65,7 @@ build 和 publish 的缓存也相互隔离，发布请使用完整 `dotnet publi
 python desktop/tools/test-build-isolation.py
 ```
 
-它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、21 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
+它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、22 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
 
 `--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
 
@@ -83,9 +83,13 @@ pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -G
 
 `--background` 不激活窗口，截图通过 PrintWindow 获取；测试脚本检测到抢占焦点会失败。`JEEKMUSIC_DATA` 覆盖数据目录，单实例通信也按此目录隔离。正式数据默认放在 `%LOCALAPPDATA%/JeekMusic`。
 
+## 修正智能标签
+
+歌曲右键一级「修正智能标签…」打开同一个编辑面板，运动、人声、曲风及其选项全部直接可见；每类显示当前值和自动／手动来源，多选会标明混合值或混合来源。默认保持不变，只在「应用」时批量保存明确选择的维度。取消、Esc 或关闭窗口不保存；方向键选择同类选项，Tab 切换焦点，Enter 应用。选择具体值会设为手动覆盖，即使与自动结果相同；「恢复自动」保留同步所需的清除记录。不修改音乐文件标签，也不重新分析音频。
+
 ## MCP 接口
 
-开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、扫描、音频输出和日志诊断，共 21 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
+开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 22 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
 
 仓库提供只依赖 Python 标准库的调试客户端：
 

@@ -378,7 +378,7 @@ public sealed class LyricsPanelTests
         Assert.True(diagnostic["following"]!.GetValue<bool>());
         Assert.Equal(5, diagnostic["currentIndex"]!.GetValue<int>());
         Assert.Equal(500, diagnostic["offsetMs"]!.GetValue<int>());
-        Assert.Equal(21, tools.Catalog.Count);
+        Assert.Equal(22, tools.Catalog.Count);
         var schema = tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject());
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());

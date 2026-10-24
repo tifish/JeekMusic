@@ -98,6 +98,8 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
     internal static void Validate(JsonObject args, JsonObject schema)
     {
         var properties = schema["properties"]!.AsObject();
+        if (schema["minProperties"] is { } minimum && args.Count < minimum.GetValue<int>())
+            throw new ArgumentException($"At least {minimum.GetValue<int>()} arguments are required");
         foreach (var required in schema["required"]!.AsArray())
             if (!args.ContainsKey(required!.GetValue<string>())) throw new ArgumentException("Missing argument: " + required);
         foreach (var (name, value) in args)

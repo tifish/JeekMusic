@@ -84,7 +84,7 @@ async def sdk_check(exe, data, player_pid):
             info = await session.initialize()
             assert info.serverInfo.name == "JeekMusic"
             catalog = await session.list_tools()
-            assert len(catalog.tools) == 21
+            assert len(catalog.tools) == 22
             for tool in catalog.tools:
                 Draft202012Validator.check_schema(tool.inputSchema)
             diagnostics = await session.call_tool("get_diagnostics", {})
@@ -137,7 +137,7 @@ def main():
                 assert diagnostics["frameworkDescription"].startswith(".NET")
                 assert call(first, "get_status")["trackCount"] == 0
                 catalog = first.request("tools/list")
-                assert len(catalog["tools"]) == 21
+                assert len(catalog["tools"]) == 22
                 if args.catalog:
                     args.catalog.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
                 print("Runtime: " + json.dumps({k: diagnostics[k] for k in (
@@ -153,12 +153,12 @@ def main():
                         result.returncode, result.stdout, result.stderr)
                     close_player(player_pid)
                     player_pid = None
-                    print("PASS: actual EXE/MCP cold start, 21 tools, diagnostics, graceful GUI exit, bridge exit=0 stdout/stderr empty (no audio endpoint required)")
+                    print("PASS: actual EXE/MCP cold start, 22 tools, diagnostics, graceful GUI exit, bridge exit=0 stdout/stderr empty (no audio endpoint required)")
                     return
             # Both clients share the same GUI, but each negotiates its own MCP session.
             with McpClient(exe, data) as client, McpClient(exe, data) as other:
                 assert call(other, "get_diagnostics")["processId"] == player_pid
-                assert len(client.request("tools/list")["tools"]) == 21
+                assert len(client.request("tools/list")["tools"]) == 22
                 assert call(client, "add_folder", path=str(music))["queued"]
                 tracks = wait_for(other, "search_tracks", lambda r: r["total"] == 3)["items"]
                 tracks.sort(key=lambda t: t["fileName"])

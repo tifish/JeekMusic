@@ -17,6 +17,7 @@ public sealed class AppServices : IDisposable
     public SettingsStore Settings { get; }
     public LibraryDb Db { get; }
     public LibraryService Library { get; }
+    public Analysis.SmartTagService SmartTags { get; }
     public PlaylistService Playlists { get; }
     public PlayerService Player { get; }
     public QueuePersistence QueuePersistence { get; }
@@ -51,6 +52,7 @@ public sealed class AppServices : IDisposable
         L.Initialize(Settings.Current.Language);
         Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
+        SmartTags = new Analysis.SmartTagService(Library, Settings);
         Playlists = new PlaylistService(Library);
         Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
         var s = Settings.Current;

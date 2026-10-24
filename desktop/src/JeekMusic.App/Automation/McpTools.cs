@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using JeekMusic.Core.Queue;
+using JeekMusic.Core.Analysis;
 using JeekMusic.Infrastructure;
 using JeekMusic.Library;
 using JeekMusic.UI;
@@ -27,7 +28,9 @@ public sealed class McpTools
         Tool("get_status", "Read current playback, queue summary and library scan state. idle means no loaded audio stream and may retain a paused track/queue/position after output release. Playback commands are asynchronous; poll this tool to observe the result.", "", [], true),
         Tool("search_tracks", "Search using the UI library matching and sorting services. Empty query lists all tracks. Uses saved sorting, or file modification time newest first without a preference; sort/reverse override this query only. Invalid dates stay last; equal dates keep file/CUE order. Filters combine with AND; sorting precedes pagination. Returns mtimeUtcTicks, modifiedUtc (ISO UTC or null) and modifiedLocal (local display or em dash). Pages default to 50, max 200.",
             "\"query\":{\"type\":\"string\",\"maxLength\":1000},\"folderId\":{\"type\":\"integer\"},\"artistKey\":{\"type\":\"string\"},\"albumKey\":{\"type\":\"string\"},\"sort\":{\"type\":\"string\",\"enum\":[\"FileName\",\"Modified\",\"Title\",\"Artist\",\"Album\",\"Duration\",\"Format\"],\"description\":\"Optional per-query sort, same values as UI settings. Modified is file mtime newest first.\"},\"reverse\":{\"type\":\"boolean\",\"description\":\"Reverse base order; Modified becomes oldest first, unknown dates still last. Defaults to saved direction, or false when sort is supplied. Does not save a preference.\"}," + Page, [], true),
-        Tool("get_track", "Read metadata, stable key, path, tags and cached file mtime: mtimeUtcTicks (.NET UTC ticks), modifiedUtc (ISO UTC or null), modifiedLocal (local date/time or em dash). No file metadata read or rescan.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
+        Tool("get_track", "Read metadata, stable key, path, committed smart tags and tagSources (AUTO/MANUAL, null without a result), and cached file mtime: mtimeUtcTicks (.NET UTC ticks), modifiedUtc (ISO UTC or null), modifiedLocal (local date/time or em dash). No file metadata read or rescan.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
+        Tool("set_smart_tags", "Correct smart tags for 1–1000 library trackIds, including offline songs, using the same atomic batch service as the UI. Provide at least one of mood/voice/genre; omitted dimensions remain unchanged (including sync timestamps). A concrete value sets a manual override even when equal to automatic; AUTO restores automatic using a timestamped null sync record. Validates all songs/values before writing; failures roll back the entire batch and computed tags. Awaits one recomputation and sync notification; returns committed tags/tagSources for distinct tracks. Does not analyze audio, change file metadata or start playback.",
+            "\"trackIds\":" + Ids + ",\"mood\":{\"type\":\"string\",\"enum\":[\"SPORT\",\"NON_SPORT\",\"AUTO\"]},\"voice\":{\"type\":\"string\",\"enum\":[\"VOCAL\",\"INSTRUMENTAL\",\"AUTO\"]},\"genre\":{\"type\":\"string\",\"enum\":[\"CLASSICAL\",\"NON_CLASSICAL\",\"AUTO\"]}", ["trackIds"], minProperties: 2),
         Tool("play_tracks", "Play trackIds in order starting at startIndex (default 0). Preserves pending manually queued songs, like the UI. Validates all tracks before changing playback. Playback starts reveal the current song once in an existing visible song list containing it and in an open queue; never navigate or change selection. Fully visible rows keep their scroll position; offscreen or clipped rows center in the data viewport, clamped at list edges. See get_diagnostics.songVisibility/queueVisibility.",
             "\"trackIds\":" + Ids + ",\"startIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":999},\"shuffle\":{\"type\":\"boolean\"}", ["trackIds"]),
         Tool("playback", "Control playback. toggle uses the same PlayPause service as unmodified Space in the main/mini player; it pauses/resumes without clearing track/queue/position. Explicit pause closes the stream and restores owned temporary Windows formats, retaining track/queue/position; resume rematches shared automatic format before continuing. Internal track/rebuild pauses do not restore. seek uses seconds relative to the current track, including CUE tracks; requires seekable loaded audio or a retained released-pause track (paused seeking does not open output). Preserves play/pause and clamps the endpoint to 1s before track end to avoid seeking into EOF. next/previous start playback even when paused, after a valid target or restart is accepted and output safety checks pass; they never acknowledge hardware-volume confirmation. previous restarts the current track if past 3 seconds. Explicit seek also restores visible timed lyrics following, even during manual browsing. Start/resume/navigation reveal the current song once in an existing visible list containing it and in an open queue; no navigation, selection change or progress following. Fully visible rows keep their scroll position; offscreen or clipped rows center in the data viewport, clamped at list edges. See get_diagnostics.songVisibility/queueVisibility. Returns an immediate state snapshot.",
@@ -56,18 +59,42 @@ public sealed class McpTools
         Tool("show_window", "Show and activate the main player window. Other MCP tools do not activate windows.", "", [])
     );
 
-    static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false) => new()
+    static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0)
     {
-        ["name"] = name, ["description"] = description,
-        ["inputSchema"] = new JsonObject
+        var tool = new JsonObject
         {
-            ["type"] = "object", ["properties"] = JsonNode.Parse("{" + properties + "}"),
-            ["required"] = new JsonArray(required.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["additionalProperties"] = false
-        },
-        ["annotations"] = new JsonObject { ["readOnlyHint"] = readOnly, ["destructiveHint"] = destructive, ["openWorldHint"] = false }
-    };
+            ["name"] = name, ["description"] = description,
+            ["inputSchema"] = new JsonObject
+            {
+                ["type"] = "object", ["properties"] = JsonNode.Parse("{" + properties + "}"),
+                ["required"] = new JsonArray(required.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["additionalProperties"] = false
+            },
+            ["annotations"] = new JsonObject { ["readOnlyHint"] = readOnly, ["destructiveHint"] = destructive, ["openWorldHint"] = false }
+        };
+        if (minProperties > 0) tool["inputSchema"]!["minProperties"] = minProperties;
+        return tool;
+    }
 
     string? _lastPlayerError;
+
+    internal async Task<JsonObject> CallAsync(string name, JsonObject a)
+    {
+        if (name != "set_smart_tags") return Call(name, a);
+        McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
+        var changes = new Dictionary<TagDimension, Tag?>();
+        foreach (var (key, dimension) in new[] { ("mood", TagDimension.MOOD), ("voice", TagDimension.VOICE), ("genre", TagDimension.GENRE) })
+            if (a[key] is { } node)
+            {
+                var value = node.GetValue<string>();
+                changes[dimension] = value == "AUTO" ? null : Tags.Of(dimension, value) ??
+                    throw new ArgumentException("Invalid tag for " + key);
+            }
+        var tracks = Required(a, "trackIds").AsArray().Select(n => Track(n!.GetValue<long>())).DistinctBy(t => t.TrackKey).ToArray();
+        await app.SmartTags.Override(tracks, changes);
+        var committed = app.SmartTags.Read();
+        return new JsonObject { ["count"] = tracks.Length,
+            ["items"] = new JsonArray(tracks.Select(t => (JsonNode?)WithTags(TrackJson(t), committed.GetValueOrDefault(t.TrackKey))).ToArray()) };
+    }
 
     internal JsonObject Call(string name, JsonObject a)
     {
@@ -88,7 +115,9 @@ public sealed class McpTools
                 }
                 if (a["albumKey"] is { } album) tracks = tracks.Where(t => t.AlbumKey == album.GetValue<string>());
                 return Paginate(SortSearch(tracks, a, app.Settings.Current), a, TrackJson);
-            case "get_track": return TrackJson(Track(Required(a, "trackId").GetValue<long>()));
+            case "get_track":
+                var detail = Track(Required(a, "trackId").GetValue<long>());
+                return WithTags(TrackJson(detail), app.SmartTags.Read().GetValueOrDefault(detail.TrackKey));
             case "play_tracks":
                 var ids = TrackIds(a);
                 var start = a["startIndex"]?.GetValue<int>() ?? 0;
@@ -252,7 +281,22 @@ public sealed class McpTools
         ["mtimeUtcTicks"] = t.Mtime, ["modifiedUtc"] = FileModified.Utc(t.Mtime)?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
         ["modifiedLocal"] = Text.Modified(t.Mtime),
         ["tags"] = app.Library.Snapshot.Tags.TryGetValue(t.TrackKey, out var tags)
-            ? new JsonObject { ["mood"] = tags.Mood, ["voice"] = tags.Voice, ["genre"] = tags.Genre } : null
+            ? new JsonObject { ["mood"] = tags.Mood, ["voice"] = tags.Voice, ["genre"] = tags.Genre } : null,
+        ["tagSources"] = Sources(tags)
+    };
+
+    static JsonObject WithTags(JsonObject track, SongTags? tags)
+    {
+        track["tags"] = tags is null ? null : new JsonObject { ["mood"] = tags.Mood, ["voice"] = tags.Voice, ["genre"] = tags.Genre };
+        track["tagSources"] = Sources(tags);
+        return track;
+    }
+
+    static JsonObject Sources(SongTags? tags) => new()
+    {
+        ["mood"] = tags?.Mood is null ? null : tags.MoodManual ? "MANUAL" : "AUTO",
+        ["voice"] = tags?.Voice is null ? null : tags.VoiceManual ? "MANUAL" : "AUTO",
+        ["genre"] = tags?.Genre is null ? null : tags.GenreManual ? "MANUAL" : "AUTO",
     };
 
     internal static List<Track> SortSearch(IEnumerable<Track> tracks, JsonObject args, Settings.AppSettings settings) =>

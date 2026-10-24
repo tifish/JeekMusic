@@ -31,6 +31,7 @@ public sealed class AnalysisFeature : IFeature, IDisposable
     public void Start(AppServices app, Shell shell)
     {
         Current = this; _app = app;
+        app.SmartTags.ResultsChanged += OnCorrectionsChanged;
         app.Library.SnapshotChanged += Invalidate;
         app.System.PowerChanged += Wake;
         app.System.Resumed += Wake;
@@ -111,43 +112,14 @@ public sealed class AnalysisFeature : IFeature, IDisposable
     }
 
     public static string Signature(Track t) => $"{t.Mtime}:{t.Size}";
-    readonly Lock _recompute = new();
-    public void Recompute()
-    {
-        lock (_recompute)
-        {
-            var snapshot = _app.Library.Snapshot;
-            var features = _app.Db.AllFeatures().ToDictionary(f => f.TrackKey);
-            var overrides = _app.Db.TagOverrides().ToDictionary(o => (o.TrackKey, o.Dimension));
-            var sensitivity = Enum.TryParse<Sensitivity>(_app.Settings.Current.Sensitivity, out var s) ? s : Sensitivity.NORMAL;
-            var tags = new List<(string, string, string, string)>();
-            foreach (var t in snapshot.Tracks)
-            {
-                var classical = ClassicalTitles.Matches(t.Title, t.Album);
-                var auto = features.TryGetValue(t.TrackKey, out var row) && row.Signature == Signature(t) && row.AnalyzerVersion == AnalyzerVersion && FeaturesData.FromRow(row) is { } f
-                    ? TagClassifier.Classify(f, sensitivity, classical) : new Dictionary<TagDimension, Tag?>();
-                foreach (var dimension in Enum.GetValues<TagDimension>())
-                {
-                    var name = dimension.ToString();
-                    var manual = overrides.GetValueOrDefault((t.TrackKey, name))?.Value;
-                    var value = manual ?? auto.GetValueOrDefault(dimension)?.ToString();
-                    if (value is null && classical && dimension == TagDimension.GENRE) value = Tag.CLASSICAL.ToString();
-                    if (value is not null) tags.Add((t.TrackKey, name, value, manual is null ? "AUTO" : "MANUAL"));
-                }
-            }
-            var old = _app.Db.AllTags();
-            if (old.Sum(x => x.Value.Count) == tags.Count && tags.All(t => old.TryGetValue(t.Item1, out var dims) && dims.TryGetValue(t.Item2, out var v) && v == (t.Item3, t.Item4))) return;
-            _app.Db.ReplaceAllTags(tags);
-            Online.LibraryRefresh.Soon(_app.Library);
-        }
-    }
+    public void Recompute() => _app.SmartTags.Recompute();
+    void OnCorrectionsChanged() => ResultsChanged?.Invoke();
 
-    public async Task Override(IReadOnlyList<Track> tracks, TagDimension dimension, Tag? tag)
-    {
-        foreach (var t in tracks) _app.Db.SetTagOverride(t.TrackKey, dimension.ToString(), tag?.ToString());
-        await Task.Run(Recompute);
-        ResultsChanged?.Invoke();
-    }
+    public Task Override(IReadOnlyList<Track> tracks, TagDimension dimension, Tag? tag) =>
+        Override(tracks, new Dictionary<TagDimension, Tag?> { [dimension] = tag });
+
+    public Task Override(IReadOnlyList<Track> tracks, IReadOnlyDictionary<TagDimension, Tag?> changes) =>
+        _app.SmartTags.Override(tracks, changes);
 
     Control BuildSettings(SettingsContext c)
     {
@@ -168,6 +140,7 @@ public sealed class AnalysisFeature : IFeature, IDisposable
 
     public void Dispose()
     {
+        _app.SmartTags.ResultsChanged -= OnCorrectionsChanged;
         _stop.Cancel(); _wake.Set(); _foreground?.Dispose();
         _worker?.Join();
     }

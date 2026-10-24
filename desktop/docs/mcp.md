@@ -214,7 +214,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 - `displaySummary` 与播放栏完整文本一致；`resampled` 同时检查解码到客户端流及源到实际端点的采样率变化，输出重建时不提前宣称重采样；`hasWarning` 覆盖格式失败、转换/回退及输出安全门控，提示和右键保留详情。以上为兼容新增的查询字段，控制参数与工具数不变。
 - `automaticFormat` 为保存的共享偏好；`activePolicy` 为 windows-current/shared-automatic/exclusive-native。
-- `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；有损/浮点解码值不等于原始 PCM 位深。
+- `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；precision 对已知有损编码为 lossy-not-applicable，已确认的 PCM 浮点源为 float32/float64，无可靠整数位深为 unknown，整数源为 integer-metadata。MP3 源显示“位深不适用（有损编码）”，无损/PCM 读取不到位深才显示“位深未知”；解码器 floatp 不会被冒充为原始浮点源或设备位深。
 - `clientStream` 为 mpv 实际客户端流 rate/sampleFormat/channels，仅用于流诊断；float 不构成设备为 32 位的证据。
 - `actualDevice`：共享使用独立 `IPropertyStore.PKEY_AudioEngine_DeviceFormat` 读回的真实端点 sampleRate/containerBits/validBits/sampleKind/channels/channelMask/layout；独占实际流率与声道可读，但播放内核不公开其最终有效位深/布局时为 null，UI 明确显示未知，不冒用共享默认值。
 - `windowsDeviceDefault` 为 Windows 端点持久格式，`windowsMix` 为新 IAudioClient.GetMixFormat 读取的当前混音格式，二者与客户端流分开。

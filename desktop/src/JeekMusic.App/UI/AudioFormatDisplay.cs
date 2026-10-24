@@ -21,8 +21,15 @@ internal static class AudioFormatDisplay
     public static string Source(PlayerService p)
     {
         var source = p.SourceFormat;
+        var precision = source.Precision switch
+        {
+            "lossy-not-applicable" => L.T("位深不适用（有损编码）"),
+            "float32" => L.F($"{32} 位浮点"),
+            "float64" => L.F($"{64} 位浮点"),
+            _ => source.Bits is { } bits ? L.F($"{bits} 位") : L.T("位深未知")
+        };
         return L.T("歌曲：") + Rate(source.SampleRate) + " · " +
-            (source.Bits is { } bits ? L.F($"{bits} 位") : L.T("位深未知 / 不适用")) + " · " + Channels(source.Channels, source.ChannelMask is not null ? source.Layout : null);
+            precision + " · " + Channels(source.Channels, source.ChannelMask is not null ? source.Layout : null);
     }
     public static string Device(PlayerService p)
     {

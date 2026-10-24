@@ -480,14 +480,11 @@ public sealed class PlayerService : IDisposable
         var mask = ChannelLayouts.Mask(layout);
         if (mask is { } knownMask && channels is { } knownCount && System.Numerics.BitOperations.PopCount(knownMask) != knownCount) mask = null;
         if (mask is null && channels is 1 or 2) mask = channels == 1 ? 4u : 3u;
-        var floating = _mpv.Get("audio-params/format")?.StartsWith("float", StringComparison.Ordinal) == true;
-        var codec = _mpv.Get("audio-codec-name");
-        var floatingSource = codec?.StartsWith("pcm_f32", StringComparison.OrdinalIgnoreCase) == true ||
-            codec?.StartsWith("pcm_f64", StringComparison.OrdinalIgnoreCase) == true;
-        var bits = floatingSource || SourceAudioFormat.IsLossy(codec) ? null : SourceAudioFormat.FromTrack(CurrentTrack).Bits;
+        var codec = _mpv.Get("audio-codec-name") ?? CurrentTrack.Codec;
+        var bits = SourceAudioFormat.IntegerBits(CurrentTrack, codec);
         _decodedSource = new((int?)_mpv.GetLong("audio-params/samplerate") ?? CurrentTrack.SampleRate,
             bits, channels, mask, layout ?? (mask is { } known && channels is { } count ? ChannelLayouts.Name(known, count) : null),
-            bits is not null ? "integer-metadata" : floating ? "floating-or-lossy-unknown-source-precision" : "unknown");
+            SourceAudioFormat.PrecisionFor(codec, bits));
         _decodedSourceTrackId = CurrentTrack.Id;
         return previous != _decodedSource;
     }

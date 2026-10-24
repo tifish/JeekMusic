@@ -170,7 +170,7 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             Assert.True(output["resampled"]!.GetValue<bool>());
             Assert.True(output["hasWarning"]!.GetValue<bool>());
             Assert.Contains("24",AudioFormatDisplay.Device(f.Player));Assert.Contains("32",AudioFormatDisplay.Device(f.Player));
-            Assert.Contains(L.T("位深未知 / 不适用"),AudioFormatDisplay.Source(f.Player));
+            Assert.Contains(L.T("位深未知"),AudioFormatDisplay.Source(f.Player));
             var automatic=window.CreateOutputMenu().Items.OfType<MenuItem>().Single(i=>Equals(i.Header,L.T("共享模式自动匹配歌曲格式")));
             automatic.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Assert.False(f.Player.AutomaticAudioFormat);
             f.Player.SetAutomaticAudioFormat(true);f.Ready();
@@ -200,6 +200,31 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
             Assert.Equal(expected,f.Player.AutomaticAudioFormat);
             Assert.Null(settings.Current.SampleRateMode);Assert.Null(settings.Current.ManualSampleRate);
             settings.WriteNow();Assert.DoesNotContain("manualSampleRate",File.ReadAllText(path));File.Delete(path);
+        },CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData("mp3",16,"floatp",null,"lossy-not-applicable")]
+    [InlineData("pcm_f32le",32,"float",null,"float32")]
+    [InlineData("pcm_f64le",64,"double",null,"float64")]
+    [InlineData("flac",24,"floatp",24,"integer-metadata")]
+    [InlineData("flac",null,"s32",null,"unknown")]
+    public async Task SourcePrecisionComesFromTheSourceCodecRatherThanTheDecodedFloatContainer(string codec,int? metadataBits,
+        string decoderFormat,int? expectedBits,string expectedPrecision)
+    {
+        using var session=HeadlessUnitTestSession.StartNew(typeof(ShortcutTestApplication));
+        await session.Dispatch(()=>
+        {
+            using var f=new OutputModeSwitchTests.Fixture(initialBits:metadataBits,configureEngine:engine=>
+            {
+                engine.Properties["audio-codec-name"]=codec;
+                engine.Properties["audio-params/format"]=decoderFormat;
+            });
+            Assert.Equal(expectedBits,f.Player.SourceFormat.Bits);
+            Assert.Equal(expectedPrecision,f.Player.SourceFormat.Precision);
+            var source=McpTools.AudioFormatState(f.Player)["source"]!;
+            Assert.Equal(expectedPrecision,source["precision"]!.GetValue<string>());
+            Assert.Equal(expectedBits,source["bits"]?.GetValue<int>());
         },CancellationToken.None);
     }
 
@@ -328,4 +353,5 @@ public sealed class RealAudioFactAttribute:FactAttribute
             Skip="Opt-in endpoint mutation requires no other JeekMusic client and JEEKMUSIC_TEST_REAL_AUDIO=1.";
     }
 }
+
 

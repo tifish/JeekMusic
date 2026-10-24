@@ -11,14 +11,25 @@ public sealed record EndpointAudioFormat(int SampleRate, int ContainerBits, int 
 public sealed record SourceAudioFormat(int? SampleRate, int? Bits, int? Channels, uint? ChannelMask, string? Layout, string Precision)
 {
     public static SourceAudioFormat FromTrack(Track? track) => new(track?.SampleRate,
-        KnownBits(track), track?.Channels,
+        IntegerBits(track), track?.Channels,
         track?.Channels == 1 ? 4u : track?.Channels == 2 ? 3u : null,
         track?.Channels == 1 ? "mono" : track?.Channels == 2 ? "stereo" : null,
-        KnownBits(track) is null ? "unknown" : "integer-metadata");
+        PrecisionFor(track?.Codec, IntegerBits(track)));
 
-    static int? KnownBits(Track? track) => !IsLossy(track?.Codec) && track?.BitsPerSample is >= 8 and <= 32 ? track.BitsPerSample : null;
+    public static int? IntegerBits(Track? track, string? decodedCodec = null)
+    {
+        var codec = decodedCodec ?? track?.Codec;
+        return !IsLossy(codec) && FloatingPrecision(codec) is null && codec?.ToLowerInvariant() is not ("ogg" or "wma") &&
+            track?.BitsPerSample is >= 8 and <= 32 ? track.BitsPerSample : null;
+    }
 
-    public static bool IsLossy(string? codec) => codec?.ToLowerInvariant() is "mp3" or "aac" or "opus" or "vorbis" or "ogg" or "wma";
+    public static bool IsLossy(string? codec) => codec?.ToLowerInvariant() is "mp3" or "mp2" or "aac" or "opus" or "vorbis" or
+        "ac3" or "eac3" or "wmav1" or "wmav2" or "wmapro";
+    public static string? FloatingPrecision(string? codec) =>
+        codec?.StartsWith("pcm_f32", StringComparison.OrdinalIgnoreCase) == true ? "float32" :
+        codec?.StartsWith("pcm_f64", StringComparison.OrdinalIgnoreCase) == true ? "float64" : null;
+    public static string PrecisionFor(string? codec, int? bits) => IsLossy(codec) ? "lossy-not-applicable" :
+        FloatingPrecision(codec) ?? (bits is not null ? "integer-metadata" : "unknown");
 }
 
 public static class ChannelLayouts

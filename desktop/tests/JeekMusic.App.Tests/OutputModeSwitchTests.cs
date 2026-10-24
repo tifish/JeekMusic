@@ -531,6 +531,7 @@ public sealed class OutputModeSwitchTests
         public List<string> Errors { get; } = [];
         public FakeEngine Current => Engines[^1];
         public FakeEndpointVolume Endpoint { get; }
+        public HashSet<long> MissingPaths { get; } = [];
 
         public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null,
             IExclusiveAudioFormat? formats = null)
@@ -564,7 +565,7 @@ public sealed class OutputModeSwitchTests
         }
         public Track? ById(long id) => id == 1 ? _track : id == 2 ? _nextTrack : null;
         public Track? ByKey(string trackKey) => trackKey == _track.TrackKey ? _track : null;
-        public string? PathOf(Track track) => _path;
+        public string? PathOf(Track track) => MissingPaths.Contains(track.Id) ? null : _path;
         public void Dispose() { Player.Dispose(); File.Delete(_path); }
     }
 
@@ -573,7 +574,8 @@ public sealed class OutputModeSwitchTests
         public Dictionary<string, string> Properties { get; } = new() { ["seekable"] = "yes", ["seeking"] = "no", ["ao-volume"] = "100", ["ao-mute"] = "no", ["current-ao"] = "wasapi", ["playlist-count"] = "0" };
         public List<string[]> Commands { get; } = [];
         public List<string> Operations { get; } = [];
-        public bool Disposed, RejectMute, RejectSeek;
+        public bool Disposed, RejectMute, RejectSeek, RejectLoad;
+        long _entryId = 9;
         public FakeEngine(IEnumerable<(string, string)> options)
         {
             foreach (var (key, value) in options) Properties[key] = value;
@@ -581,7 +583,7 @@ public sealed class OutputModeSwitchTests
         public event Action<string, string?>? PropertyChanged;
         public event Action<long>? FileStarted { add { } remove { } }
         public event Action<long>? FileLoaded;
-        public event Action<long, Mpv.EndReason, string?>? FileEnded { add { } remove { } }
+        public event Action<long, Mpv.EndReason, string?>? FileEnded;
         public event Action<Mpv.EventId>? Notified;
         public event Action<string, string, string>? Log { add { } remove { } }
         public void Observe(string name) { }
@@ -590,6 +592,7 @@ public sealed class OutputModeSwitchTests
             if (e == Mpv.EventId.FileLoaded) FileLoaded?.Invoke(GetLong("playlist/0/id") ?? -1);
             else Notified?.Invoke(e);
         }
+        public void EndCurrent(Mpv.EndReason reason) => FileEnded?.Invoke(GetLong("playlist/0/id") ?? -1, reason, "test decoder failure");
         public string? Get(string name) => Properties.GetValueOrDefault(name);
         public double? GetDouble(string name) => double.TryParse(Get(name), CultureInfo.InvariantCulture, out var n) ? n : null;
         public long? GetLong(string name) => long.TryParse(Get(name), out var n) ? n : null;
@@ -607,9 +610,10 @@ public sealed class OutputModeSwitchTests
             if (args[0] == "seek") return RejectSeek ? -1 : 0;
             if (args[0] == "loadfile")
             {
+                if (RejectLoad) return -1;
                 var count = args[2] == "replace" ? 1 : (int)GetLong("playlist-count")! + 1;
                 Properties["playlist-count"] = count.ToString();
-                Properties[$"playlist/{count - 1}/id"] = (count + 9).ToString();
+                Properties[$"playlist/{count - 1}/id"] = (++_entryId).ToString();
                 if (args[2] == "replace")
                 {
                     var start = args[4].Split(',').FirstOrDefault(s => s.StartsWith("start="))?[6..];

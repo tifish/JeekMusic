@@ -211,7 +211,9 @@ public sealed class PlayerService : IDisposable
         _mpv?.TrySet("pause", "yes");
     }
 
-    public void Resume()
+    public void Resume() => Resume(confirmHardwareVolume: true);
+
+    void Resume(bool confirmHardwareVolume)
     {
         if (CurrentTrack is null) return;
         EnsureEngine();
@@ -219,7 +221,7 @@ public sealed class PlayerService : IDisposable
         _wantPlaying = true;
         // Explicit Play after the hardware warning acknowledges the physical knob. Never
         // acknowledge read failures, mixer attenuation, or automatic mode/device changes.
-        if (OutputBlockReason == "hardware-volume-confirmation") _hardwareVolumeConfirmed = true;
+        if (confirmHardwareVolume && OutputBlockReason == "hardware-volume-confirmation") _hardwareVolumeConfirmed = true;
         if (_restoringOutput)
         {
             _outputRestoreFailed = false;
@@ -233,17 +235,36 @@ public sealed class PlayerService : IDisposable
     public void Next()
     {
         if (Queue.NextIndex(user: true) is not { } i) return;
-        Queue.MoveTo(i);
-        LoadCurrent(play: true);
+        NavigateTo(i);
     }
 
-    /// <summary>上一首：播放超过 3 秒时回到这首的开头（和常见播放器一样）。</summary>
+    /// <summary>上一首并播放：超过 3 秒时回到这首的开头；切歌不代替物理音量确认。</summary>
     public void Previous()
     {
-        if (Position > TimeSpan.FromSeconds(3)) { Seek(TimeSpan.Zero); return; }
+        if (Position > TimeSpan.FromSeconds(3))
+        {
+            var revision = SeekRevision;
+            Seek(TimeSpan.Zero);
+            if (SeekRevision != revision) Resume(confirmHardwareVolume: false);
+            return;
+        }
         if (Queue.PreviousIndex() is not { } i) return;
-        Queue.MoveTo(i);
-        LoadCurrent(play: true);
+        NavigateTo(i);
+    }
+
+    bool _navigating;
+
+    void NavigateTo(int index)
+    {
+        // MoveTo raises Changed synchronously. Load once with the navigation intent,
+        // rather than first loading with the previous paused/playing state.
+        _navigating = true;
+        try
+        {
+            Queue.MoveTo(index);
+            LoadCurrent(play: true);
+        }
+        finally { _navigating = false; }
     }
 
     /// <summary>在队列里点了一首。</summary>
@@ -581,6 +602,7 @@ public sealed class PlayerService : IDisposable
             CurrentTrack = null;
             _mpv?.TryRun("stop");
             IsIdle = true;
+            IsPlaying = false;
             TrackChanged?.Invoke(null);
             StateChanged?.Invoke();
             return;
@@ -601,11 +623,15 @@ public sealed class PlayerService : IDisposable
         var paused = _mpv.TrySet("pause", "yes") >= 0;
         if (!muted || !paused) { BlockOutputRestore(); return; }
         _mpv.TrySet("loop-file", Queue.Repeat == RepeatMode.One ? "inf" : "no");
+        // A rejected replacement must not accept late FileLoaded for the old song.
+        _currentEntry = _nextEntry = _nextTrackId = -1;
         _mpv.TryRun("playlist-clear");
-        _mpv.TryRun("loadfile", path, "replace", "-1", FileOptions(track, start));
+        if (_mpv.TryRun("loadfile", path, "replace", "-1", FileOptions(track, start)) < 0)
+        {
+            BlockOutputRestore();
+            return;
+        }
         _currentEntry = LastEntryId();
-        _nextEntry = -1;
-        _nextTrackId = -1;
         IsIdle = false;
         if (_restoringOutput)
         {
@@ -685,7 +711,7 @@ public sealed class PlayerService : IDisposable
     void OnQueueChanged()
     {
         // 自动换歌时由 OnFileStarted 自己处理
-        if (_inFileStarted) return;
+        if (_inFileStarted || _navigating) return;
         // 当前这首被移除了（队列界面里删掉、或曲库里不存在了）：换到新的当前歌曲
         var current = Queue.Current is { } c ? c.TrackId : -1;
         if (CurrentTrack is not null && current != CurrentTrack.Id)

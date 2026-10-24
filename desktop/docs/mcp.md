@@ -41,7 +41,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `search_tracks` | `query` 可省略或留空以浏览全库；支持界面相同的标题、艺术家、专辑、文件名和拼音首字母搜索；可按 `folderId`、`artistKey`、`albumKey` 同时筛选；支持分页。结果包含 `artistKeys`、`albumKey` |
 | `get_track` | `trackId`。详细元数据、音频文件路径、稳定键和智能标签，包括 CUE 分轨 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
-| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲且输出已就绪，否则返回业务错误。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。上一首遵循播放超过 3 秒先回到开头的规则 |
+| `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲且输出已就绪，否则返回业务错误。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
@@ -108,6 +108,15 @@ English: Folders expand by default, including newly discovered directories. Your
 
 Headless 模拟验证直接调用内存 McpTools；禁止客户端启动期间，不执行 stdio/命名管道桥接，即使只是 `get_diagnostics`。
 
+上一首/下一首的限定模拟回归位于 `TrackNavigationTests`：使用注入的 FakeEngine、FakeEndpointVolume、临时空文件及 Headless 窗口，内存调用 MCP，不启动客户端或 MCP 服务，不解码音频、不访问真实音频设备。覆盖暂停/播放中切歌、3 秒阈值、CUE、随机/循环和边界、加载/seek 失败、连续切歌事件及输出门控。全局快捷键和 SMTC 的真实系统分发仍需在允许客户端及音频测试时验收。
+
+```powershell
+# RID 构建避免向正在使用的根 output/ 执行日常 staging；只运行指定模拟类。
+$env:JEEKMUSIC_DATA = Join-Path $env:TEMP ('jeek-navigation-tests-' + [guid]::NewGuid().ToString('N'))
+dotnet build desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -r win-x64 -p:SelfContained=false -p:PublishAot=false
+dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj --no-build --no-restore -r win-x64 -p:SelfContained=false -p:PublishAot=false --filter FullyQualifiedName~JeekMusic.App.Tests.TrackNavigationTests
+```
+
 ### 音量输出语义
 
 原 `get_status.volume` 保留数值字段，表示端点读数（不可读时为 0 占位，**不能把它当作真实值**）；`muted` 只表示应用静音。`get_status.output` 和 `get_output.volumeState` 提供同样的详细对象：
@@ -117,7 +126,7 @@ Headless 模拟验证直接调用内存 McpTools；禁止客户端启动期间�
 - `endpointVolume` / `endpointMuted`：设备当前读数，不可读为 `null`；不等于应用静音。
 - `volumeAvailable`：当前能否写端点音量。`hardwareVolume` / `hardwareMute`：硬件支持，未知为 `null`。独占无硬件音量时端点软件音量不影响实际响度，不能以滑块数值声称独占响度。
 - `sessionVolume` / `sessionMuted`：本进程默认会话的 Windows 合成器状态，未知为 `null`；`sessionPolicy: "preserve-external-block-exclusive"`。正常新会话为 100%，已有用户衰减/静音保留；请在合成器中恢复后再进入独占。
-- `hardwareVolumeConfirmationRequired`：独占会绕过软件音量或软件静音时，用户需先用物理旋钮确认安全音量，再调用 `playback` 的 `resume` 或点击播放。切换设备/模式会重新要求确认；此确认不能绕过读取错误或会话衰减。
+- `hardwareVolumeConfirmationRequired`：独占会绕过软件音量或软件静音时，用户需先用物理旋钮确认安全音量，再调用 `playback` 的 `resume` 或点击播放。切换设备/模式会重新要求确认；此确认不能绕过读取错误或会话衰减。`next` / `previous`（包括上一首回到开头）不能完成此确认。
 - `outputPending`、`blockReason`、`diagnostic`：保护门控和读取/写入错误，诊断包含 Core Audio 操作及 HRESULT。修复设备后显式 `resume` 重试，不自动恢复播放。`endpoint-write-failed`、`endpoint-read-failed`、`hardware-support-unreadable`、`session-attenuated-or-unreadable`、`hardware-volume-confirmation` 等原因可用于诊断。
 
 `set_output` 若进入独占被会话策略拒绝，返回 `isError`，原模式保留。已接受的异步重建仍需轮询输出状态。音量、静音和默认设备每 250ms 只读同步；窗口在托盘时同样更新。启动、模式/设备切换和退出均不写历史端点音量。旧设置中的 `volume` / `sharedVolume` / `exclusiveVolume` / `sharedDeviceVolumes` 被忽略并在保存时移除。

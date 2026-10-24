@@ -19,8 +19,8 @@ internal sealed unsafe partial class ExclusiveAudioFormat : IExclusiveAudioForma
 
     public string? Select(string? deviceName, int sampleRate, int channels, int? sourceBits)
     {
-        // 未知声道布局交给 mpv；不把多声道歌曲强制混成双声道。
-        if (sampleRate <= 0 || channels is < 1 or > 2) return null;
+        // 按标准声道布局探测，不把多声道歌曲强制混成双声道；实际输出仍须由播放内核确认。
+        if (sampleRate <= 0 || channels is < 1 or > 8) return null;
         var initialized = CoInitializeEx(0, 0);
         nint enumerator = 0, device = 0, client = 0;
         try
@@ -72,14 +72,14 @@ internal sealed unsafe partial class ExclusiveAudioFormat : IExclusiveAudioForma
         {
             Tag = 0xfffe, Channels = (ushort)channels, Rate = (uint)rate, Bytes = (uint)(rate * channels * bits / 8),
             Align = (ushort)(channels * bits / 8), Bits = (ushort)bits, Extra = 22, ValidBits = (ushort)validBits,
-            Mask = channels == 1 ? 4u : 3u,
+            Mask = DeviceAudioFormat.ChannelMask(channels),
             Subtype = floating ? new("00000003-0000-0010-8000-00aa00389b71") : new("00000001-0000-0010-8000-00aa00389b71"),
         };
         // IAudioClient::IsFormatSupported(EXCLUSIVE)，不 Initialize / Start，不影响正在播放的音频。
         var query = (delegate* unmanaged[Stdcall]<nint, int, WaveFormat*, nint, int>)(*(nint**)client)[7];
         if (query(client, 1, &wave, 0) == 0) return true;
         // 部分驱动只接受普通 WAVEFORMATEX，按 Windows 的建议也检查这一形式。
-        if (bits != validBits) return false;
+        if (bits != validBits || channels > 2) return false;
         wave.Tag = floating ? (ushort)3 : (ushort)1;
         wave.Extra = 0;
         return query(client, 1, &wave, 0) == 0;

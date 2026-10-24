@@ -38,9 +38,9 @@ public sealed class McpTools
         Tool("set_play_mode", "Set shuffle and/or repeat (off, all, one).", "\"shuffle\":{\"type\":\"boolean\"},\"repeat\":{\"type\":\"string\",\"enum\":[\"off\",\"all\",\"one\"]}", []),
         Tool("set_volume", "Set the current physical endpoint master volume (0–100) in both modes, affecting other apps on that endpoint. Never persisted/restored. muted controls this player only. Unavailable endpoint writes fail; mute-only remains supported.",
             "\"volume\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100,\"description\":\"Current endpoint master volume; requires volumeAvailable. No saved mode value.\"},\"muted\":{\"type\":\"boolean\",\"description\":\"Mute only JeekMusic; never writes endpoint or session mute.\"}", []),
-        Tool("get_output", "Read WASAPI selection, actual bound endpoint, endpoint master volume/mute, hardware capability, process mixer state, safety gate/diagnostics and current audio format.", "", [], true),
-        Tool("set_output", "Select a device from get_output (auto follows Windows default) and/or set exclusive mode. Changes persist and may reinitialize audio. Exclusive is blocked by mixer attenuation/mute or unreadable controls. Without hardware volume, explicit playback resume after checking the physical knob is required.",
-            "\"device\":{\"type\":\"string\",\"minLength\":1},\"exclusive\":{\"type\":\"boolean\"}", []),
+        Tool("get_output", "Read WASAPI selection, actual bound endpoint, volume safety and audio format. sampleRate reports driver-probed supported shared/exclusive rates, real Windows mix rate, requested policy, applied state and failures. Shared client resampling is never reported as a system format change.", "", [], true),
+        Tool("set_output", "Select a device, exclusive mode and/or sample-rate policy. sampleRateMode: system preserves Windows mix format (exclusive prefers native); auto follows each song; manual requires sampleRate from get_output. sampleRate alone selects manual. Shared switching changes the actual Windows endpoint mix format and affects other apps; unsupported/failed changes report errors and keep usable playback. Changes persist and may rebuild output at the saved position. Exclusive still requires unattenuated mixer state and physical volume confirmation where necessary.",
+            "\"device\":{\"type\":\"string\",\"minLength\":1},\"exclusive\":{\"type\":\"boolean\"},\"sampleRateMode\":{\"type\":\"string\",\"enum\":[\"system\",\"auto\",\"manual\"]},\"sampleRate\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1536000,\"description\":\"Manual device rate in Hz, driver-probed in get_output; requires manual mode if sampleRateMode is supplied.\"}", []),
         Tool("list_playlists", "List playlists with local IDs, stable UIDs and names. Paginated.", Page, [], true),
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
         Tool("edit_playlist", "Create/rename/delete/add/remove/move a playlist. create requires name; other actions require playlistId; rename requires name; add requires trackIds; remove/move require positions; move also needs target (index before moving). Changes persist and use normal sync events. Deleting removes only the playlist, never music files.",
@@ -145,7 +145,11 @@ public sealed class McpTools
                 return Status();
             case "get_output": return Output();
             case "set_output":
-                RequireAny(a, "device", "exclusive");
+                RequireAny(a, "device", "exclusive", "sampleRateMode", "sampleRate");
+                var rateMode = a["sampleRateMode"]?.GetValue<string>();
+                var sampleRate = a["sampleRate"]?.GetValue<int>();
+                if (rateMode == "manual" && sampleRate is null || sampleRate is not null && rateMode is not (null or "manual"))
+                    throw new ArgumentException("manual mode requires sampleRate; sampleRate cannot be combined with system/auto.");
                 if (a["device"] is { } deviceNode)
                 {
                     var device = deviceNode.GetValue<string>();
@@ -160,6 +164,9 @@ public sealed class McpTools
                     p.SetExclusive(exclusive.GetValue<bool>());
                     if (p.Exclusive != exclusive.GetValue<bool>()) throw new InvalidOperationException(p.OutputSafetyMessage);
                 }
+                if (rateMode is not null || sampleRate is not null)
+                    if (!p.SetSampleRate(rateMode ?? "manual", sampleRate))
+                        throw new InvalidOperationException(p.SampleRateDiagnostic);
                 return Output();
             case "list_playlists": return Paginate(app.Playlists.All, a, PlaylistJson);
             case "get_playlist":
@@ -268,16 +275,31 @@ public sealed class McpTools
     JsonObject Output()
     {
         var p = app.Player;
+        p.RefreshRateCapabilities();
         var f = p.Format;
         return new JsonObject
         {
             ["device"] = p.Device ?? "auto", ["exclusive"] = p.Exclusive,
             ["volumeState"] = VolumeState(p),
+            ["sampleRate"] = SampleRateState(p),
             ["devices"] = new JsonArray(p.Devices.Select(d => (JsonNode)new JsonObject { ["id"] = d.name, ["description"] = d.description }).ToArray()),
             ["format"] = new JsonObject { ["codec"] = f.Codec, ["fileRate"] = f.FileRate, ["fileFormat"] = f.FileFormat,
                 ["deviceRate"] = f.DeviceRate, ["deviceFormat"] = f.DeviceFormat, ["deviceChannels"] = f.DeviceChannels, ["ao"] = f.Ao, ["resampled"] = f.Resampled }
         };
     }
+
+    internal static JsonObject SampleRateState(Playback.PlayerService p) => new()
+    {
+        ["mode"] = p.SampleRateMode, ["manualRate"] = p.ManualSampleRate, ["requestedRate"] = p.RequestedSampleRate,
+        ["actualRate"] = p.ActualSampleRate, ["applied"] = p.SampleRateApplied,
+        ["mixRate"] = p.RateCapabilities.MixRate, ["mixChannels"] = p.RateCapabilities.Channels,
+        ["canSetShared"] = p.RateCapabilities.CanSetShared,
+        ["sharedRates"] = new JsonArray(p.RateCapabilities.SharedRates.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+        ["exclusiveRates"] = new JsonArray(p.RateCapabilities.ExclusiveRates.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+        ["discovery"] = "driver-exact-standard-rates-plus-source-and-current; channel-layout-specific",
+        ["sharedSemantics"] = "windows-endpoint-mix-format; affects-other-apps",
+        ["diagnostic"] = p.SampleRateDiagnostic ?? p.RateCapabilities.Diagnostic
+    };
 
     internal static JsonObject VolumeState(Playback.PlayerService p) => new()
     {

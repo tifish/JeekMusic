@@ -89,15 +89,18 @@ public sealed partial class PlayerViewModel : ObservableObject
             var f = _player.Format;
             var mode = _player.Exclusive ? L.T("独占") : L.T("共享");
             if (Track is null) return mode;
-            if (f.DeviceRate is null) return $"{Track.FormatLabel} {mode}";
-            var device = $"{f.DeviceRate / 1000.0:0.#}kHz";
-            return f.Resampled ? L.F($"{Track.FormatLabel} → {device} {mode}（已重采样）") : $"{Track.FormatLabel} → {device} {mode}";
+            var rate = _player.ActualSampleRate;
+            if (rate is null) return $"{Track.FormatLabel} {mode}";
+            var device = $"{rate / 1000.0:0.###}kHz";
+            var warning = _player.SampleRateDiagnostic is null ? "" : " ⚠";
+            return (Track.SampleRate != rate ? L.F($"{Track.FormatLabel} → {device} {mode}（已重采样）") : $"{Track.FormatLabel} → {device} {mode}") + warning;
         }
     }
 
-    public string OutputModeTip => _player.Exclusive
+    public string OutputModeTip => (_player.Exclusive
         ? L.T("点击切换为共享模式，并从当前位置继续播放。")
-        : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。");
+        : L.T("点击切换为 WASAPI 独占模式，并从当前位置继续播放。")) + "\n" +
+        L.T("右键选择输出模式和采样率。") + "\n" + (_player.SampleRateDiagnostic ?? "");
 
     // ── 音量（需求 O-4）──
 
@@ -145,9 +148,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     [RelayCommand]
     void ToggleExclusive()
     {
-        _settings.Current.Exclusive = !_player.Exclusive;
-        _player.SetExclusive(_settings.Current.Exclusive);
-        _settings.Save("playback");
+        _player.SetExclusive(!_player.Exclusive);
     }
 
     [RelayCommand]

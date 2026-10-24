@@ -273,7 +273,43 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(Note(L.T("跟随默认设备时，插上耳机、连上蓝牙后自动切过去；指定的设备断开时暂停（需求 O-2）。")));
 
         panel.Children.Add(SubHeading(L.T("音质")));
-        panel.Children.Add(Toggle(L.T("WASAPI 独占模式"), c.S.Exclusive, v => { c.S.Exclusive = v; c.Save("playback"); p.SetExclusive(v); }));
+        var formats = new StackPanel { Spacing = 6 };
+        string? formatKey = null;
+        void RefreshFormats()
+        {
+            var caps = p.RateCapabilities;
+            var rates = p.Exclusive ? caps.ExclusiveRates : caps.SharedRates;
+            var key = $"{p.Exclusive}/{p.SampleRateMode}/{p.ManualSampleRate}/{p.ActualSampleRate}/{p.OutputPending}/{p.SampleRateDiagnostic}/{caps.Diagnostic}/{string.Join(',', rates)}";
+            if (key == formatKey) return;
+            formatKey = key;
+            formats.Children.Clear();
+            formats.Children.Add(Toggle(L.T("WASAPI 独占模式"), p.Exclusive, p.SetExclusive));
+            var options = new List<(string, string)>
+            {
+                ("system", p.Exclusive ? L.T("原始采样率（兼容模式）") : L.T("保留 Windows 混音格式")),
+                ("auto", L.T("自动跟随歌曲"))
+            };
+            options.AddRange(rates.Select(rate => (rate.ToString(System.Globalization.CultureInfo.InvariantCulture), L.T("手动：") + $"{rate / 1000.0:0.###} kHz")));
+            var selected = p.SampleRateMode == "manual" ? p.ManualSampleRate?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "system" : p.SampleRateMode;
+            if (options.All(o => o.Item1 != selected)) options.Add((selected, L.T("当前请求（设备不支持）：") + selected + " Hz"));
+            formats.Children.Add(Labeled(L.T("设备采样率"), Choice(options, selected, value =>
+            {
+                if (int.TryParse(value, out var rate)) p.SetSampleRate("manual", rate);
+                else p.SetSampleRate(value);
+                formatKey = null;
+                RefreshFormats();
+            })));
+            formats.Children.Add(Note(L.T("实际设备采样率：") + (p.ActualSampleRate is { } actual ? $"{actual} Hz" : "—") +
+                (p.OutputPending ? L.T("（正在切换）") : "")));
+            if ((p.SampleRateDiagnostic ?? caps.Diagnostic) is { } diagnostic) formats.Children.Add(Note(diagnostic));
+        }
+        p.RefreshRateCapabilities();
+        RefreshFormats();
+        void OutputChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(RefreshFormats);
+        p.OutputChanged += OutputChanged;
+        formats.DetachedFromVisualTree += (_, _) => p.OutputChanged -= OutputChanged;
+        panel.Children.Add(formats);
+        panel.Children.Add(Note(L.T("共享模式切换会实际修改 Windows 当前设备的混音采样率，也影响其他程序。候选采样率经驱动精确探测；不支持或切换失败会保留可用格式并提示。跨采样率自动切换需要重开输出，可能有短暂间隔。")));
         panel.Children.Add(Note(L.T("共享和独占模式都调节当前设备主音量，共享下也会影响同设备的其他程序；切换、启动和退出不恢复历史音量。静音按钮只影响本播放器。Windows 合成器中的衰减或静音会保留，解除后才能进入独占。独占设备无硬件音量时，请先用硬件旋钮确认安全音量，再按播放继续；读取失败时保持暂停。")));
         panel.Children.Add(Note(L.F($"当前：{c.Main.ViewModel.Player.FormatText}")));
 

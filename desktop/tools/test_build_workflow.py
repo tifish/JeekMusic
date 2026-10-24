@@ -20,9 +20,31 @@ def load(name, filename):
 
 mcp = load("mcp_workflow", "test-mcp.py")
 build = load("build_workflow", "test-build-isolation.py")
+licenses = load("collect_licenses", "collect-licenses.py")
 
 
 class WorkflowGuards(unittest.TestCase):
+    def test_license_collector_uses_isolated_publish_graph_and_rejects_ambiguous_or_stale_graphs(self):
+        with tempfile.TemporaryDirectory(prefix="jeek-license-graph-") as temp:
+            project = Path(temp)
+            legacy = project / "obj/project.assets.json"
+            legacy.parent.mkdir()
+            legacy.write_text("stale legacy graph")
+            with self.assertRaises(ValueError):
+                licenses.resolve_assets(project)
+            correct = project / "obj/publish/win-x64/aot-true_sc-_psc-/project.assets.json"
+            correct.parent.mkdir(parents=True)
+            correct.write_text("matching publish graph")
+            self.assertEqual(licenses.resolve_assets(project), correct)
+            other = project / "obj/publish/portable/project.assets.json"
+            other.parent.mkdir(parents=True)
+            other.write_text("another configuration")
+            with self.assertRaises(ValueError):
+                licenses.resolve_assets(project)
+            self.assertEqual(licenses.resolve_assets(project, correct), correct)
+            with self.assertRaises(ValueError):
+                licenses.resolve_assets(project, project / "missing.json")
+
     def test_default_mcp_only_reads_diagnostics_and_never_generates_or_plays_audio(self):
         calls = []
 

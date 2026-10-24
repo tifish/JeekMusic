@@ -68,7 +68,9 @@ jobs:
           export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
           dotnet publish desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 \
             -p:JeekVersion=$VERSION -o publish/JeekMusic
-          python desktop/tools/collect-licenses.py publish/JeekMusic
+          assets=$(dotnet msbuild desktop/src/JeekMusic.App/JeekMusic.App.csproj -nologo \
+            -p:_IsPublishing=true -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -getProperty:ProjectAssetsFile)
+          python desktop/tools/collect-licenses.py publish/JeekMusic --assets "$assets"
           rm -f publish/JeekMusic/*.pdb
           ls -la publish/JeekMusic
 

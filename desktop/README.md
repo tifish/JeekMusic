@@ -47,7 +47,8 @@ dotnet build desktop/src/JeekMusic.App
 & 'C:/Program Files/Git/bin/bash.exe' desktop/tools/get-libmpv.sh --lgpl
 dotnet test desktop/JeekMusic.slnx
 dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 -o desktop/artifacts/publish
-python desktop/tools/collect-licenses.py desktop/artifacts/publish
+$assets = dotnet msbuild desktop/src/JeekMusic.App -nologo -p:_IsPublishing=true -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -getProperty:ProjectAssetsFile
+python desktop/tools/collect-licenses.py desktop/artifacts/publish --assets $assets
 ```
 
 编译与还原不直接使用 `output/`。App 工程的中间产物与 NuGet assets 位于 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/<Configuration>/<TFM>/`（SDK 可再追加 RID）；`bin/` 使用相同层级。空开关值表示 SDK 默认值；NuGet assets 位于配置子目录之前。操作、RID 和显式部署开关在 SDK 导入前隔离，避免还原缓存和编译文件混用。Core 是 RID 无关的类库，SDK 构建项目引用时会移除其 RID/SelfContained，故 Core 和测试工程保留 SDK 默认 `obj/`、`bin/<Configuration>/<TFM>/`；单元测试从各自 `bin/` 加载引用。
@@ -95,3 +96,8 @@ python desktop/tools/mcp_client.py search_tracks '{"query":"周杰伦"}'
 ```
 
 `tools/prepare-benchmark.py` 可生成独立的五万首合成曲库。`spike/` 和 `spike-audio/` 保留早期技术验证工程，不是正式播放器。
+
+
+设备采样率可在设置的“音质”中选择自动跟随歌曲或手动指定。播放栏采样率仍可单击切共享/独占，右键菜单集中提供两种模式及驱动实际支持的采样率。旧配置默认保留 Windows 混音格式。共享自动切换实际修改 Windows 当前端点的混音率，也影响同设备其他程序；失败会提示原因并显示实际格式。发现范围、MCP 参数与 opt-in 真实 WASAPI 验证见 [设备采样率控制](docs/mcp.md#设备采样率控制)。
+
+许可证收集使用与 publish 配置一致的 `ProjectAssetsFile`，不再读取旧的 `obj/project.assets.json`。自定义 RID / AOT / SelfContained 时，查询 assets 路径须传入与 publish 相同的开关；未传 `--assets` 时只接受唯一的隔离 publish graph，多个配置时明确报错，不猜测旧缓存。

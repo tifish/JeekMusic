@@ -534,7 +534,7 @@ public sealed class OutputModeSwitchTests
         public HashSet<long> MissingPaths { get; } = [];
 
         public Fixture(SettingsStore? settings = null, string initialNativeVolume = "100", FakeEndpointVolume? endpoint = null,
-            IExclusiveAudioFormat? formats = null)
+            IExclusiveAudioFormat? formats = null, IDeviceAudioFormat? deviceFormats = null)
         {
             Endpoint = endpoint ?? new FakeEndpointVolume();
             _track = new Track { Id = 1, TrackKey = "cue#01", Dir = "", FileName = "cue.wav", Title = "CUE track", ArtistDisplay = "Test", CueTrackNo = 1, StartMs = 60000, EndMs = 180000, DurationMs = 120000, SampleRate = 44100, Channels = 2 };
@@ -545,7 +545,7 @@ public sealed class OutputModeSwitchTests
                 if (Engines.Count == 0) engine.Properties["ao-volume"] = initialNativeVolume;
                 Engines.Add(engine);
                 return engine;
-            }, Endpoint, formats);
+            }, Endpoint, formats, deviceFormats);
             Player.Error += Errors.Add;
             if (settings is not null) OutputSettingsBinding.Attach(Player, settings);
             Player.Restore([new(1, false), new(2, true)], 0, true, RepeatMode.All, null, TimeSpan.FromSeconds(12.345));

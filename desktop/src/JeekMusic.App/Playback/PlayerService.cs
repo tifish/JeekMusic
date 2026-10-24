@@ -33,6 +33,16 @@ public sealed class PlayerService : IDisposable
     readonly Func<IEnumerable<(string, string)>, IPlaybackEngine> _createEngine;
     readonly IEndpointVolume? _endpointVolume;
     readonly IExclusiveAudioFormat? _exclusiveAudioFormat;
+    readonly IDeviceAudioFormat? _deviceAudioFormat;
+    public DeviceAudioCapabilities RateCapabilities { get; private set; } = new(null, null, null, [], [], false, null);
+    public string SampleRateMode { get; private set; } = "system";
+    public int? ManualSampleRate { get; private set; }
+    public string? SampleRateDiagnostic { get; private set; }
+    public int? RequestedSampleRate => SampleRateMode == "manual" ? ManualSampleRate : SampleRateMode == "auto" ? CurrentTrack?.SampleRate : null;
+    public int? ActualSampleRate => Exclusive ? Format.DeviceRate : RateCapabilities.MixRate;
+    public bool SampleRateApplied => RequestedSampleRate is { } rate && ActualSampleRate == rate && !OutputPending && SampleRateDiagnostic is null;
+    long _mixPoll;
+    (string Mode, int? Rate)? _rateSelectionRollback;
     readonly DispatcherTimer _outputMonitor;
     EndpointVolumeSnapshot? _endpoint;
     string? _boundDeviceId;
@@ -105,15 +115,16 @@ public sealed class PlayerService : IDisposable
     /// <summary>一首歌自然播完（睡眠定时"播完 N 首"计数用，需求 P-8）。</summary>
     public event Action? TrackCompleted;
 
-    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume(), new ExclusiveAudioFormat()) { }
+    public PlayerService(ITrackSource tracks) : this(tracks, options => new Mpv(options, "warn"), new EndpointVolume(), new ExclusiveAudioFormat(), new DeviceAudioFormat()) { }
 
     internal PlayerService(ITrackSource tracks, Func<IEnumerable<(string, string)>, IPlaybackEngine> createEngine,
-        IEndpointVolume? endpointVolume = null, IExclusiveAudioFormat? exclusiveAudioFormat = null)
+        IEndpointVolume? endpointVolume = null, IExclusiveAudioFormat? exclusiveAudioFormat = null, IDeviceAudioFormat? deviceAudioFormat = null)
     {
         _tracks = tracks;
         _createEngine = createEngine;
         _endpointVolume = endpointVolume;
         _exclusiveAudioFormat = exclusiveAudioFormat;
+        _deviceAudioFormat = deviceAudioFormat;
         Queue.Changed += OnQueueChanged;
         _outputMonitor = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background,
             (_, _) => RefreshOutput());
@@ -340,6 +351,7 @@ public sealed class PlayerService : IDisposable
     {
         device = device is "auto" ? null : device;
         if (Device == device && _boundDeviceId is not null) return;
+        _rateSelectionRollback = null;
         Device = device;
         RebuildOutput();
     }
@@ -357,11 +369,107 @@ public sealed class PlayerService : IDisposable
             return;
         }
         Exclusive = exclusive;
+        _rateSelectionRollback = null;
         RebuildOutput();
     }
 
+    internal void RestoreSampleRateSettings(string mode, int? rate)
+    {
+        SampleRateMode = mode is "auto" or "manual" && (mode != "manual" || rate is > 0) ? mode : "system";
+        ManualSampleRate = rate is > 0 ? rate : null;
+    }
+
+    public void RefreshRateCapabilities()
+    {
+        var previous = RateCapabilities;
+        RateCapabilities = _deviceAudioFormat?.Capture(_boundDeviceId ?? Device, CurrentTrack?.SampleRate, CurrentTrack?.Channels ?? 2)
+            ?? new(null, null, null, [], [], false, "Device format service unavailable.");
+        if (previous.MixRate is not null && previous.MixRate != RateCapabilities.MixRate &&
+            previous.DeviceId == RateCapabilities.DeviceId && !_restoringOutput && !Exclusive &&
+            RequestedSampleRate is { } requested && RateCapabilities.MixRate != requested)
+            ReportRateFailure($"Windows mix format changed externally; requested {requested} Hz, actual {RateCapabilities.MixRate?.ToString() ?? "unavailable"} Hz.");
+        if (previous.MixRate != RateCapabilities.MixRate || previous.DeviceId != RateCapabilities.DeviceId)
+            OutputChanged?.Invoke();
+    }
+
+    /// <summary>system 保留 Windows 混音率（兼容旧设置）；auto 跟随歌曲；manual 使用精确支持的固定采样率。</summary>
+    public bool SetSampleRate(string mode, int? rate = null)
+    {
+        if (mode is not ("system" or "auto" or "manual") || mode == "manual" && rate is not > 0)
+            throw new ArgumentException("Use system, auto, or manual with a positive sampleRate.");
+        RefreshRateCapabilities();
+        var supported = Exclusive ? RateCapabilities.ExclusiveRates : RateCapabilities.SharedRates;
+        if (mode == "manual" && !supported.Contains(rate!.Value) || mode == "auto" && !Exclusive && !RateCapabilities.CanSetShared)
+        {
+            ReportRateFailure(RateCapabilities.Diagnostic ?? "Requested sample rate is not supported by the current endpoint.");
+            OutputChanged?.Invoke();
+            return false;
+        }
+        var previousMode = SampleRateMode;
+        var previousRate = ManualSampleRate;
+        SampleRateMode = mode;
+        if (mode == "manual") ManualSampleRate = rate;
+        SampleRateDiagnostic = null;
+        _rateSelectionRollback = Exclusive && mode == "manual" && CurrentTrack is not null && _mpv is not null
+            ? (previousMode, previousRate) : null;
+        RebuildOutput(resetHardwareConfirmation: false);
+        // 共享写入同步完成；失败不持久化一个伪装成已生效的手动设置。
+        if (mode == "manual" && SampleRateDiagnostic is not null)
+        {
+            SampleRateMode = previousMode;
+            ManualSampleRate = previousRate;
+            OutputChanged?.Invoke();
+            return false;
+        }
+        return SampleRateDiagnostic is null;
+    }
+
+    void ReportRateFailure(string diagnostic)
+    {
+        if (SampleRateDiagnostic == diagnostic) return;
+        SampleRateDiagnostic = diagnostic;
+        Log.Warn("player", "设备采样率切换失败：" + diagnostic);
+        Error?.Invoke(L.T("设备采样率切换失败，继续使用实际可用格式：") + diagnostic);
+    }
+
+    bool PrepareSampleRate(Track? track)
+    {
+        if (_deviceAudioFormat is null) return true;
+        RateCapabilities = _deviceAudioFormat.Capture(_boundDeviceId ?? Device, track?.SampleRate, track?.Channels ?? 2);
+        var rate = SampleRateMode == "manual" ? ManualSampleRate : SampleRateMode == "auto" ? track?.SampleRate : null;
+        if (rate is null)
+        {
+            if (SampleRateMode == "auto" && track is not null) ReportRateFailure("Source sample rate is unavailable; keeping the current device format.");
+            else SampleRateDiagnostic = null;
+            return true;
+        }
+        var rates = Exclusive ? RateCapabilities.ExclusiveRates : RateCapabilities.SharedRates;
+        if (!rates.Contains(rate.Value))
+        {
+            ReportRateFailure(RateCapabilities.Diagnostic ?? $"{rate} Hz is not supported by the current endpoint/channel layout.");
+            return true;
+        }
+        if (Exclusive || RateCapabilities.MixRate == rate) { SampleRateDiagnostic = null; return true; }
+        // Close our old WASAPI stream before invalidating the system mix format.
+        if (_mpv is { } old)
+        {
+            var muted = old.TrySet("mute", "yes") >= 0;
+            var paused = old.TrySet("pause", "yes") >= 0;
+            _mpv = null;
+            old.Dispose();
+            _currentEntry = _nextEntry = _nextTrackId = -1;
+            if (!muted || !paused) { BlockOutputRestore("quiesce-failed"); return false; }
+        }
+        string? error = null;
+        if (RateCapabilities.DeviceId is not { } id || !_deviceAudioFormat.SetSharedRate(id, rate.Value, out error))
+            ReportRateFailure(error ?? "Cannot resolve the endpoint for shared format switching.");
+        else SampleRateDiagnostic = null;
+        RefreshRateCapabilities();
+        return true;
+    }
+
     /// <summary>绑定明确的物理端点后重建，保留队列、CUE 位置与播放意图；不向新端点写旧值。</summary>
-    void RebuildOutput()
+    void RebuildOutput(bool resetHardwareConfirmation = true)
     {
         var position = Position;
         var play = _restoringOutput ? _wantPlaying : _mpv?.Get("pause") == "no";
@@ -369,7 +477,7 @@ public sealed class PlayerService : IDisposable
         _restorePosition = position;
         _restoringOutput = oldEngine is not null && CurrentTrack is not null;
         _outputFileLoaded = _outputRestoreFailed = false;
-        _hardwareVolumeConfirmed = false;
+        if (resetHardwareConfirmation) _hardwareVolumeConfirmed = false;
         OutputBlockReason = null;
         if (oldEngine is not null)
         {
@@ -396,6 +504,7 @@ public sealed class PlayerService : IDisposable
         _boundDeviceId = null;
         ReadEndpoint(Device, bind: true);
         if (oldEngine is not null && CurrentTrack is not null) LoadCurrent(play, position);
+        else PrepareSampleRate(CurrentTrack);
         Log.Playback($"重建输出：{(Exclusive ? "独占" : "共享")}，设备 {_boundDeviceId}，保留位置 {position.TotalSeconds:F3}s");
         OutputChanged?.Invoke();
         StateChanged?.Invoke();
@@ -406,6 +515,18 @@ public sealed class PlayerService : IDisposable
         if (!_restoringOutput || !_outputFileLoaded || _outputRestoreFailed || _mpv is null) return;
         if (string.IsNullOrEmpty(_mpv.Get("current-ao"))) return;
         if (_mpv.Get("current-ao") != "wasapi") { BlockOutputRestore("unexpected-audio-backend"); return; }
+        ReadStreamFormat();
+        if (_deviceAudioFormat is not null)
+        {
+            RefreshRateCapabilities();
+            var actual = Exclusive ? (int?)_mpv.GetLong("audio-out-params/samplerate") : RateCapabilities.MixRate;
+            if (RequestedSampleRate is { } requested && actual != requested)
+            {
+                ReportRateFailure($"Requested {requested} Hz; actual device output is {actual?.ToString() ?? "unavailable"} Hz.");
+                if (RecoverRateSelection()) return;
+            }
+        }
+        _rateSelectionRollback = null;
         if (!CheckOutputSafety()) { BlockOutputRestore(OutputBlockReason); return; }
         if (_mpv.TrySet("mute", Muted ? "yes" : "no") < 0 ||
             _mpv.TrySet("pause", _wantPlaying ? "no" : "yes") < 0)
@@ -421,8 +542,26 @@ public sealed class PlayerService : IDisposable
         Seeked?.Invoke();
     }
 
+    bool RecoverRateSelection()
+    {
+        if (_rateSelectionRollback is not { } previous) return false;
+        _rateSelectionRollback = null;
+        var diagnostic = SampleRateDiagnostic;
+        SampleRateMode = previous.Mode;
+        ManualSampleRate = previous.Rate;
+        RebuildOutput(resetHardwareConfirmation: false);
+        SampleRateDiagnostic = diagnostic;
+        OutputChanged?.Invoke();
+        return true;
+    }
+
     void BlockOutputRestore(string? reason = null)
     {
+        if (reason is null && _rateSelectionRollback is not null)
+        {
+            ReportRateFailure("Exclusive sample-rate output initialization failed or timed out.");
+            if (RecoverRateSelection()) return;
+        }
         _restorePosition = Position;
         OutputBlockReason = reason ?? "output-restore-failed";
         Log.Playback($"输出保护：{OutputBlockReason}；设备 {_boundDeviceId}；{VolumeDiagnostic}");
@@ -532,7 +671,7 @@ public sealed class PlayerService : IDisposable
     }
 
     /// <summary>250ms 只读同步（含托盘状态）；从不因通知写回。auto 的实际输出固定为解析后的端点。</summary>
-    internal void RefreshOutput()
+    internal void RefreshOutput(bool forceRateRefresh = false)
     {
         var previous = _endpoint;
         var diagnostic = VolumeDiagnostic;
@@ -558,6 +697,20 @@ public sealed class PlayerService : IDisposable
         if (_mpv is not null && !_restoringOutput && (!readable || !CheckOutputSafety()))
             BlockOutputRestore(OutputBlockReason ?? "endpoint-read-failed");
         if (previous != _endpoint || diagnostic != VolumeDiagnostic) OutputChanged?.Invoke();
+        if (_deviceAudioFormat is not null && (forceRateRefresh || Environment.TickCount64 >= _mixPoll) && _boundDeviceId is { } endpointId)
+        {
+            _mixPoll = Environment.TickCount64 + 1000;
+            var mix = _deviceAudioFormat.ReadMixRate(endpointId);
+            if (mix != RateCapabilities.MixRate)
+            {
+                // 尊重外部更改，不在监视循环中抢写；下一首或显式选择时再次应用策略。
+                RateCapabilities = RateCapabilities with { MixRate = mix };
+                if (!Exclusive && RequestedSampleRate is { } requested && mix != requested)
+                    ReportRateFailure($"Windows mix format changed externally; requested {requested} Hz, actual {mix?.ToString() ?? "unavailable"} Hz.");
+                else SampleRateDiagnostic = null;
+                OutputChanged?.Invoke();
+            }
+        }
     }
 
     /// <summary>睡眠定时渐弱用的软件音量（唯一允许改动样本的情况，需求 §4.1）。</summary>
@@ -607,8 +760,6 @@ public sealed class PlayerService : IDisposable
             StateChanged?.Invoke();
             return;
         }
-        EnsureEngine();
-        if (_mpv is null) return;
         var path = _tracks.PathOf(track);
         if (path is null || !File.Exists(path))
         {
@@ -617,6 +768,9 @@ public sealed class PlayerService : IDisposable
         }
         CurrentTrack = track;
         _restorePosition = start ?? TimeSpan.Zero;
+        if (!PrepareSampleRate(track)) return;
+        EnsureEngine();
+        if (_mpv is null) return;
         _restoringOutput = true;
         _outputFileLoaded = _outputRestoreFailed = false;
         var muted = _mpv.TrySet("mute", "yes") >= 0;
@@ -659,13 +813,17 @@ public sealed class PlayerService : IDisposable
         var begin = (track.StartMs ?? 0) / 1000m + (decimal)(start ?? TimeSpan.Zero).TotalSeconds;
         if (begin > 0 || track.IsCue) opts.Add("start=" + begin.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (track.EndMs is { } end) opts.Add("end=" + (end / 1000m - 0.000001m).ToString(System.Globalization.CultureInfo.InvariantCulture));
-        if (Exclusive && track.SampleRate is > 0 && track.Channels is > 0 &&
-            _exclusiveAudioFormat?.Select(Device, track.SampleRate.Value, track.Channels.Value, track.BitsPerSample) is { } format)
+        var targetRate = SampleRateMode == "manual" ? ManualSampleRate : track.SampleRate;
+        if (Exclusive && targetRate is > 0 &&
+            (_deviceAudioFormat is null || SampleRateMode != "manual" || RateCapabilities.ExclusiveRates.Contains(targetRate.Value)))
         {
+            var format = track.Channels is > 0 ? _exclusiveAudioFormat?.Select(_boundDeviceId ?? Device,
+                targetRate.Value, track.Channels.Value, track.BitsPerSample) : null;
             // 文件级选项同样用于预加载的下一首，切回共享或切换歌曲时不会遗留固定的位深 / 采样率。
-            opts.Add("audio-format=" + format);
-            opts.Add("audio-samplerate=" + track.SampleRate.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            Log.Playback($"独占输出优先源采样率 {track.SampleRate}Hz，样本格式 {format}，文件 {track.RelativePath}");
+            if (format is not null) opts.Add("audio-format=" + format);
+            if (format is not null || SampleRateMode == "manual")
+                opts.Add("audio-samplerate=" + targetRate.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Log.Playback($"独占输出请求 {targetRate}Hz，样本格式 {format ?? "auto"}，文件 {track.RelativePath}");
         }
         return string.Join(',', opts);
     }
@@ -693,6 +851,8 @@ public sealed class PlayerService : IDisposable
             _nextTrackId = -1;
         }
         if (next is null) return;
+        // 跨采样率的共享自动跟随必须在 EOF 关闭旧流后修改系统格式，不能提前改变当前歌曲的设备。
+        if (!Exclusive && SampleRateMode == "auto" && next.SampleRate != CurrentTrack.SampleRate) return;
         var path = _tracks.PathOf(next);
         if (path is null || !File.Exists(path)) return; // 换到它时再处理
         _mpv.TryRun("loadfile", path, "append", "-1", FileOptions(next, null));
@@ -758,6 +918,11 @@ public sealed class PlayerService : IDisposable
         if (reason == Mpv.EndReason.Error)
         {
             Log.Playback($"出错：条目 {entryId} {error}");
+            if (entryId == _currentEntry && _restoringOutput && _rateSelectionRollback is not null)
+            {
+                ReportRateFailure(error ?? "Exclusive sample-rate initialization failed.");
+                if (RecoverRateSelection()) return;
+            }
             if (entryId == _currentEntry && CurrentTrack is { } t) SkipBroken(t, error ?? L.T("无法解码"));
             else if (entryId == _nextEntry) { _nextEntry = -1; _nextTrackId = -1; }
             return;
@@ -768,7 +933,7 @@ public sealed class PlayerService : IDisposable
             Log.Playback("队列播完");
             TrackCompleted?.Invoke();
             _wantPlaying = false;
-            if (Queue.NextIndex(user: false) is { } next) { Queue.MoveTo(next); LoadCurrent(play: true); }
+            if (Queue.NextIndex(user: false) is { } next) NavigateTo(next);
             else LoadCurrent(play: false);
         }
     }
@@ -817,15 +982,17 @@ public sealed class PlayerService : IDisposable
                 }
                 break;
             default:
-                Format = new AudioFormatInfo(
-                    _mpv?.Get("audio-codec-name"),
-                    (int?)_mpv?.GetLong("audio-params/samplerate"), _mpv?.Get("audio-params/format"),
-                    (int?)_mpv?.GetLong("audio-out-params/samplerate"), _mpv?.Get("audio-out-params/format"),
-                    (int?)_mpv?.GetLong("audio-out-params/channel-count"), _mpv?.Get("current-ao"));
+                ReadStreamFormat();
                 OutputChanged?.Invoke();
                 break;
         }
     }
+
+    void ReadStreamFormat() => Format = new AudioFormatInfo(
+        _mpv?.Get("audio-codec-name"),
+        (int?)_mpv?.GetLong("audio-params/samplerate"), _mpv?.Get("audio-params/format"),
+        (int?)_mpv?.GetLong("audio-out-params/samplerate"), _mpv?.Get("audio-out-params/format"),
+        (int?)_mpv?.GetLong("audio-out-params/channel-count"), _mpv?.Get("current-ao"));
 
     void OnEvent(Mpv.EventId e)
     {
@@ -833,7 +1000,18 @@ public sealed class PlayerService : IDisposable
         {
             case Mpv.EventId.AudioReconfig:
                 if (_restoringOutput) TryFinishOutputRestore();
-                else RefreshOutput();
+                else
+                {
+                    RefreshOutput();
+                    if (_deviceAudioFormat is not null)
+                    {
+                        ReadStreamFormat();
+                        RefreshRateCapabilities();
+                        if (RequestedSampleRate is { } requested && ActualSampleRate != requested)
+                            ReportRateFailure($"Requested {requested} Hz; actual device output is {ActualSampleRate?.ToString() ?? "unavailable"} Hz.");
+                        OutputChanged?.Invoke();
+                    }
+                }
                 break;
             case Mpv.EventId.PlaybackRestart:
                 Seeked?.Invoke();

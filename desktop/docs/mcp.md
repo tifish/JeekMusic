@@ -46,8 +46,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
 | `set_volume` | 至少提供 `volume`（0–100）或 `muted`。两种模式都设置当前实际设备端点主音量，共享下影响同设备其他程序；不持久化音量。`muted` 只静音播放器。不可调/写入失败返回业务错误 |
-| `get_output` | 无参数。WASAPI 设备列表、所选设备/独占模式、文件与设备的音频格式，以及下述 `volumeState` |
-| `set_output` | 至少提供 `device` 或 `exclusive`。`device` 来自设备列表；`auto` 跟随系统默认设备。设置持久化，模式切换可能重建音频输出 |
+| `get_output` | 无参数。WASAPI 设备列表、所选设备/独占模式、文件与客户端流格式、`volumeState` 及下述 `sampleRate`（真实端点混音率、驱动探测能力、策略与失败原因） |
+| `set_output` | 至少提供 `device`、`exclusive`、`sampleRateMode` 或 `sampleRate`。`device` 来自设备列表；`auto` 跟随系统默认设备。采样率策略为 `system` / `auto` / `manual`；manual 必须同时提供以 Hz 为单位的 `sampleRate`，单独提供 sampleRate 等同 manual。system/auto 不允许同时提供 sampleRate。设置持久化，模式切换可能重建音频输出 |
 | `list_playlists` | 支持分页。播放列表 ID、UID、名称和时间戳 |
 | `get_playlist` | `playlistId`，支持分页。按手动顺序返回条目，保留不可用条目 |
 | `edit_playlist` | `action`：`create` 需 `name`；其余需 `playlistId`。`rename` 需 `name`，`delete` 删除列表，`add` 需 `trackIds`，`remove` 需 `positions`，`move` 需 `positions` 和 `target`（移动前的目标位置，可等于条目数）。触发正常持久化及同步事件，不删除音频文件 |
@@ -189,3 +189,37 @@ python desktop/tools/test-build-isolation.py --build-only
 `test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、21 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
 
 **静音 WAV / 应用静音仍会打开 WASAPI 设备，独占能中断游戏等其他程序声音。** 独立数据目录只隔离曲库和单实例，不隔离物理音频设备。默认启动诊断也会启动 GUI 并读取系统音频状态；用户要求禁止启动或正在处理游戏失声时，不运行任何 EXE/MCP（包括 `--startup-only`、`mcp_client.py` 的只读命令）。仅可编译/静态检查和确认使用模拟端点的测试。测试结束后只清理自己的播放器，不激活窗口或使用正式曲库；`show_window` 的激活行为不在后台测试中调用。
+
+
+### 设备采样率控制
+
+`get_output.sampleRate` 与 `get_diagnostics.output.sampleRate` 使用同一业务服务，开发版及 NativeAOT 正式版完全一致，原有 21 个工具和旧参数继续兼容。
+
+- `mode`：`system` 保留 Windows 当前混音格式（独占维持旧版原始采样率优先行为）；`auto` 每首歌曲自动跟随原采样率；`manual` 固定使用 `manualRate`。
+- `requestedRate`：当前歌曲/手动策略请求值；`actualRate`：共享时为新建 IAudioClient 读取的真实 Windows 混音率，独占时为实际 WASAPI 输出流采样率。未知为 null。`applied` 仅在请求与实际一致、输出初始化完成且没有格式诊断时为 true，不能将选中的策略当成已生效。
+- `mixRate` / `mixChannels`：Windows 当前混音格式；`canSetShared` 表示音频策略格式接口可查询，不保证驱动一定接受每次写入。
+- `sharedRates` / `exclusiveRates`：针对当前设备和声道布局、用 `IsFormatSupported(EXCLUSIVE)` 精确确认的候选采样率。共享候选针对当前混音声道，独占候选针对当前歌曲声道（空闲时双声道）。没有把共享模式下自动重采样接受的格式冒充硬件支持。
+- `discovery` 明确发现范围：Windows 没有通用的全部采样率枚举接口，探测 8–768 kHz 标准音乐/视频采样率，另加当前歌曲和混音采样率；非标准且尚未出现的自定义采样率不承诺穷尽。多声道按当前混音或标准布局探测，实际打开仍可能受驱动限制。
+- `sharedSemantics` 为 `windows-endpoint-mix-format; affects-other-apps`。共享切换通过 Windows 非公开 `IPolicyConfig.SetDeviceFormat` 修改系统端点/混音格式，优先保留原位深和布局，再由新 IAudioClient.GetMixFormat 读回确认。接口缺失、驱动拒绝、实际格式不匹配均报诊断；写入失败尝试恢复完整旧格式。操作影响同设备其他程序，跨采样率自动换曲会重开流，因此可能有短暂间隔。
+- `diagnostic` 为格式能力/应用失败原因（含 HRESULT 或实际值）。失败保留可用播放；手动共享写入失败不保存无效选择；独占手动新选择的初始化失败/实际率不匹配会恢复前一个策略与 CUE 位置。系统在外部改动混音率时更新实际读数并提示，不在轮询中抢写；下一首或显式选择时再次应用策略。设备改变后重新探测并应用配置，不支持的持久化选择会显示请求/实际差异，保留可用格式。
+
+示例：
+
+```json
+{"sampleRateMode":"auto"}
+{"sampleRateMode":"manual","sampleRate":96000}
+{"exclusive":true,"sampleRate":48000}
+{"sampleRateMode":"system"}
+```
+
+共享格式写入在调用内读回，但 libmpv 重建为异步；调用成功后继续读取 `sampleRate.applied`、`volumeState.outputPending` 和诊断。异步独占失败会在后续快照和正常错误提示中出现。多个参数按设备、模式、采样率顺序处理，前项成功不会因后项失败回滚；控制端需要一次变更一个参数时可分次调用。手动采样率须来自当前目标设备/模式的能力列表，不支持值返回业务错误。自动跟随遇到不支持的歌曲保留自动策略并明确报告当前实际输出，不静默显示为原采样率。
+
+验证：`dotnet test` 默认仅运行注入端点/引擎的模拟测试；真实格式测试需显式设置 `JEEKMUSIC_TEST_REAL_AUDIO=1`（会临时修改真实系统混音格式，finally 恢复完整原格式）。实际 EXE/MCP/WASAPI 自动换曲与暂停手动切换：
+
+```powershell
+python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio
+# 另显式验证独占输出（会占用端点）：
+python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --exclusive
+```
+
+脚本使用临时曲库和静音 WAV，记录输出快照到 `desktop/artifacts/sample-rate-verification/wasapi.json`，结束恢复原混音率并关闭其自己的测试客户端。静音仍会占用设备；禁止音频测试时不要运行这些 opt-in 验证。

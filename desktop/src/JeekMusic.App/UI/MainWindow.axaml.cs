@@ -56,6 +56,7 @@ public partial class MainWindow : Window
 
         NowAlbum.Click += (_, _) => { if (_app.Player.CurrentTrack is { } track) GoToAlbum(track); };
         OutputButton.Click += (_, _) => ShowOutputMenu();
+        OutputModeButton.ContextRequested += (_, e) => { ShowOutputMenu(OutputModeButton); e.Handled = true; };
         ArtistList.ContextRequested += OnArtistContextRequested;
         LetterIndex.PointerPressed += OnLetterIndexPressed;
         _app.ArtistList = ArtistList;

@@ -11,6 +11,7 @@ import androidx.media3.common.Timeline
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaController
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
@@ -31,6 +32,7 @@ import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +42,7 @@ import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.guava.await
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -58,6 +61,7 @@ class PlaybackService : MediaLibraryService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var session: MediaLibrarySession? = null
+    private var navigationController: ListenableFuture<MediaController>? = null
     private lateinit var sleepTimer: SleepTimer
     private lateinit var offload: OffloadController
     private lateinit var diagnostics: PlaybackDiagnostics
@@ -78,8 +82,8 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         val player = playerFactory.create()
-        // 交给会话的播放器包一层：队列最后一首时"下一首"也可用（跳回第一首），通知和锁屏上总有这个按钮
-        val session = MediaLibrarySession.Builder(this, NextAlwaysPlayer(player), LibraryCallback()).build()
+        // 显式上一首/下一首共享跳转后播放的行为；自动曲尾、错误恢复和队列管理仍使用原播放器。
+        val session = MediaLibrarySession.Builder(this, NextAlwaysPlayer(player, ::playAfterNavigation), LibraryCallback()).build()
         this.session = session
 
         sleepTimer = SleepTimer(player, scope) { status ->
@@ -125,6 +129,27 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
+    /** 不能直接 player.play()：MediaSession 在 Android 12/12L 会先检查能否启动前台服务。 */
+    private fun playAfterNavigation(isStillValid: () -> Boolean) {
+        val currentSession = session ?: return
+        val controller = navigationController ?: MediaController.Builder(this, currentSession.token).buildAsync()
+            .also { navigationController = it }
+        scope.launch {
+            try {
+                val connected = controller.await()
+                if (isStillValid() && connected.isCommandAvailable(Player.COMMAND_PLAY_PAUSE)) connected.play()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (navigationController === controller) {
+                    MediaController.releaseFuture(controller)
+                    navigationController = null
+                }
+                playbackLog.add("navigation play controller failed: ${error.javaClass.simpleName}")
+            }
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = session?.player
         savePositionBlocking()
@@ -142,6 +167,8 @@ class PlaybackService : MediaLibraryService() {
         diagnostics.stop()
         embedDownloaded.scheduleFor(playingFiles.update(emptySet()))
         scope.cancel()
+        navigationController?.let(MediaController::releaseFuture)
+        navigationController = null
         session?.run {
             player.release()
             release()

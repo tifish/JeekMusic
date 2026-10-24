@@ -722,9 +722,12 @@ class PlaybackService : MediaLibraryService() {
 - `onTaskRemoved` 时如果没有在播放就 `stopSelf()`；暂停一段时间后，服务退出前台并允许系统回收
 - 播放出错（`onPlayerError`，需求 P-14）：先 `seekTo(出错的位置)` + `prepare()` 重试这首歌，并让 `OffloadController.suspendUntilNextItem()` 暂时关掉 offload；同一首歌 30 秒内第二次出错才跳到下一首，并通过自定义事件通知 UI 弹出提示
 
-**"下一首"始终可用（需求 P-11）**：交给 `MediaLibrarySession` 的不是 ExoPlayer 本身，而是包了一层 `NextAlwaysPlayer`（`ForwardingPlayer`）：
+**显式跳曲后播放（需求 P-1）和"下一首"始终可用（需求 P-11）**：交给 `MediaLibrarySession` 的不是 ExoPlayer 本身，而是包了一层 `NextAlwaysPlayer`（`ForwardingPlayer`）：
 - 队列不为空时 `getAvailableCommands()` / `isCommandAvailable()` 总是包含 `COMMAND_SEEK_TO_NEXT(_MEDIA_ITEM)`，所以系统媒体控件（通知、锁屏）总显示"下一首"
 - `seekToNext()` / `seekToNextMediaItem()`：没有下一首时 `seekTo(0, 0)` 跳回第一首（只有一首时就是从头重播）
+- `seekToPrevious()` / `seekToPreviousMediaItem()` 和上述两个下一首入口共享导航后播放逻辑。上一首仍委托 Media3 实际导航，保留 `maxSeekToPreviousPosition` 阈值（超过阈值回本曲开头）；直接跳上一媒体项不套用阈值。只在命令可用、目标存在、同步 seek 到达目标且没有播放错误后请求播放；目标匹配歌曲、文件和 CUE clipping 区间，允许换歌监听器同步刷新封面元数据。已经请求播放的曲目继续保持原音频焦点 / 抑制行为
+- 暂停、未准备和结束状态的播放请求由 `PlaybackService` 懒连接到本会话的 `MediaController.play()` 发起，复用 Media3 的准备 / 播放流程及 Android 12/12L 前台服务许可检查，不直接绕过会话调用 ExoPlayer `play()`。会话连接后复核导航版本和目标；后续暂停、停止、释放、进度跳转、队列变化、焦点抑制或错误让等待中的请求失效。平台拒绝或连接失败不额外强制播放、不重试，不修改音量、静音或焦点配置；内部 controller 随服务释放
+- 播放页和迷你播放条 → `PlayerViewModel` → `PlayerConnection` → MediaController；通知、锁屏、蓝牙 / 有线耳机也通过 MediaSession 的这些标准跳曲命令。无需在 UI 各加一次 `play()`；现有通用 `tools/ui.sh` 点击工具沿用同一业务入口，移动端没有另设 MCP 接口
 - 会话直接使用"可用命令变化"事件里的参数（不会再调 `getAvailableCommands()`，反编译 Media3 1.11 确认过），而这个参数来自 ExoPlayer、不含"下一首"。所以 `addListener` 时用 `CommandsListener` 包装监听器，转发前补上
 - `CommandsListener` 逐个写出 `Player.Listener` 的全部回调：这些都是 Java 默认方法，Kotlin 的 `by` 委托不会转发它们（单元测试验证过），否则播放状态等事件会丢失。`NextAlwaysPlayerTest` 用反射检查是否覆盖了全部回调，升级 Media3 新增回调时会提醒
 - 播放出错时自动跳下一首（`onPlayerError`）仍用 ExoPlayer 本身判断，最后一首出错不会绕回开头

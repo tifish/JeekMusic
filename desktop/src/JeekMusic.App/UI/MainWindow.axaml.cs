@@ -256,10 +256,6 @@ public partial class MainWindow : Window
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         switch (e.Key)
         {
-            case Key.Space when !inText:
-                _app.Player.PlayPause();
-                e.Handled = true;
-                break;
             case Key.F when ctrl:
                 SearchBox.Focus();
                 SearchBox.SelectAll();

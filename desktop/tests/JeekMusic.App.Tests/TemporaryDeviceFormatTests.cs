@@ -1,7 +1,14 @@
+using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using JeekMusic.Automation;
+using JeekMusic.Library;
 using JeekMusic.Playback;
+using JeekMusic.Settings;
+using JeekMusic.UI;
+using JeekMusic.UI.ViewModels;
 
 namespace JeekMusic.App.Tests;
 
@@ -156,6 +163,80 @@ public sealed class TemporaryDeviceFormatTests
         service.States["render-device"]=edited;
         f.Player.Resume();f.Ready();Assert.Equal(edited.Item1,Assert.Single(f.Player.TemporaryFormats).BaselineDevice);
         f.Player.Pause();Assert.Equal(edited,service.States["render-device"]);
+    });
+
+    [Theory]
+    [InlineData("main")]
+    [InlineData("mini")]
+    [InlineData("mcp")]
+    public Task SpaceAndMcpToggleShareTheExplicitPauseFormatLifecycle(string entry) => Run((f, formats) =>
+    {
+        var baseline = formats.States["render-device"];
+        f.Player.SetAutomaticAudioFormat(true); f.Ready();
+        var queue = f.Player.Queue.Items.ToArray();
+        var position = f.Player.Position;
+        var index = f.Player.Queue.CurrentIndex;
+        var settings = new SettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json"));
+        settings.Current.AutomaticAudioFormat = true;
+        using var app = new AppServices(settings, new LibraryDb(":memory:"), _ => f.Player);
+        var vm = new PlayerViewModel(f.Player, app.SleepTimer, settings) { ProgressVisible = false };
+        Window? window = entry == "main" ? new MainWindow(app) { ExitRequested = true } :
+            entry == "mini" ? new MiniPlayerWindow(vm, false) : null;
+        var clicks = 0;
+        var restores = 0;
+        if (window is MiniPlayerWindow mini) mini.RestoreRequested += () => restores++;
+        try
+        {
+            window?.Show();
+            // Exercise real window hookup, including a play button whose Command would double-toggle.
+            var playerVm = window is MainWindow main ? main.ViewModel.Player : vm;
+            var playButton = window?.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Command, playerVm.PlayPauseCommand));
+            if (playButton is not null) { playButton.Click += (_, _) => clicks++; Assert.True(playButton.Focus()); }
+            var old = f.Current;
+            Toggle();
+            Assert.True(old.Disposed);
+            Assert.True(f.Player.PausedOutputReleased);
+            Assert.False(f.Player.IsPlaying);
+            Assert.Equal(baseline, formats.States["render-device"]);
+            Assert.Equal(position, f.Player.Position);
+            Assert.Equal(queue, f.Player.Queue.Items);
+            Assert.Equal(index, f.Player.Queue.CurrentIndex);
+
+            // Ordinary output/restore buttons must toggle playback without opening a menu/restoring a window.
+            var ordinary = window is MainWindow mw ? mw.FindControl<Button>("OutputModeButton") :
+                window?.FindControl<Button>("RestoreButton");
+            if (ordinary is not null) { ordinary.Click += (_, _) => clicks++; Assert.True(ordinary.Focus()); }
+            Toggle(); f.Ready();
+            Assert.True(f.Player.IsPlaying);
+            Assert.False(f.Player.PausedOutputReleased);
+            Assert.Equal(position, f.Player.Position);
+            Assert.Equal(queue, f.Player.Queue.Items);
+            Assert.Equal(index, f.Player.Queue.CurrentIndex);
+            Assert.Equal(Pcm(44100), formats.States["render-device"].Device);
+            Assert.Equal(0, clicks);
+            Assert.Equal(0, restores);
+            Assert.Empty(f.Endpoint.Writes);
+            if (window is MainWindow mainWindow) Assert.Null(mainWindow.ActiveOutputMenu);
+            if (window is MiniPlayerWindow miniWindow) Assert.False(miniWindow.Topmost);
+        }
+        finally
+        {
+            if (window is MainWindow main) main.ViewModel.Player.ProgressVisible = false;
+            vm.ProgressVisible = false;
+            window?.Close();
+        }
+
+        void Toggle()
+        {
+            if (window is null) new McpTools(app).Call("playback", new() { ["action"] = "toggle" });
+            else
+            {
+                window.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+                window.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+                window.KeyRelease(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+            }
+            Dispatcher.UIThread.RunJobs();
+        }
     });
 
     [Fact]

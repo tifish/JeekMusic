@@ -238,3 +238,12 @@ adb -s emulator-5580 shell am instrument -w com.tinyfish.jeekmusic.debug.test/an
 - `TemporaryDeviceFormatTests` 使用 fake 多端点/解码引擎，覆盖完整设备/混音快照（含 24 有效位/32 容器与 5.1(side)）、同率不同精度切歌不替换基线、显式暂停先关流后恢复、CUE 精确原位续播及暂停 seek、不因内部加载/下一首恢复、自然队列末尾、清空与退出、设备/独占转换、暂停期间外部修改成为新基线、播放时设备或混音外部修改不覆盖、第二控制器租约、写入拒绝与恢复失败重试/MCP 诊断。
 - 关闭共享自动只停止后续匹配，不立即恢复；下一次显式暂停/结束/释放恢复已有所有权配置。旧版历史基线不可追溯，首次写入前实时捕获。无新增按钮或控制参数，原 playback pause/toggle/resume 复用同一服务。
 - 默认测试不访问真实音频；`test-sample-rates.py` 另在明确关闭其他客户端的部署窗口执行独立原生读回，检查暂停/队列结束恢复及原位续播；清理不覆盖未知外部格式或其他客户端。
+
+### 2026-10-25 空格播放与控件焦点
+
+- 主/迷你窗口通过同一 `PlaybackShortcuts` 隧道路由调用 `PlayerService.PlayPause()`，移除主窗口旧冒泡 Space 分支。一次按下/释放只切换一次；重复 KeyDown 和对应 KeyUp 不进入按钮/复选框，按住期间更换焦点或修饰键不会再次切换；失活清理按住状态。编辑控件及其模板子元素、菜单/弹出层、对话框和有修饰键的初始 Space 保留正常输入。
+- 新增 Headless 实际焦点/原始按键回归：Button（含 ClickMode.Press）、RepeatButton、ToggleButton、CheckBox、RadioButton 不 Click/toggle；列表项、树项、DataGrid 和 Slider；文本/搜索/重命名式输入、ComboBox、NumericUpDown、AutoCompleteBox、中文提交文本；内嵌菜单、真实 ContextMenu/MenuFlyout、模态按钮；长按、焦点变化、修饰键变化及隐藏失活/重现后的按键。Headless 不能代替 Windows 原生 IME 候选上屏及系统真实键盘验收。
+- 主窗口实际播放按钮/音频菜单按钮、迷你窗口播放/还原按钮和内存 MCP `playback toggle` 使用 fake 格式/引擎/端点验证：显式暂停先关流、恢复完整基线；续播重新匹配并保留 CUE 位置、队列与索引，焦点控件无点击、菜单不打开、窗口不还原。允许业务服务正常重建输出；快捷键不自行 stop/load/seek。没有测试真实音频或改动音频格式生命周期。
+- 临时 `JEEKMUSIC_DATA` 下执行 `dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -c Release -r win-x64 --no-restore --filter "FullyQualifiedName~SpacePlaybackShortcutTests|FullyQualifiedName~PlaybackShortcutTests|FullyQualifiedName~TemporaryDeviceFormatTests|FullyQualifiedName~McpSessionTests|FullyQualifiedName~OutputMenuInteractionTests|FullyQualifiedName~TrackNavigationTests" --verbosity minimal`：**165 项通过，0 失败/跳过**。未运行本机 solution/App 全集、RealDecoder 或真实设备测试；RID 构建避免测试期间覆盖正在运行的 `output/` 客户端。
+- `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 --no-restore -p:JeekVersion=1.0.147 --verbosity minimal`：**0 警告、0 错误**。`git diff --check` 通过。
+- MCP 保持 **21 工具**，沿用 `playback` 的 `toggle`；工具及 action 参数描述、中英文使用说明、PC-8 和兼容 Schema 断言同步，无新增键盘工具、参数或开发专用分支。

@@ -63,6 +63,14 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 成功的工具调用同时返回 `structuredContent` 对象和对应 JSON 文本 `content`，便于程序及通用 MCP 客户端消费。工具参数/业务错误返回 `isError: true`；未知工具或 JSON-RPC 方法、协议格式错误返回 JSON-RPC 错误，不会因此终止正常会话。
 
+### 空格播放/暂停与焦点
+
+`playback {"action":"toggle"}` 与主窗口、迷你播放器的无修饰空格共用 `PlayerService.PlayPause()`：切换播放/暂停，保留曲目、队列及位置；暂停释放流并恢复本客户端拥有的临时端点格式，续播自动重新匹配并从保留位置继续。空队列仍为空操作，输出保护仍有效。沿用现有工具及参数，无新增键盘工具。
+
+窗口内普通按钮、复选框、列表、滑块聚焦时，空格的 KeyDown/KeyUp 在隧道路由中接管，一次按压只切换一次，长按不重复，不点击焦点控件。按住期间切换焦点仍属于原按压；窗口失活时清理状态。文本/搜索/重命名与 IME、编辑控件、菜单/弹出层和对话框保持原有输入语义，Ctrl/Alt/Shift/Meta+Space 不触发应用内播放快捷键；原方向键、音量、Z/X 和 Alt 导航保持原规则。
+
+English: `playback` with `action: "toggle"` shares the main/mini player's unmodified Space service, retaining track, queue and position and the existing pause/release/rematch lifecycle. A held Space triggers once without clicking the focused control. Editing, IME, menus, dialogs and modified Space keep their normal behavior. No keyboard-specific tool or schema field is added.
+
 ### 歌曲修改时间与排序
 
 所有歌曲对象（包括 `get_track`、`search_tracks`、队列和播放列表中的歌曲）兼容新增：`mtimeUtcTicks` 为缓存音频文件 mtime 的 .NET UTC ticks 原值；`modifiedUtc` 为带 `Z` 的 ISO 8601 UTC 字符串，未知为 null；`modifiedLocal` 为客户端本地 `yyyy-MM-dd HH:mm`，未知为“—”。CUE 分轨共享源音频 mtime，不使用 CUE 文件、扫描或入库时间。查询不重新读取文件元数据、不扫描、不创建窗口、不启动音频。

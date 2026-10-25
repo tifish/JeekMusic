@@ -50,7 +50,8 @@ jobs:
 
       # 只改了测试（含 shared/testcases）时只跑测试、不发布：APK 内容没变
       - name: Check app changes
-        if: env.PUBLISH == 'true'
+        # Explicit dispatch also supports coordinated same-SHA desktop/mobile releases.
+        if: env.PUBLISH == 'true' && github.event_name != 'workflow_dispatch'
         run: |
           last=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
           if [ -n "$last" ] && [ -z "$(git diff --name-only "$last" HEAD -- . ':!docs' ':!fastlane' ':!app/src/test' ':!**.md')" ]; then

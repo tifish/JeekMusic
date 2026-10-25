@@ -1,13 +1,17 @@
 # 实现与验证记录
 
-## 2026-10-25：即时浮显与主题合成配色修复（原生悬停验收待解锁）
+## 2026-10-25：即时浮显与主题合成配色修复（原生悬停已验收）
 
 - 基线 `5d0a35d8100fbaaf60a4d7fbc5a1597eee57bab1`（1.0.155）。用户反馈背景失配和延迟。根因：无主题参数的 `TryFindResource(key, out value)` 传入 null，并不自动使用控件 ActualThemeVariant；旧代码把默认主题背景和实际暗色行前景组合。原测试仅比较画刷引用，且使用显式不透明窗口底色，未检查合成后实际像素是否可读。
 - 移除 350ms 延迟计时器，直接在当前 PointerMove 中创建点击透传覆盖层，兼容诊断字段 `pending=false` / `delayMs=0`。背景和边线按实际主题显式取资源，祖先背景及行选中/悬停色合成到不透明主题底色；真实 Mica 使用同主题实色近似，避免文字透底或默认浅色资源混入暗色。仅在原前景合成后对比度低于 3 时保护性选用可读深/浅前景，保留原字体字号及有效透明度。
 - `mainLayout.navigationOverflow` 兼容追加最近一次 `theme/background/foreground/contrastRatio/foregroundAdjusted` 只读诊断；不含文字内容，工具仍 22、输入 Schema 不变，开发和正式同一代码。描述/中英文文档同步。AGENTS.md 仅增补真实客户端 UI 验证约定：代理操作并截图、Headless 不代替原生验收、诚实记录阻断和未测项。
 - **154 项限定回归通过，0 失败/跳过**，含浮显专项 **27 项**、MainWindowLayout、FolderNavigation、Typography、McpSession、ArtistList、PlayingAppearance、SmartTag、OutputMenuInteraction。无延迟直接断言 MouseMove 返回时已 visible；新增应用主题继承 + 透明窗口/Mica hint、深浅/选中与未选中四种组合、主题切换旧表面关闭及新配色、低对比度自定义色保护，并读取 Skia 实际像素检查背景不透明及文字对比度，不以画刷引用替代可读性。使用模拟窗口、内存曲库和假音频，未启动测试音频或改写用户布局/主题。
 - `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 --no-restore -p:JeekVersion=1.0.156`：0 警告/错误；RID 隔离输出不覆盖正在运行的 output 客户端。`git diff --check` 通过。
-- 已读 computer-use 技能及相关文档。其 native pipe 不可用；经用户授权的标准 PrintWindow(PW_RENDERFULLCONTENT) 成功保存真实 1.0.155 暗色/Mica 窗口静态截图 `desktop/artifacts/overflow-fix/native-before.png`（1822×1151，非 Headless）。随后确认 WTS Session 1 为 WTS_SESSIONSTATE_LOCK（lockFlag=0），OpenInputDesktop 返回 ERROR_ACCESS_DENIED(5)，已停止所有 UI 输入，不绕过锁屏、不轮询锁状态。该截图不证明旧 hover 复现或新 hover 通过。真实深浅主题、选中/未选中、立即浮显、点击/滚轮及主题/布局恢复仍待桌面解锁后由代理完成；未重启用户客户端或发布此修复，后续验收/发布由当前父会话协调继续。
+- 已读 computer-use 技能及相关文档。此前 native pipe 不可用且桌面锁定，停止输入，没有绕过或轮询锁屏。用户明确确认解锁并授权原生备用路径后，轻量连接恢复仍报 `Computer Use native pipe is unavailable`；使用标准 Windows 鼠标输入、UI Automation、PrintWindow(PW_RENDERFULLCONTENT) 和限定前台 Jeek 窗口的 CopyFromScreen，未启动私有 helper。旧 1.0.155 暗色未选中行真实悬停复现白底白字，证据为 `desktop/artifacts/overflow-fix/native-old-dark-hover.png`；此前静态 `native-before.png` 不算 hover 证据。
+- 基于完整 `2153a591f65438ab71aa478e547fc1423a050b55`（包含后续队列跟随修复）重新 Release RID 构建，0 警告/错误，正常结束旧 PID 46136，启动 `output/JeekMusic.exe` **1.0.157+2153a591f65438ab71aa478e547fc1423a050b55，PID 32600**。本轮未再修改功能代码，重新执行上述限定回归 **154 项全部通过**；实际 MCP 为 22 工具。
+- 在用户真实 **150% DPI / Mica** 桌面实测鼠标移入、移出、单击选中、右键菜单、滚轮、深浅主题切换。移入后直接捕获，不插入等待来绕过延迟；MouseMove 当次返回即 visible 的严格断言由隔离测试补充。实际屏幕合成证据位于同一忽略目录：`screen-dark-unselected.png`、`screen-dark-selected.png`、`screen-light-unselected.png`、`screen-light-selected.png`；父会话已逐张目检并接受。四态全文可读，字体、大小、起点/基线与原行贴合，无可见叠影，背景接近原行悬停/选中色。暗色未选中/选中诊断对比度约 7.46/5.71，浅色约 11.79/6.13；截图检查的是合成后的实际文字，未仅凭画刷引用判定通过。主题切换后浮显使用新配色，完整短名称不弹，移出及滚动关闭，点击和右键仍作用于原行。
+- 实际分割条反复双向拖动，导航从 238.67 到 312、540 再返回；全文在祖先视口内完整可见后不弹。窗口从 1200 缩至约 918.67 DIP 后歌曲区仍约 658 DIP，随后恢复。Music 收起不缩窄，再展开按 14 个可见目录增宽至约 480.67，手动再调回 238.67 后保持。最终恢复 System 主题、1200 DIP 窗口、导航 238.67 DIP、原展开状态、滚动位置与 Celtic 视图，`screen-final-restored.png` 留证。原生覆盖当前 150% DPI，100%–200%、极端中文长名/深层目录/虚拟化清理由隔离交互和 Skia 测试补充，不声称已穷举真实多屏 DPI。
+- 状态须区分两个时点：正常重启后、UI 导航测试前，原 **100 项**队列的 trackId、手动标记、索引及暂停/随机/循环与重启前一致，位置差约 0.00006 秒（`current-after-restart.json`）；随后选择文件夹及恢复原 Celtic 视图，按 `2153a59` 新功能跟随 **Celtic 7 首**列表，保留旧当前曲锚点、暂停/模式/位置（`native-final-report.json`）。测试前实时备份仅留本地 `current-before.json`，没有用旧快照覆盖当前状态。停止 UI 操作并交父会话串行验收队列功能；本轮不 push、不发布。
 
 ## 2026-10-25：导航裁剪文字原位浮显
 

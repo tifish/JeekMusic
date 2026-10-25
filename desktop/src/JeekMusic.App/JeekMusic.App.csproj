@@ -58,6 +58,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="JeekMusic.App.Tests" />
+    <InternalsVisibleTo Include="JeekMusic.TagWriteProbe" />
   </ItemGroup>
   <Import Project="..\..\BuildSupport\JeekMusic.Output.targets" />
 </Project>

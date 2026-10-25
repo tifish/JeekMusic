@@ -1,5 +1,8 @@
 # Native tag preservation validation (2026-10-25)
 
+The follow-up [policy 3 transaction review](tag-write-transaction-validation.md)
+supersedes the policy 2 commit/interrupt behavior and records its four corrections.
+
 The [shared policy](../../docs/tag-writing-policy.md) defines the target records,
 Unicode encodings and safe refusal contract. This change does not retag a library,
 download replacement lyrics, migrate databases or touch the previous recovery data.

@@ -12,7 +12,6 @@ namespace JeekMusic.Online;
 /// </summary>
 public static class TagWriter
 {
-    static readonly Lock Gate = new();
     static volatile string? _lastFormat, _lastResult, _lastReason;
 
     /// <summary>Same production safety policy and latest result for development and NativeAOT MCP.</summary>
@@ -20,7 +19,8 @@ public static class TagWriter
     {
         return new JsonObject
         {
-            ["policyVersion"] = 2, ["transaction"] = "verified-handle-reserve-no-replace-rename",
+            ["policyVersion"] = 3, ["transaction"] = "journaled-guarded-source-and-validated-candidate",
+            ["recoveryPending"] = TagWriteRecovery.PendingCount, ["recoveryProblem"] = TagWriteRecovery.LastProblem,
             ["newMp3"] = "ID3v2.4/UTF-8", ["existingId3v23"] = "retain-v2.3/UTF-16-targets",
             ["preservation"] = "opaque non-target records; native container/audio validation; reject unsafe input",
             ["maximumFileBytes"] = TagWriteFrames.MaxFileBytes,
@@ -36,13 +36,14 @@ public static class TagWriter
     {
         if (coverJpeg is null && lyrics is null) return true;
         TagReader.Configure();
-        lock (Gate)
+        lock (TagWriteCommit.Gate)
         {
             string? temporary = null;
             try
             {
                 _lastFormat = null; _lastResult = "preparing"; _lastReason = null;
                 if (!CanWrite(path)) throw new NotSupportedException("Unsupported embedded-tag extension");
+                if (!TagWriteRecovery.RecoverBeforeScan(Path.GetDirectoryName(Path.GetFullPath(path)))) throw new IOException("Pending tag transaction needs recovery; see tagWriting/get_logs");
                 // Reject invalid scalar input instead of replacing unpaired surrogates with '?'.
                 if (lyrics is not null)
                 {
@@ -65,6 +66,7 @@ public static class TagWriter
                 using var sourceLease = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
                 var sourceStamp = TagWriteCommit.Capture(sourceLease.SafeFileHandle);
                 var sourceHash = SHA256.HashData(sourceLease);
+                _ = TagWriteMetadata.Read(path, sourceLease.SafeFileHandle, checkShortName: true); // refuse unsupported filesystem metadata before editing
                 var staging = Path.Combine(original.DirectoryName!, ".jeekmusic", "tag-writes");
                 Directory.CreateDirectory(staging);
                 temporary = Path.Combine(staging, Guid.NewGuid().ToString("N") + original.Extension);
@@ -82,7 +84,8 @@ public static class TagWriter
                     "ogg" => TagWriteFrames.EditOgg(before, coverJpeg, lyrics),
                     _ => null
                 };
-                if (edited is not null) File.WriteAllBytes(temporary, edited);
+                byte[] validated;
+                if (edited is not null) { File.WriteAllBytes(temporary, edited); validated = edited; }
                 else
                 {
                     var track = new ATL.Track(temporary);
@@ -113,11 +116,11 @@ public static class TagWriter
                         if (!((ATL.AudioData.IMetaDataIO)audio).Write(stream, changes, new ATL.AudioData.IO.MetaDataIO.WriteTagParams())) throw new IOException("Native tag serializer failed");
                     }
                     var after = TagWriteFrames.Read(temporary);
-                    if (format == "ogg") TagWriteFrames.CheckOgg(before, after, coverJpeg is not null, lyrics is not null);
-                    else if (format == "mp4") File.WriteAllBytes(temporary, TagWriteFrames.RetainMp4NonTargets(before, after, coverJpeg, lyrics));
+                    if (format == "ogg") { TagWriteFrames.CheckOgg(before, after, coverJpeg is not null, lyrics is not null); validated = after; }
+                    else if (format == "mp4") { validated = TagWriteFrames.RetainMp4NonTargets(before, after, coverJpeg, lyrics); File.WriteAllBytes(temporary, validated); }
                     else if (format == "asf")
                     {
-                        File.WriteAllBytes(temporary, TagWriteFrames.RetainAsfNonTargets(before, after, coverJpeg, lyrics));
+                        validated = TagWriteFrames.RetainAsfNonTargets(before, after, coverJpeg, lyrics); File.WriteAllBytes(temporary, validated);
                     }
                     else throw new NotSupportedException("Unsupported native envelope");
                 }
@@ -126,16 +129,24 @@ public static class TagWriter
                 using (var current = File.OpenRead(path))
                     if (!SHA256.HashData(current).AsSpan().SequenceEqual(sourceHash)) throw new IOException("Source SHA256 changed before replacement");
                 if (id3v1 is not null && !id3v1.AsSpan().SequenceEqual(ReadId3v1(temporary))) throw new IOException("Legacy footer changed");
+                var validatedHash = SHA256.HashData(validated);
+                temporary = TagWriteMetadata.Prepare(path, temporary, validatedHash);
                 File.SetLastWriteTimeUtc(temporary, mtime);
                 File.SetCreationTimeUtc(temporary, original.CreationTimeUtc);
+                TagWriteCommit.Stamp candidateIdentity;
+                using (var candidate = new FileStream(temporary, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+                {
+                    if (!SHA256.HashData(candidate).AsSpan().SequenceEqual(validatedHash)) throw new IOException("Candidate no longer matches validated content");
+                    candidate.Flush(true); candidateIdentity = TagWriteCommit.Capture(candidate.SafeFileHandle);
+                }
                 sourceLease.Dispose(); // Commit acquires a fresh identity-checked DELETE/read guard.
-                TagWriteCommit.Commit(path, temporary, sourceStamp, sourceHash, commitOperations);
+                TagWriteCommit.Commit(path, temporary, sourceStamp, sourceHash, candidateIdentity, validatedHash, commitOperations);
                 _lastResult = "saved";
                 Log.Info("tagwriter", $"写入完成：{path} cover={coverJpeg is not null} lyrics={lyrics is not null} id3v1Preserved={id3v1 is not null}");
-                Log.Info("tagwriter", $"preservation=verified policy=2 format={format}");
+                Log.Info("tagwriter", $"preservation=verified policy=3 format={format}");
                 return true;
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or ArgumentException or OverflowException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or ArgumentException or OverflowException or System.Security.SecurityException)
             {
                 _lastResult = "rejected"; _lastReason = e.Message;
                 Log.Warn("tagwriter", $"写入失败：{path}", e);

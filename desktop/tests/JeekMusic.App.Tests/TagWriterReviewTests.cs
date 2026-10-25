@@ -48,6 +48,13 @@ public sealed class TagWriterReviewTests
     {
         var bytes = Tag(Frame(id, new byte[16])); FileCase("index.mp3", bytes, p => Refuses(p, bytes));
     }
+    [Theory]
+    [InlineData(3, 0x80)] [InlineData(4, 0x40)]
+    public void UnknownDiscardOnTagAlterationFramesRefuseForTheirActualVersion(int version, byte status)
+    {
+        var frame = Frame("XPOS", Be(24), version); frame[8] = status;
+        var bytes = Tag(frame, version); FileCase("discard.mp3", bytes, p => Refuses(p, bytes));
+    }
 
     static byte[] AddMp4Child(byte[] input, string parent, byte[] child, bool first = false)
     {
@@ -97,6 +104,13 @@ public sealed class TagWriterReviewTests
     {
         var bytes = AddMp4Child(File.ReadAllBytes(Fixture("native.m4a")), "stbl", Box("sgpd", [..Be(0), .."seig"u8, ..Be(0)]));
         FileCase("group.m4a", bytes, p => Refuses(p, bytes));
+    }
+    [Theory]
+    [InlineData("iloc")] [InlineData("uuid")]
+    public void LocationOrVendorAtomInsideUdtaFullBoxMetaRefuses(string type)
+    {
+        var bytes = AddMp4Child(File.ReadAllBytes(Fixture("native.m4a")), "meta", Box(type, new byte[24]));
+        FileCase("nested-location.m4a", bytes, p => Refuses(p, bytes));
     }
 
     static uint Crc(byte[] page)

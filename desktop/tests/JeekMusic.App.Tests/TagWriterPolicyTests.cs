@@ -95,7 +95,7 @@ public sealed class TagWriterPolicyTests
     [Fact]
     public void DiagnosticsAdvertiseSameNativePolicyWithoutLyricsContent()
     {
-        var d = TagWriter.Diagnostics(); Assert.Equal(2, d["policyVersion"]!.GetValue<int>()); Assert.Equal("ID3v2.4/UTF-8", d["newMp3"]!.GetValue<string>()); Assert.DoesNotContain("lyricsText", d.ToJsonString());
+        var d = TagWriter.Diagnostics(); Assert.Equal(3, d["policyVersion"]!.GetValue<int>()); Assert.Equal("ID3v2.4/UTF-8", d["newMp3"]!.GetValue<string>()); Assert.DoesNotContain("lyricsText", d.ToJsonString());
     }
     [Fact]
     public void ApeNativeEditKeepsId3v1AndOpaqueItemsAndHonorsReadOnly()

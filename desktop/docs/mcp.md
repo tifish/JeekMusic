@@ -37,7 +37,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 `get_diagnostics.tagWriting` 返回生产标签写入策略版本、新MP3/已有v2.3版本策略、文件大小上限、最近检测到的原生格式及 `saved` / `rejected` 结果和原因；不返回歌词内容。`get_logs(kind="app")` 的 `[tagwriter]` 记录同一写入服务的成功、保全验证及拒绝原因。封面/歌词仍通过既有在线/离线保存业务调用写入器；不新增绕过播放避让、验证或回退的直接文件写入工具。两项接口参数 Schema 和22项工具目录保持兼容，Debug/Release/NativeAOT一致。格式、保留字段、复杂输入拒绝和外部保存回退见[跨端写入契约](../../docs/tag-writing-policy.md)。
 
-策略2的 `transaction=verified-handle-reserve-no-replace-rename` 表示以文件身份/SHA及句柄保护原件，再用不覆盖的重命名提交。两次重命名间路径可短暂缺失，不能称为持续可见的原子替换；遇外部新文件不覆盖，日志记录保留原件的 `.jeekmusic/tag-writes/<unique>.original` 路径。每次重试等待后重新验证。MP4保护/未支持位置索引、ID3章节/定位索引明确 `rejected`；不以音频hash未变代替布局安全验证。参数Schema及22项工具不变。
+策略3的 `transaction=journaled-guarded-source-and-validated-candidate` 同时绑定源文件与已验证候选的身份/哈希，并验证 ADS、完整可读安全描述符和文件属性。改名前把原路径、候选/保留原件位置、预期身份/哈希及属性摘要持久化到数据目录 `tag-transactions/*.json`。启动曲库前和每次扫描枚举前自动恢复；已有 `rescan_library` 可重试同一恢复服务，无需重启或新增文件路径参数。`recoveryPending`/`recoveryProblem` 是只读诊断，`get_logs` 记录映射与失败原因。恢复冲突不覆盖，受影响目录暂缓扫描，不删除缺失记录。源路径仍可短暂缺失，不能称为持续可见的原子替换；过程强杀恢复已测试，不冒称断电持久性。特殊属性、未知备份记录或权限无法保全则明确 `rejected` 并走外部保存。MP4位置布局及ID3失效帧仍拒绝。参数Schema及22项工具保持兼容，开发/NativeAOT一致。
 
 | 工具 | 参数与行为 |
 |---|---|

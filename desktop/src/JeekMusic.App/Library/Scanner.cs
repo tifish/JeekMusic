@@ -35,7 +35,15 @@ public sealed class Scanner(LibraryDb db)
     /// </summary>
     public ScanResult Scan(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct)
     {
+        // Enumeration and missing-record deletion must not observe the name gap
+        // of a live in-process tag commit after the recovery check returned.
+        lock (Online.TagWriteCommit.Gate) return ScanCore(folder, builder, scopes, full, ct);
+    }
+
+    ScanResult ScanCore(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct)
+    {
         var root = folder.Root;
+        if (!Online.TagWriteRecovery.RecoverBeforeScan(root)) return new(0, 0, 0, 0, 1);
         var audio = new Dictionary<string, (long mtime, long size)>(StringComparer.OrdinalIgnoreCase);
         var cues = new Dictionary<string, (long mtime, long size)>(StringComparer.OrdinalIgnoreCase);
         var dirFiles = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);

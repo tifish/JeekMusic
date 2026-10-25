@@ -1,6 +1,6 @@
 # Audio tag writing policy — shared desktop / Android contract
 
-Policy version: **2**. This applies to a requested cover/lyrics edit, not a library-wide
+Policy version: **3**. This applies to a requested cover/lyrics edit, not a library-wide
 retag, charset repair, lyric download/matching decision, or implicit ID3 migration.
 Each platform must document its actual implemented/validated subset. Recognizing an
 extension or a library advertising `save()` is not proof of safe writing.
@@ -108,23 +108,54 @@ the same production outcomes. Debug/Release/NativeAOT have the same behavior.
 ### Windows no-clobber commit and interruption boundary
 
 Windows path-based `ReplaceFile` has no expected-file-identity compare-and-swap.
-Desktop policy 2 opens a read/DELETE handle denying write/delete sharing, verifies
-volume/file ID, length/times and SHA-256, reserves that exact original object by
-handle under `.jeekmusic/tag-writes/<unique>.original`, then renames the verified
-candidate to the source name **without replacement**. An external file created
-even after the vacancy check wins; it is never overwritten. Every retry rechecks
-the guarded identity/hash and destination vacancy after the wait. Ordinary writers
-and renamers cannot change the guarded source. Privileged/kernel manipulation is
-outside this ordinary filesystem writer contract.
+Desktop policy 3 therefore prepares native filesystem metadata while the source
+name still exists: `CopyFile` to a private template and `ReplaceFile` there, without
+ignore-merge/ACL-error flags, preserve ADS. It explicitly clones owner/group/DACL/
+audit SACL, including protection and inheritance control bits, and checks all those
+values independently. `SetKernelObjectSecurity` retains the non-auto-inherited
+DACL case that the high-level setter otherwise normalizes. All work stays in the
+same-volume staging directory; the public source is never a `ReplaceFile` target.
 
-This is a no-clobber name handoff, **not a continuously visible atomic replacement**:
-the pathname can briefly be absent between the two renames. Failure restores the
-original by handle without replacement when the name is free. If an external file
-occupies it, the complete original remains in the unique `.original` path and logs
-identify it. Interruption/crash can also leave that reserved original; it is never
-automatically deleted on a later launch. Successful commits delete only the owned
-old object, by handle. Candidates are cleaned on ordinary failure. Do not blindly
-restore a retained original over newer external contents.
+The **expected candidate hash comes from the independently validated output bytes**,
+not a later unvalidated reread. After preparation/flush it captures candidate file
+identity. At commit, read/DELETE handles deny write/delete sharing on **both** source
+and candidate. Verify volume/file ID, length/times, full SHA and filesystem metadata
+again under those guards. Replacing or truncating the candidate in the earlier
+validation-to-open window refuses; ordinary writers/renamers cannot alter either
+guarded object. Privileged/kernel manipulation and ancestor-junction replacement
+are not certified by this ordinary local-filesystem writer contract.
+
+Before changing names, persist a write-through, flushed JSON journal in
+`<dataDirectory>/tag-transactions/`: absolute source/candidate/reserved-original
+paths, both expected identities/hashes and the filesystem-metadata digest. Then
+reserve the exact original by handle and rename the candidate to the source name
+**without replacement**. The normal brief pathname gap contains no full-file hash,
+metadata copy or journal serialization. Every retry rechecks both objects and name
+vacancy after waiting. An external newly created source path always wins.
+
+This is **not a continuously visible atomic replacement**. Process termination can
+leave a missing name, but the mapping now exists before that is possible. Production
+startup recovers before library initialization; every scanner also recovers before
+enumerating or deleting records. A missing name restores the exact original object
+by no-replace rename. An already committed candidate is independently verified
+before finalizing cleanup. Different identities, hashes, metadata, unavailable
+storage or malformed/unreadable journals are retained as pending, never overwritten;
+affected scans defer instead of deleting missing records. Ordinary `TagWriter.Write`
+also recovers before opening its source; existing MCP `rescan_library` retries this
+same recovery path. Diagnostics expose pending count/problem and logs identify the
+journal. Successful cleanup deletes only expected, verified objects by handle.
+Recovery is idempotent. Power-loss/storage-firmware durability is not claimed by
+the process-kill tests; ambiguous states remain pending. Old policy-2 `.original`
+files lacking a mapping are never guessed back into the library or auto-deleted.
+
+Filesystem subset: ordinary attributes (archive/hidden/system/not-content-indexed/
+temporary), complete readable/copyable security descriptors and bounded named data
+streams (32 MiB total). Read-only, encrypted/compressed/sparse/reparse/offline/cloud
+flags, pre-existing DOS short-name aliases, object-ID/EA/other unsupported backup
+records, unknown stream-enumeration support or insufficient security rights refuse
+before source changes, using the normal external-file fallback. No elevation or
+weakened ACL is used to force a write. Last-access effects of reading are not a
+promise of preservation. Hard-link aliases retain old bytes, as with replacement.
 
 Position-dependency review: FLAC seek offsets are relative to the first unchanged
 audio frame; APEv2 updates do not move encoded audio; standard RIFF cues address
@@ -175,6 +206,8 @@ differences must be visible, never a silent deletion of tags or advertised suppo
   [Ogg page framing/granules](https://www.xiph.org/ogg/doc/framing.html),
   [ISO BMFF common encryption layout](https://www.w3.org/TR/eme-stream-mp4/),
   [Windows handle rename semantics](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_rename_info).
+* [ReplaceFile metadata/ADS and partial-failure behavior](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew),
+  [BackupRead filesystem records](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-backupread).
 * [Monkey's Audio SDK and tagging implementation](https://www.monkeysaudio.com/developers.html).
 * [EBU BWF Tech 3285](https://tech.ebu.ch/docs/tech/tech3285.pdf),
   [Microsoft ASF overview/specification link](https://learn.microsoft.com/en-us/windows/win32/wmformat/overview-of-the-asf-format).

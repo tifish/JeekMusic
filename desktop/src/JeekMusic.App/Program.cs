@@ -32,6 +32,7 @@ static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error("app", "未处理的异常", e.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, e) => { Log.Error("app", "未观察的任务异常", e.Exception); e.SetObserved(); };
         Log.Info("app", $"启动 {typeof(Program).Assembly.GetName().Version} {string.Join(' ', args)}");
+        Online.TagWriteRecovery.RecoverBeforeScan(); // before library startup/scanner can delete a temporarily absent path
         try
         {
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnExplicitShutdown);

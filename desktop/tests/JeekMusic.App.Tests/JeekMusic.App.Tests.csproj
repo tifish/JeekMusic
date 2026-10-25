@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\JeekMusic.App\JeekMusic.App.csproj" />
+    <ProjectReference Include="..\JeekMusic.TagWriteProbe\JeekMusic.TagWriteProbe.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

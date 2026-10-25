@@ -65,6 +65,82 @@ public class PlayQueueTests
     }
 
     [Fact]
+    public void Handoff_keeps_reordered_pending_manual_entries_and_preserves_single_repeat_policy()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3], 0); q.PlayNext([20]); q.Move(1, 3);
+        q.SwitchSource(new(new QueueSource.Playlist(8), "New list"), [7, 8]);
+        Assert.Equal([1, 20, 7, 8], Ids(q));
+        q.Repeat = RepeatMode.One;
+        Assert.Equal(0, q.NextIndex(false)); Assert.Equal(1, q.NextIndex(true));
+        q.MoveTo(2); q.SourceChanged([1, 7, 8]);
+        Assert.Equal(-1, q.SourceAnchorIndex);
+    }
+
+    [Fact]
+    public void Switched_external_current_is_history_only_and_never_a_forward_or_repeat_target()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3], 1);
+        q.SwitchSource(new(new QueueSource.Playlist(8), "New list"), [7, 8]);
+        q.MoveTo(1); Assert.Equal(0, q.PreviousIndex()); // History can return to the old current.
+        q.Move(0, 2); Assert.Equal(2, q.SourceAnchorIndex);
+        q.PlayNext([20]); Assert.Equal(3, q.SourceAnchorIndex);
+        q.MoveTo(2); q.Repeat = RepeatMode.All;
+        Assert.Equal(0, q.NextIndex(true)); Assert.Equal(0, q.NextIndex(false));
+        q.SetShuffle(true); Assert.DoesNotContain(2L, Ids(q));
+    }
+
+    [Fact]
+    public void Explicit_same_source_filter_uses_the_new_first_song_but_background_refresh_keeps_random_order()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3, 4], 1);
+        q.SwitchSource(Folder, [4, 1, 3]); Assert.Equal([2, 4, 1, 3], Ids(q));
+        q.SetShuffle(true); var order = Ids(q);
+        q.SourceChanged([4, 1, 3]); Assert.Equal(order, Ids(q));
+    }
+
+    [Fact]
+    public void Switch_source_without_current_match_starts_the_new_order_after_current_and_manual()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3], 1); q.PlayNext([20]);
+        var context = new QueueContext(new QueueSource.Playlist(8), "New list");
+        q.SwitchSource(context, [7, 8, 9]);
+        Assert.Equal([2, 20, 7, 8, 9], Ids(q));
+        Assert.Equal(new QueueEntry(2, false), q.Current); Assert.Equal(0, q.CurrentIndex);
+        Assert.True(q.Items[1].Manual); Assert.Equal(context, q.Context);
+        Assert.Equal(1, q.NextIndex(user: true));
+        q.SourceChanged([9, 7, 8]); Assert.Equal([2, 20, 9, 7, 8], Ids(q));
+    }
+
+    [Fact]
+    public void Switch_source_with_current_match_continues_at_its_new_position_and_keeps_duplicates()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3], 1);
+        q.SwitchSource(new(new QueueSource.Playlist(8), "New list"), [7, 2, 2, 8]);
+        Assert.Equal([7, 2, 2, 8], Ids(q)); Assert.Equal(1, q.CurrentIndex);
+        Assert.Equal(0, q.PreviousIndex()); Assert.Equal(2, q.NextIndex(user: true));
+    }
+
+    [Fact]
+    public void Switch_source_shuffles_only_the_new_list_and_discards_old_random_history()
+    {
+        var q = Queue(); q.Play(Folder, [1, 2, 3, 4], 1, shuffle: true); q.PlayNext([20]);
+        var current = q.Current!.Value;
+        q.SwitchSource(new(new QueueSource.Playlist(8), "New list"), [7, 7, 8, current.TrackId, 9]);
+        Assert.Equal(current, q.Current); Assert.True(q.Shuffle); Assert.Equal(0, q.CurrentIndex);
+        Assert.Equal([7, 7, 8, 9], Ids(q).Skip(2).Order()); Assert.True(q.Items[1].Manual);
+    }
+
+    [Fact]
+    public void Switching_empty_sources_does_not_start_or_clear_current_and_empty_queue_does_not_start()
+    {
+        var context = new QueueContext(new QueueSource.Playlist(8), "Empty list");
+        var q = Queue(); q.SwitchSource(context, [7]); Assert.Empty(q.Items); Assert.Null(q.Context);
+        q.Play(Folder, [1, 2, 3], 1); q.SwitchSource(context, []);
+        Assert.Equal([2], Ids(q)); Assert.Equal(0, q.CurrentIndex);
+        Assert.Null(q.NextIndex(user: false)); Assert.Null(q.NextIndex(user: true));
+    }
+
+    [Fact]
     public void Regenerate_in_order_keeps_current_and_manual()
     {
         var q = Queue();

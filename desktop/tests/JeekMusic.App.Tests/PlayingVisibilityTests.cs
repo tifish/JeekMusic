@@ -143,7 +143,7 @@ public sealed class PlayingVisibilityTests
         Assert.Equal(version + 1, h.Version);
         Assert.Equal(h.Track(240).Id, h.Player.CurrentTrack!.Id);
         h.ScrollTo(0); h.Player.SetRepeat(RepeatMode.One);
-        h.Engine.StartEntry(1); h.Pump(); h.AssertVisible(240);
+        h.Engine.StartEntry(0); h.Pump(); h.AssertVisible(240);
         Assert.Equal(version + 2, h.Version);
     });
 

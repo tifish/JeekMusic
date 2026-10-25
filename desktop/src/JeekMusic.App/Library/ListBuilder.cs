@@ -31,39 +31,45 @@ public static class ListBuilder
 
     /// <summary>某个来源的歌（已筛选、已排序）。播放列表的不可用条目不在这里（它们不能播放）。</summary>
     public static List<Track> Tracks(LibrarySnapshot snapshot, QueueSource source, AppSettings settings, PlaylistService? playlists)
+        => Capture(snapshot, source, settings, source is QueueSource.Playlist p ? playlists?.Entries(p.PlaylistId) : null)();
+
+    /// <summary>Capture immutable source/settings input once. The returned computation uses memory only,
+    /// so an immediate Next/EOF can resolve the same list without waiting on the Rows worker or querying storage.</summary>
+    internal static Func<List<Track>> Capture(LibrarySnapshot snapshot, QueueSource source, AppSettings settings, IReadOnlyList<PlaylistEntry>? playlistEntries)
     {
-        var filter = FilterOf(snapshot, settings.TagFilter);
-        IEnumerable<Track> items;
+        var filter = FilterOf(snapshot, settings.TagFilter.ToArray());
+        Func<IEnumerable<Track>> items;
         ListKind kind;
         switch (source)
         {
             case QueueSource.Folder f:
                 var node = snapshot.Node(f.FolderId, f.Dir);
-                items = node is null ? [] : f.Recursive ? node.AllTracks() : node.Tracks;
+                items = () => node is null ? [] : f.Recursive ? node.AllTracks() : node.Tracks;
                 kind = f.Recursive ? ListKind.FolderRecursive : ListKind.Folder;
                 break;
             case QueueSource.Artist a:
-                items = snapshot.ArtistByKey.TryGetValue(a.NameKey, out var artist) ? artist.Tracks : [];
+                items = () => snapshot.ArtistByKey.TryGetValue(a.NameKey, out var artist) ? artist.Tracks : [];
                 kind = ListKind.Artist;
                 break;
             case QueueSource.Album al:
-                items = snapshot.Albums.TryGetValue(al.AlbumKey, out var album) ? album : [];
+                items = () => snapshot.Albums.TryGetValue(al.AlbumKey, out var album) ? album : [];
                 kind = ListKind.Album;
                 break;
             case QueueSource.Playlist p:
-                items = playlists?.Entries(p.PlaylistId).Where(e => e.Track is not null).Select(e => e.Track!) ?? [];
+                var entries = playlistEntries?.ToArray() ?? [];
+                items = () => entries.Where(e => e.Track is not null).Select(e => e.Track!);
                 kind = ListKind.Playlist;
                 break;
             case QueueSource.Search s:
-                items = Search(snapshot, s.Query);
+                items = () => Search(snapshot, s.Query);
                 kind = ListKind.Search;
                 break;
             default:
-                return [];
+                return () => [];
         }
-        if (filter is not null) items = items.Where(filter);
-        var list = items.ToList();
-        return Sort(list, kind, settings.SortFor(kind is ListKind.Playlist or ListKind.Album), settings.SortDescending);
+        var sort = settings.SortFor(kind is ListKind.Playlist or ListKind.Album);
+        var descending = settings.SortDescending;
+        return () => Sort((filter is null ? items() : items().Where(filter)).ToList(), kind, sort, descending);
     }
 
     /// <summary>

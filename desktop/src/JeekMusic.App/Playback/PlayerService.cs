@@ -26,7 +26,7 @@ public sealed record AudioFormatInfo(string? Codec, int? FileRate, string? FileF
 /// 这样 mpv 能提前打开下一首做到无缝（需求 O-6），队列又可以很长、随时重新生成。
 /// 所有公开方法和事件都在 UI 线程上；mpv 的事件转到 UI 线程再处理。
 /// </summary>
-public sealed class PlayerService : IDisposable
+public sealed partial class PlayerService : IDisposable
 {
     readonly ITrackSource _tracks;
     IPlaybackEngine? _mpv;
@@ -231,6 +231,7 @@ public sealed class PlayerService : IDisposable
     /// <summary>播放一个列表（需求 G-3、P-15）。</summary>
     public void Play(QueueContext? context, IReadOnlyList<long> ids, int? startIndex, bool? shuffle = null)
     {
+        CancelSourceSwitch(resync: false);
         Queue.Play(context, ids, startIndex, shuffle);
         LoadCurrent(play: true, reveal: true);
     }
@@ -344,6 +345,7 @@ public sealed class PlayerService : IDisposable
 
     public void Next()
     {
+        if (!ResolveSourceSwitch()) return;
         if (Queue.NextIndex(user: true) is not { } i) return;
         NavigateTo(i);
     }
@@ -351,6 +353,7 @@ public sealed class PlayerService : IDisposable
     /// <summary>上一首并播放：超过 3 秒时回到这首的开头；切歌不代替物理音量确认。</summary>
     public void Previous()
     {
+        if (!ResolveSourceSwitch()) return;
         if (Position > TimeSpan.FromSeconds(3))
         {
             var revision = SeekRevision;
@@ -380,6 +383,7 @@ public sealed class PlayerService : IDisposable
     /// <summary>在队列里点了一首。</summary>
     public void JumpTo(int queueIndex)
     {
+        CancelSourceSwitch(resync: false);
         Queue.MoveTo(queueIndex);
         LoadCurrent(play: true, reveal: true);
     }
@@ -804,9 +808,10 @@ public sealed class PlayerService : IDisposable
     TimeSpan _restorePosition;
 
     /// <summary>恢复保存的队列（启动时，mpv 还没创建）。</summary>
-    public void Restore(IReadOnlyList<QueueEntry> items, int index, bool shuffle, RepeatMode repeat, QueueContext? context, TimeSpan position)
+    public void Restore(IReadOnlyList<QueueEntry> items, int index, bool shuffle, RepeatMode repeat, QueueContext? context, TimeSpan position, int sourceAnchorIndex = -1)
     {
-        Queue.Restore(items, index, shuffle, repeat, context);
+        CancelSourceSwitch(resync: false);
+        Queue.Restore(items, index, shuffle, repeat, context, sourceAnchorIndex);
         _restorePosition = position;
         CurrentTrack = Queue.Current is { } c ? _tracks.ById(c.TrackId) : null;
         TrackChanged?.Invoke(CurrentTrack);
@@ -921,7 +926,7 @@ public sealed class PlayerService : IDisposable
     void SyncNext()
     {
         if (_mpv is null || IsIdle || CurrentTrack is null) return;
-        var nextIndex = Queue.NextIndex(user: false);
+        var nextIndex = PendingSourceContext is null ? Queue.NextIndex(user: false) : null;
         // 单曲循环由 mpv 的 loop-file 处理，不放下一首
         var next = nextIndex is { } i && Queue.Repeat != RepeatMode.One && i != Queue.CurrentIndex ? _tracks.ById(Queue.Items[i].TrackId) : null;
         // 列表循环且只剩自己时 NextIndex 是自己：也交给 loop
@@ -953,6 +958,7 @@ public sealed class PlayerService : IDisposable
 
     void OnQueueChanged()
     {
+        if (Queue.Items.Count == 0) CancelSourceSwitch(resync: false);
         // 自动换歌时由 OnFileStarted 自己处理
         if (_inFileStarted || _navigating) return;
         // 当前这首被移除了（队列界面里删掉、或曲库里不存在了）：换到新的当前歌曲
@@ -1023,6 +1029,7 @@ public sealed class PlayerService : IDisposable
             // 播完了最后一首（不循环）：停在这首的开头，暂停（按播放从头再放）
             Log.Playback("队列播完");
             TrackCompleted?.Invoke();
+            if (!ResolveSourceSwitch()) return;
             _wantPlaying = false;
             if (Queue.NextIndex(user: false) is { } next) NavigateTo(next);
             else ReleasePlaybackOutput("queue-end", resetPosition: true);
@@ -1123,6 +1130,7 @@ public sealed class PlayerService : IDisposable
 
     public void Dispose()
     {
+        CancelSourceSwitch(resync: false);
         _outputMonitor.Stop();
         ReleasePlaybackOutput("exit", notify: false, releaseFailed: true);
         _temporaryFormats?.Dispose();

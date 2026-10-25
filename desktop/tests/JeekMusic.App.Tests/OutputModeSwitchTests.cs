@@ -586,6 +586,7 @@ public sealed class OutputModeSwitchTests
         public void EmitProperty(string name, string? value) => PropertyChanged?.Invoke(name, value);
         public event Action<long>? FileStarted;
         public void StartEntry(int index) => FileStarted?.Invoke(GetLong($"playlist/{index}/id") ?? -1);
+        public void StartEntryId(long id) => FileStarted?.Invoke(id);
         public event Action<long>? FileLoaded;
         public event Action<long, Mpv.EndReason, string?>? FileEnded;
         public event Action<Mpv.EventId>? Notified;
@@ -612,6 +613,14 @@ public sealed class OutputModeSwitchTests
         {
             Commands.Add(args);
             if (args[0] == "seek") return RejectSeek ? -1 : 0;
+            if (args[0] == "playlist-remove")
+            {
+                var index = int.Parse(args[1], CultureInfo.InvariantCulture);
+                var count = (int)(GetLong("playlist-count") ?? 0);
+                for (var i = index; i < count - 1; i++) Properties[$"playlist/{i}/id"] = Properties[$"playlist/{i + 1}/id"];
+                Properties.Remove($"playlist/{count - 1}/id");
+                Properties["playlist-count"] = Math.Max(0, count - 1).ToString();
+            }
             if (args[0] == "loadfile")
             {
                 if (RejectLoad) return -1;

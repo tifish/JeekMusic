@@ -43,7 +43,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `set_smart_tags` | `trackIds`（1–1000 项）和至少一个 `mood` / `voice` / `genre`。运动为 `SPORT` / `NON_SPORT`，人声为 `VOCAL` / `INSTRUMENTAL`，曲风为 `CLASSICAL` / `NON_CLASSICAL`；每类也可用 `AUTO` 恢复自动。省略的维度及其同步时间戳保持不变。支持曲库中的离线歌曲，不要求文件在线；先验证全部歌曲和输入，再一次事务写入覆盖及重算结果，失败全部回滚。等待提交和同步通知后返回去重歌曲的 `count`、`items`（包含 `tags` 和 `tagSources`），不播放、分析音频或修改文件元数据 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
 | `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲，或显式暂停释放后保留的歌曲（只改保存位置，不开启音频），否则返回业务错误。显式 pause/toggle 暂停先关闭流并恢复本客户端临时格式，保留歌曲/队列/位置；resume 先重新匹配共享自动格式，再从原位播放，内部切歌/重建暂停不恢复。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
-| `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置 |
+| `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置，以及只读 `sourceState`（当前/待决来源、切源代次/状态、仅作历史的旧当前曲索引）；读取不提交待决切源 |
 | `edit_queue` | `action`：`add` / `next` 另需 `trackIds`，`remove` / `jump` 另需 `index`，`move` 另需 `index` 与 `toIndex`，`clear` 清空。空队列添加歌曲会开始播放，与界面一致 |
 | `set_play_mode` | 至少提供 `shuffle` 或 `repeat`（`off` / `all` / `one`） |
 | `set_volume` | 至少提供 `volume`（0–100）或 `muted`。两种模式都设置当前实际设备端点主音量，共享下影响同设备其他程序；不持久化音量。`muted` 只静音播放器。不可调/写入失败返回业务错误 |
@@ -89,6 +89,22 @@ English: `typography` reports the configured/effective default chain, exact Micr
 窗口内普通按钮、复选框、列表、滑块聚焦时，空格的 KeyDown/KeyUp 在隧道路由中接管，一次按压只切换一次，长按不重复，不点击焦点控件。按住期间切换焦点仍属于原按压；窗口失活时清理状态。文本/搜索/重命名与 IME、编辑控件、菜单/弹出层和对话框保持原有输入语义，Ctrl/Alt/Shift/Meta+Space 不触发应用内播放快捷键；原方向键、音量、Z/X 和 Alt 导航保持原规则。
 
 English: `playback` with `action: "toggle"` shares the main/mini player's unmodified Space service, retaining track, queue and position and the existing pause/release/rematch lifecycle. A held Space triggers once without clicking the focused control. Editing, IME, menus, dialogs and modified Space keep their normal behavior. No keyboard-specific tool or schema field is added.
+
+### 当前显示列表的后续播放来源
+
+用户切换主界面歌曲列表（文件夹、包含子文件夹、艺术家/固定艺术家、专辑、保存播放列表、搜索），或主动改变排序/筛选时，当前曲、位置和播放/暂停状态保持，后续歌曲改从该视图的最终排序/筛选结果接续。仅选中歌曲行不算切源；启动恢复视图、普通扫描/快照刷新和同源内容更新不当作新的浏览意图，不反复重置随机历史。没有歌曲列表的欢迎/艺术家提示页不接管队列；空队列不会因浏览而自动开始播放。
+
+顺序模式中当前曲在新列表时从它的新位置接续（重复 ID 取第一个匹配位置，保留其他重复条目）；不在时从新列表首曲接续。随机模式仅重排新来源的待播部分，不把旧来源历史混入抽选。已有显式“下一首播放/添加到队列”的待播手动项仍优先。跨源时旧当前曲若不在新列表，保留为可返回的历史锚点，但 Next/列表循环跳过它，不能随机抽中它；新列表为空且无待播项时 Next 无操作，当前曲自然结束后停止。上一首仍遵循超过 3 秒先重播当前曲的规则。离线/无法加载歌曲沿用现有跳过及连续失败保护，不引入文件扫描。
+
+切源意图建立时立即使旧 mpv 下一首预加载失效；异步 Rows 结果和服务提交都带代次，过期结果不覆盖较新意图。若 UI 下一首、快捷键、MCP `playback` 的 next/previous 或自然 EOF 先于 Rows 到达，只计算已经捕获的内存来源/排序/筛选输入，不等待异步任务、不在音频回调重新查询数据库或扫描文件。播放列表成员在列表计算准备时通过既有仓库读取一次，同时供后台 Rows 和立即切歌复用。显式 `play_tracks`/UI 重新播放或 `edit_queue jump` 会取消待决浏览切源意图；旧 Rows 仍可显示其视图，但不能再覆盖显式播放队列。
+
+`get_queue.sourceState` 与 `get_diagnostics.queueSource` 兼容新增：
+
+- `context` / `pendingContext`：已生效/待决来源；没有时为 null。对象包含 `kind`、`title` 及对应的 `folderId`/`dir`/`recursive`、`artistKey`、`albumKey`、`playlistId` 或 `query`。
+- `revision`：切源代次；`status` 为 `none`、`pending`、`committed`、`cancelled` 或 `empty`（无当前队列，未开始切源）。
+- `sourceAnchorIndex`：旧当前曲仅作为历史锚点的零基队列索引，无锚点为 -1；普通历史可由上一首访问，前向及循环不会选到此锚点。该索引随队列编辑调整并随队列持久化，旧配置缺省为 -1。
+
+这些读取不启动播放、解析待决来源、计算 Rows 或创建窗口。继续使用现有播放/队列工具，无新导航或 UI 专用工具，22 个工具及输入字段/范围保持兼容；参数说明同步描述共用业务行为。回归位于 `SourceSwitchTests` 和 `PlayQueueTests`，使用 fake 引擎/端点、内存数据库和真实 Headless 控件验证竞态及状态，不能代替解锁后的真实客户端操作与截图验收。
 
 ### 播放时当前歌曲可见性
 

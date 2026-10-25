@@ -38,6 +38,9 @@ public sealed class QueuePersistence
         var index = q.CurrentIndex - rows.Take(Math.Max(0, q.CurrentIndex)).Count(r => r is null);
         _db.SetQueueItems(rows.Where(r => r is not null).ToList()!);
         _db.SetValue("queue_index", index.ToString(CultureInfo.InvariantCulture));
+        var anchor = q.SourceAnchorIndex;
+        if (anchor >= 0) anchor = rows[anchor] is null ? -1 : anchor - rows.Take(anchor).Count(r => r is null);
+        _db.SetValue("queue_source_anchor", anchor.ToString(CultureInfo.InvariantCulture));
         _db.SetValue("queue_shuffle", q.Shuffle ? "1" : "0");
         _db.SetValue("queue_repeat", q.Repeat.ToString());
         _db.SetValue("queue_context", q.Context?.Source.Encode());
@@ -56,15 +59,18 @@ public sealed class QueuePersistence
         var index = int.TryParse(_db.GetValue("queue_index"), out var i) ? i : 0;
         var entries = new List<QueueEntry>();
         var newIndex = 0;
+        var anchor = int.TryParse(_db.GetValue("queue_source_anchor"), out var a) ? a : -1;
+        var newAnchor = -1;
         for (var k = 0; k < rows.Count; k++)
         {
             if (k == index) newIndex = entries.Count;
+            if (k == anchor && snapshot.ByKey.ContainsKey(rows[k].TrackKey)) newAnchor = entries.Count;
             if (snapshot.ByKey.TryGetValue(rows[k].TrackKey, out var t)) entries.Add(new QueueEntry(t.Id, rows[k].Manual));
         }
         if (entries.Count == 0) return;
         var context = QueueSource.Decode(_db.GetValue("queue_context")) is { } source ? new QueueContext(source, _db.GetValue("queue_context_title") ?? "") : null;
         var position = long.TryParse(_db.GetValue("queue_position_ms"), out var ms) ? TimeSpan.FromMilliseconds(ms) : TimeSpan.Zero;
         _player.Restore(entries, Math.Min(newIndex, entries.Count - 1), _db.GetValue("queue_shuffle") == "1",
-            Enum.TryParse<RepeatMode>(_db.GetValue("queue_repeat"), out var r) ? r : RepeatMode.Off, context, position);
+            Enum.TryParse<RepeatMode>(_db.GetValue("queue_repeat"), out var r) ? r : RepeatMode.Off, context, position, newAnchor);
     }
 }

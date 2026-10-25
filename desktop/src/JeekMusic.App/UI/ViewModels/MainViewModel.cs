@@ -37,6 +37,7 @@ public sealed partial class MainViewModel : ObservableObject
     readonly Stack<NavTarget> _forward = new();
     bool _navigating;
     bool _firstContentLogged;
+    long? _pendingSourceRevision;
 
     public PlayerViewModel Player { get; }
     [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _albumCover;
@@ -282,7 +283,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (!SetProperty(ref _includeSubfolders, value)) return;
             S.IncludeSubfolders = value;
             _settings.Save("view");
-            Recompute();
+            Recompute(playbackIntent: true);
         }
     }
 
@@ -292,6 +293,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>切换内容区；<paramref name="history"/> 为 false 时不记入历史（后退、前进、刷新）。</summary>
     public void Navigate(NavTarget target, bool history = true)
     {
+        var playbackIntent = Current is not null && Current != target;
         if (history && Current is not null && Current != target)
         {
             _back.Push(Current);
@@ -313,7 +315,7 @@ public sealed partial class MainViewModel : ObservableObject
             try { SearchText = ""; } finally { _navigating = false; }
         }
         SelectNavFor(target);
-        Recompute();
+        Recompute(playbackIntent);
         Navigated?.Invoke();
     }
 
@@ -338,6 +340,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     void Show(ContentKind kind, string title, string hint)
     {
+        if (_pendingSourceRevision == _app.Player.SourceSwitchRevision) _app.Player.CancelSourceSwitch();
+        _pendingSourceRevision = null;
         ContentKind = kind;
         ContentTitle = title;
         HintText = hint;
@@ -347,7 +351,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>重算当前列表（来源、筛选、排序、曲库变了）。</summary>
-    public void Recompute()
+    public void Recompute(bool playbackIntent = false)
     {
         _computeCts?.Cancel();
         RowsGeneration++;
@@ -408,12 +412,26 @@ public sealed partial class MainViewModel : ObservableObject
         var settings = S;
         var playlistId = (target as NavTarget.Playlist)?.PlaylistId;
         var isSearch = target is NavTarget.Search;
+        // Playlist membership is captured once through the existing repository before either computation.
+        // Neither the Next/EOF fallback nor the worker re-queries it; all other sources use the library snapshot.
+        var entries = playlistId is { } pid ? _playlists.Entries(pid) : null;
+        var compute = ListBuilder.Capture(snapshot, source, settings, entries);
+        var ordered = settings.SortFor(orderedView: true) == SongSort.FileName && !settings.SortDescending;
+        var unfiltered = settings.TagFilter.Count == 0;
+        List<Track> ComputeTracks()
+        {
+            var result = compute();
+            return isSearch && result.Count > 200 ? result.Take(200).ToList() : result;
+        }
+        long? revision = null;
+        var continuingIntent = _pendingSourceRevision == _app.Player.SourceSwitchRevision && _app.Player.PendingSourceContext is not null;
+        if ((playbackIntent || continuingIntent) && _app.Player.Queue.Current is not null)
+            revision = _pendingSourceRevision = _app.Player.BeginSourceSwitch(new QueueContext(source, title), () => ComputeTracks().Select(t => t.Id).ToArray());
         _ = Task.Run(() =>
         {
-            var list = ListBuilder.Tracks(snapshot, source, settings, _playlists);
-            if (isSearch && list.Count > 200) list = list.Take(200).ToList(); // 需求 S-1：最多 200 首
+            var list = ComputeTracks();
             if (cts.IsCancellationRequested) return;
-            var rows = BuildRows(snapshot, list, playlistId);
+            var rows = BuildRows(snapshot, list, entries, ordered, unfiltered);
             Dispatcher.UIThread.Post(() =>
             {
                 if (cts.IsCancellationRequested) return;
@@ -429,7 +447,12 @@ public sealed partial class MainViewModel : ObservableObject
                                   + (isSearch && list.Count >= 200 ? L.T("，只显示前 200 首") : "");
                 MarkPlaying();
                 // 播放队列跟着来源列表走（需求 P-15）
-                if (_app.Player.Queue.Context?.Source == source) _app.Player.Queue.SourceChanged(list.Select(t => t.Id).ToList());
+                if (revision is { } r)
+                {
+                    _app.Player.CompleteSourceSwitch(r, list.Select(t => t.Id).ToArray());
+                    if (_pendingSourceRevision == r) _pendingSourceRevision = null;
+                }
+                else if (_app.Player.Queue.Context?.Source == source) _app.Player.Queue.SourceChanged(list.Select(t => t.Id).ToList());
                 RowsChanged?.Invoke();
             });
         }, cts.Token);
@@ -438,20 +461,19 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>表格内容换了。</summary>
     public event Action? RowsChanged;
 
-    List<SongRow> BuildRows(LibrarySnapshot snapshot, List<Track> list, long? playlistId)
+    List<SongRow> BuildRows(LibrarySnapshot snapshot, List<Track> list, IReadOnlyList<PlaylistEntry>? entries, bool ordered, bool unfiltered)
     {
         var rows = new List<SongRow>(list.Count);
-        if (playlistId is { } pid)
+        if (entries is not null)
         {
             // 播放列表：按条目顺序（含不可用的），排序方式不是"文件名"时按排序后的顺序、不可用的排最后
-            var entries = _playlists.Entries(pid);
-            if (S.SortFor(orderedView: true) == SongSort.FileName && !S.SortDescending)
+            if (ordered)
             {
                 var allowed = list.Select(t => t.Id).ToHashSet();
                 foreach (var e in entries)
                 {
                     if (e.Track is { } t) { if (allowed.Contains(t.Id)) rows.Add(new SongRow(t, e.Item.Position, snapshot.Tags.GetValueOrDefault(t.TrackKey))); }
-                    else if (S.TagFilter.Count == 0) rows.Add(new SongRow(null, e.Item.Position, null, e.Item.ForeignRef ?? e.Item.TrackKey, e.Item.TrackKey));
+                    else if (unfiltered) rows.Add(new SongRow(null, e.Item.Position, null, e.Item.ForeignRef ?? e.Item.TrackKey, e.Item.TrackKey));
                 }
                 return rows;
             }
@@ -462,7 +484,7 @@ public sealed partial class MainViewModel : ObservableObject
                 q.Enqueue(e.Item.Position);
             }
             foreach (var t in list) rows.Add(new SongRow(t, positions.TryGetValue(t.Id, out var q) && q.Count > 0 ? q.Dequeue() : -1, snapshot.Tags.GetValueOrDefault(t.TrackKey)));
-            if (S.TagFilter.Count == 0)
+            if (unfiltered)
                 foreach (var e in entries.Where(e => e.Track is null))
                     rows.Add(new SongRow(null, e.Item.Position, null, e.Item.ForeignRef ?? e.Item.TrackKey, e.Item.TrackKey));
             return rows;
@@ -561,7 +583,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FilterText));
         RebuildNav();
         RefreshArtists();
-        Recompute();
+        Recompute(playbackIntent: true);
     }
 
     // ── 排序（需求 G-2）──
@@ -577,7 +599,7 @@ public sealed partial class MainViewModel : ObservableObject
         _settings.Save("sort");
         OnPropertyChanged(nameof(Sort));
         OnPropertyChanged(nameof(SortDescending));
-        Recompute();
+        Recompute(playbackIntent: true);
     }
 
     // ── 曲库变化 ──

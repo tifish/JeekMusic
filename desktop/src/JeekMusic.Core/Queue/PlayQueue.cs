@@ -25,6 +25,9 @@ public sealed class PlayQueue
     readonly Random _random;
     readonly List<QueueEntry> _items = new();
     IReadOnlyList<long>? _sourceList;
+    // A cross-source current song absent from the new source remains reachable as history,
+    // but must not reappear when Next/Repeat wraps the new list.
+    public int SourceAnchorIndex { get; private set; } = -1;
 
     public PlayQueue(Random? random = null) => _random = random ?? Random.Shared;
 
@@ -70,6 +73,7 @@ public sealed class PlayQueue
         _items.AddRange(order.Select(id => new QueueEntry(id, false)));
         _items.InsertRange(current + 1, manual);
         CurrentIndex = current;
+        SourceAnchorIndex = -1;
         Shuffle = random;
         Context = context;
         _sourceList = context is null ? null : list;
@@ -81,7 +85,7 @@ public sealed class PlayQueue
     {
         if (ids.Count == 0) return;
         if (_items.Count == 0) { PlayWithoutSource(ids); return; }
-        _items.InsertRange(CurrentIndex + 1, ids.Select(id => new QueueEntry(id, true)));
+        InsertManual(CurrentIndex + 1, ids);
         Changed?.Invoke();
     }
 
@@ -90,7 +94,7 @@ public sealed class PlayQueue
     {
         if (ids.Count == 0) return;
         if (_items.Count == 0) { PlayWithoutSource(ids); return; }
-        _items.InsertRange(CurrentIndex + 1 + ManualAfterCurrent().Count, ids.Select(id => new QueueEntry(id, true)));
+        InsertManual(CurrentIndex + 1 + ManualAfterCurrent().Count, ids);
         Changed?.Invoke();
     }
 
@@ -99,17 +103,25 @@ public sealed class PlayQueue
         _items.Clear();
         _items.AddRange(ids.Select(id => new QueueEntry(id, false)));
         CurrentIndex = 0;
+        SourceAnchorIndex = -1;
         Context = null;
         _sourceList = null;
         Changed?.Invoke();
     }
 
+    void InsertManual(int index, IReadOnlyList<long> ids)
+    {
+        if (SourceAnchorIndex >= index) SourceAnchorIndex += ids.Count;
+        _items.InsertRange(index, ids.Select(id => new QueueEntry(id, true)));
+    }
+
     /// <summary>断点续播：恢复保存的队列（已经是播放顺序，随机时也不重新排）。来源的列表等下次 <see cref="SourceChanged"/> 再记下。</summary>
-    public void Restore(IReadOnlyList<QueueEntry> items, int currentIndex, bool shuffle, RepeatMode repeat, QueueContext? context)
+    public void Restore(IReadOnlyList<QueueEntry> items, int currentIndex, bool shuffle, RepeatMode repeat, QueueContext? context, int sourceAnchorIndex = -1)
     {
         _items.Clear();
         _items.AddRange(items);
         CurrentIndex = items.Count == 0 ? -1 : Math.Clamp(currentIndex, 0, items.Count - 1);
+        SourceAnchorIndex = sourceAnchorIndex >= 0 && sourceAnchorIndex < items.Count ? sourceAnchorIndex : -1;
         Shuffle = shuffle;
         Repeat = repeat;
         Context = context;
@@ -125,10 +137,48 @@ public sealed class PlayQueue
         if (Context is null) return;
         var previous = _sourceList;
         _sourceList = list;
+        if (SourceAnchorIndex >= 0 && list.Contains(_items[SourceAnchorIndex].TrackId))
+        {
+            SourceAnchorIndex = -1;
+            Changed?.Invoke();
+        }
         if (previous is null || previous.SequenceEqual(list) || _items.Count == 0) return;
         // 随机时已经播过的歌（还在新列表里的）保留在前面，这一轮不再播
         var history = Shuffle ? _items.Take(CurrentIndex).Where(e => !e.Manual).Select(e => e.TrackId).ToList() : null;
         Apply(list, history);
+    }
+
+    /// <summary>显式选择当前视图的来源/排序筛选，保留当前条目和待播手动项，不跳转或开始播放。
+    /// 顺序模式从当前曲在新列表的位置接续；不在新列表时从首曲接续。
+    /// 跨来源不继承旧列表的顺序/随机历史，同源内容更新仍走 SourceChanged。</summary>
+    public void SwitchSource(QueueContext context, IReadOnlyList<long> list)
+    {
+        if (Current is not { } current) return;
+        if (Context?.Source == context.Source && _sourceList?.SequenceEqual(list) == true) { Context = context; return; }
+        var manual = _items.Skip(CurrentIndex + 1).Where(e => e.Manual).ToList();
+        var here = IndexOf(list, current.TrackId);
+        List<long> before, after;
+        if (Shuffle)
+        {
+            before = [];
+            after = list.Where((_, index) => index != here).ToList();
+            ShuffleInPlace(after);
+        }
+        else
+        {
+            before = here >= 0 ? list.Take(here).ToList() : [];
+            after = here >= 0 ? list.Skip(here + 1).ToList() : [.. list];
+        }
+        _items.Clear();
+        _items.AddRange(before.Select(id => new QueueEntry(id, false)));
+        _items.Add(current);
+        _items.AddRange(manual);
+        _items.AddRange(after.Select(id => new QueueEntry(id, false)));
+        CurrentIndex = before.Count;
+        SourceAnchorIndex = here < 0 ? CurrentIndex : -1;
+        Context = context;
+        _sourceList = list.ToArray();
+        Changed?.Invoke();
     }
 
     /// <summary>用户切换随机：打开时当前这首之外全部重新打乱；关闭时恢复列表顺序。</summary>
@@ -154,6 +204,7 @@ public sealed class PlayQueue
     {
         var c = CurrentIndex;
         var current = _items[c];
+        var sourceAnchor = SourceAnchorIndex == c && !list.Contains(current.TrackId);
         var inList = list.ToHashSet();
         var laterSource = _items.Skip(c + 1).Where(e => !e.Manual).Select(e => e.TrackId).ToList();
         List<long> before, after;
@@ -175,6 +226,11 @@ public sealed class PlayQueue
                 before = list.Take(here).ToList();
                 after = list.Skip(here + 1).ToList();
             }
+            else if (sourceAnchor)
+            {
+                before = [];
+                after = [.. list];
+            }
             else
             {
                 // 当前歌曲不在列表里了（或是手动添加的）：从它后面第一首还在列表里的歌接着播
@@ -189,7 +245,11 @@ public sealed class PlayQueue
         var oldAfter = _items.Skip(c + 1).ToList();
         if (oldBefore.Select(e => e.TrackId).SequenceEqual(before) && oldBefore.All(e => !e.Manual) &&
             oldAfter.Select(e => e.TrackId).SequenceEqual(manual.Select(e => e.TrackId).Concat(after)))
+        {
+            var anchor = sourceAnchor ? CurrentIndex : -1;
+            if (SourceAnchorIndex != anchor) { SourceAnchorIndex = anchor; Changed?.Invoke(); }
             return;
+        }
 
         _items.Clear();
         _items.AddRange(before.Select(id => new QueueEntry(id, false)));
@@ -197,6 +257,7 @@ public sealed class PlayQueue
         _items.AddRange(manual);
         _items.AddRange(after.Select(id => new QueueEntry(id, false)));
         CurrentIndex = before.Count;
+        SourceAnchorIndex = sourceAnchor ? CurrentIndex : -1;
         Changed?.Invoke();
     }
 
@@ -223,13 +284,16 @@ public sealed class PlayQueue
     /// 下一首的位置。<paramref name="user"/> 为 true 表示用户按了"下一首"：始终可用（需求 P-11），最后一首时回到第一首，
     /// 只有一首时还是它（从头重播）；单曲循环时用户也是切到下一首。为 false 表示自动播完：单曲循环时还是这首，
     /// 最后一首时列表循环回到第一首、否则停止（null）。
+    /// 例外：新来源为空且只保留历史锚点时，没有合法前向目标，用户下一首也返回 null。
     /// </summary>
     public int? NextIndex(bool user)
     {
         if (_items.Count == 0) return null;
         if (!user && Repeat == RepeatMode.One) return CurrentIndex;
-        if (CurrentIndex + 1 < _items.Count) return CurrentIndex + 1;
-        return user || Repeat == RepeatMode.All ? 0 : null;
+        for (var i = CurrentIndex + 1; i < _items.Count; i++) if (i != SourceAnchorIndex) return i;
+        if (!user && Repeat != RepeatMode.All) return null;
+        for (var i = 0; i < _items.Count; i++) if (i != SourceAnchorIndex) return i;
+        return null;
     }
 
     /// <summary>上一首的位置：第一首时列表循环回到最后一首，否则还是第一首（从头播）。</summary>
@@ -237,7 +301,9 @@ public sealed class PlayQueue
     {
         if (_items.Count == 0) return null;
         if (CurrentIndex > 0) return CurrentIndex - 1;
-        return Repeat == RepeatMode.All ? _items.Count - 1 : 0;
+        if (Repeat != RepeatMode.All) return 0;
+        for (var i = _items.Count - 1; i >= 0; i--) if (i != SourceAnchorIndex) return i;
+        return 0;
     }
 
     /// <summary>切到 <paramref name="index"/>（自动换歌、用户切歌、在队列里点一首）。</summary>
@@ -253,6 +319,8 @@ public sealed class PlayQueue
     {
         if (index < 0 || index >= _items.Count) return;
         _items.RemoveAt(index);
+        if (index == SourceAnchorIndex) SourceAnchorIndex = -1;
+        else if (index < SourceAnchorIndex) SourceAnchorIndex--;
         if (_items.Count == 0) CurrentIndex = -1;
         else if (index < CurrentIndex) CurrentIndex--;
         else if (index == CurrentIndex) CurrentIndex = Math.Min(CurrentIndex, _items.Count - 1);
@@ -266,6 +334,9 @@ public sealed class PlayQueue
         var entry = _items[from];
         _items.RemoveAt(from);
         _items.Insert(to, entry);
+        if (SourceAnchorIndex == from) SourceAnchorIndex = to;
+        else if (from < SourceAnchorIndex && to >= SourceAnchorIndex) SourceAnchorIndex--;
+        else if (from > SourceAnchorIndex && to <= SourceAnchorIndex) SourceAnchorIndex++;
         if (CurrentIndex == from) CurrentIndex = to;
         else if (from < CurrentIndex && to >= CurrentIndex) CurrentIndex--;
         else if (from > CurrentIndex && to <= CurrentIndex) CurrentIndex++;
@@ -277,6 +348,7 @@ public sealed class PlayQueue
     {
         _items.Clear();
         CurrentIndex = -1;
+        SourceAnchorIndex = -1;
         Context = null;
         _sourceList = null;
         Changed?.Invoke();
@@ -290,15 +362,18 @@ public sealed class PlayQueue
         // 当前位置落到原来当前歌曲（或它后面第一首还在的歌）上；后面都没有了就是最后一首
         var kept = new List<QueueEntry>();
         var newCurrent = -1;
+        var newAnchor = -1;
         for (var i = 0; i < _items.Count; i++)
         {
             if (!exists(_items[i].TrackId)) continue;
             if (i >= CurrentIndex && newCurrent < 0) newCurrent = kept.Count;
+            if (i == SourceAnchorIndex) newAnchor = kept.Count;
             kept.Add(_items[i]);
         }
         _items.Clear();
         _items.AddRange(kept);
         CurrentIndex = _items.Count == 0 ? -1 : newCurrent < 0 ? _items.Count - 1 : newCurrent;
+        SourceAnchorIndex = newAnchor;
         Changed?.Invoke();
         return currentGone;
     }

@@ -1,5 +1,14 @@
 # 实现与验证记录
 
+## 2026-10-25：即时浮显与主题合成配色修复（原生悬停验收待解锁）
+
+- 基线 `5d0a35d8100fbaaf60a4d7fbc5a1597eee57bab1`（1.0.155）。用户反馈背景失配和延迟。根因：无主题参数的 `TryFindResource(key, out value)` 传入 null，并不自动使用控件 ActualThemeVariant；旧代码把默认主题背景和实际暗色行前景组合。原测试仅比较画刷引用，且使用显式不透明窗口底色，未检查合成后实际像素是否可读。
+- 移除 350ms 延迟计时器，直接在当前 PointerMove 中创建点击透传覆盖层，兼容诊断字段 `pending=false` / `delayMs=0`。背景和边线按实际主题显式取资源，祖先背景及行选中/悬停色合成到不透明主题底色；真实 Mica 使用同主题实色近似，避免文字透底或默认浅色资源混入暗色。仅在原前景合成后对比度低于 3 时保护性选用可读深/浅前景，保留原字体字号及有效透明度。
+- `mainLayout.navigationOverflow` 兼容追加最近一次 `theme/background/foreground/contrastRatio/foregroundAdjusted` 只读诊断；不含文字内容，工具仍 22、输入 Schema 不变，开发和正式同一代码。描述/中英文文档同步。AGENTS.md 仅增补真实客户端 UI 验证约定：代理操作并截图、Headless 不代替原生验收、诚实记录阻断和未测项。
+- **154 项限定回归通过，0 失败/跳过**，含浮显专项 **27 项**、MainWindowLayout、FolderNavigation、Typography、McpSession、ArtistList、PlayingAppearance、SmartTag、OutputMenuInteraction。无延迟直接断言 MouseMove 返回时已 visible；新增应用主题继承 + 透明窗口/Mica hint、深浅/选中与未选中四种组合、主题切换旧表面关闭及新配色、低对比度自定义色保护，并读取 Skia 实际像素检查背景不透明及文字对比度，不以画刷引用替代可读性。使用模拟窗口、内存曲库和假音频，未启动测试音频或改写用户布局/主题。
+- `dotnet build desktop/src/JeekMusic.App/JeekMusic.App.csproj -c Release -r win-x64 --no-restore -p:JeekVersion=1.0.156`：0 警告/错误；RID 隔离输出不覆盖正在运行的 output 客户端。`git diff --check` 通过。
+- 已读 computer-use 技能及相关文档。其 native pipe 不可用；经用户授权的标准 PrintWindow(PW_RENDERFULLCONTENT) 成功保存真实 1.0.155 暗色/Mica 窗口静态截图 `desktop/artifacts/overflow-fix/native-before.png`（1822×1151，非 Headless）。随后确认 WTS Session 1 为 WTS_SESSIONSTATE_LOCK（lockFlag=0），OpenInputDesktop 返回 ERROR_ACCESS_DENIED(5)，已停止所有 UI 输入，不绕过锁屏、不轮询锁状态。该截图不证明旧 hover 复现或新 hover 通过。真实深浅主题、选中/未选中、立即浮显、点击/滚轮及主题/布局恢复仍待桌面解锁后由代理完成；未重启用户客户端或发布此修复，后续验收/发布由当前父会话协调继续。
+
 ## 2026-10-25：导航裁剪文字原位浮显
 
 - 基线 `36b2b7571c6cc14f54a9fb084382775181ef2344`（1.0.154）。保留微软雅黑字体链、22 个 MCP 工具、智能标签和格式菜单。文件夹、播放列表、固定艺术家、内置分组使用同一导航模板；新增 `NavigationOverflowReveal` 从真实鼠标位置识别名称或计数，停留 350ms 后仅为实际裁剪的字段显示原位文字副本。

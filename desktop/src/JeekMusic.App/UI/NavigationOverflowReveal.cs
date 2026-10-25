@@ -25,7 +25,6 @@ internal sealed class NavigationOverflowReveal : IDisposable
     readonly Window _window;
     readonly TreeView _tree;
     readonly Func<bool> _collapsed;
-    readonly DispatcherTimer _delay;
     readonly DispatcherTimer _readingTimer;
     readonly Stopwatch _readingClock = new();
     INotifyCollectionChanged? _items;
@@ -40,12 +39,13 @@ internal sealed class NavigationOverflowReveal : IDisposable
     string _reason = "none";
     double _naturalWidth;
     bool _wrapped;
+    string? _theme, _background, _foreground;
+    double _contrast;
+    bool _foregroundAdjusted;
 
     public NavigationOverflowReveal(Window window, TreeView tree, Func<bool> collapsed)
     {
         _window = window; _tree = tree; _collapsed = collapsed;
-        _delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
-        _delay.Tick += ShowAfterDelay;
         _readingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _readingTimer.Tick += OnReadTick;
         window.AddHandler(InputElement.PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel, true);
@@ -67,12 +67,14 @@ internal sealed class NavigationOverflowReveal : IDisposable
 
     public JsonObject Diagnostics() => new()
     {
-        ["visible"] = _surface is not null, ["pending"] = _delay.IsEnabled,
+        ["visible"] = _surface is not null, ["pending"] = false,
         ["reason"] = _reason, ["naturalWidth"] = _naturalWidth,
         ["visibleTextWidth"] = _visibleRect.Width, ["wrapped"] = _wrapped,
         ["overlayWidth"] = _surface?.Bounds.Width ?? 0, ["overlayHeight"] = _surface?.Bounds.Height ?? 0,
         ["automaticReading"] = _readingScroll is not null, ["readingOffset"] = _readingScroll?.Offset.Y ?? 0,
-        ["hitTestVisible"] = false, ["delayMs"] = _delay.Interval.TotalMilliseconds
+        ["hitTestVisible"] = false, ["delayMs"] = 0,
+        ["theme"] = _theme, ["background"] = _background, ["foreground"] = _foreground,
+        ["contrastRatio"] = _contrast, ["foregroundAdjusted"] = _foregroundAdjusted
     };
 
     void OnPointerMoved(object? sender, PointerEventArgs e)
@@ -96,8 +98,7 @@ internal sealed class NavigationOverflowReveal : IDisposable
         _sourceRect = source; _visibleRect = visible; _naturalWidth = width;
         field.PropertyChanged += OnSourceChanged;
         field.DetachedFromVisualTree += OnSourceDetached;
-        _reason = "delay";
-        _delay.Start();
+        Show();
     }
 
     // Intersect the actual run with every ancestor viewport/clip, not just the text's
@@ -135,9 +136,8 @@ internal sealed class NavigationOverflowReveal : IDisposable
         new Typeface(text.FontFamily, text.FontStyle, text.FontWeight, text.FontStretch), text.FontSize, text.Foreground,
         flowDirection: text.FlowDirection, lineHeight: text.LineHeight, letterSpacing: text.LetterSpacing, fontFeatures: text.FontFeatures);
 
-    void ShowAfterDelay(object? sender, EventArgs e)
+    void Show()
     {
-        _delay.Stop();
         if (!StillValid() || _source is not { } source || _row is null) { Close("stale"); return; }
         _layer = OverlayLayer.GetOverlayLayer(_tree);
         if (_layer is null || _window.TransformToVisual(_layer) is not { } toLayer) { Close("no-overlay"); return; }
@@ -154,17 +154,20 @@ internal sealed class NavigationOverflowReveal : IDisposable
         // Preserve effective text opacity (e.g. secondary counts), not only its brush.
         for (Visual? v = source; v is not null && v != _window; v = v.GetVisualParent()) text.Opacity *= v.Opacity;
 
-        // Opaque theme base under the original row's selected/hover brush. Copying only
-        // a translucent brush onto the song area would change the apparent row colour.
-        var baseBrush = _tree.TryFindResource("SystemControlBackgroundAltHighBrush", out var resource) && resource is IBrush brush
-            ? brush : new SolidColorBrush(_tree.ActualThemeVariant == ThemeVariant.Dark ? Color.Parse("#202020") : Colors.White);
-        var rowBackground = _row.GetVisualDescendants().OfType<Border>()
-            .FirstOrDefault(b => b.Name == "PART_LayoutRoot" && ReferenceEquals(b.TemplatedParent, _row))?.Background;
-        var fill = new Border { Background = rowBackground, Child = text, Padding = new Thickness(1), IsHitTestVisible = false };
+        // Resource lookup without a ThemeVariant passes null, NOT ActualThemeVariant.
+        // That mixed the default light backdrop with dark-row white text. Resolve the
+        // same actual theme as the source, then flatten its visual backgrounds onto
+        // an opaque base: the overlay cannot inherit native Mica's backdrop pixels.
+        var palette = ResolvePalette(source, text.Opacity);
+        text.Foreground = new SolidColorBrush(palette.Foreground);
+        _theme = _tree.ActualThemeVariant.ToString();
+        _background = palette.Background.ToString(); _foreground = palette.Foreground.ToString();
+        _contrast = palette.Contrast; _foregroundAdjusted = palette.Adjusted;
+        var fill = new Border { Child = text, Padding = new Thickness(1), IsHitTestVisible = false };
         _surface = new Border
         {
-            Name = "NavigationOverflowReveal", Background = baseBrush, Child = fill, IsHitTestVisible = false, Focusable = false,
-            BorderBrush = _tree.TryFindResource("SystemControlForegroundBaseLowBrush", out var line) ? line as IBrush : null,
+            Name = "NavigationOverflowReveal", Background = new SolidColorBrush(palette.Background), Child = fill, IsHitTestVisible = false, Focusable = false,
+            BorderBrush = _tree.TryFindResource("SystemControlForegroundBaseLowBrush", _tree.ActualThemeVariant, out var line) ? line as IBrush : null,
             BorderThickness = new Thickness(1), ClipToBounds = true
         };
 
@@ -208,6 +211,60 @@ internal sealed class NavigationOverflowReveal : IDisposable
         Canvas.SetLeft(_surface, location.X); Canvas.SetTop(_surface, location.Y);
         _layer.Children.Add(_surface);
         _reason = "revealed";
+    }
+
+    (Color Background, Color Foreground, double Contrast, bool Adjusted) ResolvePalette(TextBlock source, double opacity)
+    {
+        var theme = _tree.ActualThemeVariant;
+        var fallback = theme == ThemeVariant.Dark ? Color.Parse("#202020") : Colors.White;
+        // Mica is transparent in the visual tree. Its opaque theme counterpart avoids
+        // both text showing through from below and an unrelated default-theme colour.
+        var backdropKey = _window.ActualTransparencyLevel == WindowTransparencyLevel.Mica
+            ? "SystemControlBackgroundChromeMediumLowBrush" : "SystemControlBackgroundAltHighBrush";
+        var background = ResourceColor(backdropKey, fallback);
+        foreach (var visual in source.GetVisualAncestors().Reverse())
+        {
+            IBrush? brush = visual switch
+            {
+                Border b => b.Background, Panel p => p.Background,
+                TemplatedControl t => t.Background, _ => null
+            };
+            if (brush is ISolidColorBrush solid) background = Composite(BrushColor(solid), background);
+        }
+        var foreground = source.Foreground is ISolidColorBrush actual ? BrushColor(actual)
+            : ResourceColor("SystemControlForegroundBaseHighBrush", theme == ThemeVariant.Dark ? Colors.White : Colors.Black);
+        var ratio = Contrast(Composite(WithOpacity(foreground, opacity), background), background);
+        var adjusted = ratio < 3;
+        if (adjusted)
+        {
+            // Preserve the original foreground unless the combined palette is unreadable.
+            // This also protects custom/translucent themes and unusually pale accents.
+            var blackRatio = Contrast(Composite(WithOpacity(Colors.Black, opacity), background), background);
+            var whiteRatio = Contrast(Composite(WithOpacity(Colors.White, opacity), background), background);
+            foreground = blackRatio >= whiteRatio ? Colors.Black : Colors.White;
+            ratio = Math.Max(blackRatio, whiteRatio);
+        }
+        return (background, foreground, ratio, adjusted);
+
+        Color ResourceColor(string key, Color alternative) => _tree.TryFindResource(key, theme, out var resource) && resource is ISolidColorBrush solid
+            ? Composite(BrushColor(solid), fallback) : alternative;
+    }
+
+    static Color BrushColor(ISolidColorBrush brush) => WithOpacity(brush.Color, brush.Opacity);
+    static Color WithOpacity(Color color, double opacity) => Color.FromArgb((byte)Math.Round(color.A * Math.Clamp(opacity, 0, 1)), color.R, color.G, color.B);
+    static Color Composite(Color foreground, Color opaqueBackground)
+    {
+        var alpha = foreground.A / 255d;
+        return Color.FromRgb((byte)Math.Round(foreground.R * alpha + opaqueBackground.R * (1 - alpha)),
+            (byte)Math.Round(foreground.G * alpha + opaqueBackground.G * (1 - alpha)),
+            (byte)Math.Round(foreground.B * alpha + opaqueBackground.B * (1 - alpha)));
+    }
+    static double Contrast(Color a, Color b)
+    {
+        var first = Luminance(a); var second = Luminance(b);
+        return (Math.Max(first, second) + .05) / (Math.Min(first, second) + .05);
+        static double Luminance(Color color) => .2126 * Linear(color.R) + .7152 * Linear(color.G) + .0722 * Linear(color.B);
+        static double Linear(byte value) => value / 255d <= .04045 ? value / 255d / 12.92 : Math.Pow((value / 255d + .055) / 1.055, 2.4);
     }
 
     Rect AvailableClientRect()
@@ -262,7 +319,6 @@ internal sealed class NavigationOverflowReveal : IDisposable
 
     public void Close(string reason)
     {
-        _delay.Stop();
         _readingTimer.Stop(); _readingClock.Reset(); _readingScroll = null;
         if (_source is not null)
         {
@@ -278,7 +334,6 @@ internal sealed class NavigationOverflowReveal : IDisposable
     {
         if (_disposed) return;
         _disposed = true; Close("closed");
-        _delay.Tick -= ShowAfterDelay;
         _readingTimer.Tick -= OnReadTick;
         _window.RemoveHandler(InputElement.PointerMovedEvent, OnPointerMoved);
         _window.RemoveHandler(InputElement.PointerPressedEvent, OnPress);

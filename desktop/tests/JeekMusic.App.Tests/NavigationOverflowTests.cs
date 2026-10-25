@@ -26,14 +26,14 @@ namespace JeekMusic.App.Tests;
 public sealed class NavigationOverflowTests
 {
     [Fact]
-    public Task OnlyClippedTextRevealsAfterDelayWithoutResizingOrChangingSelection() => Run(async () =>
+    public Task OnlyClippedTextRevealsInPointerMoveWithoutResizingOrChangingSelection() => Run(async () =>
     {
         using var h = new Harness();
         var before = h.Save(); var selected = h.Vm.SelectedNav;
-        h.Hover(h.Short); await h.WaitDelay(); Assert.False(h.Visible);
-        h.Hover(h.Long); Assert.True(h.D["pending"]!.GetValue<bool>()); Assert.False(h.Visible);
-        await Task.Delay(100); h.Pump(); Assert.False(h.Visible);
-        await h.WaitDelay(); Assert.True(h.Visible, h.D.ToJsonString());
+        h.Hover(h.Short); Assert.False(h.VisibleAtMoveReturn); Assert.False(h.Visible);
+        h.Hover(h.Long); Assert.True(h.VisibleAtMoveReturn); Assert.True(h.Visible, h.D.ToJsonString());
+        Assert.False(h.D["pending"]!.GetValue<bool>()); Assert.Equal(0, h.D["delayMs"]!.GetValue<int>());
+        await Task.CompletedTask;
         Assert.Equal(h.Long.Title, h.RevealText.Text);
         Assert.Same(selected, h.Vm.SelectedNav); Assert.Equal(before.NavWidth, h.Save().NavWidth);
         Assert.Equal(before.CollapsedFolders, h.Save().CollapsedFolders);
@@ -52,18 +52,18 @@ public sealed class NavigationOverflowTests
         h.Window.SetRenderScaling(scale); h.Window.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
         h.Window.Background = dark ? new SolidColorBrush(Color.Parse("#202020")) : Brushes.White;
         if (selected) h.Vm.SelectedNav = h.Long;
-        h.Pump(); h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible, h.D.ToJsonString());
+        h.Pump(); h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible, h.D.ToJsonString());
         var original = h.Name(h.Long); var clone = h.RevealText;
         Assert.Equal(original.FontFamily, clone.FontFamily); Assert.Equal(original.FontSize, clone.FontSize);
         Assert.Equal(original.FontWeight, clone.FontWeight); Assert.Equal(original.FontStyle, clone.FontStyle);
-        Assert.Same(original.Foreground, clone.Foreground); Assert.Equal(original.LetterSpacing, clone.LetterSpacing);
+        Assert.Equal(((ISolidColorBrush)original.Foreground!).Color, ((ISolidColorBrush)clone.Foreground!).Color); Assert.Equal(original.LetterSpacing, clone.LetterSpacing);
         var origin = original.TranslatePoint(default, h.Window)!.Value;
         var floated = clone.TranslatePoint(default, h.Window)!.Value;
         Assert.InRange(Math.Abs(origin.X - floated.X), 0, 1 / scale + .01);
         Assert.InRange(Math.Abs(origin.Y - floated.Y), 0, 1 / scale + .01);
         Assert.False(h.D["wrapped"]!.GetValue<bool>());
-        var header = h.Row(h.Long).GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_LayoutRoot" && ReferenceEquals(b.TemplatedParent, h.Row(h.Long)));
-        Assert.Same(header.Background, ((Border)h.Surface.Child!).Background);
+        Assert.True(h.D["contrastRatio"]!.GetValue<double>() >= 3, h.D.ToJsonString());
+        Assert.Equal(255, ((ISolidColorBrush)h.Surface.Background!).Color.A);
         h.Capture($"overflow-{(dark ? "dark" : "light")}-{(selected ? "selected" : "hover")}-{scale}");
         // Click through the overlay still selects/navigates the original row.
         h.Click(original); Assert.Same(h.Long, h.Vm.SelectedNav); Assert.False(h.Visible);
@@ -76,7 +76,7 @@ public sealed class NavigationOverflowTests
         var text = h.Name(h.Long);
         text.Width = 600; text.TextTrimming = TextTrimming.None; h.Pump();
         Assert.True(text.Bounds.Width > 500);
-        h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible, h.D.ToJsonString());
+        h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible, h.D.ToJsonString());
         Assert.True(h.D["naturalWidth"]!.GetValue<double>() < text.Bounds.Width);
         Assert.True(h.D["visibleTextWidth"]!.GetValue<double>() < h.D["naturalWidth"]!.GetValue<double>());
     });
@@ -88,11 +88,11 @@ public sealed class NavigationOverflowTests
         var playlist = h.Vm.Nav.Single(n => n.Kind == NavKind.Playlists);
         playlist.IsExpanded = true; h.Pump();
         var english = playlist.Children.Single();
-        h.Hover(english); await h.WaitDelay(); Assert.True(h.Visible); Assert.Equal(english.Title, h.RevealText.Text);
+        h.Hover(english); await Task.CompletedTask; Assert.True(h.Visible); Assert.Equal(english.Title, h.RevealText.Text);
         h.Window.MouseMove(new Point(700, 400)); h.Pump();
         h.Long.IsExpanded = true;
         var branch = h.Long.Children.Single(); branch.IsExpanded = false; h.Pump();
-        h.Tree.ScrollIntoView(branch); h.Pump(); h.Hover(branch); await h.WaitDelay();
+        h.Tree.ScrollIntoView(branch); h.Pump(); h.Hover(branch); await Task.CompletedTask;
         Assert.True(h.Visible, h.D.ToJsonString()); Assert.False(branch.IsExpanded);
         Assert.Equal(branch.Title, h.RevealText.Text);
     });
@@ -103,7 +103,7 @@ public sealed class NavigationOverflowTests
         using var h = new Harness(760);
         var row = h.Long;
         var text = h.Name(row); text.Text = string.Concat(Enumerable.Repeat("很长的目录Name", 18)); h.Pump();
-        h.Hover(row); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(row); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.True(h.D["wrapped"]!.GetValue<bool>()); Assert.Equal(text.FontSize, h.RevealText.FontSize);
         Assert.Equal(text.Text, h.RevealText.Text); Assert.Equal(TextTrimming.None, h.RevealText.TextTrimming);
         var bounds = new Rect(h.Surface.Bounds.Size).TransformToAABB(h.Surface.TransformToVisual(h.Window)!.Value);
@@ -122,17 +122,17 @@ public sealed class NavigationOverflowTests
     [InlineData("detach")]
     [InlineData("inactive")]
     [InlineData("close")]
-    public Task LifecycleAndInputChangesCloseVisibleAndPendingReveal(string change) => Run(async () =>
+    public Task LifecycleAndInputChangesCloseImmediateReveal(string change) => Run(async () =>
     {
         using var h = new Harness();
-        h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible);
         Change(); h.Pump(); Assert.False(h.Visible);
         if (change == "close") { Assert.Null(h.App.MainLayoutDiagnostics); return; }
         Assert.False(h.D["pending"]!.GetValue<bool>());
         if (change is "wheel" or "resize" or "splitter")
         {
-            h.Tree.ScrollIntoView(h.Long); h.Pump(); h.Hover(h.Long); Assert.True(h.D["pending"]!.GetValue<bool>());
-            Change(); await h.WaitDelay(); Assert.False(h.Visible); Assert.False(h.D["pending"]!.GetValue<bool>());
+            h.Tree.ScrollIntoView(h.Long); h.Pump(); h.Hover(h.Long); Assert.False(h.D["pending"]!.GetValue<bool>());
+            Change(); h.Pump(); await Task.CompletedTask; Assert.False(h.Visible); Assert.False(h.D["pending"]!.GetValue<bool>());
         }
         void Change()
         {
@@ -158,12 +158,12 @@ public sealed class NavigationOverflowTests
     public Task ScrolledContainersAndChangedTextCannotLeaveStaleOverlay() => Run(async () =>
     {
         using var h = new Harness();
-        h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible);
         var scroll = h.Tree.GetVisualDescendants().OfType<ScrollViewer>().First();
         scroll.Offset = new Vector(0, 200); h.Pump(); Assert.False(h.Visible);
-        scroll.Offset = default; h.Pump(); h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible);
+        scroll.Offset = default; h.Pump(); h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible);
         h.Name(h.Long).Text = "changed"; h.Pump(); Assert.False(h.Visible);
-        h.Hover(h.Short); await h.WaitDelay(); Assert.False(h.Visible);
+        h.Hover(h.Short); await Task.CompletedTask; Assert.False(h.Visible);
     });
 
     [Fact]
@@ -172,13 +172,13 @@ public sealed class NavigationOverflowTests
         using var h = new Harness();
         var row = h.Long; h.Vm.SelectedNav = row; h.Pump();
         h.Name(row).Focus(); var focus = h.Window.FocusManager!.GetFocusedElement();
-        h.Hover(row); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(row); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.Same(focus, h.Window.FocusManager.GetFocusedElement());
         var downs = 0; var wheels = 0;
         h.Tree.AddHandler(InputElement.PointerPressedEvent, (_, _) => downs++, RoutingStrategies.Tunnel, true);
         h.Tree.AddHandler(InputElement.PointerWheelChangedEvent, (_, _) => wheels++, RoutingStrategies.Tunnel, true);
         h.Click(h.Name(row)); h.Click(h.Name(row)); h.Pump(); Assert.Equal(2, downs);
-        h.Hover(row); await h.WaitDelay();
+        h.Hover(row); await Task.CompletedTask;
         h.Click(h.Name(row), MouseButton.Right); h.Pump(); Assert.Equal(3, downs); Assert.False(h.Visible);
         h.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
         h.Window.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null); h.Pump();
@@ -194,8 +194,8 @@ public sealed class NavigationOverflowTests
         var schema = h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject()); Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         h.Hover(h.Long);
-        for (var i = 0; i < 3; i++) Assert.False(h.D["visible"]!.GetValue<bool>());
-        await h.WaitDelay(); Assert.True(h.Visible); Assert.Equal(width, h.Save().NavWidth);
+        for (var i = 0; i < 3; i++) Assert.True(h.D["visible"]!.GetValue<bool>());
+        await Task.CompletedTask; Assert.True(h.Visible); Assert.Equal(width, h.Save().NavWidth);
         h.Close(); Assert.Null(h.App.MainLayoutDiagnostics);
         Assert.False(h.Tools.Call("get_diagnostics", new())["mainLayout"]!["created"]!.GetValue<bool>());
     });
@@ -208,7 +208,7 @@ public sealed class NavigationOverflowTests
         var row = h.Row(h.Long);
         var icon = row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("nav-icon") && ReferenceEquals(t.DataContext, h.Long));
         var point = icon.TranslatePoint(new Point(2, 2), h.Window)!.Value;
-        h.Window.MouseMove(point); h.Pump(); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Window.MouseMove(point); h.Pump(); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.Equal(h.Long.Title, h.RevealText.Text);
         h.Window.MouseMove(new Point(700, 400)); h.Pump();
         name.Width = 20;
@@ -216,9 +216,9 @@ public sealed class NavigationOverflowTests
         count.Text = "123456789"; count.Width = 20; h.Pump();
         point = count.TranslatePoint(new Point(2, 2), h.Window)!.Value;
         Assert.Same(row, (h.Window.InputHitTest(point) as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true));
-        h.Window.MouseMove(point); h.Pump(); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Window.MouseMove(point); h.Pump(); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.Equal(count.Text, h.RevealText.Text); Assert.Equal(count.FontSize, h.RevealText.FontSize);
-        Assert.Equal(count.Opacity, h.RevealText.Opacity); Assert.Same(count.Foreground, h.RevealText.Foreground);
+        Assert.Equal(count.Opacity, h.RevealText.Opacity); Assert.Equal(((ISolidColorBrush)count.Foreground!).Color, ((ISolidColorBrush)h.RevealText.Foreground!).Color);
     });
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class NavigationOverflowTests
     {
         using var h = new Harness(760);
         var name = h.Name(h.Long); name.Text = string.Concat(Enumerable.Repeat("全文内容Long name ", 500)); h.Pump();
-        h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.True(h.D["automaticReading"]!.GetValue<bool>());
         Assert.Equal(name.Text, h.RevealText.Text); Assert.Equal(name.FontSize, h.RevealText.FontSize);
         await Task.Delay(1300); h.Pump(); Assert.True(h.D["readingOffset"]!.GetValue<double>() > 0);
@@ -236,17 +236,67 @@ public sealed class NavigationOverflowTests
     });
 
     [Fact]
-    public Task QuickHoverChangesCancelOldDelayAndMovingInsideTheRowDoesNotFlicker() => Run(async () =>
+    public Task QuickHoverSwitchesImmediatelyAndMovingInsideTheRowDoesNotFlicker() => Run(async () =>
     {
         using var h = new Harness();
-        h.Hover(h.Long); Assert.True(h.D["pending"]!.GetValue<bool>());
-        h.Hover(h.Short); await h.WaitDelay(); Assert.False(h.Visible);
-        h.Hover(h.Long); await h.WaitDelay(); Assert.True(h.Visible);
+        h.Hover(h.Long); Assert.False(h.D["pending"]!.GetValue<bool>());
+        Assert.True(h.VisibleAtMoveReturn);
+        h.Hover(h.Short); await Task.CompletedTask; Assert.False(h.Visible);
+        h.Hover(h.Long); await Task.CompletedTask; Assert.True(h.Visible);
         var surface = h.Surface;
         var point = h.Name(h.Long).TranslatePoint(new Point(12, 4), h.Window)!.Value;
         h.Window.MouseMove(point); h.Pump(); Assert.Same(surface, h.Surface);
         Assert.False(h.D["pending"]!.GetValue<bool>());
         h.Window.MouseMove(new Point(600, point.Y)); h.Pump(); Assert.False(h.Visible);
+    });
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public Task InheritedThemeAndTransparentMicaHintProduceReadableCompositedPixels(bool dark, bool selected) => Run(async () =>
+    {
+        using var h = new Harness();
+        // Match production: application owns the theme, the window inherits it and
+        // its background is transparent. Explicit opaque test backgrounds hid this bug.
+        Application.Current!.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        h.Window.RequestedThemeVariant = ThemeVariant.Default;
+        h.Window.Background = Brushes.Transparent;
+        h.Window.TransparencyLevelHint = [WindowTransparencyLevel.Mica];
+        if (selected) h.Vm.SelectedNav = h.Long;
+        h.Pump(); h.Hover(h.Long);
+        Assert.True(h.VisibleAtMoveReturn); Assert.True(h.Visible);
+        Assert.Equal(0, h.D["delayMs"]!.GetValue<int>()); Assert.False(h.D["pending"]!.GetValue<bool>());
+        Assert.Equal(dark ? "Dark" : "Light", h.D["theme"]!.GetValue<string>());
+        Assert.False(h.D["foregroundAdjusted"]!.GetValue<bool>(), h.D.ToJsonString());
+        Assert.True(h.D["contrastRatio"]!.GetValue<double>() >= 3, h.D.ToJsonString());
+        h.AssertRenderedTextContrast();
+        h.Capture($"overflow-fixed-transparent-{(dark ? "dark" : "light")}-{(selected ? "selected" : "hover")}");
+
+        // Changing themes closes the old surface; the very next move gets a new palette.
+        var oldBackground = h.D["background"]!.GetValue<string>();
+        Application.Current.RequestedThemeVariant = dark ? ThemeVariant.Light : ThemeVariant.Dark;
+        h.Pump(); Assert.False(h.Visible);
+        h.Hover(h.Long); Assert.True(h.VisibleAtMoveReturn);
+        Assert.Equal(dark ? "Light" : "Dark", h.D["theme"]!.GetValue<string>());
+        Assert.NotEqual(oldBackground, h.D["background"]!.GetValue<string>());
+        h.AssertRenderedTextContrast();
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task LowContrastCustomBackdropPreservesFontAndUsesReadableForeground() => Run(async () =>
+    {
+        using var h = new Harness();
+        h.Name(h.Long).Foreground = Brushes.White;
+        h.Window.Background = Brushes.White;
+        h.Pump(); h.Hover(h.Long); Assert.True(h.VisibleAtMoveReturn);
+        Assert.True(h.D["foregroundAdjusted"]!.GetValue<bool>());
+        Assert.Equal(h.Name(h.Long).FontSize, h.RevealText.FontSize);
+        Assert.True(h.D["contrastRatio"]!.GetValue<double>() >= 3);
+        h.AssertRenderedTextContrast();
+        await Task.CompletedTask;
     });
 
     static async Task Run(Func<Task> test)
@@ -267,6 +317,7 @@ public sealed class NavigationOverflowTests
         public McpTools Tools { get; }
         public JsonNode D => Tools.Call("get_diagnostics", new())["mainLayout"]!["navigationOverflow"]!;
         public bool Visible => !_closed && D["visible"]!.GetValue<bool>();
+        public bool VisibleAtMoveReturn { get; private set; }
         public TreeView Tree => Control<TreeView>("NavTree");
         public NavNode Root => Vm.Nav.Single(n => n.Kind == NavKind.Folders).Children.Single();
         public NavNode Long => Root.Children.Single(n => n.Title.StartsWith("a中文"));
@@ -302,7 +353,6 @@ public sealed class NavigationOverflowTests
         public TreeViewItem Row(NavNode node) => Tree.GetVisualDescendants().OfType<TreeViewItem>().Single(c => ReferenceEquals(c.DataContext, node));
         public TextBlock Name(NavNode node) => Row(node).GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("nav-name") && ReferenceEquals(t.DataContext, node));
         public void Pump() { for (var i = 0; i < 6; i++) { Window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); } }
-        public async Task WaitDelay() { await Task.Delay(420); Pump(); }
         public UiState Save() { var state = new UiState(); Window.SaveLayout(state); return state; }
         public void Hover(NavNode node)
         {
@@ -322,7 +372,7 @@ public sealed class NavigationOverflowTests
             var hit = Window.InputHitTest(point) as Visual;
             Assert.True(ReferenceEquals(Row(node), hit?.FindAncestorOfType<TreeViewItem>(includeSelf: true)),
                 $"Wanted {node.Title}; point={point}; name={text.Bounds}; tree={Tree.Bounds}; got={(hit?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext as NavNode)?.Title}; {D}");
-            Window.MouseMove(point); Pump();
+            Window.MouseMove(point); VisibleAtMoveReturn = Visible; Pump();
         }
         public void Click(Control control, MouseButton button = MouseButton.Left)
         {
@@ -340,6 +390,35 @@ public sealed class NavigationOverflowTests
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(); using var frame = Window.CaptureRenderedFrame(); Assert.NotNull(frame);
             if (Environment.GetEnvironmentVariable("JEEKMUSIC_TEST_ARTIFACTS") is { Length: > 0 } output)
             { Directory.CreateDirectory(output); frame.Save(Path.Combine(output, name + ".png"), PngBitmapEncoderOptions.Default); }
+        }
+        public void AssertRenderedTextContrast()
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            using var frame = Window.CaptureRenderedFrame(); Assert.NotNull(frame);
+            Assert.True(frame.Format == Avalonia.Platform.PixelFormat.Bgra8888 || frame.Format == Avalonia.Platform.PixelFormat.Rgba8888);
+            var red = frame.Format == Avalonia.Platform.PixelFormat.Rgba8888 ? 0 : 2;
+            var blue = 2 - red;
+            var location = RevealText.TranslatePoint(default, Window)!.Value;
+            var scale = Window.RenderScaling;
+            var crop = new PixelRect((int)Math.Ceiling(location.X * scale), (int)Math.Ceiling(location.Y * scale),
+                (int)Math.Floor(RevealText.Bounds.Width * scale), (int)Math.Floor(RevealText.Bounds.Height * scale));
+            var stride = crop.Width * 4; var bytes = new byte[stride * crop.Height];
+            var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(bytes.Length);
+            try
+            {
+                frame.CopyPixels(crop, buffer, bytes.Length, stride);
+                System.Runtime.InteropServices.Marshal.Copy(buffer, bytes, 0, bytes.Length);
+            }
+            finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
+            var low = 1d; var high = 0d;
+            for (var i = 0; i < bytes.Length; i += 4)
+            {
+                Assert.Equal(255, bytes[i + 3]); // backdrop is actually opaque in the rendered image
+                var luminance = .2126 * Linear(bytes[i + red]) + .7152 * Linear(bytes[i + 1]) + .0722 * Linear(bytes[i + blue]);
+                low = Math.Min(low, luminance); high = Math.Max(high, luminance);
+            }
+            Assert.True((high + .05) / (low + .05) >= 3, $"Rendered contrast={(high + .05) / (low + .05)}; {D}");
+            static double Linear(byte value) => value / 255d <= .04045 ? value / 255d / 12.92 : Math.Pow((value / 255d + .055) / 1.055, 2.4);
         }
         public void Close() { if (_closed) return; _closed = true; Vm.Player.ProgressVisible = false; Window.Close(); Pump(); }
         public void Dispose() { Close(); App.Dispose(); Assert.Empty(_engines); Assert.Empty(_endpoint.Writes); File.Delete(_path); }

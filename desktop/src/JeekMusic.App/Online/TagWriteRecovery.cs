@@ -30,8 +30,9 @@ internal static class TagWriteRecovery
         if (new FileInfo(path).Length > 65536) throw new IOException("Oversized tag transaction journal");
         var j = JsonSerializer.Deserialize(File.ReadAllBytes(path), TagWriteJournalJson.Default.TagWriteJournal) ?? throw new IOException("Empty tag transaction journal");
         if (j.Source is null || j.Candidate is null || j.Original is null || j.SourceHash is null || j.CandidateHash is null || j.MetadataHash is null) throw new IOException("Incomplete tag transaction journal");
-        var staging = Path.Combine(Path.GetDirectoryName(j.Source)!, ".jeekmusic", "tag-writes");
-        bool InStaging(string p) => Path.IsPathFullyQualified(p) && Path.GetDirectoryName(p)!.Equals(staging, StringComparison.OrdinalIgnoreCase);
+        var sourceParent = Path.GetDirectoryName(j.Source) ?? throw new IOException("Invalid tag transaction mapping");
+        var staging = Path.Combine(sourceParent, ".jeekmusic", "tag-writes");
+        bool InStaging(string p) => Path.IsPathFullyQualified(p) && Path.GetDirectoryName(p) is { } parent && parent.Equals(staging, StringComparison.OrdinalIgnoreCase);
         if (j.Version != 1 || !Path.IsPathFullyQualified(j.Source) || !InStaging(j.Candidate) || !InStaging(j.Original) ||
             !j.Original.EndsWith(".original", StringComparison.Ordinal) || new[] { j.SourceHash, j.CandidateHash, j.MetadataHash }.Any(h => h.Length != 64 || !h.All(Uri.IsHexDigit)))
             throw new IOException("Invalid tag transaction mapping");

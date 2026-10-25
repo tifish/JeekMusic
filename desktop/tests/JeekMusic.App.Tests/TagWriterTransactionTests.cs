@@ -195,6 +195,23 @@ public sealed class TagWriterTransactionTests
             Assert.Single(Directory.GetFiles(Path.Combine(root, "data", "tag-transactions"), "*.json"));
         });
     }
+    [Theory]
+    [InlineData("Candidate")] [InlineData("Original")]
+    public void RootPathInJournalDefersRecoveryAndScanWithoutLosingJournalOrOriginal(string field)
+    {
+        Case((root, path) =>
+        {
+            var original = File.ReadAllBytes(path); Assert.Equal(0, Probe(root, "scan").Code);
+            Assert.True(Probe(root, "crash", "source-reserved").Code is not (0 or 20 or 21)); Assert.False(File.Exists(path));
+            var reserved = Assert.Single(Directory.GetFiles(Path.Combine(root, "music", ".jeekmusic", "tag-writes"), "*.original"));
+            var journal = Assert.Single(Directory.GetFiles(Path.Combine(root, "data", "tag-transactions"), "*.json"));
+            var mapping = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(journal))!; mapping[field] = Path.GetPathRoot(path)!;
+            File.WriteAllText(journal, mapping.ToJsonString()); var pending = File.ReadAllBytes(journal);
+            var recovery = Probe(root, "recover"); Assert.True(recovery.Code == 1, recovery.Output);
+            var scan = Probe(root, "scan"); Assert.True(scan.Code == 0, scan.Output); Assert.Contains("records=1 deleted=0 failed=1", scan.Output);
+            Assert.False(File.Exists(path)); Assert.Equal(pending, File.ReadAllBytes(journal)); Assert.Equal(original, File.ReadAllBytes(reserved));
+        });
+    }
     [Fact]
     public void LiveScannerCannotObserveAnInProcessCommitNameGap()
     {

@@ -46,6 +46,7 @@ public partial class MainWindow
     {
         if (collapsed == _navCollapsed) return;
         CancelAutomaticNavWidth();
+        _navigationOverflow?.Close("navigation-collapsed");
         _navCollapsed = collapsed;
         NavTree.Classes.Set("collapsed", collapsed);
         NavSplitter.IsVisible = !collapsed;

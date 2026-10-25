@@ -6,6 +6,15 @@
         <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
     </Styles.Resources>
 
+    <!-- Icon-only mode keeps its existing accessible name hint. Expanded names use
+         the in-place, clipped-text reveal instead of a conventional tooltip. -->
+    <Style Selector="TreeView TextBlock.nav-icon">
+        <Setter Property="ToolTip.IsEnabled" Value="False" />
+    </Style>
+    <Style Selector="TreeView.collapsed TextBlock.nav-icon">
+        <Setter Property="ToolTip.IsEnabled" Value="True" />
+    </Style>
+
     <!-- A narrow visible rule, with a full-height six-DIP pointer target. -->
     <Style Selector="GridSplitter.pane-splitter">
         <Setter Property="Background" Value="Transparent" />

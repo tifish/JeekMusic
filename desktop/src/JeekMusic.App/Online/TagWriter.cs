@@ -30,6 +30,7 @@ public static class TagWriter
                 Directory.CreateDirectory(staging);
                 temporary = Path.Combine(staging, Guid.NewGuid().ToString("N") + original.Extension);
                 File.Copy(path, temporary);
+                var id3v1 = ReadId3v1(temporary);
                 var track = new ATL.Track(temporary);
                 if (coverJpeg is not null)
                 {
@@ -48,11 +49,15 @@ public static class TagWriter
                 if (!ok) Log.Warn("tagwriter", $"写入失败：{path}");
                 if (ok)
                 {
+                    // ID3v1 has no artwork/lyrics and cannot represent Unicode. ATL synchronizes the
+                    // ID3v2 text back into it on Save; retain the user's original legacy bytes instead.
+                    RestoreId3v1(temporary, id3v1);
                     original.Refresh();
                     if (original.Length != size || original.LastWriteTimeUtc != mtime) throw new IOException("文件在写入期间已变化");
                     File.SetLastWriteTimeUtc(temporary, mtime);
                     File.SetCreationTimeUtc(temporary, original.CreationTimeUtc);
                     File.Replace(temporary, path, null);
+                    Log.Info("tagwriter", $"写入完成：{path} cover={coverJpeg is not null} lyrics={lyrics is not null} id3v1Preserved={id3v1 is not null}");
                 }
                 return ok;
             }
@@ -68,6 +73,32 @@ public static class TagWriter
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("tagwriter", "清理临时文件失败", e); }
             }
         }
+    }
+
+    static byte[]? ReadId3v1(string path)
+    {
+        using var file = File.OpenRead(path);
+        if (file.Length < 128) return null;
+        file.Seek(-128, SeekOrigin.End);
+        var tag = new byte[128];
+        file.ReadExactly(tag);
+        return tag.AsSpan(0, 3).SequenceEqual("TAG"u8) ? tag : null;
+    }
+
+    static void RestoreId3v1(string path, byte[]? tag)
+    {
+        if (tag is null) return;
+        using var file = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Span<byte> marker = stackalloc byte[3];
+        var hasTag = false;
+        if (file.Length >= 128)
+        {
+            file.Seek(-128, SeekOrigin.End);
+            file.ReadExactly(marker);
+            hasTag = marker.SequenceEqual("TAG"u8);
+        }
+        file.Seek(hasTag ? -128 : 0, SeekOrigin.End);
+        file.Write(tag);
     }
 
     /// <summary>能不能写入这种格式（CUE 整轨的一首歌不能写进整个文件，由调用方判断）。</summary>

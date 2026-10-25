@@ -33,14 +33,14 @@ public static partial class TagReader
     static int _configured;
 
     /// <summary>
-    /// 多值字段用 \0 连接（和移动端 artist_raw 的格式一致）；ID3v2.3 里声明为 ISO-8859-1 的字符串按 Latin-1 解码，
-    /// 这样每个字符就是一个原始字节，CharsetFixer 可以无损还原 GBK（设计 §5.3）。
+    /// 多值字段用 \0 连接（和移动端 artist_raw 的格式一致）。ATL 按 ID3 编码字节读取 Latin-1，
+    /// CharsetFixer 因而仍可还原误标的 GBK；DefaultTextEncoding 也控制保存，必须使用 Unicode 编码。
     /// </summary>
     public static void Configure()
     {
         if (Interlocked.Exchange(ref _configured, 1) == 1) return;
         ATL.Settings.DisplayValueSeparator = LibraryDb.MultiValueSeparator;
-        ATL.Settings.DefaultTextEncoding = Encoding.Latin1;
+        ATL.Settings.DefaultTextEncoding = Encoding.UTF8;
         ATL.Settings.UseFileNameWhenNoTitle = false;
         ATL.Settings.NullAbsentValues = true;
         ATL.Settings.OutputStacktracesToConsole = false;

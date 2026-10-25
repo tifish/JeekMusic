@@ -193,6 +193,7 @@ queue_item、lyrics_cache                          -- 同移动端
 - 首选 ATL.NET：MIT 许可，纯托管代码，支持 APE、WMA、TAK、WavPack、DSF；只读不写（写封面、歌词时也用它，见 §9）
 - **D1 验证**（和移动端 M0 一样）：用 `mobile/tools/pick_library_sample.py` 挑出的真实曲库子集和 `push-testdata.sh` 生成的合成素材，对比 ATL 和移动端 TagLib 读出的结果（标题、艺术家多值、专辑艺术家、音轨号、内嵌歌词、内嵌封面、CUESHEET、时长、采样率、位深），并测 5 万首的解析耗时。不满足就换 TagLib#
 - GBK 乱码：ID3v2.3 里按 ISO-8859-1 存的 GBK 字节，读出来的字符串每个字符就是一个字节（Latin-1 解码是无损的），`CharsetFixer`（移植）还原成字节再按 GBK 解码。.NET 里要先 `Encoding.RegisterProvider(CodePagesEncodingProvider.Instance)` 才有 GBK / Big5 / Shift-JIS
+- ATL 按 ID3 帧编码字节读取 Latin-1；全局 `DefaultTextEncoding` 保持 UTF-8，因为它也决定保存编码。封面 / 歌词嵌入在暂存副本保存后恢复原有 ID3v1 的 128 字节，避免 ATL 把 Unicode 元数据同步为问号。成功写入记录到 `app.log`（文件、封面 / 歌词操作及 ID3v1 保留状态）。复现证据和验证边界见 [写入编码调查](tag-write-encoding-investigation.md)。
 - 多值艺术家：ATL 把多值字段用分隔符连接成一个字符串（可以配置分隔符），设成 `\u0000`，和移动端的 `artist_raw` 一致
 
 ### 5.4 文件操作

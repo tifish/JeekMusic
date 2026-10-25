@@ -1,5 +1,7 @@
 # 《花火（周深）》Android 元数据调查（2026-10-25）
 
+后续写入调查已用真实桌面 TagWriter 复现正确中文标签变问号，并完成预防修复，见 [写入编码调查](../../desktop/docs/tag-write-encoding-investigation.md)。用户也已确认手机显示与本样本问号相同。以下保留首次只读调查记录；文件中的问号并不排除 JeekMusic 写入造成，具体历史事件仍不能定案。
+
 ## 状态与范围
 
 用户已明确问题在歌名、歌手或专辑文字，不是歌词。本轮基于 `2153a59`，在独立分支 `t3/android-huohua-garbled-text` 调查；T3 返回的配置为 `codex / gpt-6.1-sol / reasoningEffort=high`。

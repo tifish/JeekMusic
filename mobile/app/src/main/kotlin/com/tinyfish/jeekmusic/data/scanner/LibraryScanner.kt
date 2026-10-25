@@ -124,6 +124,7 @@ class LibraryScanner @Inject constructor(
         val start = System.currentTimeMillis()
         val config = settings.current().scan
         val factory = TrackFactory(config)
+        val committing = lan.pendingFileKeys()
 
         // 1-3. 查询 MediaStore，过滤不支持的格式
         val found = LinkedHashMap<String, Pair<MediaStoreAudio, LibraryFolderEntity>>()
@@ -131,13 +132,14 @@ class LibraryScanner @Inject constructor(
         for (folder in folderDao.all()) {
             if (onlyFiles != null && onlyFiles.none { it.startsWith("${folder.volumeName}:${folder.relativePath}") }) continue
             for (audio in mediaStore.query(folder.volumeName, folder.relativePath)) {
+                if (audio.fileKey in committing) continue
                 if (onlyFiles != null && audio.fileKey !in onlyFiles) continue
                 if (SupportedFormats.isSupported(audio.fileName)) found[audio.fileKey] = audio to folder else unsupported++
             }
         }
 
         // 4. 与库中记录比对
-        val existing = trackDao.signatures().filter { onlyFiles == null || it.fileKey in onlyFiles }.groupBy { it.fileKey }
+        val existing = trackDao.signatures().filter { it.fileKey !in committing && (onlyFiles == null || it.fileKey in onlyFiles) }.groupBy { it.fileKey }
         val removedIds = existing.filterKeys { it !in found }.values.flatten().map { it.id }
         val toParse = found.values.filter { (audio, _) ->
             val old = existing[audio.fileKey]?.firstOrNull()
@@ -192,7 +194,10 @@ class LibraryScanner @Inject constructor(
         }
 
         db.withTransaction {
-            (removedIds + staleIds).chunked(BATCH_SIZE).forEach { trackDao.delete(it) }
+            // Recheck after parsing too: a sync commit may have started during MediaStore enumeration.
+            val deferred = lan.pendingFileKeys()
+            val protectedIds = existing.filterKeys { it in deferred }.values.flatten().map { it.id }.toSet()
+            (removedIds + staleIds).filterNot { it in protectedIds }.chunked(BATCH_SIZE).forEach { trackDao.delete(it) }
             artistDao.deleteOrphans()
             artistDao.updateTrackCounts()
         }

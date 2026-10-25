@@ -18,6 +18,7 @@ class JeekApp : Application(), Configuration.Provider {
 
     @Inject lateinit var snapshot: StartupSnapshot
     @Inject lateinit var database: Lazy<JeekDatabase>
+    @Inject lateinit var lanSync: Lazy<com.tinyfish.jeekmusic.data.sync.LanSyncService>
 
     /**
      * 主线程上只发起两个后台任务，都不等待（docs/design.md §9.2）：
@@ -27,7 +28,7 @@ class JeekApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         snapshot.preload()
-        Thread({ runCatching { database.get().openHelper.writableDatabase } }, "db-warmup").start()
+        Thread({ runCatching { database.get().openHelper.writableDatabase; lanSync.get().startRecovery() } }, "db-warmup").start()
     }
 
     override val workManagerConfiguration: Configuration

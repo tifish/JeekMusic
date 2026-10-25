@@ -13,14 +13,14 @@ public sealed partial class LibraryDb
     {
         lock (Gate)
         {
-            using var cmd = Command("SELECT id, volume_id, path_in_volume, last_root, display_name, available, added_at FROM library_folder ORDER BY id");
+            using var cmd = Command("SELECT id, volume_id, path_in_volume, last_root, display_name, available, added_at, identity FROM library_folder ORDER BY id");
             using var r = cmd.ExecuteReader();
             var list = new List<LibraryFolder>();
             while (r.Read())
                 list.Add(new LibraryFolder
                 {
                     Id = r.GetInt64(0), VolumeId = r.GetString(1), PathInVolume = r.GetString(2), Root = r.GetString(3),
-                    DisplayName = r.GetString(4), Available = r.Bool(5), AddedAt = r.GetInt64(6),
+                    DisplayName = r.GetString(4), Available = r.Bool(5), AddedAt = r.GetInt64(6), Identity = r.GetString(7),
                 });
             return list;
         }

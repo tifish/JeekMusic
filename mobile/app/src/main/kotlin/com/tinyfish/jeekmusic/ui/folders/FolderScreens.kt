@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.folders
 
+import com.tinyfish.jeekmusic.ui.components.libraryPathLabel
 import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.ui.components.rememberTrackSelection
 import com.tinyfish.jeekmusic.ui.components.SelectionBar
@@ -212,7 +213,7 @@ fun FolderScreen(
         val total = content?.let { data -> data.tracks.size + data.folders.sumOf { it.trackCount } }
         if (selection.active) SelectionBar(selection, tracks = { content?.tracks.orEmpty() }) else SubScreenHeader(
             title = route.title,
-            subtitle = listOfNotNull(route.relativePath, total?.let { songCount(it) }).joinToString(" · "),
+            subtitle = listOfNotNull(libraryPathLabel(route.relativePath), total?.let { songCount(it) }).joinToString(" · "),
             onBack = onBack,
             actions = {
                 // 下载的是这个文件夹（包括子文件夹）里所有歌的封面、歌词（需求 C-6、LY-13）

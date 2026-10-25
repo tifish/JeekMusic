@@ -7,6 +7,20 @@ namespace JeekMusic.App.Tests;
 public sealed class LanProtocolTests
 {
     [Fact]
+    public void FolderIdentitySurvivesRelocationButNeverRowIdReuse()
+    {
+        using var db = new JeekMusic.Library.LibraryDb(":memory:");
+        var id = db.AddFolder("volume", "A", "C:\\A", "A");
+        var identity = Assert.Single(db.Folders()).Identity;
+        Assert.Matches("^[0-9a-f]{32}$", identity);
+        db.UpdateFolderLocation(id, "D:\\A", false);
+        Assert.Equal(identity, Assert.Single(db.Folders()).Identity);
+        db.RemoveFolder(id);
+        Assert.Equal(id, db.AddFolder("volume", "B", "C:\\B", "B"));
+        Assert.NotEqual(identity, Assert.Single(db.Folders()).Identity);
+    }
+
+    [Fact]
     public async Task FramesAreLengthBoundedAndRoundTripWithoutReflection()
     {
         using var stream = new MemoryStream();

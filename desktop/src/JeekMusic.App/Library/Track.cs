@@ -76,6 +76,7 @@ public sealed class Track
 public sealed class LibraryFolder
 {
     public long Id { get; init; }
+    public string Identity { get; init; } = "";
     /// <summary>"{卷 GUID}" 或 "unc"。</summary>
     public required string VolumeId { get; init; }
     /// <summary>卷内路径，"\" 开头和结尾；网络路径是完整的 UNC 路径（"\\" 开头，"\" 结尾）。</summary>

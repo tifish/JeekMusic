@@ -115,6 +115,14 @@ public sealed partial class LibraryDb : IDisposable
         );
         CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);
         """,
+        """
+        ALTER TABLE library_folder ADD COLUMN identity TEXT NOT NULL DEFAULT '';
+        UPDATE library_folder SET identity = lower(hex(randomblob(16)));
+        CREATE TRIGGER library_folder_identity AFTER INSERT ON library_folder
+        WHEN NEW.identity = '' BEGIN
+          UPDATE library_folder SET identity = lower(hex(randomblob(16))) WHERE id = NEW.id;
+        END;
+        """,
     ];
 
     void Migrate()

@@ -46,6 +46,10 @@ public sealed class LanSyncService : IDisposable
         try { _config = JsonNode.Parse(File.ReadAllText(_configPath))!.AsObject(); }
         catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { _config = new(); }
         _config["roots"] ??= new JsonObject(); _config["devices"] ??= new JsonObject();
+        // Pre-release folderId-only grants cannot establish which record originally owned the ID.
+        foreach (var r in Roots.Select(p => p.Value).OfType<JsonObject>())
+            if (r["folderIdentity"] is null) r["enabled"] = false;
+        app.Library.SnapshotChanged += ReconcileRoots;
         if (_config["enabled"]?.GetValue<bool>() == true)
             try { Start(); } catch (IOException) { /* A failed optional listener must not prevent player startup. */ }
     }
@@ -105,12 +109,14 @@ public sealed class LanSyncService : IDisposable
     public JsonObject EnableRoot(long folderId, bool enabled)
     {
         var folder = _app.Library.Snapshot.Folder(folderId) ?? throw new ArgumentException("Unknown library folder");
+        if (string.IsNullOrEmpty(folder.Identity)) throw new InvalidOperationException("Library root identity is unavailable");
+        ReconcileRoots();
         if (enabled) LanFiles.Resolve(folder.Root, "", true);
         lock (_gate)
         {
-            var root = Roots.FirstOrDefault(p => p.Value?["folderId"]?.GetValue<long>() == folderId);
+            var root = Roots.FirstOrDefault(p => p.Value?["folderIdentity"]?.GetValue<string>() == folder.Identity && p.Value?["revoked"]?.GetValue<bool>() != true);
             var id = root.Key ?? Guid.NewGuid().ToString("N");
-            Roots[id] = new JsonObject { ["folderId"] = folderId, ["enabled"] = enabled };
+            Roots[id] = new JsonObject { ["folderId"] = folderId, ["folderIdentity"] = folder.Identity, ["name"] = folder.DisplayName, ["enabled"] = enabled };
             RootRevision++;
             _plans.Clear(); Save(); Notify(); return new JsonObject { ["rootId"] = id, ["enabled"] = enabled };
         }
@@ -119,7 +125,8 @@ public sealed class LanSyncService : IDisposable
     {
         lock (_gate)
         {
-            var root = Roots.FirstOrDefault(p => p.Value?["folderId"]?.GetValue<long>() == folderId);
+            var identity = _app.Library.Snapshot.Folder(folderId)?.Identity;
+            var root = Roots.FirstOrDefault(p => identity is { Length: > 0 } && p.Value?["folderIdentity"]?.GetValue<string>() == identity && p.Value?["revoked"]?.GetValue<bool>() != true);
             return root.Key is null ? null : "root:" + root.Key + "/" + relative.Replace('\\', '/');
         }
     }
@@ -137,6 +144,7 @@ public sealed class LanSyncService : IDisposable
     public void Revoke(string id) { lock (_gate) { Devices.Remove(id); _plans.Clear(); Save(); } Notify(); }
     public JsonObject Diagnostics()
     {
+        ReconcileRoots();
         lock (_gate) return new JsonObject
         {
             ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 1,
@@ -144,19 +152,34 @@ public sealed class LanSyncService : IDisposable
             ["addresses"] = new JsonArray(NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a.Address))
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
-            ["roots"] = new JsonArray(Roots.Select(p => { var f = _app.Library.Snapshot.Folder(p.Value!["folderId"]!.GetValue<long>()); return (JsonNode)new JsonObject
-                { ["rootId"] = p.Key, ["folderId"] = p.Value["folderId"]!.DeepClone(), ["name"] = f?.DisplayName, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f?.Available ?? false }; }).ToArray()),
+            ["roots"] = new JsonArray(Roots.Select(p => { var f = _app.Library.Snapshot.Folder(p.Value!["folderId"]!.GetValue<long>()); if (f?.Identity != p.Value["folderIdentity"]?.GetValue<string>()) f = null; return (JsonNode)new JsonObject
+                { ["rootId"] = p.Key, ["folderId"] = p.Value["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f?.Available ?? false }; }).ToArray()),
             ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone() }).ToArray())
         };
     }
     string RootPath(string id)
     {
+        ReconcileRoots();
         lock (_gate)
         {
             if (Roots[id] is not JsonObject root || root["enabled"]?.GetValue<bool>() != true) throw new IOException("Root is not shared");
             var folder = _app.Library.Snapshot.Folder(root["folderId"]!.GetValue<long>());
-            if (folder is not { Available: true } || !Directory.Exists(folder.Root)) throw new IOException("Root is offline; no deletions inferred");
+            if (folder is not { Available: true } || folder.Identity != root["folderIdentity"]?.GetValue<string>() || !Directory.Exists(folder.Root)) throw new IOException("Root is offline or authorization expired; no deletions inferred");
             return LanFiles.Resolve(folder.Root, "", true);
+        }
+    }
+    void ReconcileRoots()
+    {
+        // Use persisted records, not an initially empty/loading UI snapshot. Removal is permanent
+        // revocation, while an unavailable disk leaves its record/identity intact.
+        var identities = _app.Db.Folders().Select(f => f.Identity).ToHashSet();
+        lock (_gate)
+        {
+            var changed = false;
+            foreach (var root in Roots.Select(p => p.Value).OfType<JsonObject>())
+                if (root["folderIdentity"]?.GetValue<string>() is { } identity && !identities.Contains(identity) && root["revoked"]?.GetValue<bool>() != true)
+                { root["enabled"] = false; root["revoked"] = true; changed = true; }
+            if (changed) { _plans.Clear(); RootRevision++; Save(); }
         }
     }
     async Task Accept(TcpListener listener, CancellationToken cancel)
@@ -305,5 +328,5 @@ public sealed class LanSyncService : IDisposable
         var prefix = new byte[4]; BinaryPrimitives.WriteInt32BigEndian(prefix, bytes.Length);
         await stream.WriteAsync(prefix, cancel); await stream.WriteAsync(bytes, cancel); await stream.FlushAsync(cancel);
     }
-    public void Dispose() { _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); }
+    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); }
 }

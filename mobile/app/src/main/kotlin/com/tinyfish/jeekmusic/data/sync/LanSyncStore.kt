@@ -9,6 +9,26 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal object LanBindings {
+    /** Replace one CUE's edges only; retain other sheets that still own an audio binding. */
+    fun replace(bindings: JSONObject, cue: String, audio: List<String>): Set<String> {
+        val affected = audio.toMutableSet()
+        for (path in bindings.keys().asSequence().toList()) {
+            val old = bindings.getJSONArray(path)
+            val names = List(old.length()) { old.getString(it) }
+            if (cue !in names) continue
+            affected += path
+            val kept = names.filterNot { it == cue }
+            if (kept.isEmpty()) bindings.remove(path) else bindings.put(path, JSONArray(kept))
+        }
+        for (path in audio.distinct()) {
+            val names = bindings.optJSONArray(path) ?: JSONArray().also { bindings.put(path, it) }
+            names.put(cue)
+        }
+        return affected
+    }
+}
+
 /** Device-local settings and credentials: never exported through user-data sync. */
 @Singleton
 class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context) {
@@ -32,6 +52,13 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
         return null
     }
     fun mappings(): List<JSONObject> = read().optJSONArray("mappings")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
+    /** A rename transaction may temporarily remove the public name. Never infer a deletion. */
+    fun pendingFileKeys(): Set<String> = runCatching {
+        val pending = JSONObject(AtomicFile(File(file.baseFile.parentFile, "lan-owned.json")).readFully().toString(Charsets.UTF_8))
+            .optJSONObject("pending") ?: return@runCatching emptySet<String>()
+        val mapping = pending.optJSONObject("mapping") ?: mappings().single { it.getString("key") == pending.getString("key") }
+        setOf(mapping.getString("volume") + ":" + mapping.getString("relative") + LanProtocol.relative(pending.getString("path")))
+    }.getOrDefault(emptySet())
     @Synchronized fun cues(fileKey: String): List<String> {
         val mappings = data.optJSONArray("mappings") ?: return emptyList()
         for (i in 0 until mappings.length()) {

@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import com.tinyfish.jeekmusic.ui.components.libraryPathLabel
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.update.AppUpdater
@@ -317,7 +318,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     Column(Modifier.weight(1f)) {
                         Text(folder.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            "${folder.relativePath.ifEmpty { "/" }} · ${songCount(count)}",
+                            "${libraryPathLabel(folder.relativePath).ifEmpty { "/" }} · ${songCount(count)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

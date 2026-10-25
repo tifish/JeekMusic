@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.res.stringResource
@@ -112,6 +113,7 @@ fun LanSyncSettings(lan: LanSyncService) {
 private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: () -> Unit, onError: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
     var path by remember { mutableStateOf("") }
     var children by remember { mutableStateOf<List<String>>(emptyList()) }
     var selection by remember { mutableStateOf(root.optJSONArray("selection")?.let { a -> List(a.length()) { a.getString(it) }.toSet() } ?: emptySet()) }
@@ -121,7 +123,7 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
     var estimate by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) target = it }
     val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed -> if (allowed) picker.launch(target) else onError(context.getString(R.string.permission_needed)) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed -> if (allowed) picker.launch(target) else onError(resources.getString(R.string.permission_needed)) }
     LaunchedEffect(path) { busy = true; try { children = lan.directories(root.getString("rootId"), path) } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false } }
     fun select(value: String) {
         selection = if (value in selection) selection - value else selection.filterNot { value.isEmpty() || it.startsWith("$value/") || it.isEmpty() || value.startsWith("$it/") }.toSet() + value
@@ -142,7 +144,7 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
             }
             Text(selection.joinToString("\n") { it.ifEmpty { "/" } })
             TextButton(enabled = !busy && selection.isNotEmpty(), onClick = { scope.launch {
-                busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection); estimate = context.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
+                busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection); estimate = resources.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
                 catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
             } }) { Text(stringResource(R.string.lan_estimate)) }
             estimate?.let { Text(it) }

@@ -37,7 +37,7 @@ def main():
                 startup.close_player(player_pid)
                 player_pid = None
             with closing(sqlite3.connect(data / "library.db")) as db, db:
-                db.execute("INSERT INTO library_folder VALUES(1,'offline-fixture','\\offline-tags\\','Z:\\offline-tags\\','Offline tags',0,1)")
+                db.execute("INSERT INTO library_folder(id,volume_id,path_in_volume,last_root,display_name,available,added_at) VALUES(1,'offline-fixture','\\offline-tags\\','Z:\\offline-tags\\','Offline tags',0,1)")
                 for i in (1, 2):
                     db.execute("""INSERT INTO track(id,track_key,folder_id,dir,file_name,title,artist_display,artist_inferred,artists,
                         duration_ms,has_lyrics,has_cover,mtime,size,sort_title,sort_file,sort_artist,genre)

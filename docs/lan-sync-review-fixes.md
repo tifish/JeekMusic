@@ -29,3 +29,12 @@ App 回归：545 通过、1 个既有物理音频端点测试跳过。使用 por
 
 
 扫描避让补丁在同一签名 Release 再次实际中断提交、放入外部阻挡、启动后点击“Rescan library”：pending 原路径不被删除，恢复前后 track ID=16 及全部其他行一致，见 `protected-normal-scan.json`、`protected-final-recovery.json`、`protected-rename.log`。随后另一次 A 同 size/mtime 更新在 B 下载时真实终止进程，重启不下载即从磁盘待刷新队列读到 AfterAAC，ID=16 保留，见 `refresh-restart-pending.json`、`refresh-restart-after.json`。
+
+
+## 账本 AtomicFile 并发回归的定向修复
+
+6dbc149 新增的扫描读路径与服务写路径各自使用 AtomicFile，确实存在 openRead 删除进行中 .new、finishWrite 仅记录日志却返回成功的竞争。本次只将 `lan-owned.json` 的磁盘访问统一到 Hilt singleton `LanSyncLedger`：读、startWrite、fsync、finishWrite 和提交内容核验共用同一 monitor。服务仍是唯一修改者，由现有 coroutine gate 串行化；扫描只取独立 JSON 快照。磁盘锁不包含设置锁、扫描或协程等待；账本初始化在 IO gate 内进行。扫描读错误不再降级成“无 pending”。
+
+写入显式 fd.sync，并在 finishWrite 后直接核对 base 字节和 .new 消失，不能用会删除 .new 的 openRead 冒充核验。startWrite/同步/提交/核验失败都抛专用错误，中止整个文件批次或清理，禁止继续下一文件；丢弃未确认的内存状态，下次本地恢复先重新读取磁盘。pending 的确认成功仍在 old→backup 之前。
+
+`LanSyncLedgerTest` 在真实 API35 AtomicFile 上确定性控制 close-before-rename 窗口，3 项通过：旧双入口丢 pending/refresh 的复现；实际 `LanSyncStore.pendingFileKeys()` 被共享 monitor 阻挡、pending 和 refresh 同时持久化/重开保留；finishWrite 静默失败被识别并阻止目标重命名。测试只新建私有合成子目录，既有 debug 账本逐字节未变。证据在 `desktop/artifacts/lan-sync/ledger-race/`，签名 Release 实际生产账本路径与重试验证结果随最终 manifest 记录。没有改动 PC 协议、MCP Schema 或其他功能。

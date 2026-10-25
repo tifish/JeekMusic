@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.system.Os
-import android.util.AtomicFile
 import android.util.Base64
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
@@ -41,6 +40,7 @@ data class LanStatus(val running: Boolean = false, val text: String = "", val do
 class LanSyncService @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val store: LanSyncStore,
+    private val ledgerStore: LanSyncLedger,
     private val tree: DocumentTree,
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
@@ -57,12 +57,14 @@ class LanSyncService @Inject constructor(
     private val _revision = MutableStateFlow(0)
     val revision = _revision.asStateFlow()
     private val partials = File(context.filesDir, "lan-partials").apply { mkdirs() }
-    private val ledgerFile = AtomicFile(File(context.filesDir, "lan-owned.json"))
-    private var ledger = runCatching { JSONObject(ledgerFile.readFully().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
+    // Loaded only inside gate on IO, never during UI/Hilt construction. This service is the
+    // only ledger writer; its gate serializes all mutations, including local recovery/cleanup.
+    private var ledger = JSONObject()
+    private var ledgerLoaded = false
+    private fun loadLedger() { if (!ledgerLoaded) { ledger = ledgerStore.read(); ledgerLoaded = true } }
     private fun saveLedger() {
-        val stream = ledgerFile.startWrite()
-        try { stream.write(ledger.toString().toByteArray()); ledgerFile.finishWrite(stream) }
-        catch (e: Exception) { ledgerFile.failWrite(stream); throw e }
+        try { ledgerStore.write(ledger) }
+        catch (e: LanLedgerException) { ledgerLoaded = false; throw e } // Recovery reloads the confirmed disk state.
     }
     private fun report() { _revision.value++ }
     private fun problem(e: Exception): String = if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
@@ -149,6 +151,7 @@ class LanSyncService @Inject constructor(
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying))
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
+                    loadLedger()
                     recoverPending()
                     drainRefresh()
                     for (mapping in store.mappings().filter { it.optBoolean("enabled", true) }) {
@@ -186,7 +189,7 @@ class LanSyncService @Inject constructor(
                                 }
                             } catch (e: CancellationException) { throw e }
                             catch (e: Exception) {
-                                if (ledger.has("pending")) throw e // Never allow another commit to replace this recovery record.
+                                if (e is LanLedgerException || ledger.has("pending")) throw e // Never continue after a journal failure.
                                 failedPaths += path; problems += "$path: ${problem(e)}"
                             }
                             done += entry.getLong("size")
@@ -211,7 +214,7 @@ class LanSyncService @Inject constructor(
     /** Local recovery only; this never connects to a PC or starts a new download. */
     fun startRecovery() {
         scope.launch(Dispatchers.IO) { gate.withLock {
-            try { recoverPending(); drainRefresh() }
+            try { loadLedger(); recoverPending(); drainRefresh() }
             catch (e: Exception) { _status.value = _status.value.copy(running = false, problems = (_status.value.problems + problem(e)).distinct()) }
         } }
     }
@@ -443,6 +446,7 @@ class LanSyncService @Inject constructor(
     suspend fun clean(root: String) = withContext(Dispatchers.IO) {
         gate.withLock {
             check(job?.isActive != true) { "Cancel sync first" }
+            loadLedger()
             val m = store.mappings().single { it.getString("rootId") == root }; val folder = folder(m); recover(m, folder)
             val records = owned(m); val issues = mutableListOf<String>()
             for (path in records.keys().asSequence().toList()) try {
@@ -454,7 +458,7 @@ class LanSyncService @Inject constructor(
                     require(tree.delete(folder, target.documentId)) { "Delete refused" }
                 }
                 records.remove(path); saveLedger()
-            } catch (e: Exception) { issues += "$path: ${e.message}" }
+            } catch (e: Exception) { if (e is LanLedgerException) throw e; issues += "$path: ${e.message}" }
             m.put("enabled", false); store.saveMapping(m); report()
             _status.value = LanStatus(text = context.getString(R.string.lan_cleaned), problems = issues)
         }

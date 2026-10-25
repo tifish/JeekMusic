@@ -31,7 +31,7 @@ internal object LanBindings {
 
 /** Device-local settings and credentials: never exported through user-data sync. */
 @Singleton
-class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context) {
+class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context, private val ledger: LanSyncLedger) {
     private val file = AtomicFile(File(context.filesDir, "lan-sync.json"))
     private var data = runCatching { JSONObject(file.readFully().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
     @Synchronized fun read(): JSONObject = JSONObject(data.toString())
@@ -53,12 +53,13 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
     }
     fun mappings(): List<JSONObject> = read().optJSONArray("mappings")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
     /** A rename transaction may temporarily remove the public name. Never infer a deletion. */
-    fun pendingFileKeys(): Set<String> = runCatching {
-        val pending = JSONObject(AtomicFile(File(file.baseFile.parentFile, "lan-owned.json")).readFully().toString(Charsets.UTF_8))
-            .optJSONObject("pending") ?: return@runCatching emptySet<String>()
+    fun pendingFileKeys(): Set<String> {
+        // read() releases the ledger monitor before mappings() takes the settings monitor.
+        // An unreadable ledger aborts the scan rather than inferring a deletion.
+        val pending = ledger.read().optJSONObject("pending") ?: return emptySet()
         val mapping = pending.optJSONObject("mapping") ?: mappings().single { it.getString("key") == pending.getString("key") }
-        setOf(mapping.getString("volume") + ":" + mapping.getString("relative") + LanProtocol.relative(pending.getString("path")))
-    }.getOrDefault(emptySet())
+        return setOf(mapping.getString("volume") + ":" + mapping.getString("relative") + LanProtocol.relative(pending.getString("path")))
+    }
     @Synchronized fun cues(fileKey: String): List<String> {
         val mappings = data.optJSONArray("mappings") ?: return emptyList()
         for (i in 0 until mappings.length()) {

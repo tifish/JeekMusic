@@ -86,7 +86,7 @@ class WorkflowGuards(unittest.TestCase):
             def request(self, method):
                 calls.append(method)
                 return {"tools": [{"name": "get_diagnostics", "inputSchema": {
-                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(21)]}
+                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(23)]}
 
         with patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
              patch.object(mcp, "McpClient", Client), \

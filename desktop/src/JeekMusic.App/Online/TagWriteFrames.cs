@@ -77,6 +77,11 @@ internal static partial class TagWriteFrames
         // Reject a stacked leading tag, rather than emit competing versions. Audio bytes are opaque.
         if (source.Length - tag.End >= 3 && source.AsSpan(tag.End, 3).SequenceEqual("ID3"u8)) throw Unsafe("stacked ID3 tags");
         var frames = tag.Frames; var version = tag.Version;
+        // Chapters can carry absolute file byte offsets (including nested CHAP/CTOC).
+        // This writer does not relocate chapter graphs: refuse the whole envelope, even
+        // when current padding might hide a change, rather than preserve stale pointers.
+        if (frames.Any(f => f.Id is "CHAP" or "CTOC" or "SEEK" or "ASPI" or "MLLT"))
+            throw Unsafe("ID3 chapter/position index frames require relocation support");
         if (lyrics is not null && (frames.Count(f => f.Id == "USLT") > 1 || frames.Any(f => f.Id == "SYLT")))
             throw Unsafe("multiple lyric slots or SYLT require explicit slot selection");
         var replacement = new List<Record>();

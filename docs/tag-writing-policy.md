@@ -1,6 +1,6 @@
 # Audio tag writing policy — shared desktop / Android contract
 
-Policy version: **1**. This applies to a requested cover/lyrics edit, not a library-wide
+Policy version: **2**. This applies to a requested cover/lyrics edit, not a library-wide
 retag, charset repair, lyric download/matching decision, or implicit ID3 migration.
 Each platform must document its actual implemented/validated subset. Recognizing an
 extension or a library advertising `save()` is not proof of safe writing.
@@ -25,8 +25,10 @@ extension or a library advertising `save()` is not proof of safe writing.
 * Preserve an existing ID3v1 footer's **entire original 128 bytes**, and never put UTF-8
   into ID3v1. Do not infer a footer from `TAG` inside RIFF/FLAC/MP4/audio payloads.
 * Stage on the same volume. Validate output independently of the serializer, then
-  recheck the source signature and full SHA-256 before atomic replacement. Failures
-  leave source bytes/times unchanged and discard the temporary output. Preserve
+  recheck source identity/signature and full SHA-256 under an exclusive write/delete
+  guard before committing. Never overwrite an external replacement, even after the
+  last hash check or during a retry wait. Aborted edits preserve original bytes/times;
+  an external replacement retains ownership of its pathname. Preserve
   creation/mtime for ordinary cover/lyric embedding; explicit recovery is a separate
   authorized operation. Never write a shared CUE image for a single CUE track.
 * Refuse malformed, unsupported, encrypted/ambiguous or over-limit envelopes. Reuse
@@ -65,13 +67,22 @@ complete mapping/unknown-frame policy; it is not needed for artwork or lyrics.
   lyric edit are refused. Unknown/non-target frames remain opaque and are retained.
   A named USLT slot requires an explicit future selection API. Covers alone can
   preserve all existing multilingual/synchronized lyric frames.
+  CHAP/CTOC (including embedded chapter graphs), SEEK, ASPI and MLLT refuse for any
+  edit: their absolute/index addressing is not relocated by this bounded profile.
 * FLAC has one STREAMINFO and at most one Vorbis-comment block; repeated ordinary
   keys are retained byte-for-byte. Ambiguous multiple LYRICS fields are refused.
 * Ogg supports one serial/logical stream, separate codec-header/audio pages, Vorbis or
   Opus. Chained/multiplexed streams, legacy COVERART and malformed CRC/lacing refuse.
   Header pagination and page sequence/CRC may change; audio packets/granules do not.
+  Every page must have valid flags, sequence, serial, continuation, CRC and EOS.
+  A page completing no packet has granule -1 (all FF), including large comment pages.
 * MP4 supports one `moov` and `mdat`, internal chunk locations; fragmented/external
-  sample layouts refuse. ATL output that changes any non-target typed value or
+  sample layouts refuse. Protected sample entries, CENC auxiliary/protection data
+  (`saio`, `saiz`, `senc`, `sinf`, `tenc`, `pssh`), encryption/unknown sample groups,
+  item-location/fragment/segment indexes (`iloc`, `sidx`, `tfra` etc.), compressed or
+  reference movies and unclassified UUID boxes refuse. Only known audio sample-entry
+  envelopes and self-contained `dref` are accepted; only `stco`/`co64` are relocated.
+  ATL output that changes any non-target typed value or
   unknown atom refuses. The writer inserts only generated target atoms into the original
   movie envelope; it does not accept incidental rewrites of existing lyrics/date atoms.
   Zero padding/container size/validated chunk offsets may change.
@@ -93,6 +104,34 @@ complete mapping/unknown-frame policy; it is not needed for artwork or lyrics.
 `get_diagnostics.tagWriting` reports policy version, limits, last detected native
 profile and saved/rejected result/reason without lyric content. `get_logs` exposes
 the same production outcomes. Debug/Release/NativeAOT have the same behavior.
+
+### Windows no-clobber commit and interruption boundary
+
+Windows path-based `ReplaceFile` has no expected-file-identity compare-and-swap.
+Desktop policy 2 opens a read/DELETE handle denying write/delete sharing, verifies
+volume/file ID, length/times and SHA-256, reserves that exact original object by
+handle under `.jeekmusic/tag-writes/<unique>.original`, then renames the verified
+candidate to the source name **without replacement**. An external file created
+even after the vacancy check wins; it is never overwritten. Every retry rechecks
+the guarded identity/hash and destination vacancy after the wait. Ordinary writers
+and renamers cannot change the guarded source. Privileged/kernel manipulation is
+outside this ordinary filesystem writer contract.
+
+This is a no-clobber name handoff, **not a continuously visible atomic replacement**:
+the pathname can briefly be absent between the two renames. Failure restores the
+original by handle without replacement when the name is free. If an external file
+occupies it, the complete original remains in the unique `.original` path and logs
+identify it. Interruption/crash can also leave that reserved original; it is never
+automatically deleted on a later launch. Successful commits delete only the owned
+old object, by handle. Candidates are cleaned on ordinary failure. Do not blindly
+restore a retained original over newer external contents.
+
+Position-dependency review: FLAC seek offsets are relative to the first unchanged
+audio frame; APEv2 updates do not move encoded audio; standard RIFF cues address
+samples/data, not the file's metadata start; ASF standard indexes address the Data
+Object/packets and the entire data/index suffix is copied unchanged. Preserving
+opaque bytes cannot prove arbitrary undocumented vendor pointers: MP4 UUIDs and
+the known unsafe structures above are refused, not certified by an `mdat` hash.
 
 ## Cross-platform test contract
 
@@ -132,6 +171,10 @@ differences must be visible, never a silent deletion of tags or advertised suppo
   [FLAC RFC 9639 §8](https://www.rfc-editor.org/rfc/rfc9639.html#section-8),
   [Opus RFC 7845 §5.2](https://www.rfc-editor.org/rfc/rfc7845.html#section-5.2).
 * [Apple metadata atoms/types](https://developer.apple.com/documentation/quicktime-file-format/metadata_atoms_and_types).
+* [ID3 chapter absolute offsets](https://id3.org/id3v2-chapters-1.0),
+  [Ogg page framing/granules](https://www.xiph.org/ogg/doc/framing.html),
+  [ISO BMFF common encryption layout](https://www.w3.org/TR/eme-stream-mp4/),
+  [Windows handle rename semantics](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_rename_info).
 * [Monkey's Audio SDK and tagging implementation](https://www.monkeysaudio.com/developers.html).
 * [EBU BWF Tech 3285](https://tech.ebu.ch/docs/tech/tech3285.pdf),
   [Microsoft ASF overview/specification link](https://learn.microsoft.com/en-us/windows/win32/wmformat/overview-of-the-asf-format).

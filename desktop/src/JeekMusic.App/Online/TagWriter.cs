@@ -20,7 +20,7 @@ public static class TagWriter
     {
         return new JsonObject
         {
-            ["policyVersion"] = 1, ["transaction"] = "same-volume-stage-validate-source-sha256-replace",
+            ["policyVersion"] = 2, ["transaction"] = "verified-handle-reserve-no-replace-rename",
             ["newMp3"] = "ID3v2.4/UTF-8", ["existingId3v23"] = "retain-v2.3/UTF-16-targets",
             ["preservation"] = "opaque non-target records; native container/audio validation; reject unsafe input",
             ["maximumFileBytes"] = TagWriteFrames.MaxFileBytes,
@@ -30,6 +30,9 @@ public static class TagWriter
 
     /// <summary>写入；<paramref name="coverJpeg"/>、<paramref name="lyrics"/> 为 null 的不动。成功返回 true。</summary>
     public static bool Write(string path, byte[]? coverJpeg, string? lyrics)
+        => Write(path, coverJpeg, lyrics, null);
+
+    internal static bool Write(string path, byte[]? coverJpeg, string? lyrics, TagWriteCommit.Operations? commitOperations)
     {
         if (coverJpeg is null && lyrics is null) return true;
         TagReader.Configure();
@@ -60,6 +63,7 @@ public static class TagWriter
                 // Keep other writers from opening the contents while staging; allow atomic rename.
                 // Recheck path identity/signature and SHA too, as another process can replace a path.
                 using var sourceLease = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                var sourceStamp = TagWriteCommit.Capture(sourceLease.SafeFileHandle);
                 var sourceHash = SHA256.HashData(sourceLease);
                 var staging = Path.Combine(original.DirectoryName!, ".jeekmusic", "tag-writes");
                 Directory.CreateDirectory(staging);
@@ -124,22 +128,11 @@ public static class TagWriter
                 if (id3v1 is not null && !id3v1.AsSpan().SequenceEqual(ReadId3v1(temporary))) throw new IOException("Legacy footer changed");
                 File.SetLastWriteTimeUtc(temporary, mtime);
                 File.SetCreationTimeUtc(temporary, original.CreationTimeUtc);
-                sourceLease.Dispose(); // ReplaceFile opens its own destination handle on Windows.
-                // Antivirus/indexer opens immediately after a new fixture/file is created can
-                // transiently deny ReplaceFile. Recheck the original on every bounded retry.
-                for (var attempt = 0; ; attempt++)
-                {
-                    try { File.Replace(temporary, path, null); break; }
-                    catch (IOException e) when (attempt < 2 && (e.HResult & 0xffff) is 32 or 1175)
-                    {
-                        using var current = File.OpenRead(path);
-                        if (!SHA256.HashData(current).AsSpan().SequenceEqual(sourceHash)) throw new IOException("Source changed after a refused replacement", e);
-                        Thread.Sleep(25 * (attempt + 1));
-                    }
-                }
+                sourceLease.Dispose(); // Commit acquires a fresh identity-checked DELETE/read guard.
+                TagWriteCommit.Commit(path, temporary, sourceStamp, sourceHash, commitOperations);
                 _lastResult = "saved";
                 Log.Info("tagwriter", $"写入完成：{path} cover={coverJpeg is not null} lyrics={lyrics is not null} id3v1Preserved={id3v1 is not null}");
-                Log.Info("tagwriter", $"preservation=verified policy=1 format={format}");
+                Log.Info("tagwriter", $"preservation=verified policy=2 format={format}");
                 return true;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or ArgumentException or OverflowException)

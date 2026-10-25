@@ -55,15 +55,21 @@ internal static partial class TagWriteFrames
             var id = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(p + 14)); serial ??= id;
             if (id != serial || BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(p + 18)) != sequence++) throw Unsafe("chained/multiplexed Ogg");
             if (((b[p + 5] & 1) != 0) != (packet.Length > 0)) throw Unsafe("invalid Ogg continuation");
+            var flags = b[p + 5];
+            if ((flags & ~7) != 0 || ((flags & 2) != 0) != (p == 0)) throw Unsafe("invalid Ogg page flags/BOS");
             var count = b[p + 26]; var start = p + 27 + count;
             if (start > b.Length) throw Unsafe("truncated Ogg lacing");
+            var completedOnPage = 0;
             for (var i = 0; i < count; i++)
             {
                 var n = b[p + 27 + i]; if (n > b.Length - start) throw Unsafe("truncated Ogg packet");
                 packet.Write(b, start, n); start += n;
                 if (packet.Length > MaxTagBytes) throw Unsafe("oversized Ogg packet");
-                if (n < 255) { packets.Add(packet.ToArray()); packet.SetLength(0); }
+                if (n < 255) { packets.Add(packet.ToArray()); packet.SetLength(0); completedOnPage++; }
             }
+            var granule = BinaryPrimitives.ReadInt64LittleEndian(b.AsSpan(p + 6));
+            if ((completedOnPage == 0 && granule != -1) || (completedOnPage > 0 && granule < 0)) throw Unsafe("Ogg granule disagrees with packet completion");
+            if (((flags & 4) != 0) != (start == b.Length) || ((flags & 4) != 0 && packet.Length != 0)) throw Unsafe("invalid Ogg EOS/incomplete packet");
             uint crc = 0;
             for (var i = p; i < start; i++) crc = crc << 8 ^ OggCrcTable[(crc >> 24) ^ (uint)(i >= p + 22 && i < p + 26 ? 0 : b[i])];
             if (crc != BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(p + 22))) throw Unsafe("Ogg checksum mismatch");
@@ -71,6 +77,8 @@ internal static partial class TagWriteFrames
             p = start;
         }
         if (packet.Length != 0 || packets.Count < 3 || serial is null) throw Unsafe("incomplete Ogg stream");
+        var opus = packets[0].AsSpan().StartsWith("OpusHead"u8);
+        if (!opus && !packets[0].AsSpan().StartsWith(new byte[] { 1, 118, 111, 114, 98, 105, 115 })) throw Unsafe("unsupported Ogg codec");
         return new(packets, granules, serial.Value);
     }
     static readonly uint[] OggCrcTable = Enumerable.Range(0, 256).Select(i =>
@@ -131,6 +139,8 @@ internal static partial class TagWriteFrames
         void Flush(bool continuationNext)
         {
             var page = new byte[27 + segments.Count + payload.Length]; "OggS"u8.CopyTo(page); page[5] = (byte)(continued ? 1 : 0);
+            // A page consisting solely of continuation segments has no completed packet.
+            BinaryPrimitives.WriteInt64LittleEndian(page.AsSpan(6), segments.Any(n => n < 255) ? 0 : -1);
             BinaryPrimitives.WriteUInt32LittleEndian(page.AsSpan(14), data.Serial); page[26] = (byte)segments.Count;
             segments.ToArray().CopyTo(page, 27); payload.GetBuffer().AsSpan(0, (int)payload.Length).CopyTo(page.AsSpan(27 + segments.Count));
             Page(page); segments.Clear(); payload.SetLength(0); continued = continuationNext;

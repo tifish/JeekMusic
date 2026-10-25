@@ -58,6 +58,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Test
+        env:
+          # New fixtures use the runner's scratch volume, without legacy DOS aliases.
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           python desktop/tools/test_build_workflow.py
           dotnet test desktop/JeekMusic.slnx -c Release

@@ -6,5 +6,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/JeekMusic.Core.Tests/JeekMusic.Core.Tests.csproj" />
     <Project Path="tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj" />
+    <Project Path="tests/JeekMusic.TagWriteProbe/JeekMusic.TagWriteProbe.csproj" />
   </Folder>
 </Solution>

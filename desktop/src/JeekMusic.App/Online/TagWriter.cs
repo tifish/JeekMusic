@@ -30,8 +30,14 @@ public static class TagWriter
                 Directory.CreateDirectory(staging);
                 temporary = Path.Combine(staging, Guid.NewGuid().ToString("N") + original.Extension);
                 File.Copy(path, temporary);
-                var id3v1 = ReadId3v1(temporary);
                 var track = new ATL.Track(temporary);
+                // Only these elementary stream formats use the legacy footer. ATL also declares
+                // ID3v1 support for WAV, where a trailing TAG can actually be PCM inside RIFF.
+                var footerFormat = original.Extension.ToLowerInvariant() is ".mp3" or ".ape" or ".wv" or ".tak" or ".mpc";
+                var hasId3v1 = track.MetadataFormats.Any(f => f.ID == (int)ATL.AudioData.MetaDataIOFactory.TagType.ID3V1);
+                if (hasId3v1 && !footerFormat)
+                    throw new NotSupportedException("容器末尾的 ID3v1 签名可能属于音频数据，取消写入以保留原文件");
+                var id3v1 = footerFormat ? ReadId3v1(temporary) : null;
                 if (coverJpeg is not null)
                 {
                     // 换掉原来的封面（正面），其他类型的图片保留

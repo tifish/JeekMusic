@@ -11,7 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
-    <None Update="Fixtures\tag-writer-silence.mp3" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\tag-writer-silence.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\JeekMusic.App\JeekMusic.App.csproj" />

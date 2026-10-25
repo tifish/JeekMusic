@@ -32,6 +32,7 @@
 
 - 全局默认保存编码设为 UTF-8，不增加任何中文猜测转码；ID3 的 Latin-1 读取仍按其编码标记，现有 GBK 显示修复保持有效。
 - 在暂存副本中保存前读取原有 ID3v1，保存成功后恢复其全部 128 字节。封面 / 歌词不属于 ID3v1，不应借机同步改写它的文本。
+- ID3v1 尾部恢复只适用于 MP3、APE、WavPack、TAK、Musepack；不对 WAV、FLAC、MP4、Ogg 等容器追加尾标签。ATL 7.18.0 还声明 WAV 支持 ID3v1，实际可能把 RIFF 内最后 128 字节的 `TAG` PCM 误认成标签；容器检测到这种歧义时，在保存前取消写入并记录原因，源文件完整不变，沿用已有封面 / 歌词回退保存流程。
 - 保留原有同卷暂存、变更检查、mtime / 创建时间恢复及最后替换流程；保存或恢复失败时丢弃暂存文件，不替换源文件。
 - 成功操作新增 `[tagwriter]` 日志，记录路径、封面 / 歌词操作及 ID3v1 保留状态。既有 MCP `get_logs(kind=app)` 读取相同日志，接口 / Schema 不变。
 - 不修改已有问号标签，不触发批量重扫或数据库迁移，不用坏文件标签覆盖桌面缓存中的正确文字。
@@ -56,6 +57,18 @@ dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -p:_IsP
 对实际歌曲的本地副本另做修复后的三种写入。完整音频负载哈希三次均为 `8f86b470849cfbdc83dd6a69ddd65e6a0a8993568a0331649ebd69e3aa3c51af`，ID3v1 字节不变；问号不会凭空恢复。原路径未被写入，整文件 SHA-256 仍为 `92de4f14a7500838d6cfa3c9c002e0917508896b49ce7b5d25fd02d31fbbd840`。
 
 本地证据均在忽略的 `mobile/build/huahuo-investigation/`：`writer-probe/before-fix-bytes.json`、`writer-probe/after-fix-bytes.json`、`after-fix-writer.jsonl`、`test-results/tag-writer-fixed.trx` 和实际依赖反编译文件。真实歌曲副本未提交或上传；提交的 MP3 fixture 只有合成静音。
+
+## 主分支整合验证
+
+整合时补充 WAV PCM 尾部恰好为 `TAG` 的安全取消回归，以及 WAV、FLAC、AAC/M4A、Ogg Vorbis 的中文、重音、阿拉伯文、扩展汉字和 emoji 读写兼容回归。FLAC / M4A / WAV 比较真实生产无声 PCM 解码；Ogg 独立解析全部页和分段，除 Vorbis 注释包外逐包比较 codec / 音频原字节。全部 fixture 为合成静音。
+
+短 Ogg 的 mpv 命名管道截窗出现长度不稳定，未将它当作写入损坏结论：单独用旧 Latin-1 和新 UTF-8 设置各保存一次后，45 个完整音频包均与输入完全一致；独立 FFmpeg 全长解码的 175888 字节 PCM 三者 SHA-256 均为 `c3f5549bb70dd9bb8479a8b22a48dd69dd2ece63e46d7b9661bbdc966328bf54`。自动回归改用确定性的全部 Ogg 包比较，没有降低音频覆盖范围。
+
+本轮全套 Release 回归：App 433 通过、1 跳过，Core 70 通过；跳过项是需要单独显式启用的真实端点完整格式测试，没有宣称通过。构建工作流约束测试 7 通过。证据位于忽略的 `desktop/artifacts/tag-write-validation/`，完整 TRX 在 `results/final/`。MCP `get_logs` 的工具描述同步明确成功日志字段、无歌词内容和旧日志边界，输入 Schema / 工具数不变。
+
+新托管 Release 客户端 PID 13436 使用隔离数据目录 `managed/data`。代理通过真实 Windows 设置界面将歌词、封面两项改为「写入音乐文件」，然后经正式 MCP `add_folder` 加入仅含三首合成静音的目录；已有离线同名 JPEG / LRC 走生产 `EmbedPrevious`，分别完成封面、歌词、联合写入，日志明确记录三个操作组合和 `id3v1Preserved=True`。未调用 mock 写入接口。UI 实际双击联合样本播放无声内容、打开歌词面板并暂停，歌名、歌手、专辑、青色封面和多语歌词均正确。截图 `evidence/managed-embed-settings.jpg`、`evidence/managed-combined-result.jpg`，对应可访问性全文 `evidence/managed-combined-tree.txt`。
+
+`managed/before.json` / `after.json` 由独立 Python 原始 ID3 解码生成：三个样本的完整 MPEG 负载 SHA-256 均保持 `18954b9008c4fdd983a6dd559fd8bfc727ba2b05e57182ab941c6cf3211abbff`，全部原 ID3v1 字节及 mtime 不变，TIT2 / TPE1 / TALB 原文字不变，APIC / USLT 与所选操作一致，成功后同名 JPEG / LRC 已按原业务规则清理。`managed/mcp-tagwriter-logs.json` 为真实 MCP `get_logs` 读回。既有 `TryDeleteLyrics` 在隐藏目录尚不存在时会输出清理警告，写入及同名歌词清理均已独立核实成功；本轮不作无关清理重构。
 
 ## Android 与历史归因边界
 

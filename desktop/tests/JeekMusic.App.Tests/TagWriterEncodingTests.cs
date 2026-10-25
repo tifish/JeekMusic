@@ -8,6 +8,7 @@ using SkiaSharp;
 
 namespace JeekMusic.App.Tests;
 
+[Collection("Tag writing")]
 public sealed class TagWriterEncodingTests
 {
     const string NewLyrics = "[00:00.00]中文歌词 café Ελληνικά 𠮷😀";

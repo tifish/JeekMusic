@@ -1,0 +1,172 @@
+{
+  "policyVersion": 1,
+  "source": "FFmpeg lavfi silence / 440Hz WavPack tone + procedural JPEG + explicitly framed synthetic metadata",
+  "ffmpegVersion": "ffmpeg version 6.0-essentials_build-www.gyan.dev Copyright (c) 2000-2023 the FFmpeg developers",
+  "operations": [
+    "cover",
+    "lyrics",
+    "combined"
+  ],
+  "files": [
+    {
+      "id": "back",
+      "path": "back.jpg",
+      "sha256": "c6c51c0faa6666e24c1684b1d07b3fb6c3cc22f83447e7cebf668f8adf0725f0",
+      "bytes": 634,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "faststart",
+      "path": "faststart.m4a",
+      "sha256": "888e550d968716c1228deb830464333656c074cfbb40c847b6bd41f265a5c843",
+      "bytes": 1219,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "front",
+      "path": "front.jpg",
+      "sha256": "83753a4c6eec2065a48a7db6afe9920833bee2083ab0717a918637bb7f69223e",
+      "bytes": 634,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "id3v23",
+      "path": "id3v23.mp3",
+      "sha256": "d721681756f5aa70ee5e327e14fe32acf853016023eae0568f27758d4bdfa4ea",
+      "bytes": 2640,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "id3v24",
+      "path": "id3v24.mp3",
+      "sha256": "76fb92a365aed9c6035b9c92ae51a04af6ae8f8bf3f173cf0a6f4d07eb9e67d3",
+      "bytes": 2523,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "lyrics-after",
+      "path": "lyrics-after.lrc",
+      "sha256": "67e63a8e7b84128588029be3269d8b5f786e8fb26e2b0811df804e4ca4561c35",
+      "bytes": 133,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "lyrics-before",
+      "path": "lyrics-before.lrc",
+      "sha256": "e7971b5b68a3939e2b9c140ea3a28d7aaccbfe642a9dd32c08e6d50d816b160f",
+      "bytes": 123,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "multiple-lyrics",
+      "path": "multiple-lyrics.mp3",
+      "sha256": "dfbafeebbe319468e292d8357ca25ad63f9737b4dd4221d567eb22ca169b9f33",
+      "bytes": 2670,
+      "synthetic": true,
+      "expectedLyricsEdit": "refuse"
+    },
+    {
+      "id": "native",
+      "path": "native.aiff",
+      "sha256": "5cbfd6d68cf99855cac030d7734322a1209573cd906fe3b4f4a156e2ab68a813",
+      "bytes": 9762,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.flac",
+      "sha256": "a230a1bdc68588102085060ed6a8b96ffb940c1966d7123d4c8a055eb4691ec5",
+      "bytes": 8720,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.m4a",
+      "sha256": "20a62990c79e47a0402482e55d2d5c716f73e78ec78bf0118a3a53e6588ecf5f",
+      "bytes": 1276,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.ogg",
+      "sha256": "487116ab00f2679540c0f5632b5abe1ca43a6147ea9b4301d74b8e458fbcf553",
+      "bytes": 3741,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.opus",
+      "sha256": "7c88cc05570f09af385aae3a886b4f736e4f9ec22a92d18559920ff4c5ef3618",
+      "bytes": 500,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.wav",
+      "sha256": "d800d7d0190c1a9af944933fa3cdac08c578a15c8cc78be5e0a29df9bb8a5da5",
+      "bytes": 9852,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.wma",
+      "sha256": "cc241d22a7e83a295156d798668f1ee393b481f4e45b7675229197b4fdf1afbb",
+      "bytes": 7557,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "native",
+      "path": "native.wv",
+      "sha256": "015d909b2c0d54fc463886e3985b1ec9adb19ea8dac9bea64ca05c04adf30ce9",
+      "bytes": 3097,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "opaque-marker",
+      "path": "opaque-marker.bin",
+      "sha256": "652afbda5fb63667af02f7ac655d37de31d3648ea5725a0a5457b19d3812ce33",
+      "bytes": 33,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "raw",
+      "path": "raw.mp3",
+      "sha256": "1572dbb8cf98696f002af738105ea0feff41efd51d09cfc25d051b41dc7fa01d",
+      "bytes": 1703,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "untagged",
+      "path": "untagged.m4a",
+      "sha256": "4e4f86f8beb2a5f09028d7174e78e3fde8f1109af7cd3c876100084c069f140d",
+      "bytes": 772,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    },
+    {
+      "id": "untagged",
+      "path": "untagged.mp3",
+      "sha256": "c181abe681ee385923b5941600d173b20ec86c80ef44e87884bac32c5cc2d9a2",
+      "bytes": 1368,
+      "synthetic": true,
+      "expectedLyricsEdit": "write-if-profile-supported"
+    }
+  ]
+}

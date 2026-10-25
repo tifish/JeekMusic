@@ -5,6 +5,13 @@ namespace JeekMusic.App.Tests;
 
 public sealed class McpSessionTests
 {
+    [Fact]
+    public void DiagnosticsDescribeProductionTagWritingPolicy()
+    {
+        var tool = McpTools.BuildCatalog().Single(x => x!["name"]!.GetValue<string>() == "get_diagnostics")!;
+        Assert.Contains("tagWriting", tool["description"]!.GetValue<string>());
+        Assert.Empty(tool["inputSchema"]!["properties"]!.AsObject());
+    }
     static McpSession Session(Func<string, JsonObject, Task<JsonObject>>? call = null) =>
         new(McpTools.BuildCatalog(), call ?? ((_, _) => Task.FromResult(new JsonObject { ["ok"] = true })));
 

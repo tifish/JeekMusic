@@ -4,6 +4,7 @@ using SkiaSharp;
 
 namespace JeekMusic.App.Tests;
 
+[Collection("Tag writing")]
 public sealed class TagWriterTests
 {
     [Theory]
@@ -26,7 +27,7 @@ public sealed class TagWriterTests
             using var image = SKImage.FromBitmap(bitmap);
             using var jpeg = image.Encode(SKEncodedImageFormat.Jpeg, 85);
             const string lyrics = "[00:00.00]中文歌词 Ελληνικά 𠮷😀";
-            Assert.True(TagWriter.Write(path, jpeg.ToArray(), lyrics));
+            Assert.True(TagWriter.Write(path, jpeg.ToArray(), lyrics), TagWriter.Diagnostics().ToJsonString());
             if (extension == "ogg")
             {
                 // Ogg repagination changes page bytes; compare every codec/audio packet except
@@ -116,11 +117,9 @@ public sealed class TagWriterTests
             var before = File.ReadAllBytes(path);
             "TAG"u8.CopyTo(before.AsSpan(before.Length - 128));
             File.WriteAllBytes(path, before);
-            // ATL itself detects this PCM suffix as a tag too. Fail closed before Save rather
-            // than let it rewrite PCM or restore a supposed footer outside the RIFF container.
-            Assert.False(TagWriter.Write(path, null, "[00:00.00]保留所有音频字节"));
+            // The bounded RIFF editor never interprets PCM as a footer, even if ATL would.
+            Assert.True(TagWriter.Write(path, null, "[00:00.00]保留所有音频字节"));
             var after = File.ReadAllBytes(path);
-            Assert.Equal(before, after);
             Assert.Equal(after.Length, BitConverter.ToInt32(after, 4) + 8);
             using var reader = new BinaryReader(new MemoryStream(after));
             reader.BaseStream.Position = 12;

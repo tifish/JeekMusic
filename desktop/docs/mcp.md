@@ -35,6 +35,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 实际名称、描述、JSON Schema 和只读/破坏性提示由 `tools/list` 提供。所有工具接受对象参数，拒绝未知参数和类型、枚举、范围错误。列表的默认页大小为 50，最大为 200；使用 `offset`、`limit` 分页，返回 `total`、`items`、`nextOffset`。队列和播放列表的位置均从 **0** 开始；歌曲、文件夹和播放列表的数字 ID 仅在当前数据目录内有效，歌曲另有稳定的 `trackKey`。
 
+`get_diagnostics.tagWriting` 返回生产标签写入策略版本、新MP3/已有v2.3版本策略、文件大小上限、最近检测到的原生格式及 `saved` / `rejected` 结果和原因；不返回歌词内容。`get_logs(kind="app")` 的 `[tagwriter]` 记录同一写入服务的成功、保全验证及拒绝原因。封面/歌词仍通过既有在线/离线保存业务调用写入器；不新增绕过播放避让、验证或回退的直接文件写入工具。两项接口参数 Schema 和22项工具目录保持兼容，Debug/Release/NativeAOT一致。格式、保留字段、复杂输入拒绝和外部保存回退见[跨端写入契约](../../docs/tag-writing-policy.md)。
+
 | 工具 | 参数与行为 |
 |---|---|
 | `get_status` | 无参数。当前歌曲、播放/暂停、秒数、音量、随机/循环、队列位置、曲库数量、扫描状态和快照版本 |

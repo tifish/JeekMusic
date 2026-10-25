@@ -18,7 +18,7 @@ public sealed class SpacePlaybackShortcutTests
     public void McpToggleKeepsItsExistingSchemaAndDescribesTheSharedService()
     {
         var catalog = McpTools.BuildCatalog().OfType<JsonObject>().ToArray();
-        Assert.Equal(22, catalog.Length);
+        Assert.Equal(24, catalog.Length);
         var tool = catalog.Single(t => t["name"]!.GetValue<string>() == "playback");
         Assert.Contains("same PlayPause service", tool["description"]!.GetValue<string>());
         var properties = tool["inputSchema"]!["properties"]!.AsObject();

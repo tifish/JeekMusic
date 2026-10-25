@@ -39,6 +39,7 @@ class SyncService @Inject constructor(
     private val scanner: LibraryScanner,
     private val tree: DocumentTree,
     private val tags: TagRepository,
+    private val lan: LanSyncStore,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -120,7 +121,7 @@ class SyncService @Inject constructor(
 
     private fun reference(key: String, roots: List<BackupRefs.Root>): String {
         if (key.startsWith("foreign:")) return key.removePrefix("foreign:")
-        val found = BackupRefs.refOf(key, roots)
+        val found = lan.reference(key) ?: BackupRefs.refOf(key, roots)
         if (found != null) refs.put(key, found)
         return found ?: refs.optString(key, key)
     }
@@ -183,6 +184,9 @@ class SyncService @Inject constructor(
                 fun match(ref: String) = matcher.match(ref.replace('\\', '/').lowercase())
                 fun canonical(ref: String) = match(ref)?.let { reference(it, roots) } ?: ref
                 val remotes = mutableListOf<SyncFile>()
+                File(context.filesDir, "lan-inbox.json").takeIf { it.exists() }?.let { file ->
+                    SyncFormat.parse(file.readText())?.let { f -> remotes += f.copy(state = SyncMerge.normalizeReferences(f.state, ::canonical)) }
+                }
                 for (folder in folders) {
                     val files = tree.list(folder, DocumentTree.appPath(folder, "sync")).filter { it.name.endsWith(".json") && !it.name.endsWith(".features.json") }
                     for (file in files) {
@@ -294,8 +298,10 @@ class SyncService @Inject constructor(
     private suspend fun shareFeatures(folders: List<LibraryFolderEntity>, tracks: List<TrackEntity>, roots: List<BackupRefs.Root>, match: (String) -> String?) {
         val byKey = tracks.associateBy { it.trackKey }
         var imported = false
-        for (folder in folders) for (file in tree.list(folder, DocumentTree.appPath(folder, "sync")).filter { it.name.endsWith(".features.json") && it.name != SyncFormat.featuresFileName(device.id) }) {
-            val json = runCatching { JSONObject(tree.readLimited(folder, file.documentId, 32_000_000)?.toString(Charsets.UTF_8) ?: "") }.getOrNull() ?: continue
+        val featureInputs = folders.flatMap { folder -> tree.list(folder, DocumentTree.appPath(folder, "sync")).filter { it.name.endsWith(".features.json") && it.name != SyncFormat.featuresFileName(device.id) }
+            .mapNotNull { file -> runCatching { JSONObject(tree.readLimited(folder, file.documentId, 32_000_000)?.toString(Charsets.UTF_8) ?: "") }.getOrNull() } }.toMutableList()
+        File(context.filesDir, "lan-inbox.features.json").takeIf { it.exists() }?.let { file -> runCatching { JSONObject(file.readText()) }.getOrNull()?.let(featureInputs::add) }
+        for (json in featureInputs) {
             if (json.optInt("format") != 2 || json.optInt("analyzer_version") != TagRepository.ANALYZER_VERSION) continue
             val items = json.optJSONObject("items") ?: continue
             for (ref in items.keys()) {
@@ -333,6 +339,32 @@ class SyncService @Inject constructor(
     }
 
     suspend fun renameDevice(name: String) = withContext(Dispatchers.IO) { mutex.withLock { ensureLoaded(); device = device.copy(name = name.trim().ifEmpty { Build.MODEL }); lastWritten.clear(); saveJournal() } }
+    suspend fun lanDeviceId(): String = mutex.withLock { ensureLoaded(); device.id }
+    suspend fun exportLan(): JSONObject = withContext(Dispatchers.IO) {
+        syncNow()
+        mutex.withLock {
+            ensureLoaded()
+            val folders = db.folderDao().all()
+            val state = capture(folders) { it }
+            val result = JSONObject().put("state", SyncFormat.toJson(SyncFile(device, System.currentTimeMillis(), state)))
+            lastFeatures.values.firstOrNull()?.let { result.put("features", JSONObject(it)) }
+            result
+        }
+    }
+    suspend fun acceptLan(payload: JSONObject) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            ensureLoaded()
+            fun save(name: String, value: JSONObject) {
+                val atomic = AtomicFile(File(context.filesDir, name)); val out = atomic.startWrite()
+                try { out.write(value.toString().toByteArray()); atomic.finishWrite(out) } catch (e: Exception) { atomic.failWrite(out); throw e }
+            }
+            val state = payload.getJSONObject("state"); require(SyncFormat.parse(state.toString()) != null)
+            save("lan-inbox.json", state)
+            payload.optJSONObject("features")?.let { save("lan-inbox.features.json", it) }
+            metadata.put("initialized", true); saveJournal()
+        }
+        syncNow()
+    }
     suspend fun history(): List<Pair<Int, String>> = withContext(Dispatchers.IO) { mutex.withLock { ensureLoaded(); List(history.length()) { it to history.getJSONObject(it).getJSONObject("playlist").getString("name") } } }
     suspend fun restoreHistory(index: Int) = withContext(Dispatchers.IO) {
         mutex.withLock {

@@ -110,7 +110,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 - `revision`：切源代次；`status` 为 `none`、`pending`、`committed`、`cancelled` 或 `empty`（无当前队列，未开始切源）。
 - `sourceAnchorIndex`：旧当前曲仅作为历史锚点的零基队列索引，无锚点为 -1；普通历史可由上一首访问，前向及循环不会选到此锚点。该索引随队列编辑调整并随队列持久化，旧配置缺省为 -1。
 
-这些读取不启动播放、解析待决来源、计算 Rows 或创建窗口。继续使用现有播放/队列工具，无新导航或 UI 专用工具，22 个工具及输入字段/范围保持兼容；参数说明同步描述共用业务行为。回归位于 `SourceSwitchTests` 和 `PlayQueueTests`，使用 fake 引擎/端点、内存数据库和真实 Headless 控件验证竞态及状态，不能代替解锁后的真实客户端操作与截图验收。
+这些读取不启动播放、解析待决来源、计算 Rows 或创建窗口。继续使用现有播放/队列工具，无新导航或 UI 专用工具，24 个工具及输入字段/范围保持兼容；参数说明同步描述共用业务行为。回归位于 `SourceSwitchTests` 和 `PlayQueueTests`，使用 fake 引擎/端点、内存数据库和真实 Headless 控件验证竞态及状态，不能代替解锁后的真实客户端操作与截图验收。
 
 ### 播放时当前歌曲可见性
 
@@ -127,7 +127,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 - `alignment` 为 `none`、`awaiting-layout`、`keep` 或 `center`；`initiallyFullyVisible` 在可靠布局前为 null，之后记录本次请求的原始判断，虚拟化实现行后也不改写；`centerErrorY` 为当前行中心相对实际数据视口中心的纵向差（逻辑像素），无行布局时为 null。首尾无法居中时可以非零，判断是否完整可见仍以 `currentFullyVisible` 为准。
 - `result`：`no-request`、`pending`、`already-visible`、`centered`、`clamped`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。原 `revealed` 结果随居中规则改为 `centered` 或 `clamped`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
 
-现共 22 个工具（新增智能标签修正）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
+现共 24 个工具（新增智能标签修正）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
 
 ### 歌曲修改时间与排序
 
@@ -190,7 +190,7 @@ English: The visible six-DIP navigation splitter resizes both ways. Expanding a 
 
 ### 文件夹展开诊断
 
-`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 22 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
+`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 24 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
 
 - `defaultExpanded: true`、`persistence: "device-local-ui-snapshot"`、`keyVersion: 1`。
 - `automaticNavigation: "preserve-collapsed"`：恢复选中项、普通导航/历史、刷新/扫描不打开已主动收起的文件夹祖先。
@@ -275,7 +275,7 @@ python desktop/tools/test-mcp.py --audio --exclusive
 python desktop/tools/test-build-isolation.py --build-only
 ```
 
-`test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、22 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
+`test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、24 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
 
 **静音 WAV / 应用静音仍会打开 WASAPI 设备，独占能中断游戏等其他程序声音。** 独立数据目录只隔离曲库和单实例，不隔离物理音频设备。默认启动诊断也会启动 GUI 并读取系统音频状态；用户要求禁止启动或正在处理游戏失声时，不运行任何 EXE/MCP（包括 `--startup-only`、`mcp_client.py` 的只读命令）。仅可编译/静态检查和确认使用模拟端点的测试。测试结束后只清理自己的播放器，不激活窗口或使用正式曲库；`show_window` 的激活行为不在后台测试中调用。
 
@@ -297,7 +297,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 声道布局来自已加载解码器的明确 `audio-params/channels`，mono/stereo 可安全识别；5.1 与 5.1(side) 区分。首次加载保持静音/暂停，拿到可靠布局后若有必要，再切换设备并重开流；确认完成才继续播放。只知道“6 声道”等数量时不推断通用掩码，保留当前扬声器布局，标明布局未知和必要声道转换。已知源布局直接输出不可行时，使用设备当前布局并报告转换；原采样率不可行时保留可用率并明确报告重采样/精度降低。独占仍交给播放内核自动协商，多声道未知布局不强套固定掩码。
 
-关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正共 22 个工具。
+关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正共 24 个工具。
 
 共享自动格式是临时配置：每个物理端点首次实际写入前，保存当时真实 Windows 设备默认格式与混音格式的完整原始结构，不使用 factory default、硬编码 48k/16/2 或其他端点快照。显式暂停（界面、媒体键、快捷键与 MCP 共用业务）先静音并关闭流，恢复基线，保留歌曲/队列/CUE 精确位置；暂停 seek 只更新保存位置。续播重新读取当前基线并匹配，确认真实输出后继续。切歌和内部重建不恢复；自然队列结束、清空、正常退出、释放旧设备和进入独占恢复。独占本身不改共享格式，暂停仅释放其流。
 
@@ -336,3 +336,14 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 
 显示名称统一为 **Jeek Music**。初始化的 `serverInfo.title` 使用该显示名称，稳定协议标识 `serverInfo.name` 仍为 `JeekMusic`；工具 ID、参数 Schema、管道名、数据目录、EXE 名称及已有连接配置不变。
+
+
+## 局域网同步（生产与开发版同套服务）
+
+- `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/lastOperation/bytesServed/addresses/roots/devices`。根带稳定 `rootId`、当前 `folderId`、显示名、启用与可用状态；设备仅返回 ID 和名称。不会返回邀请、令牌、令牌 hash 或私钥。
+- `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TCP 39843 的 TLS 服务。默认不启动，停用中断连接与计划；不修改防火墙。
+- `lan_sync_control {"action":"share","folderId":1}` / `unshare`：仅能启用/停用已在曲库登记的根。返回稳定 rootId；目录位置由当前曲库服务解析，调用不能指定磁盘路径。停用不删除源或手机下载。
+- `lan_sync_control {"action":"invite","host":"192.168.1.7"}`：生成 5 分钟、单次有效邀请，含地址、证书指纹和随机授权值。此返回值是凭证，只向要配对的手机私下传递，不写日志、截图或报告。
+- `lan_sync_control {"action":"revoke","deviceId":"..."}`：撤销设备。既有 TLS 连接每个请求重新检查授权，后续读取被拒绝；已下载的文件不删除。
+
+所有工具 Schema 禁止额外参数，action 为枚举；share/unshare 要求 folderId，invite 要求 host，revoke 要求 deviceId。沿用正常业务服务，不存在开发专用传输入口。完整产品契约、限制及隔离验证见 [局域网同步](../../docs/lan-sync.md)。

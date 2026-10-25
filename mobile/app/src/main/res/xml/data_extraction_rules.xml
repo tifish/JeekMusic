@@ -11,4 +11,9 @@
         <exclude domain="sharedpref" path="." />
         <exclude domain="external" path="." />
     </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="lan-sync.json" />
+        <exclude domain="file" path="lan-owned.json" />
+        <exclude domain="file" path="lan-partials/" />
+    </device-transfer>
 </data-extraction-rules>

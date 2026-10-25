@@ -50,7 +50,7 @@ def main():
                 diagnostic = startup.call(client, "get_diagnostics")
                 player_pid = diagnostic["processId"]
                 catalog = client.request("tools/list")["tools"]
-                assert len(catalog) == 22
+                assert len(catalog) == 24
                 tool = next(t for t in catalog if t["name"] == "set_smart_tags")
                 assert tool["inputSchema"]["minProperties"] == 2
                 # Offline songs remain addressable by ID but are deliberately
@@ -95,7 +95,7 @@ def main():
                     assert db.execute("SELECT DISTINCT genre FROM track").fetchall() == [('file genre',)]
                 startup.close_player(player_pid)
                 player_pid = None
-            print("PASS: 22 tools, real async MCP, offline single/batch, same-value manual, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
+            print("PASS: 24 tools, real async MCP, offline single/batch, same-value manual, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
         except Exception:
             with closing(sqlite3.connect(data / "library.db")) as db:
                 print("Fixture database:", db.execute("SELECT id,title FROM track").fetchall(), flush=True)

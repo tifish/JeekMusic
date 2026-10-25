@@ -19,6 +19,8 @@
 
 需求与设计见 [docs/requirements.md](docs/requirements.md) 和 [docs/design.md](docs/design.md)。
 
+局域网文件同步：在 PC 明确启用曲库根，在手机通过一次性邀请配对，选择子目录和 SAF 目标后下载。详见 [首版契约与限制](../docs/lan-sync.md)。
+
 ## 构建
 
 需要 JDK 17+ 和 Android SDK（compileSdk 37）。以下命令都在 `mobile/` 目录下执行，Android Studio 也打开 `mobile/` 目录。

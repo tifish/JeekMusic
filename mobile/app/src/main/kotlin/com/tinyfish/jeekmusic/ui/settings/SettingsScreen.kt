@@ -108,6 +108,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val backups: BackupManager,
     val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
+    val lan: com.tinyfish.jeekmusic.data.sync.LanSyncService,
     private val messages: MessageBus,
     private val tags: TagRepository,
     private val analysis: AnalysisScheduler,
@@ -375,6 +376,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
 
             item { SectionHeader(stringResource(R.string.settings_sync)) }
+            item { LanSyncSettings(viewModel.lan) }
             item { SyncSettings(viewModel.sync) }
             item { SectionHeader(stringResource(R.string.settings_backup)) }
             item {

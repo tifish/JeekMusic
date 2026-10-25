@@ -48,6 +48,9 @@ public sealed class McpTools
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
         Tool("edit_playlist", "Create/rename/delete/add/remove/move a playlist. create requires name; other actions require playlistId; rename requires name; add requires trackIds; remove/move require positions; move also needs target (index before moving). Changes persist and use normal sync events. Deleting removes only the playlist, never music files.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"rename\",\"delete\",\"add\",\"remove\",\"move\"]},\"playlistId\":{\"type\":\"integer\"},\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200},\"trackIds\":" + Ids + ",\"positions\":" + Positions + ",\"target\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"], destructive: true),
+        Tool("lan_sync_status", "Read LAN sharing status, root IDs, availability, addresses, port and paired device IDs. Never returns invitation, tokens or private keys. Uses the production service.", "", [], true),
+        Tool("lan_sync_control", "Control the production LAN sync service: start/stop, share/unshare a registered library folder, create a five-minute single-use TLS-pinned invitation, or revoke a device. share/unshare require folderId; invite requires host (LAN IPv4/DNS name); revoke requires deviceId. Only explicit library roots are shared, no arbitrary disk access. stop/revoke invalidate active transfer authorization. Invitation is sensitive: do not log, publish or screenshot the returned value. No firewall changes.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"share\",\"unshare\",\"invite\",\"revoke\"]},\"folderId\":{\"type\":\"integer\"},\"host\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":253},\"deviceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
         Tool("list_folders", "Read library folders, IDs, paths and availability.", "", [], true),
         Tool("add_folder", "Schedule adding and scanning an existing absolute local folder. If it contains registered child folders, replaceChildren must explicitly be true. Work runs in the normal library queue; response means queued, not completed.",
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
@@ -102,6 +105,19 @@ public sealed class McpTools
         switch (name)
         {
             case "get_status": return Status();
+            case "lan_sync_status": return app.LanSync.Diagnostics();
+            case "lan_sync_control":
+                switch (Required(a, "action").GetValue<string>())
+                {
+                    case "start": app.LanSync.Start(); break;
+                    case "stop": app.LanSync.Stop(); break;
+                    case "share": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), true);
+                    case "unshare": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), false);
+                    case "invite": return new JsonObject { ["invitation"] = app.LanSync.Invite(Required(a, "host").GetValue<string>()) };
+                    case "revoke": app.LanSync.Revoke(Required(a, "deviceId").GetValue<string>()); break;
+                    default: throw new ArgumentException("Unknown action");
+                }
+                return app.LanSync.Diagnostics();
             case "search_tracks":
                 var snapshot = app.Library.Snapshot;
                 var query = a["query"]?.GetValue<string>() ?? "";

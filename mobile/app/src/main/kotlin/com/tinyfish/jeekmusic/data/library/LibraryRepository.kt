@@ -105,6 +105,14 @@ class LibraryRepository @Inject constructor(
         return AddFolderResult.Added(folder.copy(id = id))
     }
 
+    /** The durable parent grant was taken by the SAF picker; register just the managed child. */
+    suspend fun registerSyncDestination(folder: LibraryFolderEntity) {
+        val existing = folderDao.all().filter { it.volumeName == folder.volumeName }
+        if (existing.any { folder.relativePath.startsWith(it.relativePath) }) return
+        require(existing.none { it.relativePath.startsWith(folder.relativePath) }) { "Sync destination contains an existing library root" }
+        folderDao.insert(folder)
+    }
+
     suspend fun removeFolder(folder: LibraryFolderEntity) {
         db.withTransaction {
             folderDao.delete(listOf(folder.id))

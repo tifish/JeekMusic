@@ -460,5 +460,19 @@
   "位深未知": "Bit depth unknown",
   "位深不适用（有损编码）": "Bit depth not applicable (lossy encoding)",
   "点击或右键选择输出设备和模式，查看格式详情。": "Click or right-click to choose the output device and mode and view format details.",
-  "恢复设备原配置失败：": "Failed to restore the original device format: "
+  "恢复设备原配置失败：": "Failed to restore the original device format: ",
+  "局域网音乐同步": "LAN music sync",
+  "PC 是音乐源。手机选择根或子文件夹与保存位置。仅共享下面启用的曲库根；取消同步不删除音乐。请勿让 Syncthing 同时管理手机的同一目标；无法自动识别全部 Syncthing 配置。": "The PC is the music source. Choose roots or subfolders and destinations on Android. Only enabled library roots are shared. Cancelling keeps music. Do not let Syncthing manage the same destination; all Syncthing configurations cannot be detected automatically.",
+  "启用局域网服务": "Enable LAN service",
+  "无法监听端口。检查端口占用、网络权限和防火墙；程序不会修改系统防火墙。": "Cannot listen on the port. Check port use, network permissions and firewall; the app does not change firewall rules.",
+  "无法共享此根：路径不可用、权限不足或包含链接。": "Cannot share this root: unavailable path, access denied, or links.",
+  "手动连接：两端连接同一局域网，将下面的一次性邀请填入手机。邀请 5 分钟有效，只能使用一次；请勿截图或公开。": "Manual connection: connect both devices to the same LAN and enter this invitation on Android. It expires in five minutes and works once. Do not screenshot or publish it.",
+  "PC 局域网 IP 地址": "PC LAN IP address",
+  "一次性配对邀请": "One-use pairing invitation",
+  "生成配对邀请": "Generate pairing invitation",
+  "请输入有效的局域网地址，并启用服务。": "Enter a valid LAN address and enable the service.",
+  "撤销设备": "Revoke device",
+  "手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；权限或防火墙阻止连接时可重试，不会自动更改系统规则。": "Every sync hashes all selected content, detecting changes even with identical size and mtime. Large folders take longer to verify. Retry after checking network/firewall permissions; no system rules are changed.",
+  "已传输": "Transferred",
+  "已配对设备": "paired devices"
 }

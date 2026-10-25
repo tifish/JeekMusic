@@ -56,6 +56,7 @@ class LibraryScanner @Inject constructor(
     private val analysisScheduler: dagger.Lazy<AnalysisScheduler>,
     private val onlineFetch: dagger.Lazy<OnlineFetchScheduler>,
     private val settings: SettingsRepository,
+    private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val _state = MutableStateFlow<ScanState>(ScanState.Idle)
@@ -117,7 +118,9 @@ class LibraryScanner @Inject constructor(
         }
     }
 
-    suspend fun scan(full: Boolean, recheckCue: Boolean = false): ScanResult = mutex.withLock {
+    suspend fun refreshFiles(fileKeys: Set<String>): ScanResult = scan(full = true, recheckCue = true, onlyFiles = fileKeys)
+
+    suspend fun scan(full: Boolean, recheckCue: Boolean = false, onlyFiles: Set<String>? = null): ScanResult = mutex.withLock {
         val start = System.currentTimeMillis()
         val config = settings.current().scan
         val factory = TrackFactory(config)
@@ -126,13 +129,15 @@ class LibraryScanner @Inject constructor(
         val found = LinkedHashMap<String, Pair<MediaStoreAudio, LibraryFolderEntity>>()
         var unsupported = 0
         for (folder in folderDao.all()) {
+            if (onlyFiles != null && onlyFiles.none { it.startsWith("${folder.volumeName}:${folder.relativePath}") }) continue
             for (audio in mediaStore.query(folder.volumeName, folder.relativePath)) {
+                if (onlyFiles != null && audio.fileKey !in onlyFiles) continue
                 if (SupportedFormats.isSupported(audio.fileName)) found[audio.fileKey] = audio to folder else unsupported++
             }
         }
 
         // 4. 与库中记录比对
-        val existing = trackDao.signatures().groupBy { it.fileKey }
+        val existing = trackDao.signatures().filter { onlyFiles == null || it.fileKey in onlyFiles }.groupBy { it.fileKey }
         val removedIds = existing.filterKeys { it !in found }.values.flatten().map { it.id }
         val toParse = found.values.filter { (audio, _) ->
             val old = existing[audio.fileKey]?.firstOrNull()
@@ -155,8 +160,9 @@ class LibraryScanner @Inject constructor(
                         val tags = tagReader.read(MediaStoreSource.contentUri(audio.volumeName, audio.mediaStoreId), config.legacyCharset)
                         val old = existing[audio.fileKey].orEmpty()
                         val idsByKey = old.associate { it.trackKey to it.id }
-                        val cue = if (tags?.cueSheet != null || cueResolver.isCandidate(audio)) {
-                            runCatching { cueResolver.resolve(folder, audio, tags?.cueSheet, directoryCache) }.getOrNull()
+                        val explicitCues = lan.cues(audio.fileKey)
+                        val cue = if (tags?.cueSheet != null || cueResolver.isCandidate(audio) || explicitCues.isNotEmpty()) {
+                            runCatching { cueResolver.resolve(folder, audio, tags?.cueSheet, directoryCache, explicitCues) }.getOrNull()
                         } else {
                             null
                         }
@@ -190,7 +196,7 @@ class LibraryScanner @Inject constructor(
             artistDao.deleteOrphans()
             artistDao.updateTrackCounts()
         }
-        settings.setUnsupportedFileCount(unsupported)
+        if (onlyFiles == null) settings.setUnsupportedFileCount(unsupported)
 
         val result = ScanResult(added, updated, removedIds.size, unsupported, System.currentTimeMillis() - start)
         if (added + updated > 0) {

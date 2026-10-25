@@ -27,10 +27,11 @@ object BackupRefs {
      */
     class Matcher(refToTrackKey: Map<String, String>) {
         private val exact = refToTrackKey
-        private val byFileName = refToTrackKey.entries.groupBy { it.key.substringAfterLast('/') }
+        private val byFileName = refToTrackKey.entries.filterNot { it.key.startsWith("root:", ignoreCase = true) }.groupBy { it.key.substringAfterLast('/') }
 
         fun match(ref: String): String? {
             exact[ref]?.let { return it }
+            if (ref.startsWith("root:", ignoreCase = true)) return null
             val candidates = byFileName[ref.substringAfterLast('/')].orEmpty()
             if (candidates.size == 1) return candidates.single().value
             if (candidates.isEmpty()) return null

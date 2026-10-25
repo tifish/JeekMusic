@@ -25,6 +25,7 @@ public sealed class SyncFeature : IFeature
     readonly Lock _fileGate = new();
     readonly Dictionary<string, string> _lastFeatures = new(StringComparer.OrdinalIgnoreCase);
     int _referenceVersion = -1;
+    int _referenceRootsVersion = -1;
     // Reuse between changes in a burst, but do not pin every path for the lifetime of the app.
     WeakReference<Dictionary<string, string>>? _references;
     IReadOnlyList<JsonObject> _devices = [];
@@ -34,6 +35,7 @@ public sealed class SyncFeature : IFeature
     public void Start(AppServices app, Shell shell)
     {
         _app = app; _shell = shell;
+        app.LanSync.Merge = this;
         try { _device = JsonNode.Parse(File.ReadAllText(AppPaths.Device))!.AsObject(); }
         catch (Exception e) when (e is IOException or JsonException) { _device = new JsonObject(); }
         if (string.IsNullOrEmpty(Str(_device["id"]))) _device["id"] = Guid.NewGuid().ToString("N");
@@ -91,7 +93,7 @@ public sealed class SyncFeature : IFeature
 
     Dictionary<string, string> References()
     {
-        if (_referenceVersion == _app.Library.Snapshot.Version && _references is not null && _references.TryGetTarget(out var cached)) return cached;
+        if (_referenceVersion == _app.Library.Snapshot.Version && _referenceRootsVersion == _app.LanSync.RootRevision && _references is not null && _references.TryGetTarget(out var cached)) return cached;
         var refs = new Dictionary<string, string>();
         if (_app.Db.GetValue("sync_references") is { } text)
             foreach (var p in JsonNode.Parse(text)!.AsObject()) refs[p.Key] = Str(p.Value);
@@ -99,8 +101,8 @@ public sealed class SyncFeature : IFeature
         var candidates = snapshot.ByKey.Values.Select(t => (t, reference: t.RelativePath.Replace('\\', '/') + (t.CueTrackNo is { } n ? $"#{n:00}" : ""))).ToList();
         var duplicates = candidates.GroupBy(x => x.reference, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var (t, reference) in candidates)
-            refs[t.TrackKey] = duplicates.Contains(reference) ? snapshot.Folder(t.FolderId)!.DisplayName + "/" + reference : reference;
-        _referenceVersion = snapshot.Version; _references = new(refs);
+            refs[t.TrackKey] = _app.LanSync.Reference(t.FolderId, reference) ?? (duplicates.Contains(reference) ? snapshot.Folder(t.FolderId)!.DisplayName + "/" + reference : reference);
+        _referenceVersion = snapshot.Version; _referenceRootsVersion = _app.LanSync.RootRevision; _references = new(refs);
         return refs;
     }
 
@@ -186,13 +188,21 @@ public sealed class SyncFeature : IFeature
         {
             var folders = _app.Library.Snapshot.Folders.ToList();
             if (folders.Count == 0) return;
-            var files = await Task.Run(() => ReadFiles(folders, false));
+            var files = await Task.Run(() => ReadFiles(folders, false).Concat(_app.LanSync.Incoming(false)).ToList());
             if (_stopped) return;
             _devices = LatestPerDevice(files, Str(_device["id"]));
             var refs = References();
             var reverse = refs.Where(p => _app.Library.Snapshot.ByKey.ContainsKey(p.Key)).GroupBy(p => p.Value.ToLowerInvariant()).Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.First().Key);
             var matcher = new BackupRefs.Matcher(reverse);
-            string? Match(string reference) => matcher.Match(reference.Replace('\\', '/').ToLowerInvariant());
+            var lanRefs = _app.Library.Snapshot.ByKey.Values.Select(t => (t.TrackKey, Ref: _app.LanSync.Reference(t.FolderId, t.RelativePath + (t.CueTrackNo is { } no ? $"#{no:00}" : ""))))
+                .Where(p => p.Ref != null).ToDictionary(p => p.Ref!.ToLowerInvariant(), p => p.TrackKey);
+            var legacyRefs = _app.Library.Snapshot.ByKey.Values.SelectMany(t =>
+            {
+                var relative = (t.RelativePath.Replace('\\', '/') + (t.CueTrackNo is { } n ? $"#{n:00}" : "")).ToLowerInvariant();
+                return new[] { (Ref: relative, t.TrackKey), (Ref: (_app.Library.Snapshot.Folder(t.FolderId)!.DisplayName + "/" + relative).ToLowerInvariant(), t.TrackKey) };
+            }).GroupBy(p => p.Ref).Where(g => g.Select(p => p.TrackKey).Distinct().Count() == 1).ToDictionary(g => g.Key, g => g.First().TrackKey);
+            string? Match(string reference) => reference.StartsWith("root:", StringComparison.OrdinalIgnoreCase)
+                ? lanRefs.GetValueOrDefault(reference.ToLowerInvariant()) : legacyRefs.GetValueOrDefault(reference.Replace('\\', '/').ToLowerInvariant()) ?? matcher.Match(reference.Replace('\\', '/').ToLowerInvariant());
             string Canonical(string r) => Match(r) is { } key ? refs[key] : r;
             files = files.Select(f => NormalizeReferences(f, Canonical)).ToList();
             var local = NormalizeReferences(Capture(refs), Canonical);
@@ -308,7 +318,7 @@ public sealed class SyncFeature : IFeature
 
     async Task ShareFeatures(List<LibraryFolder> folders, Dictionary<string, string> refs, Func<string, string?> match)
     {
-        var files = await Task.Run(() => ReadFiles(folders, true));
+        var files = await Task.Run(() => ReadFiles(folders, true).Concat(_app.LanSync.Incoming(true)).ToList());
         if (_stopped) return;
         bool imported = false;
         foreach (var file in files)
@@ -344,9 +354,26 @@ public sealed class SyncFeature : IFeature
         }
     }
 
+    internal JsonObject LanExchange()
+    {
+        var refs = References();
+        var lan = _app.Library.Snapshot.ByKey.Values.ToDictionary(t => t.TrackKey,
+            t => _app.LanSync.Reference(t.FolderId, t.RelativePath + (t.CueTrackNo is { } n ? $"#{n:00}" : "")) ?? refs.GetValueOrDefault(t.TrackKey, t.TrackKey));
+        var state = Capture(lan);
+        state["format"] = 2; state["device"] = _device.DeepClone(); state["written_at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var items = new JsonObject();
+        foreach (var f in _app.Db.AllFeatures().Where(f => !f.Failed && f.AnalyzerVersion == AnalysisFeature.AnalyzerVersion))
+            if (_app.Library.ByKey(f.TrackKey) is { } t && f.Signature == AnalysisFeature.Signature(t) && f.Data is not null)
+                items[lan[t.TrackKey]] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(f.Data) };
+        _app.Db.SetValue("sync_initialized", "1"); // Pairing explicitly authorizes the normal merge.
+        _ = Synchronize();
+        return new JsonObject { ["state"] = state, ["features"] = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } };
+    }
+
     Control BuildSettings(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 8 };
+        LanSyncSettings.Build(panel, c);
         panel.Children.Add(Note(L.T("同步工具负责传输音乐文件夹，Jeek Music 合并其中的用户数据。每台设备只写自己的同步文件。")));
         var name = new TextBox { Text = Str(_device["name"]), Width = 280 };
         name.LostFocus += (_, _) => { if (!string.IsNullOrWhiteSpace(name.Text)) { _device["name"] = name.Text.Trim(); File.WriteAllText(AppPaths.Device, _device.ToJsonString()); _lastWritten.Clear(); Schedule(); } };

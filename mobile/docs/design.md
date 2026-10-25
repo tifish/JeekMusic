@@ -216,6 +216,8 @@ lyrics_offset
 
 **孤儿清理**：每次扫描事务结束时删除没有歌曲的 artist。`track_features`、`tag_override`、`lyrics_*` 这些表中的孤儿行**不立即删除**，因为文件可能只是暂时不可用（比如 SD 卡拔出）；在"重建曲库"时，或孤儿行超过 30 天时再清理。
 
+局域网同步新增稳定 rootId 引用与每根 SAF 目标映射，协议及安全/时间限制见 [局域网同步首版](../../docs/lan-sync.md)。既有 SyncMerge/每设备文件继续用于用户数据。
+
 ### 3.1 备份与恢复（BackupManager）
 
 需求 B-1 至 B-6。

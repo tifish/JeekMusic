@@ -23,6 +23,7 @@ class CueResolver @Inject constructor(private val tree: DocumentTree) {
         audio: MediaStoreAudio,
         embeddedCue: String?,
         directoryCache: MutableMap<String, List<DocumentTree.Child>>,
+        explicitCuePaths: List<String> = emptyList(),
     ): ResolvedCue? {
         if (audio.fileName.substringAfterLast('.').lowercase() !in CUE_AUDIO) return null
 
@@ -30,6 +31,25 @@ class CueResolver @Inject constructor(private val tree: DocumentTree) {
         embeddedCue?.takeIf { it.isNotBlank() }?.let { text ->
             val sheet = CueParser.parse(text)
             pick(sheet, audio.fileName, single = true)?.let { return it }
+        }
+        // LAN manifests bind a CUE to its exact root-relative dependency, including sibling folders.
+        // This binding is persisted locally and reused by ordinary scans; no filename suffix guessing.
+        for (cuePath in explicitCuePaths) {
+            if (!cuePath.startsWith(folder.relativePath)) continue
+            val id = com.tinyfish.jeekmusic.data.library.childDocumentId(DocumentTree.directoryDocumentId(folder, cuePath.substringBeforeLast('/', "") + "/"), cuePath.substringAfterLast('/'))
+            val text = tree.readLimited(folder, id, 2_000_000)?.let(CharsetDetector::decode) ?: continue
+            val sheet = CueParser.parse(text)
+            if (sheet.isPerTrack) continue
+            val wanted = audio.relativePath + audio.fileName
+            val file = sheet.files.singleOrNull { file ->
+                val parts = mutableListOf<String>()
+                var safe = true
+                for (part in (cuePath.substringBeforeLast('/', "") + "/" + file.name.replace('\\', '/')).split('/')) {
+                    when (part) { "", "." -> Unit; ".." -> if (parts.isEmpty()) safe = false else parts.removeAt(parts.lastIndex); else -> parts += part }
+                }
+                safe && parts.joinToString("/").startsWith(folder.relativePath) && parts.joinToString("/").equals(wanted, ignoreCase = true)
+            }
+            if (file != null && file.tracks.size >= 2) return ResolvedCue(sheet, file)
         }
         if (audio.durationMs < MIN_DURATION_MS) return null
 

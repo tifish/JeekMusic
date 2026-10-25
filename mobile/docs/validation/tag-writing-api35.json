@@ -1,0 +1,106 @@
+{
+  "dateUtc": "2026-10-25T13:10:12.047245+00:00",
+  "configuration": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "high"
+  },
+  "baseCommit": "9827c5af6fc446610bffe1214d7488a6a8d539c6",
+  "branch": "t3/android-taglib-native",
+  "device": {
+    "dependency": "io.github.kyant0:taglib:1.0.6",
+    "api": 35,
+    "abi": "x86_64",
+    "build": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+    "nativeLibrary": "/data/app/~~aH_-mNfMQUYFS8M8dSagIw==/com.tinyfish.jeekmusic.debug-Oep5MEJjAlR7Hj2NCVkCMw==/lib/x86_64/libtaglib.so",
+    "nativeSha256": "12489f9f7a3829bd944721c6ec68f6f5a5269e705efb3d84bb30d7d5e2478991"
+  },
+  "sharedCorpus": {
+    "commit": "167d97ef4e43df2ce2ed110fe2e3a737dbef33dd",
+    "path": "testdata/tag-writing",
+    "manifestSha256": "46c2a637235dd9b2c97258061b2bb6c78f52e9ba2d41dea8c038f15bf074f745",
+    "synthetic": true
+  },
+  "boundaryManifestSha256": "085c747e6f77280083afbbb1f66aeb506f3d454b4113a925bbb428f5b5507ab8",
+  "unitTests": {
+    "tests": 83,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "androidMethods": 8,
+  "permissionMethods": 1,
+  "rawJniCases": 60,
+  "productionCases": 252,
+  "independentHostCases": 132,
+  "artifacts": {
+    "build/android-taglib-validation/instrumentation.txt": {
+      "sha256": "f1ca404bab7836e26455548dac7bbce14147ea3e122ae7ea1f4a7cc3dccc17e1",
+      "bytes": 5493
+    },
+    "build/android-taglib-validation/permission-instrumentation.txt": {
+      "sha256": "2059e2f23309a859d88b4ea81674b9f494c8e5f83fac91a5e1409f7d80afb828",
+      "bytes": 838
+    },
+    "build/android-taglib-validation/production-fixed.json": {
+      "sha256": "18a4a361594b4e4466ff4f5834ae3c78ba924712c3d5e6f69cedf89667016bca",
+      "bytes": 58038
+    },
+    "build/android-taglib-validation/contract.json": {
+      "sha256": "63d16498634b8e884f1fe14d737bd2c105c6bac198fb04f56ab6ebdf0c21fb99",
+      "bytes": 39110
+    },
+    "build/android-taglib-validation/transactions.json": {
+      "sha256": "3c38065ff56f246612dc6898e9ef7c4e5e29b3c2e46136b1b726f0cf7e63c83d",
+      "bytes": 360
+    },
+    "build/android-taglib-validation/external-lock.json": {
+      "sha256": "df323002a52094ae67609c919b0f5b17fc4d3b4fc0a0d992e0481a38d93cbb42",
+      "bytes": 79
+    },
+    "build/android-taglib-validation/rename-permission.json": {
+      "sha256": "e6cc42f25f5e3c43bcf0ae239ec5965d21602547eafafc7bcf3fa8b78ac731ab",
+      "bytes": 41
+    },
+    "build/android-taglib-validation/independent-containers.json": {
+      "sha256": "330bc65046e65a170dc2f5f97c415bcd92eff998b8aa5870f56582da879c66c9",
+      "bytes": 675029
+    },
+    "build/android-taglib-validation/host-validation.log": {
+      "sha256": "5ab4d7013e82c0f55474ab0fe3539dec49cc0a8a20b65e293710bb23ab4a1223",
+      "bytes": 327
+    },
+    "build/android-taglib-validation/final-build.log": {
+      "sha256": "763a0fd6b4714e7624c11bc9ab2ac12c1340e929a6dc31993ba80fe4c4635056",
+      "bytes": 13240
+    },
+    "build/android-taglib-validation/client-showcase.png": {
+      "sha256": "8feaaf5d73ca3d152a48fff4518bf9abd8d0a22d4c41d5d3762526ae49f3117b",
+      "bytes": 130721
+    },
+    "build/android-taglib-validation/client-info.png": {
+      "sha256": "7be7dd4fc005e17630a3a0d55320af2fce5fb0a3bdbdd07d0d1190fd132cd8eb",
+      "bytes": 147273
+    },
+    "app/build/outputs/apk/debug/app-debug.apk": {
+      "sha256": "7da886fb26a6dd226debd761dfd022ee6cbbbe0ea918448be9a40153dadd347f",
+      "bytes": 60896608
+    },
+    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": {
+      "sha256": "477030659e5b230bf55f042c7309ce8ff14c9b7d7b9d4e94cd27562ba53828ab",
+      "bytes": 1985479
+    },
+    "app/build/outputs/apk/release/app-release.apk": {
+      "sha256": "974aacd07d24dfe6345ab69f52a755f47b7a372df394e570ed321798e4106b16",
+      "bytes": 17280710
+    }
+  },
+  "limits": [
+    "API35/x86_64 only; no physical phone or arm64 runtime acceptance",
+    "POSIX advisory lock plus immediate source hash/stat; not mandatory exclusion of non-cooperating writers",
+    "32MiB metadata; MP4 extended-size atoms above unsigned32 length refused; no multi-GiB runtime test",
+    "CHAP/CTOC/ASPI/SEEK, protected/indexed MP4, unsafe relocation, ambiguous slots and unvalidated native formats use external fallback",
+    "Matched wrapper source pinned; its referenced TagLib submodule unavailable, actual AAR binary characterized"
+  ],
+  "sharedPolicyCommit": "a12b73e03d2dd40d55083d24bb514759f1cf58ef"
+}

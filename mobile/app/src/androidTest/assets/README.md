@@ -1,0 +1,13 @@
+# Synthetic native-tag fixtures
+
+No personal music or downloaded lyrics are included.
+
+- `corpus/`: verbatim shared corpus from commit `167d97ef4e43df2ce2ed110fe2e3a737dbef33dd`, `testdata/tag-writing/`. `SOURCE.json` pins that commit and manifest SHA. The copied README/generator describe its FFmpeg silence/procedural images and short synthetic tone.
+- `boundaries/`: generated from that corpus by `mobile/tools/generate_tag_boundary_fixtures.py`. Native private/unknown metadata, Unicode image descriptions, multiple/empty values, dates, ambiguous SYLT, Opus binary extensions, chained Ogg, fast-start padding, finite CHAP/CTOC file positions, protected CENC/saio, and 70,000-character Vorbis/Opus lyrics. The synthetic CENC key is 16 zero bytes (not a credential); its FFmpeg baseline uses that fixed key. The manifest records every exact asset SHA; generation independently decodes every output with FFmpeg. All writes stay under this assets directory.
+- `tag-writer-tone.mp3`: 0.25 s, 440 Hz, 44.1 kHz mono MPEG audio, no tags; generated with FFmpeg `-f lavfi -i sine=frequency=440:sample_rate=44100 -t 0.25 -c:a libmp3lame -b:a 128k -map_metadata -1 -write_xing 0 -id3v2_version 0`.
+- `native-unicode.flac/m4a/ogg`: short FFmpeg-generated 440 Hz tone with explicitly UTF-8 title `花火? Café Ελληνικά العربية 𠮷😀`, artist `周深 · Björk`, album `合成专辑 𠮷😀`, comment `保留备注?` and synthetic timed lyric `[00:00.00]原有合成歌词? 𠮷😀`. They supplement the shared silent corpus with nonzero Android PCM comparisons.
+- `native-unicode.wav`: hand-framed RIFF PCM + an ID3v2.4 chunk, with the final PCM bytes beginning `TAG`. FFmpeg decodes it, but API35 MediaExtractor rejects the original before editing. The test therefore asserts exact refusal/fallback and uses host FFmpeg PCM; it does not claim Android decoding passed for this file.
+
+The literal question marks are intentional. Writers must retain them. Lyrics are short original test strings, including bilingual synthetic lines, empty lines, offsets, CRLF and millisecond timestamps. Tests never read user songs or contact online lyrics/cover services.
+
+See `mobile/docs/tag-writing-validation.md` for the actual native/production/permission/host test layers and device limitations.

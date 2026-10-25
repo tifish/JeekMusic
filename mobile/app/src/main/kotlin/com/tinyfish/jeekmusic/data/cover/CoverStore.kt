@@ -3,10 +3,9 @@ package com.tinyfish.jeekmusic.data.cover
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import androidx.core.graphics.scale
-import com.kyant.taglib.Picture
+import com.tinyfish.jeekmusic.data.tags.TagEdit
 import com.kyant.taglib.TagLib
 import com.tinyfish.jeekmusic.data.db.FolderDao
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
@@ -176,7 +175,7 @@ class CoverStore @Inject constructor(
         tracks: List<TrackEntity>,
         image: ByteArray,
         mode: CoverSaveMode,
-        also: Map<String, (ParcelFileDescriptor) -> Boolean> = emptyMap(),
+        also: Map<String, TagEdit> = emptyMap(),
     ): Saved? = withContext(Dispatchers.IO) {
         val first = tracks.firstOrNull() ?: return@withContext null
         val jpeg = toJpeg(image) ?: return@withContext null
@@ -190,13 +189,14 @@ class CoverStore @Inject constructor(
                 val folder = folderOf(t)
                 val extra = also[t.fileKey]
                 val ok = folder != null && if (mode == CoverSaveMode.EMBED) {
-                    embed(folder, t, jpeg, extra?.let { op -> { pfd: ParcelFileDescriptor -> op(pfd).also { done -> if (done) alsoDone += t.fileKey } } })
+                    embed(folder, t, jpeg, extra)
                 } else {
                     writeSidecar(folder, t, jpeg)
                 }
                 // 隐藏目录里的封面优先级最高：存到别处时删掉这首歌原来的，否则新封面不会显示；
                 // 写入文件时同名图片也排在前面，同样删掉（需求 C-7）
                 if (ok) {
+                    if (mode == CoverSaveMode.EMBED && extra != null) alsoDone += t.fileKey
                     deleteHidden(folder, t)
                     if (mode == CoverSaveMode.EMBED) deleteSidecar(folder, t)
                     files++
@@ -223,15 +223,8 @@ class CoverStore @Inject constructor(
         folder: LibraryFolderEntity,
         track: TrackEntity,
         jpeg: ByteArray,
-        extra: ((ParcelFileDescriptor) -> Boolean)? = null,
-    ): Boolean = editor.edit(folder, track) { pfd ->
-        val others = TagLib.getPictures(pfd.dup().detachFd()).filter { it.pictureType != FRONT_COVER }
-        val pictures = listOf(Picture(jpeg, "", FRONT_COVER, "image/jpeg")) + others
-        val ok = TagLib.savePictures(pfd.dup().detachFd(), pictures.toTypedArray())
-        // 歌词写不进去不影响封面：调用方会改用单独保存
-        if (ok) extra?.let { runCatching { it(pfd) } }
-        ok
-    }
+        extra: TagEdit? = null,
+    ): Boolean = editor.edit(folder, track, TagEdit(cover = jpeg, lyrics = extra?.lyrics))
 
     private fun writeSidecar(folder: LibraryFolderEntity, track: TrackEntity, jpeg: ByteArray): Boolean {
         val dirId = DocumentTree.directoryDocumentId(folder, track.relativePath)
@@ -341,7 +334,6 @@ class CoverStore @Inject constructor(
 
         /** 找同专辑封面时最多看几个文件：专辑一般不会更大，避免误把几百首归成一张"专辑"时逐个读文件。 */
         private const val MAX_ALBUM_FILES = 50
-        private const val FRONT_COVER = "Front Cover"
         const val COVERS_DIR = "covers"
 
         private val IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp")

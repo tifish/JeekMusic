@@ -1,0 +1,77 @@
+[
+  {
+    "path": "ambiguous-sylt.mp3",
+    "sha256": "2f00b816f70dd545d5cec9b07974c03c438a2eb19a416977c3410d62ead4e9d0",
+    "bytes": 4743
+  },
+  {
+    "path": "faststart-padded.m4a",
+    "sha256": "24e04da24de9a16881d7e24371cba6a3d9e46cabbb151790535b05e6c1c15e09",
+    "bytes": 16467
+  },
+  {
+    "path": "large.ogg",
+    "sha256": "791d58f28245ee4a6fee8a3c370e1891fe24e43088c64e3346cc556eb185a7cf",
+    "bytes": 78085
+  },
+  {
+    "path": "large.opus",
+    "sha256": "ce472ca0f8772c9db030dd3979fefdc4a1f97fab6d9a26c8621e49f5caded041",
+    "bytes": 74842
+  },
+  {
+    "path": "private-v23.mp3",
+    "sha256": "85a112e4a0b49e8f4adbf716263aaead75097476f596885747c0ea56f693f7ad",
+    "bytes": 4896
+  },
+  {
+    "path": "private-v24.mp3",
+    "sha256": "f3e7cb9b24d1d18ee0d7d55ce2e23086e8b9b7f58e51abed64d623fce248f4b1",
+    "bytes": 4712
+  },
+  {
+    "path": "private.flac",
+    "sha256": "000825034ecf377af5fe0738ea5b28ec394e71f4e8a18785ce2fbe9f7023a858",
+    "bytes": 11081
+  },
+  {
+    "path": "private.m4a",
+    "sha256": "8195f266cb122b4c9da5203f41eee2573d876a9c430f7b1e0a6e8d906f8dd6fe",
+    "bytes": 1462
+  },
+  {
+    "path": "private.ogg",
+    "sha256": "cb3ca8229081d8366058d0c44d89304e930e9e4ded90d1be485ab8a5c99fd484",
+    "bytes": 7907
+  },
+  {
+    "path": "private.opus",
+    "sha256": "4207a3a5affd022f2fb4f36897f5088688b3d6c372d44567e6b2c76e5d5aaaf5",
+    "bytes": 4664
+  },
+  {
+    "path": "unsafe-cenc.m4a",
+    "sha256": "9907521477ff860380ef9d051024f33fb2c7ee0db3effae6e0171e4303fba2d7",
+    "bytes": 1400
+  },
+  {
+    "path": "unsafe-chained.ogg",
+    "sha256": "d6d8611f97251cadddb591ed83860539530e802a84ad9c39d6ebd7c7959b92fa",
+    "bytes": 7482
+  },
+  {
+    "path": "unsafe-chapters.mp3",
+    "sha256": "e44b7ae4eac00b9f256e259ef05ff15f0bba8fe3925e950f7ea2837479568a75",
+    "bytes": 4820
+  },
+  {
+    "path": "unsafe-faststart.m4a",
+    "sha256": "888e550d968716c1228deb830464333656c074cfbb40c847b6bd41f265a5c843",
+    "bytes": 1219
+  },
+  {
+    "path": "unsafe-saio.m4a",
+    "sha256": "da8224dba52c8808e4fd4330750c0aee8643f396706e1ef6d0913a91c7cf5950",
+    "bytes": 1296
+  }
+]

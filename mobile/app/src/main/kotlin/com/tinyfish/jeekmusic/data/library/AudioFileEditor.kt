@@ -1,8 +1,9 @@
 package com.tinyfish.jeekmusic.data.library
 
 import android.content.Context
+import android.net.Uri
 import android.os.Environment
-import android.os.ParcelFileDescriptor
+import android.os.storage.StorageManager
 import android.system.Os
 import android.util.Log
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
@@ -15,6 +16,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import com.tinyfish.jeekmusic.data.tags.SafeTagWriter
+import com.tinyfish.jeekmusic.data.tags.TagEdit
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,8 +50,9 @@ class AudioFileEditor @Inject constructor(
     fun isDeferred(track: TrackEntity) = playingFiles.isDeferred(track.fileKey)
 
     /**
-     * 以读写方式打开歌曲的音频文件交给 [block] 修改，之后把修改时间改回原来的值。
-     * 没有权限、打不开文件、[block] 失败或出错时返回 false。
+     * SAF 验证写授权及源文件身份，在同目录副本中只修改 [change] 指定的目标。
+     * 独立验证非目标元数据、音频与目标全文，再检查源 SHA/身份和播放状态，以 rename 原子提交。
+     * 权限、格式、验证或提交失败时返回 false，调用方使用外部文件回退。
      *
      * 播放器正在用这个文件（[PlayingFiles]）时也不写、返回 false：调用方会先存成下载的文件，
      * 播放器用完后再写进来（需求 P-14）。顺便清掉"下载的都已写入"标记，万一 App 在那之前被关掉，下次启动时补上。
@@ -56,7 +60,8 @@ class AudioFileEditor @Inject constructor(
      * 文件大小变了：立即更新曲库里的大小，智能标签的签名（修改时间:大小）也随之更新——音频本身没变，不需要重新分析。
      * 两者都更新后，之后的扫描看到修改时间和大小都没变，也不会再处理这个文件。
      */
-    suspend fun edit(folder: LibraryFolderEntity, track: TrackEntity, block: (ParcelFileDescriptor) -> Boolean): Boolean {
+    suspend fun edit(folder: LibraryFolderEntity, track: TrackEntity, change: TagEdit): Boolean {
+        if (change.cover == null && change.lyrics == null) return true
         if (!canEdit()) return false
         if (playingFiles.isBusy(track.fileKey)) {
             playingFiles.defer(track)
@@ -64,31 +69,46 @@ class AudioFileEditor @Inject constructor(
             log.add("edit deferred (playing): ${track.fileName}")
             return false
         }
-        return locks.getOrPut(track.fileKey) { Mutex() }.withLock { editLocked(folder, track, block) }
+        return locks.getOrPut(track.fileKey) { Mutex() }.withLock { editLocked(folder, track, change) }
     }
 
-    private suspend fun editLocked(folder: LibraryFolderEntity, track: TrackEntity, block: (ParcelFileDescriptor) -> Boolean): Boolean {
+    private suspend fun editLocked(folder: LibraryFolderEntity, track: TrackEntity, change: TagEdit): Boolean {
         var oldSize: Long? = null
         var newSize: Long? = null
         val ok = runCatching {
+            require(Uri.parse(folder.treeUri).authority == "com.android.externalstorage.documents") { "Atomic local commit requires ExternalStorageProvider" }
             val fileId = childDocumentId(DocumentTree.directoryDocumentId(folder, track.relativePath), track.fileName)
             tree.resolver.openFileDescriptor(tree.documentUri(folder, fileId), "rw")?.use { pfd ->
                 val before = Os.fstat(pfd.fileDescriptor)
-                val modifiedMs = before.st_mtim.tv_sec * 1000 + before.st_mtim.tv_nsec / 1_000_000
                 // 用文件的实际大小，不用 [track] 里的：同一首歌连着写封面和歌词时，[track] 还是第一次写之前的
                 oldSize = before.st_size
-                val changed = block(pfd)
-                // 对描述符本身设置（/proc/self/fd/N 指向的就是这个打开的文件）
-                if (!File("/proc/self/fd/${pfd.fd}").setLastModified(modifiedMs)) Log.w(TAG, "couldn't restore mtime of ${track.fileName}")
-                newSize = Os.fstat(pfd.fileDescriptor).st_size
+                val volume = context.getSystemService(StorageManager::class.java).storageVolumes
+                    .singleOrNull { it.mediaStoreVolumeName == track.volumeName }?.directory ?: error("No local storage volume")
+                val source = File(volume, track.relativePath + track.fileName).canonicalFile
+                require(source.path.startsWith(volume.canonicalPath + File.separator)) { "Invalid local path" }
+                val changed = AtomicAudioFile.replace(source, pfd.fileDescriptor, { stage ->
+                    SafeTagWriter.write(stage, change, track.fileName.substringAfterLast('.'))
+                }, { stage ->
+                    SafeTagWriter.validate(source, stage, change, track.fileName.substringAfterLast('.'))
+                }, { !playingFiles.isBusy(track.fileKey) })
+                if (!changed && playingFiles.isBusy(track.fileKey)) {
+                    playingFiles.defer(track)
+                    settings.clearDownloadedEmbedded()
+                }
+                if (changed) newSize = source.length()
                 changed
             } ?: false
-        }.onFailure { Log.w(TAG, "edit failed: ${track.fileName}", it) }.getOrDefault(false)
+        }.onFailure {
+            Log.w(TAG, "edit refused: ${track.fileName}", it)
+            log.add("edit refused: ${track.fileName}: ${it.message}")
+        }.getOrDefault(false)
         val from = oldSize
         log.add("edit ${if (ok) "done" else "failed"}: ${track.fileName} size $from -> $newSize")
         newSize?.takeIf { ok && from != null && it != from }?.let { size ->
-            trackDao.updateSize(track.fileKey, size)
-            for (old in setOf(from, track.size)) tagDao.renameSignature(track.fileKey, "${track.dateModified}:$old", "${track.dateModified}:$size")
+            runCatching {
+                trackDao.updateSize(track.fileKey, size)
+                for (old in setOf(from, track.size)) tagDao.renameSignature(track.fileKey, "${track.dateModified}:$old", "${track.dateModified}:$size")
+            }.onFailure { Log.w(TAG, "Committed tags; database size refresh failed", it) }
         }
         return ok
     }

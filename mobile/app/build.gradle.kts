@@ -90,6 +90,8 @@ android {
             val testcases = rootProject.file("../shared/testcases")
             it.systemProperty("jeek.testcases", testcases.absolutePath)
             it.inputs.dir(testcases)
+            // Native-tag JVM regressions read the exact synthetic Android fixture bytes too.
+            it.inputs.dir(file("src/androidTest/assets"))
         }
     }
 }

@@ -3,7 +3,7 @@ package com.tinyfish.jeekmusic.data.online
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.ParcelFileDescriptor
+import com.tinyfish.jeekmusic.data.tags.TagEdit
 import android.util.Log
 import com.tinyfish.jeekmusic.data.cover.CoverClient
 import com.tinyfish.jeekmusic.data.cover.CoverMissLog
@@ -105,7 +105,7 @@ class OnlineFetcher @Inject constructor(
         }
 
         // 都要写入同一个文件的，和封面一起写
-        val also = HashMap<String, (ParcelFileDescriptor) -> Boolean>()
+        val also = HashMap<String, TagEdit>()
         if (image != null && coverMode == CoverSaveMode.EMBED) {
             val coverFiles = coverTargets.mapTo(HashSet()) { it.fileKey }
             for ((t, text) in texts) if (t.fileKey in coverFiles && lyrics.embedsInFile(t)) also[t.fileKey] = lyrics.embedOperation(text)

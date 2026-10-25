@@ -777,13 +777,13 @@ artworkUri  = content://com.tinyfish.jeekmusic.artwork/<track_key 的哈希>
 - **批量获取**（`OnlineFetchWorker`）：歌曲按目录排序（目录列表的缓存才能命中）后分组——要封面时按专辑键，只要歌词时每首一组，先对每组 `plan`。还需要封面的文件——隐藏目录模式下整张专辑没有封面才需要；写入文件 / 同名图片模式下是自己没有内嵌封面 / 同名图片的文件（选了写入文件但没有"所有文件访问权限"时按隐藏目录判断，否则每次都会重复改存）。有需要的专辑先用 `albumImage` 找同专辑已有的封面，有就直接提取保存，不联网；都没有才在线查询一次，保存给整张专辑。歌词逐首查。通过 `setProgress` 报告进度（检查了几组，封面、歌词各自缺几个、找到几个），设置页的两个按钮各显示自己的"正在获取 n / m，已找到 k"。找不到的组记在 `filesDir/cover_misses.tsv`，30 天内不再查；网络出错的不记，下次重试。被系统停止（超过 10 分钟等）时返回 retry，已保存的封面下次会被跳过
 - **保存**（`CoverStore.save(tracks, …)`）：保存给同一专辑的一组歌曲，第一首决定隐藏目录里的文件名。手动选的封面也保存给整张专辑。图片统一成 JPEG（不超过 1200px 的 JPEG 原样保存）
   - 隐藏目录：`<音乐文件夹>/.jeekmusic/covers/专辑艺术家 - 专辑.jpg`，没有专辑时 `艺术家 - 歌名.jpg`，非法字符换成 `_`。查找时两个名字都试
-  - 写入文件：经 `AudioFileEditor`（见下）以 `rw` 打开，TagLib `savePictures` 替换 Front Cover、保留其他图片
+  - 写入文件：经 `AudioFileEditor`（见下）在副本中编辑原生目标记录，替换 front/generic，其他角色图片及描述保留原始字节；MP4 的 `covr` 没有角色，视为整个封面字段
   - 同名图片：`歌曲名.jpg`，已存在时覆盖
   - 写入文件、同名图片每个文件都写（CUE 整轨只写一次）；有写不进去的再在隐藏目录存一张；存到别处时删掉这首歌在隐藏目录里原来的封面，否则新封面会被它挡住
 
 **写入音乐文件并保持修改时间（`AudioFileEditor`，需求 C-5）**：封面和歌词写入文件共用。
 
-- 通过 SAF 文档 URI 以 `rw` 打开文件，`Os.fstat` 记下修改时间，交给 TagLib 修改，再对 `/proc/self/fd/<fd>` 调 `File.setLastModified` 改回原来的值
+- SAF 文档 URI 的 `rw` 描述符仅用于验证写授权及源文件身份，不原地修改。`AtomicAudioFile` 在本地同目录建立副本，`SafeTagWriter` 按容器规范只编辑目标，重新解析并校验非目标原始数据、音频/尾部和目标全文；保留原文件的修改时间、模式及所有者，检查源 SHA/身份和播放状态后以同目录 `rename` 原子提交。异常、校验失败、源变化、权限或提交失败都不截断原文件，使用已有外部文件回退。只支持可验证的本地 ExternalStorageProvider 路径；不会退化为 SAF truncate/copy 覆盖。格式矩阵和真实 Android 验证见 [tag-writing-validation.md](tag-writing-validation.md)
 - 实测（Android 16 模拟器）：只有 SAF 写授权时，无论对描述符还是对路径设置修改时间都被拒绝；有"所有文件访问权限"（`MANAGE_EXTERNAL_STORAGE`）时对描述符设置成功。所以没有这个权限时不写入，返回失败让调用方改存隐藏目录；设置页用 `Environment.isExternalStorageManager()` 判断，从系统设置返回时（`LifecycleResumeEffect`）重新检查
 - 修改时间不变、大小变了：立即把曲库里同一文件（CUE 整轨的各首）的 `size` 改成新的，`track_features.signature` 从"时间:旧大小"改成"时间:新大小"。MediaStore 随后重新扫描这个文件，得到的修改时间和大小与曲库一致，扫描器不会再处理它，智能标签也不需要重新分析
 - **不改写播放器正在用的文件**（需求 P-14，`PlayingFiles`）：vivo 手机上两次"提前二三十秒换歌"都发生在这首歌播放中被写入封面 / 歌词之后（文件的 ctime 落在播放区间内；模拟器上原地改文件、App 写封面都复现不了）。`PlaybackService` 在换歌、时间线、播放状态、随机 / 循环变化时，把 READY / BUFFERING 状态下当前这首和下一首（无缝播放会提前加载）的 file_key 交给 `PlayingFiles`；`edit()` 遇到这些文件不写、返回失败并记为推迟，调用方照常改存隐藏目录（立即显示），同时清掉"下载的都已写入"标记。播放器不再用这些文件时，服务用 `EmbedDownloadedScheduler.scheduleFor(ids)` 安排只处理这几首的 `EmbedDownloadedWorker`（输入 `tracks`，不改标记）；服务在那之前被关掉时，下次启动的整库任务补上。手动保存时提示"这首歌放完后再写入音乐文件"
@@ -880,7 +880,7 @@ App 自己保存的（1、2）排在音乐目录里原有的（3、4）前面：
 
 - **同名 .lrc**（默认）：见下面的流程，不覆盖已有文件
 - **隐藏目录**：`<音乐文件夹>/.jeekmusic/lyrics/` 下与同名 .lrc 相同的文件名，已存在时覆盖（是自己的文件）
-- **写入文件**：经 `AudioFileEditor`（§7.4，保持修改时间不变，需要"所有文件访问权限"）以 `rw` 打开，读出 TagLib 属性表、去掉原有的歌词字段、加上 `LYRICS`，整个写回（TagLib 的属性表写入会删掉表里没有的字段，所以必须先读）。MP3 写成 USLT。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
+- **写入文件**：经 `AudioFileEditor`（§7.4，保持修改时间不变，需要"所有文件访问权限"）写入原生歌词目标，不全量回写属性表。新 MP3 用 ID3v2.4/UTF-8；已有 v2.3 保留版本、目标使用 UTF-16/BOM。多个语言/描述槽、SYLT 或无法安全解析的结构拒绝嵌入，保留原文件并改存隐藏目录。保存、下载后再嵌入及封面/歌词联合事务均保留完整译文、毫秒时轴、offset、空行和原有换行。CUE 虚拟歌曲只是整轨的一段，不写入，改存隐藏目录
 - **仅 App 内**：直接写入 `lyrics_cache`
 - 写入文件成功后删掉这首歌的隐藏目录 `.lrc`、同名 `.lrc` 和 `lyrics_cache`（`deleteDownloaded`）：它们读取时排在内嵌歌词前面，不删的话手动换的歌词不会显示
 - **已下载的改为写入文件**（需求 LY-14、C-7，`EmbedDownloadedWorker`）：保存位置是写入文件、有"所有文件访问权限"、设置里还没记下"已写入"时，在 App 启动、改保存位置、授予权限（设置页恢复时发现权限变成有）后排一个不需要网络的任务（唯一任务 `embed-downloaded`，APPEND_OR_REPLACE）：
@@ -898,7 +898,7 @@ App 自己保存的（1、2）排在音乐目录里原有的（3、4）前面：
  3. DocumentsContract.createDocument(dirUri, "application/octet-stream", "<歌曲文件名去扩展名>.lrc")
     mime 不用 text/plain：部分 DocumentsProvider 会自作主张地追加 ".txt" 扩展名
  4. 检查返回文档的实际文件名，不一致（被自动改名）时删除这个文件，当作失败处理
- 5. 以 UTF-8（无 BOM）、LF 换行写入
+ 5. 以 UTF-8（无 BOM）写入，保留传入全文和换行
  6. 使该目录在 §8.1 的 LRU 目录列表缓存中失效
  失败（只读、没有写授权、空间不足等）→ 写入 lyrics_cache，并提示"歌词已缓存在 App 内，未能保存到音乐目录"
 ```

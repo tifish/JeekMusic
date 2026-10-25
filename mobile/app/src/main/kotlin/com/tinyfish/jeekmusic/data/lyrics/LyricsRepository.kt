@@ -1,7 +1,7 @@
 package com.tinyfish.jeekmusic.data.lyrics
 
 import android.content.Context
-import android.os.ParcelFileDescriptor
+import com.tinyfish.jeekmusic.data.tags.TagEdit
 import android.util.LruCache
 import com.tinyfish.jeekmusic.data.db.LyricsCacheEntity
 import com.tinyfish.jeekmusic.data.db.LibraryFolderEntity
@@ -151,7 +151,7 @@ class LyricsRepository @Inject constructor(
                 cached[t.trackKey] != null -> cached[t.trackKey]
                 else -> findLrc(folder, t.relativePath, t)?.let { readText(folder, it) }
             } ?: continue
-            if (text.isBlank() || !embed(folder, t, text.replace("\r\n", "\n"))) continue
+            if (text.isBlank() || !embed(folder, t, text)) continue
             deleteDownloaded(folder, t)
             count++
         }
@@ -196,19 +196,10 @@ class LyricsRepository @Inject constructor(
         track.cueTrackNo == null && editor.canEdit() && settings.current().lyricsSaveLocation == LyricsSaveLocation.EMBED
 
     /**
-     * 把歌词写进已经打开的音乐文件，供和封面一起写入时用（docs/design.md §7.4）：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。
-     * 成功后要调用 [onEmbedded]。
+     * 供封面/歌词单次事务使用的精确目标值；不改换行、译文、时轴或其他标签。
+     * 只有整个事务提交成功后才能调用 [onEmbedded]。
      */
-    fun embedOperation(text: String): (ParcelFileDescriptor) -> Boolean = { pfd ->
-        val map = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)?.propertyMap
-        if (map == null) {
-            false
-        } else {
-            TagReader.lyricsKeys(map.keys).forEach { map.remove(it) }
-            map["LYRICS"] = arrayOf(text.replace("\r\n", "\n"))
-            TagLib.savePropertyMap(pfd.dup().detachFd(), map)
-        }
-    }
+    fun embedOperation(text: String): TagEdit = TagEdit(lyrics = text)
 
     /** 歌词经 [embedOperation] 写入文件后：记下文件里有歌词，删掉原来下载的，通知界面。 */
     suspend fun onEmbedded(track: TrackEntity) = withContext(Dispatchers.IO) {
@@ -246,7 +237,7 @@ class LyricsRepository @Inject constructor(
      * 同名 .lrc 已存在时不覆盖，改存到隐藏目录（排在它前面）。
      */
     suspend fun save(track: TrackEntity, text: String): LyricsSaveLocation = withContext(Dispatchers.IO) {
-        val normalized = text.replace("\r\n", "\n")
+        val normalized = text
         val mode = settings.current().lyricsSaveLocation
         val folder = folderDao.byId(track.folderId)
         val saved = folder?.let {
@@ -280,7 +271,7 @@ class LyricsRepository @Inject constructor(
     }
 
     /**
-     * 写进歌词标签：TagLib 的属性表要整个写回，所以先读出原有的再加上歌词。
+     * 以原生容器结构只编辑歌词目标，保留非目标原始字段；歧义槽拒绝并回退。
      * 没有"所有文件访问权限"时不写入（保持修改时间不变需要它），改存到隐藏目录。
      */
     private suspend fun embed(folder: LibraryFolderEntity, track: TrackEntity, text: String): Boolean =

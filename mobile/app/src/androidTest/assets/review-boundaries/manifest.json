@@ -1,0 +1,47 @@
+[
+  {
+    "path": "safe-opaque.m4a",
+    "sha256": "38ff14841f9155d301199b7e3b00f569e73ba2e6eb2fd64f8d24866be0f52fc7",
+    "bytes": 1332
+  },
+  {
+    "path": "unsafe-alter-v23.mp3",
+    "sha256": "f8e109bfda200d6380b121df1552d8a734e9fb0a23feb5c91f4865eaf4775ca2",
+    "bytes": 1392
+  },
+  {
+    "path": "unsafe-alter-v24.mp3",
+    "sha256": "38b24a13453065d24ce596554edadb310c0cf3f45d76f4fbe5f0a0d9e62a8f82",
+    "bytes": 1392
+  },
+  {
+    "path": "unsafe-iloc-movie.m4a",
+    "sha256": "fdb16de55c1ae09bb21e426aa0dcbbdc2b4658f7e9ed840a97caf2638632cd1d",
+    "bytes": 1358
+  },
+  {
+    "path": "unsafe-iloc-top.m4a",
+    "sha256": "0c880ee4e97042ec8dc9c3d3d46bc70274b79802579652fafd96e09cfe0e636c",
+    "bytes": 1358
+  },
+  {
+    "path": "unsafe-iloc-udta.m4a",
+    "sha256": "9fc21cdb5d3e9f253b95fdd5099e5726a6a809dc258b3da674532a4b1964ec00",
+    "bytes": 1346
+  },
+  {
+    "path": "unsafe-uuid-movie.m4a",
+    "sha256": "c1379e1e0d0870b7574355cfe0bd38f136a8e0bf765de172c0a0aec57c7579f2",
+    "bytes": 1344
+  },
+  {
+    "path": "unsafe-uuid-top.m4a",
+    "sha256": "e4ea6eee52ca52c828aae1f75975e2944bd06a63ba965c501ca995d0aafa8b71",
+    "bytes": 1344
+  },
+  {
+    "path": "unsafe-uuid-udta.m4a",
+    "sha256": "dc7e438352317a93f60518410865cdc14a01d7d40cd216635b792821445e42e1",
+    "bytes": 1332
+  }
+]

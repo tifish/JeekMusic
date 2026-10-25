@@ -1,0 +1,159 @@
+{
+  "dateUtc": "2026-10-25T13:42:17.756031+00:00",
+  "configuration": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "high"
+  },
+  "baseCommit": "7c439e2385fec5e9cb2d7218b1cd17d4e9ddd7e2",
+  "device": {
+    "api": "35",
+    "abi": "x86_64",
+    "fingerprint": "google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+    "avd": "JeekTaglibNative35"
+  },
+  "unitTests": {
+    "tests": 85,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "androidMethods": 9,
+  "productionCases": 152,
+  "independentHostCases": 152,
+  "reviewCandidateFaults": 9,
+  "reviewFormatCases": 24,
+  "reviewRepositorySidecarCases": 3,
+  "reviewIndependentCandidateGuard": 1,
+  "rawJniRerun": false,
+  "permissionOnlyRerun": false,
+  "baselineFailedMethods": 3,
+  "independentBaselineCases": 9,
+  "installedApkMatchesBuilt": true,
+  "artifacts": {
+    "build/android-taglib-validation/review-baseline-build.log": {
+      "sha256": "6c63dfe58c29e00410ca3dede03baccc91bd2f50f8b6ebde449514acea7fe2af",
+      "bytes": 9098
+    },
+    "build/android-taglib-validation/review-baseline-instrumentation.txt": {
+      "sha256": "bebba2492a2da0ea1d0ad20cf9dd6ad3bec87c2cbb36bc09322fc9bdf97b1e63",
+      "bytes": 9062
+    },
+    "build/android-taglib-validation/review-before-candidate.json": {
+      "sha256": "71fe79cd6760b27a1526feafe174a931dad04914fb953a8c35d6f7186d1e0e63",
+      "bytes": 1210
+    },
+    "build/android-taglib-validation/review-before-mp4.json": {
+      "sha256": "2a0ad1964ae9709c5b826f786bec321cc02425fb65d6f16a46e067f4a29f77c3",
+      "bytes": 5198
+    },
+    "build/android-taglib-validation/review-before-id3.json": {
+      "sha256": "b43edea5cfd6bc898339beee19b26e5d45e9b0abfdd87836045eeaa3b68328f7",
+      "bytes": 1596
+    },
+    "build/android-taglib-validation/review-independent-baseline.json": {
+      "sha256": "b98eaa1a8ddc37a764566a733580aa8d72ca6a39105fa6f270c8eb6ded2b94e0",
+      "bytes": 3446
+    },
+    "build/android-taglib-validation/review-fix-build.log": {
+      "sha256": "ed44068ae455bfc3d6e9c7eda3d54abed599909c380223e297f9dc4ded725506",
+      "bytes": 6731
+    },
+    "build/android-taglib-validation/review-release-build.log": {
+      "sha256": "28e404325aa00d3a3c9ade1db4e2a3e6621e40d41b547004897c2a26125bf1a7",
+      "bytes": 7177
+    },
+    "build/android-taglib-validation/review-fixed-instrumentation.txt": {
+      "sha256": "04204fb20e71a0b7df082b75d4cc069074c69b5635efbacb3955a23a5e5be444",
+      "bytes": 6271
+    },
+    "build/android-taglib-validation/review-host-validation.log": {
+      "sha256": "78f2f289f009959e67ec0fbb4ec3ca116ebddaa8083da5babc92d6a72aaa1e8e",
+      "bytes": 313
+    },
+    "build/android-taglib-validation/review2/client-info.png": {
+      "sha256": "30e95e1ba12197d892e74ab1728bad729983d3df251430b0ae246217b9c77017",
+      "bytes": 147329
+    },
+    "build/android-taglib-validation/review2/client-info.xml": {
+      "sha256": "4517215afec172622dce247e4d45d95b658ffa55668f978939ca1e08fefab92a",
+      "bytes": 10162
+    },
+    "build/android-taglib-validation/review2/client-menu.xml": {
+      "sha256": "adf4a829c6ca4071d54f1c78e1766c64688020fe4a2ce40ee51642b755c92467",
+      "bytes": 12661
+    },
+    "build/android-taglib-validation/review2/client-showcase.png": {
+      "sha256": "d825ac1f4543caf82122582fe35325a9a0478da5d20e67b21358a5d8cd71a00e",
+      "bytes": 130901
+    },
+    "build/android-taglib-validation/review2/client-showcase.xml": {
+      "sha256": "88cbb84068766d3af682362504e01c070dc20ec29308ef4b6e82ea324dc4191e",
+      "bytes": 20393
+    },
+    "build/android-taglib-validation/review2/client.xml": {
+      "sha256": "9940c9748c1985878f960cd214c170e3780d91b82a235473523240a40651f68a",
+      "bytes": 15191
+    },
+    "build/android-taglib-validation/review2/contract.json": {
+      "sha256": "b0809d289e55e9f6307b730c21cf26b418c83d37e32ba57df8c86b57ac2c0627",
+      "bytes": 50032
+    },
+    "build/android-taglib-validation/review2/external-lock.json": {
+      "sha256": "df323002a52094ae67609c919b0f5b17fc4d3b4fc0a0d992e0481a38d93cbb42",
+      "bytes": 79
+    },
+    "build/android-taglib-validation/review2/independent-containers.json": {
+      "sha256": "ec99fb2bb6b3a5130b319c5f8f04785c2d9596bbcb842b1fd930a722cefad80b",
+      "bytes": 694290
+    },
+    "build/android-taglib-validation/review2/instrumentation.txt": {
+      "sha256": "04204fb20e71a0b7df082b75d4cc069074c69b5635efbacb3955a23a5e5be444",
+      "bytes": 6271
+    },
+    "build/android-taglib-validation/review2/rename-permission.json": {
+      "sha256": "e6cc42f25f5e3c43bcf0ae239ec5965d21602547eafafc7bcf3fa8b78ac731ab",
+      "bytes": 41
+    },
+    "build/android-taglib-validation/review2/review-candidate-guard.json": {
+      "sha256": "d46f471b80f14eeecd7f06ed222ef2a15c1694ad2c3faa673f7800198858731d",
+      "bytes": 47
+    },
+    "build/android-taglib-validation/review2/review-candidate.json": {
+      "sha256": "4459852985d01c13c553ad798b2b0d75aaa43e116daf42aff141b5f5fee24f69",
+      "bytes": 2459
+    },
+    "build/android-taglib-validation/review2/review-id3.json": {
+      "sha256": "63f0f617f147427735c88b63d1563fce30ad4d169c40e5941a61ce2a99bbcd57",
+      "bytes": 1962
+    },
+    "build/android-taglib-validation/review2/review-mp4.json": {
+      "sha256": "aad7d99f407f8a2cec4eb91e2a932fccc4d6d4dbf405a0def379fb1a09c6384b",
+      "bytes": 6422
+    },
+    "build/android-taglib-validation/review2/review-repository-sidecars.json": {
+      "sha256": "17ab11782ee01a2fdd15b56bd97a5db23ef3e8a85f08da676ae476ee901f3996",
+      "bytes": 519
+    },
+    "build/android-taglib-validation/review2/transactions.json": {
+      "sha256": "3c38065ff56f246612dc6898e9ef7c4e5e29b3c2e46136b1b726f0cf7e63c83d",
+      "bytes": 360
+    },
+    "app/build/outputs/apk/debug/app-debug.apk": {
+      "sha256": "12aea09b41b85d854376b3f248220daae5e7f9610a23ffcdcf2f88ab398fe90b",
+      "bytes": 60463632
+    },
+    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": {
+      "sha256": "659414c272c4b030c7411dc624bb874fa3af7c0060932cfc6bdf8267b2a285b7",
+      "bytes": 2020193
+    },
+    "app/build/outputs/apk/release/app-release.apk": {
+      "sha256": "1242acc6bad23dabce404b3d06026f9f13629c53e5f1d1bababac3c55e988b6d",
+      "bytes": 17282562
+    },
+    "app/src/androidTest/assets/review-boundaries/manifest.json": {
+      "sha256": "000dc5e2499704d7778614906d391dc0e920e1ba2e98028a6f811f2c876efbba",
+      "bytes": 1303
+    }
+  }
+}

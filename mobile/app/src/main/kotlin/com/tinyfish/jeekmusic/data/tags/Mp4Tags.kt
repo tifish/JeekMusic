@@ -30,6 +30,11 @@ internal object Mp4Tags {
         }
         require(top.firstOrNull()?.type == "ftyp" && top.count { it.type == "moov" } == 1 && top.any { it.type == "mdat" }) { "Not an MP4 audio envelope" }
         require(top.none { it.type in setOf("moof", "mfra", "sidx", "ssix", "iloc", "pssh") }) { "Fragmented/protected/indexed MP4 requires a relocation-aware writer" }
+        // Top-level metadata is a FullBox too. Do not inspect mdat/opaque payloads
+        // as atoms or rely on byte searches for names that may occur in audio.
+        for (item in top.filter { it.type in setOf("meta", "udta", "uuid") }) {
+            rejectPositionSensitive(listOf(Atom(item.type, input.bytes(item.start, item.size), item.header)))
+        }
         val movie = top.single { it.type == "moov" }
         val moov = children(input.bytes(movie.start + movie.header, movie.size - movie.header))
         require(moov.none { it.type in setOf("mvex", "cmov") }) { "Fragmented/compressed movie" }
@@ -89,7 +94,7 @@ internal object Mp4Tags {
         val available = end - movie.start
         val rendered = if (end == input.length()) newMoov else {
             // A fast-start moov may grow only into existing padding. All other top-level atoms
-            // remain at their exact offsets, including mdat/stco/co64 and private UUID data.
+            // remain at their exact offsets, including mdat/stco/co64.
             val rest = available - newMoov.size
             require(rest == 0L || rest in 8..MAX_METADATA.toLong()) { "Fast-start moov has insufficient safe padding" }
             newMoov + if (rest == 0L) byteArrayOf() else atom("free", ByteArray(rest.toInt() - 8))
@@ -116,11 +121,24 @@ internal object Mp4Tags {
     private fun rejectPositionSensitive(atoms: List<Atom>, depth: Int = 0) {
         require(depth <= 32) { "Excessive movie nesting" }
         for (item in atoms) {
-            require(item.type !in setOf("saio", "saiz", "senc", "pssh", "sinf", "schi", "tenc")) {
+            require(item.type !in setOf("saio", "saiz", "senc", "pssh", "sinf", "schi", "tenc", "iloc", "uuid")) {
                 "Protected/auxiliary ${item.type} offsets require a relocation-aware writer"
             }
             when (item.type) {
-                "trak", "mdia", "minf", "stbl", "edts", "dinf" -> rejectPositionSensitive(children(item.body), depth + 1)
+                "trak", "mdia", "minf", "stbl", "edts", "dinf", "udta", "meco" -> rejectPositionSensitive(children(item.body), depth + 1)
+                "meta" -> {
+                    val body = item.body
+                    require(body.size >= 4 && body.copyOfRange(0, 4).contentEquals(ByteArray(4))) { "Unsupported meta version/flags" }
+                    rejectPositionSensitive(children(body.copyOfRange(4, body.size)), depth + 1)
+                }
+                "ilst" -> {
+                    for (entry in children(item.body)) {
+                        // Each Apple item is a container of typed data/mean/name boxes;
+                        // the contents of those leaf boxes are never parsed as a tree.
+                        require(entry.type !in setOf("iloc", "uuid")) { "Unclassified indexed/private metadata item" }
+                        rejectPositionSensitive(children(entry.body), depth + 1)
+                    }
+                }
                 "stsd" -> {
                     val data = item.body
                     require(data.size >= 8)

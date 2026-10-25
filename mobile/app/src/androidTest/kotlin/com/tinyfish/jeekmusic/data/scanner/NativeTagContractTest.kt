@@ -39,7 +39,7 @@ class NativeTagContractTest {
     private val context = instrumentation.targetContext
     private val root = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "JeekTaglibNative")
     private val output = File(context.getExternalFilesDir(null), "native-tag-validation").apply { mkdirs() }
-    private fun asset(name: String) = instrumentation.context.assets.open(if (name.startsWith("boundaries/")) name else "corpus/$name").use { it.readBytes() }
+    private fun asset(name: String) = instrumentation.context.assets.open(if ('/' in name) name else "corpus/$name").use { it.readBytes() }
     private fun uri(name: String) = DocumentsContract.buildDocumentUriUsingTree(
         DocumentsContract.buildTreeDocumentUri("com.android.externalstorage.documents", "primary:Music/JeekTaglibNative"),
         "primary:Music/JeekTaglibNative/$name")
@@ -65,7 +65,8 @@ class NativeTagContractTest {
             val cover = asset("front.jpg")
             val regularText = asset("lyrics-after.lrc").toString(Charsets.UTF_8)
             val names = listOf("id3v23.mp3", "id3v24.mp3", "untagged.mp3", "native.flac", "native.ogg", "native.opus", "native.m4a", "untagged.m4a", "faststart.m4a", "multiple-lyrics.mp3", "native.wav", "native.aiff", "native.wma", "native.wv") +
-                listOf("private-v23.mp3", "private-v24.mp3", "ambiguous-sylt.mp3", "private.flac", "private.ogg", "private.opus", "private.m4a", "faststart-padded.m4a", "unsafe-faststart.m4a", "unsafe-chained.ogg", "unsafe-chapters.mp3", "unsafe-cenc.m4a", "unsafe-saio.m4a", "large.ogg", "large.opus").map { "boundaries/$it" }
+                listOf("private-v23.mp3", "private-v24.mp3", "ambiguous-sylt.mp3", "private.flac", "private.ogg", "private.opus", "private.m4a", "faststart-padded.m4a", "unsafe-faststart.m4a", "unsafe-chained.ogg", "unsafe-chapters.mp3", "unsafe-cenc.m4a", "unsafe-saio.m4a", "large.ogg", "large.opus").map { "boundaries/$it" } +
+                listOf("unsafe-alter-v23.mp3", "unsafe-alter-v24.mp3", "unsafe-iloc-udta.m4a", "unsafe-iloc-movie.m4a", "unsafe-iloc-top.m4a", "unsafe-uuid-udta.m4a", "unsafe-uuid-movie.m4a", "unsafe-uuid-top.m4a", "safe-opaque.m4a").map { "review-boundaries/$it" }
             val errors = ArrayList<String>()
             root.mkdirs()
             for (name in names) for (operation in listOf("cover", "lyrics", "combined", "serial")) {
@@ -81,7 +82,7 @@ class NativeTagContractTest {
                     val built = TrackFactory(ScanConfig()).build(audio, folder.id, TagReader(context).read(Uri.fromFile(file))).entity
                     val track = built.copy(id = db.trackDao().insert(listOf(built)).single())
                     val oldMap = metadata(file)
-                    val supported = extension in setOf("mp3", "flac", "ogg", "opus", "m4a") && "unsafe-" !in name && name != "faststart.m4a"
+                    val supported = extension in setOf("mp3", "flac", "ogg", "opus", "m4a") && "unsafe-" !in name && name !in setOf("faststart.m4a", "boundaries/private.m4a")
                     val pcmBefore = if (supported) pcm(file) else null
                     val lyricSafe = supported && name != "multiple-lyrics.mp3" && "ambiguous-" !in name
                     val coverEmbedded = supported && (operation != "combined" || lyricSafe)

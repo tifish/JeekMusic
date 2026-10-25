@@ -12,7 +12,7 @@ class SafeTagWriterTest {
 
     @Test fun sharedNativeCorpus() {
         for (name in listOf("id3v23.mp3", "id3v24.mp3", "untagged.mp3", "native.flac", "native.ogg", "native.opus", "native.m4a", "untagged.m4a") +
-            listOf("private-v23.mp3", "private-v24.mp3", "private.flac", "private.ogg", "private.opus", "private.m4a", "faststart-padded.m4a", "large.ogg", "large.opus").map { "../boundaries/$it" }) {
+            listOf("private-v23.mp3", "private-v24.mp3", "private.flac", "private.ogg", "private.opus", "faststart-padded.m4a", "large.ogg", "large.opus").map { "../boundaries/$it" }) {
             for (change in listOf(TagEdit(cover = cover), TagEdit(lyrics = lyric), TagEdit(cover, lyric))) {
                 withFile(name) { file ->
                     val before = file.readBytes()
@@ -36,7 +36,7 @@ class SafeTagWriterTest {
         assertArrayEquals(before, file.readBytes())
     }
     @Test fun unsupportedAndAmbiguousInputsAreUnchanged() {
-        for (name in listOf("multiple-lyrics.mp3", "native.wav", "native.aiff", "native.wma", "native.wv", "faststart.m4a", "../boundaries/unsafe-faststart.m4a", "../boundaries/unsafe-chained.ogg", "../boundaries/ambiguous-sylt.mp3", "../boundaries/unsafe-chapters.mp3", "../boundaries/unsafe-cenc.m4a", "../boundaries/unsafe-saio.m4a")) {
+        for (name in listOf("multiple-lyrics.mp3", "native.wav", "native.aiff", "native.wma", "native.wv", "faststart.m4a", "../boundaries/unsafe-faststart.m4a", "../boundaries/unsafe-chained.ogg", "../boundaries/ambiguous-sylt.mp3", "../boundaries/unsafe-chapters.mp3", "../boundaries/unsafe-cenc.m4a", "../boundaries/unsafe-saio.m4a", "../boundaries/private.m4a")) {
             withFile(name) { file ->
                 val before = file.readBytes()
                 assertTrue("Must refuse $name", runCatching { SafeTagWriter.write(file, TagEdit(cover, lyric)) }.isFailure)
@@ -81,6 +81,20 @@ class SafeTagWriterTest {
         file.writeBytes(stacked)
         assertTrue(runCatching { SafeTagWriter.write(file, TagEdit(cover, lyric)) }.isFailure)
         assertArrayEquals(stacked, file.readBytes())
+    }
+    @Test fun structuralLocationsAndInvalidatedUnknownFramesAreRefused() {
+        val names = listOf("unsafe-alter-v23.mp3", "unsafe-alter-v24.mp3") +
+            listOf("udta", "movie", "top").flatMap { listOf("unsafe-iloc-$it.m4a", "unsafe-uuid-$it.m4a") }
+        for (name in names) for (change in listOf(TagEdit(cover = cover), TagEdit(lyrics = lyric), TagEdit(cover, lyric))) {
+            withFile("../review-boundaries/$name") { file ->
+                val before = file.readBytes()
+                assertTrue("Must refuse $name", runCatching { SafeTagWriter.write(file, change) }.isFailure)
+                assertArrayEquals(name, before, file.readBytes())
+            }
+        }
+    }
+    @Test fun opaqueMp4PayloadIsNotSearchedForBoxNames() = withFile("../review-boundaries/safe-opaque.m4a") { file ->
+        SafeTagWriter.write(file, TagEdit(cover, lyric))
     }
     private fun hasV1(bytes: ByteArray) = bytes.size >= 128 && bytes.copyOfRange(bytes.size - 128, bytes.size - 125).contentEquals(ascii("TAG"))
     private fun id3Frames(bytes: ByteArray): List<Pair<String, ByteArray>> {

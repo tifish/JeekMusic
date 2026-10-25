@@ -4,6 +4,8 @@
 
 策略对齐共享 policy2（`a12b73e03d2dd40d55083d24bb514759f1cf58ef`）；该提交没有改共享 corpus，测试资产仍固定到 `167d97ef` 的 manifest。Android 未复制 PC 的两步 rename/恢复协议。
 
+`7c439e2` 独立审查的两项 P1、一项 P2 已另行复现修复；本轮候选竞争、嵌套 MP4 定位及 ID3 状态标志的逐项证据见 [审查修复验证](tag-writing-review-validation.md)。下文 252/132 数量与原 `tag-writing-api35.json` 属于首轮记录，不冒充本轮重跑。
+
 ## 支持矩阵
 
 曲库 `MediaStoreSource` 接受 `mp3 flac m4a mp4 aac ogg oga opus wav mka amr`；读取使用固定的 TagLib 及系统媒体组件，具体音频播放还受设备解码器支持限制。扩展名不是写入能力声明。
@@ -11,11 +13,11 @@
 | 实际包络 | 原生封面/歌词写入 | 编码与保护 | 明确回退边界 |
 |---|---|---|---|
 | MPEG MP3，无 ID3v2 | write | 新建一个 ID3v2.4，目标 UTF-8；整个音频及原有 ID3v1/尾部原样复制 | 非 MPEG 起点、叠放标签 |
-| MP3 ID3v2.3 | write | 保留 v2.3，APIC/USLT 使用 UTF-16/BOM；不迁移 TYER/TDAT/TIME/TORY/IPLS 等帧 | v2.2、非零 tag flags/扩展头/CRC/全局 unsync/footer；编码或只读目标帧；CHAP/CTOC/ASPI/SEEK 位置引用 |
+| MP3 ID3v2.3 | write | 保留 v2.3，APIC/USLT 使用 UTF-16/BOM；不迁移 TYER/TDAT/TIME/TORY/IPLS 等帧 | v2.2、非零 tag flags/扩展头/CRC/全局 unsync/footer；编码或只读目标帧；CHAP/CTOC/ASPI/SEEK 位置引用；任何帧声明 tag-alter invalidation（v2.3 status 0x80 / v2.4 0x40） |
 | MP3 ID3v2.4 | write | 目标 UTF-8；所有非目标帧（含未知/私有帧、日期精度、多值）保持原始字节 | 同上；损坏边界 |
 | 原生 FLAC | write | 原生 PICTURE block、UTF-8 Vorbis comment；STREAMINFO、APPLICATION、未知块、原 vendor/非目标 comment entries 保留 | ID3 前缀 FLAC、重复 comment blocks、坏边界 |
 | Ogg Vorbis / Opus 单逻辑流 | write | 原生 UTF-8 comment/`METADATA_BLOCK_PICTURE`；保留 vendor、重复/空值、未知字段与非目标图片；Opus comment 尾部扩展原样保留 | chained/multiplexed、header/audio 混合页、CRC/边界错误、旧 COVERART 字段歧义 |
-| MP4 / M4A | write（有界包络） | 原生 `covr` typed image 和 `©lyr` UTF-8 data atom；原有歌词 locale 保留；非目标 typed/私有/未知 atoms 原样保留 | fragmented/compressed/protected/indexed movie、多 metadata/歌词槽；CENC/protected sample entries、sinf/tenc/pssh、saio/saiz/senc 拒绝；fast-start 增长超出既有 padding 时回退，不重定位 mdat/stco/co64 |
+| MP4 / M4A | write（有界包络） | 原生 `covr` typed image 和 `©lyr` UTF-8 data atom；原有歌词 locale 保留；安全包络内非目标 typed/私有/未知叶 atom 原样保留 | fragmented/compressed/protected/indexed movie、多 metadata/歌词槽；CENC/protected sample entries、sinf/tenc/pssh、saio/saiz/senc、结构树中的 iloc 及未分类 uuid 拒绝（包括顶层、moov/udta/meta）；fast-start 增长超出既有 padding 时回退，不重定位 mdat/stco/co64 |
 | AAC/ADTS、WAV/BWF、MKA、AMR | refuse embed | 保留既有读取/播放路径；使用隐藏目录、同名文件或歌词缓存 | 无已验证的原生安全编辑器；不强套 UTF-8/ID3 |
 | APE/WavPack、ASF/WMA、AIFF | 不新增手机支持；refuse embed | 不在当前曲库 advertised extensions；合成样本用于拒绝及原字节保护回归 | 不因底层库可识别就宣称支持原生写入 |
 
@@ -26,7 +28,7 @@ MP4 在所有其他顶层 atoms 后的 moov 可以增长；否则只能在原 mo
 - `TagEdit` 的 null 目标完全不动。封面只替换 role 0/3，其他 role（包括未知角色）、描述和图片二进制保持原字节；MP4 covr 视为显式整个字段。
 - 歌词全文不规范化换行、不合并双语时间戳、不截断空行/offset。单个 USLT 保留语言/描述身份，单个 comment 保留 key 拼写，MP4 保留 locale；多个歌词槽、SYLT、自定义歌词别名歧义拒绝。封面单独操作不解析或改写歌词。
 - `CoverStore` 的联合操作一次提交。任一目标失败即不提交；`alsoDone` 仅在最终提交成功后记录，`LyricsRepository.onEmbedded` 才能删除外部歌词/记已嵌入。拒绝返回真实隐藏目录/缓存位置，不能误报为已嵌入。
-- `AtomicAudioFile`：SAF `rw` 授权 → 本地路径与 fd 的 dev/inode/stat 比较 → 同目录副本与源 SHA → 目标编辑 → 独立重解析目标/非目标字段及音频原始边界 → 文件权限/所有者和 mtime 校验 → 获得源 OS advisory 写锁 → 在同一锁内查播放状态、源 SHA/stat 并执行 `Os.rename`。锁内只用同一 channel 读取 SHA，不重新打开/关闭自己的第二个源 fd；源 fd 从不用于写入，不在失败后用旧 SHA 重试替换。
+- `AtomicAudioFile`：SAF `rw` 授权 → 本地路径与 fd 的 dev/inode/stat 比较 → 同目录副本与源 SHA → 目标编辑 → 打开候选 fd 并记录验证前 SHA/身份 → 独立重解析目标/非目标字段及音频原始边界 → 核对验证前后候选身份/SHA → 文件权限/所有者和 mtime 校验 → 获得源及候选 OS advisory 写锁 → 在同一双锁区间查播放状态、源 SHA/stat、已验证候选 SHA/fd/path stat 并执行 `Os.rename`。候选锁在验证器/属性 API 关闭额外 fd 后取得；双锁区只用已打开的 channel 读取 SHA，不另开关同 inode fd。源 fd 从不用于写入，不在失败后用旧 SHA 重试替换。
 - 保留旧 ID3v1 的所有 128 字节；原本没有就不新增。MP3 以外的音频尾部即使出现 `TAG` 也不按 ID3v1 处理。
 - OS 锁已用独立 `app_process` 进程实测竞争/释放：遵守 POSIX advisory 锁协议的写入者被覆盖整个最终检查/替换阶段。它不是 Windows 强制共享锁，也不是内核 compare-and-swap；不遵守锁协议的外部写入者，以及同进程其他 fd 关闭对 POSIX 锁的影响仍不能由 Android 公共 API 完全排除。此限制不以模拟测试掩盖。设备/文件系统不允许锁、保留 mtime、mode/uid/gid 或原子重命名时使用外部回退。未声称验证所有 OEM/可移除存储及 ACL 实现。
 

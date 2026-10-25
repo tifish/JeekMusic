@@ -32,6 +32,11 @@ internal object Id3Tags {
             }
             val n = if (version == 4) readSync(body, p + 4).toLong() else u32(body, p + 4)
             require(n <= body.size - p - 10) { "Invalid frame size" }
+            // Tag-alter preservation means the frame is invalid after ANY tag edit,
+            // even if its opaque payload survives byte-for-byte. Dropping it would
+            // violate preservation too, so refuse instead (v2.3 a / v2.4 a bits).
+            val tagAlterMask = if (version == 3) 0x80 else 0x40
+            require(body[p + 8].toInt() and tagAlterMask == 0) { "$id is invalidated by tag alteration" }
             frames += Frame(id, body.copyOfRange(p, p + 10 + n.toInt()))
             p += 10 + n.toInt()
         }

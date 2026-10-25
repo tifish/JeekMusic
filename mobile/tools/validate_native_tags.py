@@ -88,6 +88,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True)
     parser.add_argument("--collect-only", action="store_true")
+    parser.add_argument("--contract-only", action="store_true", help="Run affected production/transaction/review tests, without repeating raw JNI characterization")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     mobile = Path(__file__).resolve().parents[1]
@@ -111,26 +112,41 @@ def main():
         (output / name).write_bytes(result)
         if not success(result, expected): raise SystemExit(f"Instrumentation failed: {name}")
     if not args.collect_only:
-        instrument("com.tinyfish.jeekmusic.data.scanner.NativeTagWriteTest,com.tinyfish.jeekmusic.data.scanner.NativeTagContractTest", "instrumentation.txt", 8)
-        try:
-            command(adb + ["shell", "appops", "set", "--uid", package, "MANAGE_EXTERNAL_STORAGE", "deny"])
-            instrument("com.tinyfish.jeekmusic.data.scanner.NativeTagPermissionTest", "permission-instrumentation.txt", 1)
-        finally:
-            command(adb + ["shell", "appops", "set", "--uid", package, "MANAGE_EXTERNAL_STORAGE", "allow"])
-    for name, expected in [("instrumentation.txt", 8), ("permission-instrumentation.txt", 1)]:
+        classes = "com.tinyfish.jeekmusic.data.scanner.NativeTagContractTest,com.tinyfish.jeekmusic.data.scanner.NativeTagReviewTest"
+        if not args.contract_only: classes = "com.tinyfish.jeekmusic.data.scanner.NativeTagWriteTest," + classes
+        instrument(classes, "instrumentation.txt", 9 if args.contract_only else 13)
+        if not args.contract_only:
+            try:
+                command(adb + ["shell", "appops", "set", "--uid", package, "MANAGE_EXTERNAL_STORAGE", "deny"])
+                instrument("com.tinyfish.jeekmusic.data.scanner.NativeTagPermissionTest", "permission-instrumentation.txt", 1)
+            finally:
+                command(adb + ["shell", "appops", "set", "--uid", package, "MANAGE_EXTERNAL_STORAGE", "allow"])
+    logs = [("instrumentation.txt", 9 if args.contract_only else 13)]
+    if not args.contract_only: logs.append(("permission-instrumentation.txt", 1))
+    for name, expected in logs:
         if not success((output / name).read_bytes(), expected): raise SystemExit(f"No complete successful instrumentation log: {name}")
     private = f"/sdcard/Android/data/{package}/files/native-tag-validation"
-    for remote, name in [("environment.json", "environment.json"), ("raw-false.json", "raw-bmp.json"), ("raw-true.json", "raw-supplementary.json"), ("production.json", "production-fixed.json"), ("contract.json", "contract.json"), ("transactions.json", "transactions.json"), ("rename-permission.json", "rename-permission.json"), ("external-lock.json", "external-lock.json")]:
+    reports = [("contract.json", "contract.json"), ("transactions.json", "transactions.json"), ("rename-permission.json", "rename-permission.json"), ("external-lock.json", "external-lock.json")]
+    review = [("review-candidate.json", 9), ("review-mp4.json", 18), ("review-id3.json", 6), ("review-repository-sidecars.json", 3)]
+    reports += [(name, name) for name, _ in review] + [("review-candidate-guard.json", "review-candidate-guard.json")]
+    if not args.contract_only:
+        reports += [("environment.json", "environment.json"), ("raw-false.json", "raw-bmp.json"), ("raw-true.json", "raw-supplementary.json"), ("production.json", "production-fixed.json")]
+    for remote, name in reports:
         command(adb + ["pull", f"{private}/{remote}", str(output / name)])
-    rows = json.loads((output / "production-fixed.json").read_text(encoding="utf-8"))
+    rows = [] if args.contract_only else json.loads((output / "production-fixed.json").read_text(encoding="utf-8"))
     contract = json.loads((output / "contract.json").read_text(encoding="utf-8"))
-    if len(rows) != 136 or len(contract) != 116 or any(r.get("exception") or r.get("mismatches") != [] for r in rows + contract): raise SystemExit("Production matrix incomplete/failed")
+    if len(rows) != (0 if args.contract_only else 136) or len(contract) != 152 or any(r.get("exception") or r.get("mismatches") != [] for r in rows + contract): raise SystemExit("Production matrix incomplete/failed")
+    for name, count in review:
+        cases = json.loads((output / name).read_text(encoding="utf-8"))
+        if len(cases) != count or not all(row["passed"] for row in cases): raise SystemExit(f"Review regression failed: {name}")
+    if not json.loads((output / "review-candidate-guard.json").read_text())["passed"]: raise SystemExit("Candidate guard failed")
     transactions = json.loads((output / "transactions.json").read_text(encoding="utf-8"))
     if len(transactions) != 6 or not all(r["passed"] for r in transactions): raise SystemExit("Transaction checks incomplete")
     if not json.loads((output / "rename-permission.json").read_text())["passed"]: raise SystemExit("Rename permission test failed")
     if not json.loads((output / "external-lock.json").read_text())["passed"]: raise SystemExit("External process lock test failed")
     fixtures = {"corpus/" + f["path"] for f in json.loads((assets / "corpus/manifest.json").read_text(encoding="utf-8"))["files"]}
     fixtures |= {"boundaries/" + f["path"] for f in json.loads((assets / "boundaries/manifest.json").read_text())}
+    fixtures |= {"review-boundaries/" + f["path"] for f in json.loads((assets / "review-boundaries/manifest.json").read_text())}
     files = output / "containers"
     files.mkdir(exist_ok=True)
     text = "[offset:-123]\r\n\r\n[00:01.234]合成歌词? Café Ελληνικά العربية 𠮷😀\r\n[00:01.234]Synthetic translation\r\n"
@@ -140,7 +156,7 @@ def main():
             _, ext, operation = row["case"].split("-")
             cases.append((row["case"] + "." + ext, assets / f"native-unicode.{ext}", operation != "lyrics" and ext != "wav", operation != "cover" and ext != "wav", text))
     for row in contract:
-        fixture = row["fixture"] if row["fixture"].startswith("boundaries/") else "corpus/" + row["fixture"]
+        fixture = row["fixture"] if "/" in row["fixture"] else "corpus/" + row["fixture"]
         if fixture not in fixtures: raise SystemExit("Unexpected synthetic fixture")
         target_text = "L" * 70000 if "/large." in fixture else (assets / "corpus/lyrics-after.lrc").read_bytes().decode("utf-8")
         cases.append((row["file"], assets / fixture, row["coverEmbedded"], row["lyricsEmbedded"], target_text))
@@ -168,8 +184,8 @@ def main():
         if not cover and not lyrics and destination.read_bytes() != source.read_bytes(): raise SystemExit(f"Refused source changed: {name}")
         independent.append(dict(file=name, audioPacketsSha256=actual[0], pcmS16Sha256=actual[1], coverEmbedded=cover, lyricsEmbedded=lyrics, tags=tags, opaqueMarkerCounts=marker_counts, incompletePacketPages=incomplete))
     (output / "independent-containers.json").write_text(json.dumps(independent, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"252 production cases, 8 Android methods + 1 permission method, {len(independent)} independent FFmpeg packet/PCM checks passed. Artifacts: {output}")
-    print("Raw 1.0.6 reports intentionally retain known footer/picture-description defects; production avoids those setters.")
+    print(f"{len(rows) + len(contract)} production cases, {9 if args.contract_only else 13} Android methods" + ("" if args.contract_only else " + 1 permission method") + f", {len(independent)} independent FFmpeg packet/PCM checks passed. Artifacts: {output}")
+    print("Raw JNI characterization was not rerun in --contract-only mode." if args.contract_only else "Raw 1.0.6 reports intentionally retain known footer/picture-description defects; production avoids those setters.")
 
 
 if __name__ == "__main__": main()

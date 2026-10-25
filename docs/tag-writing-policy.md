@@ -184,14 +184,24 @@ native test a device pass. See the fixture manifest and platform validation repo
 
 ### Platform capability differences
 
-Android's current declared set is MP3, FLAC, Vorbis/Opus and MP4; its JNI/device
-validation is owned by the Android workstream. WAV/BWF, raw AAC, MKA and AMR use
+Android's validated set is MP3, FLAC, Vorbis/Opus and bounded MP4. Its final
+[format/device matrix](../mobile/docs/tag-writing-validation.md) and
+[targeted review results](../mobile/docs/tag-writing-review-validation.md) accompany
+the mobile revisions `7c439e2` and `d01368e` (integrated without unrelated history).
+API35/x86_64 results do not certify ARM64/OEM/removable-storage behavior. Existing
+v2.3 retains its version/UTF-16 targets there too. Android MP4 keeps other top-level
+positions fixed (growth uses available padding or a final moov); desktop instead
+relocates only independently validated stco/co64 in its bounded subset. WAV/BWF,
+raw AAC, MKA and AMR use
 the existing external-file fallback until safe native writing is proven there.
 APE and ASF are not claimed on Android. Desktop retains its existing advertised
 families with the bounded conditions above. For existing ID3v2.3 a platform may
 either retain v2.3/UTF-16 targets or prove a complete v2.4 migration (including
 private/unknown records); otherwise refuse. Platform-specific capability/refusal
 differences must be visible, never a silent deletion of tags or advertised support.
+Android's advisory-lock/atomic-rename transaction and its documented noncooperating
+writer limits remain platform-specific. Windows policy 3's mandatory-share guards,
+ADS/security preservation and startup journal recovery are not claimed on Android.
 
 ## Primary references
 

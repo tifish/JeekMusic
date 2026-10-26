@@ -536,7 +536,7 @@ M2 先用 `LIKE '%q%'` 查询 `title / artist_display / album / file_name`，在
 
 - 全局设置 `SongSort { FILE_NAME, MODIFIED, TITLE, ARTIST }`（DataStore `song_sort`），无键默认 `MODIFIED`；StateFlow 初始值一致。有效旧值保留；`DEFAULT` 显式兼容为 `FILE_NAME`，未知值回落新默认。`hasSongSortPreference` 从键内容推导，其他设置写入不创建此键。`orderedViewSort` 在无偏好时为 FILE_NAME 以保留播放列表手动顺序/拖动；`albumSort` 无偏好时为 null，按碟号/音轨号排序，显式选择仍沿用原全局行为；两种视图及其来源队列共用管线。
 - 在内存里排序（`flowOn(Dispatchers.Default)`），不改 SQL：各列表先按筛选过滤，再交给 `SongSorter.sorted()`。按文件名时有三处特殊：文件夹里 CUE 虚拟歌曲排在普通歌曲后面；"播放全部（含子文件夹）"先按所在目录；播放列表保持手动顺序
-- 比较器：修改时间 = 音频文件 MediaStore `date_modified` Unix **秒**降序（CUE 复用源音频），不使用加入/扫描时间；无效（≤0 或超出安全本地年份范围）排末。相同时间用文件名自然顺序、原名、源 fileKey、CUE 音轨号及 ID 稳定打破平局。标题和艺术家拼音规则保留；播放列表不可用条目排末。`TrackRow` 在原艺术家/专辑行下显示 labelSmall 紧凑“修改：yyyy-MM-dd HH:mm”，复用缓存字段、系统时区/语言，未知“—”；不在绑定时读盘或触发扫描。
+- 比较器：修改时间 = 音频文件 MediaStore `date_modified` Unix **秒**降序（CUE 复用源音频），不使用加入/扫描时间；无效（≤0 或超出安全本地年份范围）排末。相同时间用文件名自然顺序、原名、源 fileKey、CUE 音轨号及 ID 稳定打破平局。标题和艺术家拼音规则保留；播放列表不可用条目排末。`TrackRow` 只显示标题、艺术家/专辑及歌曲时长，不显示修改时间；缓存修改时间继续用于排序和同步，不在绑定时读盘或触发扫描。
 - 拼音转写较慢，排序键按字符串缓存（`ConcurrentHashMap`），长列表反复排序也不卡
 - 播放列表在不是按文件名排序或有筛选时隐藏拖动手柄
 

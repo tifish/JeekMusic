@@ -54,6 +54,8 @@ class QueuePersistence @Inject constructor(
         val MANUAL = stringPreferencesKey("manual")
         val SOURCE = stringPreferencesKey("source")
         val SOURCE_TITLE = stringPreferencesKey("source_title")
+        val SOURCE_ANCHOR = longPreferencesKey("source_anchor")
+        val SOURCE_PENDING = booleanPreferencesKey("source_pending")
     }
 
     suspend fun saveQueue(items: List<SavedQueueItem>) {
@@ -71,9 +73,13 @@ class QueuePersistence @Inject constructor(
         if (value == null) {
             prefs.remove(Keys.SOURCE)
             prefs.remove(Keys.SOURCE_TITLE)
+            prefs.remove(Keys.SOURCE_ANCHOR)
+            prefs.remove(Keys.SOURCE_PENDING)
         } else {
             prefs[Keys.SOURCE] = value.source.encode()
             prefs[Keys.SOURCE_TITLE] = value.title
+            if (value.anchorTrackId != null) prefs[Keys.SOURCE_ANCHOR] = value.anchorTrackId else prefs.remove(Keys.SOURCE_ANCHOR)
+            prefs[Keys.SOURCE_PENDING] = value.pending
         }
     }
 
@@ -108,7 +114,7 @@ class QueuePersistence @Inject constructor(
         return RestoredQueue(
             tracks, index.coerceIn(0, tracks.lastIndex), positionMs, prefs[Keys.SHUFFLE] ?: false, prefs[Keys.REPEAT] ?: 0,
             manual = manual,
-            context = source?.let { QueueContext(it, prefs[Keys.SOURCE_TITLE].orEmpty()) },
+            context = source?.let { QueueContext(it, prefs[Keys.SOURCE_TITLE].orEmpty(), prefs[Keys.SOURCE_ANCHOR], prefs[Keys.SOURCE_PENDING] ?: false) },
         )
     }
 }

@@ -158,6 +158,14 @@ class PlayerConnection @Inject constructor(
         )
     }
 
+    /** 显式浏览切源：当前歌曲不中断，后续队列跟随新的歌曲列表。 */
+    fun followSource(source: QueueSource, title: String) = withController {
+        sendCustomCommand(SessionCommand(PlaybackCommands.FOLLOW_SOURCE, Bundle.EMPTY), Bundle().apply {
+            putString(PlaybackCommands.EXTRA_SOURCE, source.encode())
+            putString(PlaybackCommands.EXTRA_SOURCE_TITLE, title)
+        })
+    }
+
     /** "下一首播放"：插到当前歌曲后面，作为手动添加的歌（需求 P-15）。 */
     fun playNext(tracks: List<TrackEntity>) = sendTracks(PlaybackCommands.PLAY_NEXT, tracks)
 

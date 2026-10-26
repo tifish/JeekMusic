@@ -105,7 +105,7 @@ class SearchViewModel @Inject constructor(
 }
 
 @Composable
-fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel()) {
+fun SearchScreen(onBack: () -> Unit, onSourceChanged: (String, String) -> Unit = { _, _ -> }, viewModel: SearchViewModel = hiltViewModel()) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
     val currentTrackId by viewModel.currentTrackId.collectAsStateWithLifecycle()
@@ -113,6 +113,11 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val selection = rememberTrackSelection()
+    val resources = androidx.compose.ui.platform.LocalResources.current
+    fun changeQuery(value: String) {
+        viewModel.query.value = value
+        onSourceChanged(value, resources.getString(R.string.queue_source_search, value.trim()))
+    }
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -121,7 +126,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
             }
             TextField(
                 value = query,
-                onValueChange = { viewModel.query.value = it },
+                onValueChange = ::changeQuery,
                 placeholder = { Text(stringResource(R.string.search_hint)) },
                 singleLine = true,
                 colors = TextFieldDefaults.colors(
@@ -130,7 +135,7 @@ fun SearchScreen(onBack: () -> Unit, viewModel: SearchViewModel = hiltViewModel(
                 ),
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.query.value = "" }) {
+                        IconButton(onClick = { changeQuery("") }) {
                             Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.cancel))
                         }
                     }

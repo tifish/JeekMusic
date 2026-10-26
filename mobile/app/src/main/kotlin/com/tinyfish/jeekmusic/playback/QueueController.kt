@@ -7,7 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ShuffleOrder
 import com.tinyfish.jeekmusic.data.db.TrackEntity
-import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,7 +27,9 @@ import kotlinx.coroutines.launch
 class QueueController(
     private val player: ExoPlayer,
     private val scope: CoroutineScope,
-    private val sources: QueueSourceRepository,
+    private val tracksFor: (QueueSource) -> Flow<List<TrackEntity>>,
+    private val sourceTitle: suspend (QueueSource, String) -> String = { _, title -> title },
+    private val onEndedWhileLoading: () -> Unit = {},
     private val onContextChanged: (QueueContext?) -> Unit,
 ) {
     /** 队列来自的列表和它的显示名称；没有时（只用"下一首播放"建立的队列、旧版本保存的队列）不重新生成。 */
@@ -37,6 +39,49 @@ class QueueController(
     /** 来自的列表里的歌（按列表顺序），最近一次从 [sources] 拿到的。 */
     private var sourceTracks: List<TrackEntity>? = null
     private var sourceJob: Job? = null
+    private var generation = 0L
+    private var pendingNavigation: (() -> Unit)? = null
+
+    /** Latest explicit Play/navigation wins even if an earlier database read finishes later. */
+    fun beginPlay(): Long {
+        sourceJob?.cancel()
+        cancelNavigation()
+        if (context?.pending == true) {
+            context = context?.copy(pending = false)
+            onContextChanged(context)
+        }
+        return ++generation
+    }
+
+    fun isCurrentRequest(value: Long) = value == generation
+
+    fun cancelNavigation() { pendingNavigation = null }
+
+    fun navigate(action: () -> Unit) {
+        if (context?.pending == true) pendingNavigation = action else action()
+    }
+
+    /** The outgoing current song is never a forward/loop target in the new source. */
+    fun nextTarget(): Int? {
+        val anchor = context?.anchorTrackId ?: return null
+        // A deleted file can be dropped by queue restoration before this context is restored.
+        if (player.mediaItemCount == 0 || idOf(player.getMediaItemAt(0)) != anchor) return null
+        val next = player.currentMediaItemIndex + 1
+        return if (next < player.mediaItemCount) next else if (player.mediaItemCount > 1) 1 else -1
+    }
+
+    fun follow(source: QueueSource, title: String) {
+        beginPlay()
+        if (player.mediaItemCount == 0) return
+        val current = player.currentMediaItem ?: return
+        val c = player.currentMediaItemIndex
+        val manual = manualAfterCurrent()
+        // Remove old preloaded source items now, before the asynchronous source read.
+        context = QueueContext(source, title, anchorTrackId = idOf(current), pending = true)
+        player.replaceMediaItems(c + 1, player.mediaItemCount, manual)
+        player.removeMediaItems(0, c)
+        setContext(context, initial = null)
+    }
 
     /** 自己改随机标记时不按"用户切换了随机"处理。 */
     private var applyingShuffle = false
@@ -44,6 +89,10 @@ class QueueController(
     init {
         player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(player.mediaItemCount))
         player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Don't mutate the timeline inside a Media3 transition callback.
+                scope.launch(Dispatchers.Main) { removeDepartedAnchor() }
+            }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 if (applyingShuffle) return
                 // 不能在播放器的回调里直接改队列：媒体会话还拿着旧的当前位置，收到变短的队列会崩溃。放到回调结束后再做
@@ -52,7 +101,7 @@ class QueueController(
         })
     }
 
-    /** 断点续播时恢复来源；先不重新生成，等列表下次变化。 */
+    /** 断点续播只恢复来源；未完成的切源恢复后继续完成。 */
     fun restoreContext(value: QueueContext?) = setContext(value, initial = null)
 
     /** 断点续播时恢复随机标记；保存的队列已经是播放顺序，不重新排。 */
@@ -64,6 +113,7 @@ class QueueController(
      */
     fun play(source: QueueSource, title: String, tracks: List<TrackEntity>, startIndex: Int?, shuffle: Boolean?) {
         if (tracks.isEmpty()) return
+        beginPlay()
         val random = shuffle ?: player.shuffleModeEnabled
         val start = startIndex?.coerceIn(0, tracks.lastIndex) ?: if (random) tracks.indices.random() else 0
         val order = if (random) listOf(tracks[start]) + (tracks.take(start) + tracks.drop(start + 1)).shuffled() else tracks
@@ -111,18 +161,54 @@ class QueueController(
 
     private fun setContext(value: QueueContext?, initial: List<TrackEntity>?) {
         sourceJob?.cancel()
+        val version = ++generation
         context = value
         sourceTracks = initial
         onContextChanged(value)
         val source = value?.source ?: return
         sourceJob = scope.launch {
-            sources.tracks(source).collect { tracks ->
+            tracksFor(source).collect { tracks ->
+                if (version != generation) return@collect
                 val previous = sourceTracks
                 sourceTracks = tracks
+                if (context?.pending == true) {
+                    val title = sourceTitle(source, value.title)
+                    if (version != generation) return@collect
+                    val ended = player.playWhenReady && player.playbackState == Player.STATE_ENDED
+                    handoff(tracks, title)
+                    val navigation = pendingNavigation
+                    pendingNavigation = null
+                    if (navigation != null) navigation()
+                    else if (ended && player.hasNextMediaItem()) onEndedWhileLoading()
+                    return@collect
+                }
                 // 断点续播时第一次拿到的就是保存时的列表，只记下来
                 if (previous != null && previous.map { it.id } != tracks.map { it.id }) regenerate(tracks)
             }
         }
+    }
+
+    /** Cross-source changes start at the new list's beginning when current is absent. */
+    private fun handoff(tracks: List<TrackEntity>, title: String) {
+        val c = player.currentMediaItemIndex
+        val current = player.currentMediaItem ?: return
+        val plan = SourceHandoff.plan(tracks.map { it.id }, idOf(current), MediaItemMapper.isManual(current), player.shuffleModeEnabled)
+        val manual = manualAfterCurrent()
+        val before = plan.before.map { MediaItemMapper.toMediaItem(tracks[it]) }
+        val after = plan.after.map { MediaItemMapper.toMediaItem(tracks[it]) }
+        context = context?.copy(title = title, pending = false, anchorTrackId = if (plan.anchor) idOf(current) else null)
+        player.replaceMediaItems(c + 1, player.mediaItemCount, manual + after)
+        player.replaceMediaItems(0, c, before)
+        onContextChanged(context)
+    }
+
+    fun removeDepartedAnchor() {
+        val anchor = context?.anchorTrackId ?: return
+        if (player.mediaItemCount == 0 || idOf(player.getMediaItemAt(0)) != anchor) return
+        if (player.currentMediaItemIndex <= 0) return
+        player.removeMediaItem(0)
+        context = context?.copy(anchorTrackId = null)
+        onContextChanged(context)
     }
 
     /** 当前歌曲后面连着的手动添加的歌。 */
@@ -135,6 +221,11 @@ class QueueController(
     /** 用户切换了随机：重新排列来自列表的歌。打开时当前这首之外的随机排；关闭时恢复列表顺序。 */
     private fun reorder(shuffle: Boolean) {
         if (player.mediaItemCount == 0) return
+        if (context?.pending == true) return
+        if (context?.anchorTrackId != null) {
+            sourceTracks?.let { handoff(it, context!!.title) }
+            return
+        }
         val items = items()
         val tracks = sourceTracks
         // 没有来源时用队列里现有的歌（不含手动添加的）
@@ -146,6 +237,10 @@ class QueueController(
     /** 来自的列表变了（筛选、排序、曲库）：按新列表重新生成。 */
     private fun regenerate(tracks: List<TrackEntity>) {
         if (player.mediaItemCount == 0) return
+        if (context?.anchorTrackId != null) {
+            handoff(tracks, context!!.title)
+            return
+        }
         val items = items()
         val c = player.currentMediaItemIndex
         // 随机时已经播过的歌（还在新列表里的）保留在前面，这一轮不再播
@@ -205,4 +300,4 @@ class QueueController(
 }
 
 /** 队列来自的列表和显示名称（如文件夹名、艺术家名）。 */
-data class QueueContext(val source: QueueSource, val title: String)
+data class QueueContext(val source: QueueSource, val title: String, val anchorTrackId: Long? = null, val pending: Boolean = false)

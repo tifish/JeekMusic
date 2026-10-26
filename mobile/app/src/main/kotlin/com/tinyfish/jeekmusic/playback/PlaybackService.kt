@@ -83,14 +83,18 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
         val player = playerFactory.create()
         // 显式上一首/下一首共享跳转后播放的行为；自动曲尾、错误恢复和队列管理仍使用原播放器。
-        val session = MediaLibrarySession.Builder(this, NextAlwaysPlayer(player, ::playAfterNavigation), LibraryCallback()).build()
+        val sessionPlayer = NextAlwaysPlayer(player,
+            beforeNavigation = { queue.navigate(it) }, cancelNavigation = { queue.cancelNavigation() },
+            nextTarget = { queue.nextTarget() }, afterNavigation = { queue.removeDepartedAnchor() }, requestPlay = ::playAfterNavigation)
+        val session = MediaLibrarySession.Builder(this, sessionPlayer, LibraryCallback()).build()
         this.session = session
 
         sleepTimer = SleepTimer(player, scope) { status ->
             sleepStatus = status
             publishExtras()
         }
-        queue = QueueController(player, scope, sources) { context ->
+        queue = QueueController(player, scope, sources::tracks, sources::title,
+            onEndedWhileLoading = { sessionPlayer.seekToNextMediaItem() }) { context ->
             publishExtras()
             scope.launch { persistence.saveContext(context) }
         }
@@ -361,6 +365,7 @@ class PlaybackService : MediaLibraryService() {
                         .add(SessionCommand(PlaybackCommands.SLEEP_CANCEL, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.SLEEP_FINISH_SONG, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.PLAY_SOURCE, Bundle.EMPTY))
+                        .add(SessionCommand(PlaybackCommands.FOLLOW_SOURCE, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.PLAY_NEXT, Bundle.EMPTY))
                         .add(SessionCommand(PlaybackCommands.ADD_TO_QUEUE, Bundle.EMPTY))
                 }
@@ -385,13 +390,19 @@ class PlaybackService : MediaLibraryService() {
                 PlaybackCommands.SLEEP_CANCEL -> sleepTimer.cancel()
                 PlaybackCommands.SLEEP_FINISH_SONG -> sleepTimer.setFinishSong(args.getBoolean(PlaybackCommands.EXTRA_FINISH_SONG))
                 PlaybackCommands.TOGGLE_SHUFFLE -> session.player.shuffleModeEnabled = !session.player.shuffleModeEnabled
+                PlaybackCommands.FOLLOW_SOURCE -> {
+                    val source = QueueSource.decode(args.getString(PlaybackCommands.EXTRA_SOURCE))
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
+                    queue.follow(source, args.getString(PlaybackCommands.EXTRA_SOURCE_TITLE).orEmpty())
+                }
                 PlaybackCommands.PLAY_SOURCE -> {
                     val source = QueueSource.decode(args.getString(PlaybackCommands.EXTRA_SOURCE))
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
                     val title = args.getString(PlaybackCommands.EXTRA_SOURCE_TITLE).orEmpty()
                     val start = args.getInt(PlaybackCommands.EXTRA_START, -1).takeIf { it >= 0 }
                     val shuffle = if (args.containsKey(PlaybackCommands.EXTRA_SHUFFLE)) args.getBoolean(PlaybackCommands.EXTRA_SHUFFLE) else null
-                    withTracks(args) { queue.play(source, title, it, start, shuffle) }
+                    val version = queue.beginPlay()
+                    withTracks(args) { if (queue.isCurrentRequest(version)) queue.play(source, title, it, start, shuffle) }
                 }
                 PlaybackCommands.PLAY_NEXT -> withTracks(args) { queue.playNext(it) }
                 PlaybackCommands.ADD_TO_QUEUE -> withTracks(args) { queue.addToQueue(it) }
@@ -463,6 +474,7 @@ object PlaybackCommands {
     const val SLEEP_FINISH_SONG = "jeek.sleep.finish_song"
     const val TOGGLE_SHUFFLE = "jeek.shuffle.toggle"
     const val PLAY_SOURCE = "jeek.queue.play_source"
+    const val FOLLOW_SOURCE = "jeek.queue.follow_source"
     const val PLAY_NEXT = "jeek.queue.play_next"
     const val ADD_TO_QUEUE = "jeek.queue.add"
     const val EVENT_PLAYBACK_ERROR = "jeek.event.playback_error"

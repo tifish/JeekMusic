@@ -158,7 +158,7 @@ fun JeekMusicApp(viewModel: MainViewModel) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                 UpdatePrompt()
                 TrackMenuHost {
-                    val back: () -> Unit = { viewModel.topStack.removeLastOrNull() }
+                    val back: () -> Unit = viewModel::backTop
                     NavDisplay(
                         backStack = viewModel.topStack,
                         entryDecorators = listOf(
@@ -168,7 +168,7 @@ fun JeekMusicApp(viewModel: MainViewModel) {
                         entryProvider = entryProvider {
                             entry<TopRoute.Main> { MainScreen(viewModel) }
                             entry<TopRoute.Settings> { SettingsScreen(onBack = back) }
-                            entry<TopRoute.Search> { SearchScreen(onBack = back) }
+                            entry<TopRoute.Search> { SearchScreen(onBack = back, onSourceChanged = viewModel::followSearch) }
                             entry<TopRoute.TabManager> { TabManagerScreen(viewModel, onBack = back) }
                             entry<TopRoute.ArtistSettings> { ArtistSettingsScreen(onBack = back) }
                         },
@@ -625,8 +625,8 @@ private fun TabWithMenu(
 @Composable
 private fun TabContent(tab: Tab, viewModel: MainViewModel, onFirstContent: () -> Unit) {
     val stack = viewModel.stackOf(tab)
-    val push: (TabRoute) -> Unit = { if (stack.lastOrNull() != it) stack.add(it) }
-    val pop: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
+    val push: (TabRoute) -> Unit = { viewModel.pushTab(tab, it) }
+    val pop: () -> Unit = { viewModel.popTab(tab) }
     LaunchedEffect(Unit) { if (tab !is Tab.Folders) onFirstContent() }
     NavDisplay(
         backStack = stack,

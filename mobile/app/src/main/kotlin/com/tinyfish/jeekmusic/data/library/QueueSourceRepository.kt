@@ -34,6 +34,13 @@ class QueueSourceRepository @Inject constructor(
     private val tagFilters: TagFilterRepository,
     private val sorter: SongSorter,
 ) {
+    suspend fun title(source: QueueSource, fallback: String): String = when (source) {
+        is QueueSource.Artist -> library.artist(source.nameKey).first()?.name ?: fallback
+        is QueueSource.Album -> library.albumTracks(source.albumKey).first().firstOrNull()?.album ?: fallback
+        is QueueSource.Playlist -> playlists.playlist(source.playlistId).first()?.name ?: fallback
+        else -> fallback
+    }
+
     fun tracks(source: QueueSource): Flow<List<TrackEntity>> = when (source) {
         is QueueSource.Folder -> if (source.recursive) {
             combine(searchDao.trackChanges(), tagFilters.allowedKeys, sorter.sort) { _, _, _ -> }
@@ -59,6 +66,7 @@ class QueueSourceRepository @Inject constructor(
 
     /** 搜索到的歌曲（需求 S-1）：也按智能标签筛选（需求 M-6），按全局排序（需求 U-8）后取前 [MAX_SEARCH_TRACKS] 首。 */
     suspend fun searchTracks(query: String): List<TrackEntity> {
+        if (query.isBlank()) return emptyList()
         val pattern = "%" + MediaStoreSource.escapeLike(query) + "%"
         val tracks = searchDao.tracks(pattern).filterByTags(tagFilters.allowedKeys.first()) { it.trackKey }
         // 先排序再截取，否则截到的不是排在最前面的那些

@@ -17,6 +17,33 @@ import java.lang.reflect.Proxy
 
 class NextAlwaysPlayerTest {
 
+    @Test fun pendingSourceDefersNextAndPauseOrExplicitSeekCancelsIt() {
+        var pending: (() -> Unit)? = null
+        val h = Harness(before = { pending = it }, cancel = { pending = null })
+        h.sessionPlayer.seekToNextMediaItem()
+        assertEquals(1, h.index)
+        assertFalse(h.playing)
+        pending!!()
+        assertEquals(2, h.index)
+        assertTrue(h.playing)
+        h.sessionPlayer.seekToNextMediaItem()
+        h.sessionPlayer.pause()
+        assertEquals(null, pending)
+        h.sessionPlayer.seekToNextMediaItem()
+        h.sessionPlayer.seekTo(500L)
+        assertEquals(null, pending)
+    }
+
+    @Test fun retiringSourceAnchorBeforeDeferredPlayAllowsPausedNextToPlay() {
+        lateinit var h: Harness
+        h = Harness(after = { h.items.removeAt(0); h.index-- })
+        h.deferPlay = true
+        h.sessionPlayer.seekToNextMediaItem()
+        assertEquals(1, h.index)
+        h.completePlay()
+        assertTrue(h.playing)
+    }
+
     private val nextEntries: List<(Player) -> Unit> = listOf({ it.seekToNextMediaItem() }, { it.seekToNext() })
     private val previousEntries: List<(Player) -> Unit> = listOf({ it.seekToPrevious() }, { it.seekToPreviousMediaItem() })
 
@@ -219,7 +246,7 @@ class NextAlwaysPlayerTest {
     }
 
     /** 纯 JVM 的 Player 替身：没有 ExoPlayer、Android 服务、设备、音频输出或系统音量。 */
-    private class Harness(count: Int = 3) {
+    private class Harness(count: Int = 3, val before: (() -> Unit) -> Unit = { it() }, val cancel: () -> Unit = {}, val after: () -> Unit = {}) {
         val items = MutableList(count) {
             MediaItem.Builder().setMediaId("cue-or-track-$it")
                 .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder()
@@ -284,7 +311,7 @@ class NextAlwaysPlayerTest {
                 else -> error("Unexpected player call: ${method.name}")
             }
         } as Player
-        val sessionPlayer = NextAlwaysPlayer(player) { valid ->
+        val sessionPlayer = NextAlwaysPlayer(player, beforeNavigation = before, cancelNavigation = cancel, afterNavigation = after) { valid ->
             playRequests++
             pendingPlay = valid
             if (!deferPlay) completePlay()

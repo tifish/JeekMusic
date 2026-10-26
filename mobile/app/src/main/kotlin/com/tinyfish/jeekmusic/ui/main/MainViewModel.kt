@@ -28,6 +28,7 @@ import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
 import com.tinyfish.jeekmusic.data.tabs.TabRepository
 import com.tinyfish.jeekmusic.playback.PlayerConnection
+import com.tinyfish.jeekmusic.playback.QueueSource
 import com.tinyfish.jeekmusic.startup.StartupSnapshot
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
 import com.tinyfish.jeekmusic.ui.navigation.Navigator
@@ -156,8 +157,47 @@ class MainViewModel @Inject constructor(
 
     fun selectTab(tab: Tab) {
         if (currentTabKey == tab.key) return
+        val userNavigation = currentTabKey != null
         currentTabKey = tab.key
+        if (userNavigation) followCurrentList()
         viewModelScope.launch { snapshot.saveLastTab(tab.key) }
+    }
+
+    fun pushTab(tab: Tab, route: TabRoute) {
+        val stack = stackOf(tab)
+        if (stack.lastOrNull() == route) return
+        stack.add(route)
+        if (tab == currentTab()) followCurrentList()
+    }
+
+    fun popTab(tab: Tab) {
+        val stack = stackOf(tab)
+        if (stack.size <= 1) return
+        stack.removeAt(stack.lastIndex)
+        if (tab == currentTab()) followCurrentList()
+    }
+
+    fun backTop() {
+        val previous = topStack.removeLastOrNull()
+        if (previous == TopRoute.Search) followCurrentList()
+    }
+
+    fun followSearch(query: String, title: String) {
+        if (topStack.lastOrNull() == TopRoute.Search) player.followSource(QueueSource.Search(query.trim()), title)
+    }
+
+    // Only explicit navigation changes the source. Startup restoration, precomposed pager pages,
+    // selection, settings and ordinary recomposition never take ownership of the queue.
+    private fun followCurrentList() {
+        val route = currentTab()?.let { stackOf(it).lastOrNull() } ?: return
+        val (source, title) = when (route) {
+            is TabRoute.Folder -> QueueSource.Folder(route.folderId, route.relativePath, false) to route.title
+            is TabRoute.ArtistDetail -> QueueSource.Artist(route.nameKey) to route.nameKey
+            is TabRoute.Album -> QueueSource.Album(route.albumKey) to ""
+            is TabRoute.PlaylistDetail -> QueueSource.Playlist(route.playlistId) to ""
+            else -> return // Root/artist/playlist indexes contain no displayed song list.
+        }
+        player.followSource(source, title)
     }
 
     fun unpin(tab: Tab) = viewModelScope.launch { tabRepository.unpin(tab) }
@@ -171,7 +211,10 @@ class MainViewModel @Inject constructor(
         while (topStack.size > 1) topStack.removeAt(topStack.lastIndex)
         val tab = currentTab() ?: return
         val stack = stackOf(tab)
-        if (stack.lastOrNull() != route) stack.add(route)
+        if (stack.lastOrNull() != route) {
+            stack.add(route)
+        }
+        followCurrentList()
     }
 
     override fun openArtist(nameKey: String) = pushToCurrentTab(TabRoute.ArtistDetail(nameKey))

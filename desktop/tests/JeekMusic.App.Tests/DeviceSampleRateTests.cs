@@ -225,6 +225,105 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task ReleasedOutputDoesNotCompareSourceWithIdleDeviceDefault(bool exclusive) => Run((f, formats) =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        using var app = new AppServices(new SettingsStore(path), new LibraryDb(":memory:"), _ => f.Player);
+        var window = new MainWindow(app) { ExitRequested = true };
+        var vm = window.ViewModel.Player;
+        vm.ProgressVisible = false;
+        var mcp = new McpTools(app);
+        try
+        {
+            if (!exclusive) SaveFormatWindow(window, "shared-playing-mismatch");
+            f.Player.SetAutomaticAudioFormat(true); f.Ready();
+            if (exclusive) { f.Player.SetExclusive(true); f.Current.Properties["audio-out-params/samplerate"] = "44100"; f.Ready(); }
+            Assert.Contains("44.1 kHz → 44.1 kHz", vm.FormatText);
+            var position = f.Player.Position;
+            f.Player.Pause(); Dispatcher.UIThread.RunJobs();
+            Assert.True(f.Player.IsIdle); Assert.False(f.Player.IsPlaying);
+            Assert.Equal(48000, formats.Actual.SampleRate);
+            Assert.Equal(position, f.Player.Position);
+            Assert.Contains("44.1 kHz", vm.FormatText);
+            Assert.Contains(L.T(" · 输出空闲"), vm.FormatText);
+            Assert.DoesNotContain("→", vm.FormatText);
+            Assert.DoesNotContain(L.T("（已重采样）"), vm.FormatText);
+            Assert.DoesNotContain("⚠", vm.FormatText);
+            Assert.Contains(L.T("设备默认（输出空闲）：") + "48 kHz", vm.OutputModeTip);
+            Assert.Contains(L.T("当前没有活动音频输出，设备默认格式不表示正在重采样。"), vm.OutputModeTip);
+            var idle = mcp.Call("get_output", new());
+            var audio = idle["audioFormat"]!;
+            Assert.Equal("idle", audio["outputState"]!.GetValue<string>());
+            Assert.Equal("idle", idle["sampleRate"]!["outputState"]!.GetValue<string>());
+            Assert.Null(audio["actualDevice"]); Assert.Null(idle["sampleRate"]!["actualRate"]);
+            Assert.False(audio["resampled"]!.GetValue<bool>()); Assert.False(audio["applied"]!.GetValue<bool>());
+            Assert.False(idle["format"]!["resampled"]!.GetValue<bool>());
+            Assert.False(audio["hasWarning"]!.GetValue<bool>());
+            Assert.Equal(48000, audio["windowsDeviceDefault"]!["sampleRate"]!.GetValue<int>());
+            Assert.Equal(vm.FormatText, audio["displaySummary"]!.GetValue<string>());
+            Assert.Contains(window.CreateOutputMenu().Items.OfType<MenuItem>(), item => item.Header is TextBlock text &&
+                text.Text!.Contains(L.T("设备默认（输出空闲）：") + "48 kHz"));
+            SaveFormatWindow(window, exclusive ? "exclusive-output-idle" : "shared-output-idle");
+
+            f.Player.Resume();
+            Assert.Contains("44.1 kHz → …", vm.FormatText); // StateChanged refreshes pending display immediately.
+            Assert.DoesNotContain(L.T(" · 输出空闲"), vm.FormatText);
+            f.Current.Properties["audio-out-params/samplerate"] = "44100"; f.Ready();
+            Assert.True(f.Player.IsPlaying); Assert.Equal(position, f.Player.Position);
+            Assert.Contains("44.1 kHz → 44.1 kHz", vm.FormatText);
+            Assert.Equal("active", McpTools.AudioFormatState(f.Player)["outputState"]!.GetValue<string>());
+            SaveFormatWindow(window, exclusive ? "exclusive-resumed-matched" : "shared-resumed-matched");
+
+            f.Player.Next();
+            Assert.Contains("96 kHz → …", vm.FormatText);
+            f.Current.Properties["audio-params/samplerate"] = "96000";
+            f.Current.Properties["audio-out-params/samplerate"] = "96000"; f.Ready();
+            Assert.Contains("96 kHz → 96 kHz", vm.FormatText);
+        }
+        finally { window.Close(); File.Delete(path); }
+    });
+
+    [Fact]
+    public Task IdleRestoreFailureRemainsAWarningButNotAResamplingClaim() => Run((f, formats) =>
+    {
+        f.Player.SetAutomaticAudioFormat(true); f.Ready();
+        formats.RestoreFails = true;
+        f.Player.Pause();
+        Assert.True(f.Player.IsIdle);
+        Assert.Contains("⚠", AudioFormatDisplay.Summary(f.Player));
+        Assert.DoesNotContain("→", AudioFormatDisplay.Summary(f.Player));
+        Assert.False(f.Player.OutputResampled);
+        Assert.Contains("test restore failure", AudioFormatDisplay.Warning(f.Player));
+        Assert.True(McpTools.AudioFormatState(f.Player)["hasWarning"]!.GetValue<bool>());
+    });
+
+    [Fact]
+    public Task EnginePauseWithALoadedStreamIsNotMisreportedAsReleasedOutput() => Run((f, formats) =>
+    {
+        f.Current.TrySet("pause", "yes"); Dispatcher.UIThread.RunJobs();
+        Assert.False(f.Player.IsPlaying); Assert.False(f.Player.IsIdle);
+        Assert.Equal("active", AudioFormatDisplay.OutputState(f.Player));
+        Assert.Contains("44.1 kHz → 48 kHz", AudioFormatDisplay.Summary(f.Player));
+        Assert.True(f.Player.OutputResampled);
+        Assert.DoesNotContain(L.T(" · 输出空闲"), AudioFormatDisplay.Summary(f.Player));
+    });
+
+    static void SaveFormatWindow(MainWindow window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("JEEKMUSIC_VISUAL_OUTPUT") is not { Length: > 0 } path) return;
+        window.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light;
+        window.Background = Avalonia.Media.Brushes.White;
+        window.Width = 1100; window.Height = 600;
+        window.Show(); window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        using var frame = window.CaptureRenderedFrame();
+        Assert.NotNull(frame); Directory.CreateDirectory(path);
+        frame.Save(Path.Combine(path, name + ".png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+    }
+
+    [Theory]
     [InlineData("mp3",16,"floatp",null,"lossy-not-applicable")]
     [InlineData("pcm_f32le",32,"float",null,"float32")]
     [InlineData("pcm_f64le",64,"double",null,"float64")]

@@ -16,6 +16,7 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class PlayingAppearanceTests
 {
+    const string LongTitle = "远方的灯火 — 夜航与归途（管弦乐现场录音 / The Long Journey Home, Live）";
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -24,22 +25,27 @@ public sealed class PlayingAppearanceTests
         using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(() =>
         {
-            using var h = new PlayingVisibilityTests.Harness();
+            using var h = new PlayingVisibilityTests.Harness(LongTitle);
             h.Window.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
             // Headless has no native Mica surface; give transparent window areas a theme backdrop.
             h.Window.Background = dark ? new SolidColorBrush(Color.Parse("#202020")) : Brushes.White;
-            h.Pump();
+            h.Table.Columns[0].Width = new DataGridLength(300); h.Pump();
             h.Table.SelectedItems.Add(h.Rows[2]); h.Table.SelectedItems.Add(h.Rows[4]);
             h.Window.PlayFrom(h.Track(5)); h.Ready();
             var current = Row(h, 5); var selected = Row(h, 4); var ordinary = Row(h, 3);
-            var marker = Marker(current);
             var title = current.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("song-title"));
             var columnState = h.Table.Columns.Select(c => (c.Tag, c.IsVisible, c.ActualWidth, c.DisplayIndex)).ToArray();
             var rowHeight = current.Bounds.Height; var titleBounds = title.Bounds;
             Assert.Equal(ordinary.Bounds.Height, rowHeight);
             Assert.InRange(rowHeight, 32, 42);
-            Assert.Equal(16, marker.Bounds.Height);
-            Assert.True(marker.Bounds.Width > 40);
+            Assert.Equal(LongTitle, title.Text);
+            Assert.Equal(LongTitle, ToolTip.GetTip(title));
+            Assert.InRange(Math.Abs(title.TranslatePoint(new Point(0, title.Bounds.Height / 2), current)!.Value.Y - rowHeight / 2), 0, 1);
+            AssertNoDecoration(h.Table);
+            var nowTitle = h.Window.FindControl<TextBlock>("NowTitle")!;
+            Assert.Same(nowTitle, Assert.IsType<StackPanel>(nowTitle.Parent).Children[0]);
+            Assert.Equal(3, ((StackPanel)nowTitle.Parent!).Children.Count);
+            Assert.Equal(16, nowTitle.FontSize);
             Assert.Equal(FontWeight.SemiBold, title.FontWeight);
             Assert.NotEqual(FontWeight.SemiBold, ordinary.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("song-title")).FontWeight);
 
@@ -56,15 +62,15 @@ public sealed class PlayingAppearanceTests
                 ((IPseudoClasses)selected.Classes).Set(":pointerover", true); h.Pump();
                 Assert.Contains(":pointerover", selected.Classes);
                 Assert.True(h.Rows[5].IsCurrent); Assert.Equal(playing, h.Rows[5].IsPlaying);
-                Assert.Equal(playing, marker.IsPlaying); Assert.True(marker.IsVisible);
-                AssertMarker(marker, playing);
-                var playerMarker = h.Window.FindControl<CurrentTrackMarker>("NowStatus")!;
-                Assert.True(playerMarker.IsVisible);
-                AssertMarker(playerMarker, playing);
-                Assert.Equal(h.Track(5).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
-                Assert.Equal(CurrentTrackMarker.Status(playing), AutomationProperties.GetName(marker));
-                Assert.Equal(CurrentTrackMarker.Status(playing), AutomationProperties.GetHelpText(current));
-                Assert.False(Marker(ordinary).IsVisible); Assert.False(Marker(selected).IsVisible);
+                Assert.Equal(LongTitle, nowTitle.Text);
+                Assert.Equal(Text.PlaybackStatus(playing), AutomationProperties.GetHelpText(nowTitle));
+                Assert.Equal(Text.PlaybackStatus(playing), AutomationProperties.GetHelpText(current));
+                Assert.True(string.IsNullOrEmpty(AutomationProperties.GetHelpText(ordinary)));
+                Assert.True(string.IsNullOrEmpty(AutomationProperties.GetHelpText(selected)));
+                var playButton = Assert.Single(h.Window.GetVisualDescendants().OfType<Button>(), b => ReferenceEquals(b.Command, h.Vm.Player.PlayPauseCommand));
+                Assert.Equal(playing ? Icons.Pause : Icons.Play, playButton.Content);
+                Assert.Equal(h.Vm.Player.PlayTip, AutomationProperties.GetName(playButton));
+                AssertNoDecoration(h.Table);
                 Assert.Contains("current", current.Classes); Assert.Equal(playing, current.Classes.Contains("playing"));
                 Assert.Equal(selectedCurrent, current.IsSelected); Assert.True(selected.IsSelected);
                 Assert.Equal(selectedCurrent ? 3 : 2, h.Table.SelectedItems.Count);
@@ -101,9 +107,6 @@ public sealed class PlayingAppearanceTests
                 Assert.Equal(ordinary.Foreground, current.Foreground);
                 Assert.Equal(titleBounds, title.Bounds); Assert.Equal(rowHeight, current.Bounds.Height);
                 Assert.Equal(columnState, h.Table.Columns.Select(c => (c.Tag, c.IsVisible, c.ActualWidth, c.DisplayIndex)));
-                var accent = Assert.IsAssignableFrom<ISolidColorBrush>(marker.Background).Color;
-                AssertWarm(accent);
-                Assert.True(Contrast(accent, Colors.White) >= 4.5, $"Marker contrast: {accent}");
                 SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-{(playing ? "playing" : "paused")}-{(selectedCurrent ? "selected" : "unselected")}");
             }
             ((IPseudoClasses)selected.Classes).Set(":pointerover", false);
@@ -111,8 +114,7 @@ public sealed class PlayingAppearanceTests
             h.Window.PlayFrom(h.Track(220)); h.Ready(); h.AssertCentered(220);
             Assert.Equal(selection, h.Table.SelectedItems.Cast<SongRow>());
             Assert.False(h.Rows[5].IsCurrent); Assert.True(h.Rows[220].IsCurrent);
-            Assert.True(Marker(Row(h, 220)).IsPlaying);
-            AssertMarker(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!, true);
+            Assert.Equal(Text.PlaybackStatus(true), AutomationProperties.GetHelpText(Row(h, 220)));
             Assert.Equal(h.Track(220).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
             Assert.NotNull(Background(Row(h, 220)).Stroke);
             SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-offscreen-centered");
@@ -130,37 +132,39 @@ public sealed class PlayingAppearanceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task QueueSharesTheCurrentTrackMarkerAndPauseUpdatesItWithoutRebuildingRows(bool dark)
+    public async Task QueueHasNoStatusDecorationAndAccessibleStateUpdatesWithoutRebuildingRows(bool dark)
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(() =>
         {
-            using var h = new PlayingVisibilityTests.Harness();
+            using var h = new PlayingVisibilityTests.Harness(LongTitle);
             h.Window.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
             h.Window.Background = dark ? new SolidColorBrush(Color.Parse("#202020")) : Brushes.White;
             h.Window.PlayFrom(h.Track(5)); h.Ready();
             var flyout = QueueFlyout.Show(h.Window, h.App, h.Window.FindControl<Button>("QueueButton")!); h.Pump();
             var content = (Control)flyout.Content!;
-            var marker = Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible);
-            Assert.True(marker.IsPlaying);
-            AssertMarker(marker, true);
-            Assert.NotNull(marker.Background);
-            var queueRow = marker.GetVisualAncestors().OfType<Grid>().Single(g => g.Tag is int);
+            var queueRow = QueueRow(content, 5);
+            var title = Assert.Single(queueRow.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == LongTitle);
+            Assert.Equal(Text.PlaybackStatus(true), AutomationProperties.GetHelpText(title));
+            Assert.Equal(LongTitle, ToolTip.GetTip(title));
+            var text = Assert.IsType<StackPanel>(title.Parent);
+            Assert.Equal(2, text.Children.Count);
+            Assert.IsType<TextBlock>(text.Children[1]);
+            AssertNoDecoration(content);
             Assert.NotEqual(Brushes.Transparent, queueRow.Background);
             Assert.Equal(BrushColor(Background(Row(h, 5)).Fill), BrushColor(queueRow.Background));
             AssertWarm(BrushColor(queueRow.Background));
             SaveQueue(content, $"{(dark ? "dark" : "light")}-queue-playing");
             h.Player.Pause(); h.Pump();
-            Assert.Same(marker, Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible));
-            AssertMarker(marker, false);
-            Assert.Equal(CurrentTrackMarker.Status(false), AutomationProperties.GetName(marker));
+            Assert.Same(queueRow, QueueRow(content, 5));
+            Assert.Equal(Text.PlaybackStatus(false), AutomationProperties.GetHelpText(title));
             SaveQueue(content, $"{(dark ? "dark" : "light")}-queue-paused");
             var current = Row(h, 5); Assert.True(h.Rows[5].IsCurrent); Assert.False(h.Rows[5].IsPlaying);
-            AssertMarker(Marker(current), false);
+            Assert.Equal(Text.PlaybackStatus(false), AutomationProperties.GetHelpText(current));
             h.Player.Next(); h.Ready();
-            var nextMarker = Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible);
-            Assert.NotSame(marker, nextMarker);
-            AssertMarker(nextMarker, true);
+            var nextTitle = Assert.Single(QueueRow(content, 6).GetVisualDescendants().OfType<TextBlock>(), t => t.Text == h.Track(6).Title);
+            Assert.Equal(Text.PlaybackStatus(true), AutomationProperties.GetHelpText(nextTitle));
+            AssertNoDecoration(content);
             Assert.Equal(h.Track(6).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
             Assert.Null(Background(Row(h, 5)).Stroke);
             Assert.NotNull(Background(Row(h, 6)).Stroke);
@@ -169,13 +173,13 @@ public sealed class PlayingAppearanceTests
             flyout.Hide(); h.Pump();
             h.Player.Queue.Clear(); h.Pump();
             Assert.All(h.Rows, row => { Assert.False(row.IsCurrent); Assert.False(row.IsPlaying); });
-            Assert.False(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!.IsVisible);
+            Assert.True(string.IsNullOrEmpty(AutomationProperties.GetHelpText(h.Window.FindControl<TextBlock>("NowTitle")!)));
             Assert.All(h.Realized, row => Assert.Null(Background(row).Stroke));
         }, CancellationToken.None);
     }
 
     static DataGridRow Row(PlayingVisibilityTests.Harness h, int index) => h.Realized.Single(r => ReferenceEquals(r.DataContext, h.Rows[index]));
-    static CurrentTrackMarker Marker(DataGridRow row) => row.GetVisualDescendants().OfType<CurrentTrackMarker>().Single();
+    static Grid QueueRow(Control content, int index) => content.GetVisualDescendants().OfType<Grid>().Single(g => g.Tag is int i && i == index);
     static Rectangle Background(DataGridRow row) => row.GetVisualDescendants().OfType<Rectangle>()
         .Single(r => r.Name == "BackgroundRectangle" && ReferenceEquals(r.TemplatedParent, row));
     static Color BrushColor(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
@@ -206,12 +210,13 @@ public sealed class PlayingAppearanceTests
         }
     }
 
-    static void AssertMarker(CurrentTrackMarker marker, bool playing)
+    static void AssertNoDecoration(Control content)
     {
-        Assert.Equal(playing, marker.IsPlaying);
-        var text = marker.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
-        Assert.Contains(playing ? Icons.Play : Icons.Pause, text);
-        Assert.Contains(playing ? L.T("正在播放") : L.T("已暂停"), text);
+        var text = content.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+        Assert.DoesNotContain(L.T("正在播放"), text);
+        Assert.DoesNotContain("已暂停", text);
+        Assert.DoesNotContain(Icons.Play, text);
+        Assert.DoesNotContain(Icons.Pause, text);
     }
 
     static void SaveFrame(Window window, string name)

@@ -4,11 +4,18 @@ namespace JeekMusic.UI;
 
 internal static class AudioFormatDisplay
 {
+    // IsPlaying is not a stream-lifetime signal: a loaded/safety-paused stream can
+    // still exist. Explicit output release is represented by IsIdle.
+    public static string OutputState(PlayerService p) => p.OutputPending ? "pending" : p.IsIdle ? "idle" : "active";
+
     public static string Summary(PlayerService p)
     {
         var file = p.CurrentTrack is { } track ? track.FormatLabel + " · " : "";
-        var rates = Rate(p.SourceFormat.SampleRate) + " → " + (p.OutputPending ? "…" : Rate(p.ActualSampleRate));
+        var rates = Rate(p.SourceFormat.SampleRate);
+        if (p.OutputPending) rates += " → …";
+        else if (!p.IsIdle) rates += " → " + Rate(p.ActualSampleRate);
         return file + rates + " " + (p.Exclusive ? L.T("独占") : L.T("共享")) +
+            (OutputState(p) == "idle" ? L.T(" · 输出空闲") : "") +
             (p.OutputResampled ? L.T("（已重采样）") : "") + (p.HasOutputFormatWarning ? " ⚠" : "");
     }
     public static string? Warning(PlayerService p) => p.SampleRateDiagnostic ??
@@ -35,6 +42,13 @@ internal static class AudioFormatDisplay
     public static string Device(PlayerService p)
     {
         if (p.OutputPending) return L.T("设备：正在切换");
+        if (p.IsIdle)
+        {
+            var format = p.RateCapabilities.DeviceFormat;
+            return L.T("设备默认（输出空闲）：") + (format is null ? L.T("格式读取失败") :
+                Rate(format.SampleRate) + " · " + Bits(format) + " · " + Channels(format.Channels, format.Layout)) +
+                "\n" + L.T("当前没有活动音频输出，设备默认格式不表示正在重采样。");
+        }
         if (p.Exclusive) return L.T("设备：") + Rate(p.ActualSampleRate) + " · " + L.T("有效位深未知（独占流）") + " · " +
             Channels(p.Format.DeviceChannels, null);
         if (p.ActualDeviceFormat is not { } actual) return L.T("设备：格式读取失败");

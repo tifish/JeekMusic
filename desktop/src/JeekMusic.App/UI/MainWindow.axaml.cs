@@ -199,7 +199,7 @@ public partial class MainWindow : Window
         container.Classes.Set("current", row.IsCurrent);
         container.Classes.Set("playing", row.IsPlaying);
         Avalonia.Automation.AutomationProperties.SetHelpText(container,
-            row.IsCurrent ? CurrentTrackMarker.Status(row.IsPlaying) : "");
+            row.IsCurrent ? Text.PlaybackStatus(row.IsPlaying) : "");
     }
 
     void ScrollToTop()

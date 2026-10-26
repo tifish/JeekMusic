@@ -118,7 +118,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 
 当前可见歌曲表格含目标歌曲时，先记录定位请求起点的实际可见状态。该行原本已完整可见时只更新当前曲标记，不改纵向或横向滚动；原本屏外或部分露出时，先复用 DataGrid 虚拟化实现目标行，再在布局后将行中心尽量对齐实际数据行视口中心（排除表头）。首尾按合法滚动边界停靠，不添加留白。居中决策在请求期间保持，不因中间 ScrollIntoView 已将行带进视口而提前结束。异步替换列表时，等待新列表的可靠布局再判断。打开的队列弹层同样遵循已可见则保持、屏外则居中的规则。不会改排序、筛选、多选、焦点或文件夹展开状态，也不会自动导航离开当前视图。当前视图不含歌曲（包括筛选排除、搜索结果上限等情况）时保留原视图。普通进度、队列编辑、输出状态刷新不发起定位，完成定位后用户可继续浏览其他歌曲。
 
-歌曲表格当前曲使用独立暖琥珀色系的跨列整行背景和边框：浅色主题为浅金底，深色主题为暗棕金底，悬浮时略加强。播放色通过专用语义资源定义，不修改系统强调色；普通选中/多选继续使用主题选中色（当前为蓝色），当前曲同时选中时保留该选中色，并叠加加粗的金色整行边框与琥珀状态标签。键盘焦点仍显示在原单元格，不用播放状态替换选择或焦点。标题下保留“正在播放 / 已暂停”图标文字标签、侧线和加粗歌名，隐藏标题列时整行高亮仍可辨认；不改变行高或已有列的显示偏好。队列、列表侧线和播放栏状态标签复用同一播放色系。暂停时当前曲保留整行身份并切换暂停标签，切歌/清空队列及虚拟化复用后旧行高亮清除。播放栏保留较大的歌名和完整标题提示；无歌曲时隐藏状态标签。真实播放状态仍读取现有 `get_status.playing`，当前曲读取 `get_status.track`，不新增视觉样式控制工具、诊断字段或参数。开发版与正式版共用这些 UI 和业务状态；本次纯视觉改进不改变 MCP 描述或输入 Schema。
+歌曲表格当前曲使用独立暖琥珀色系的跨列整行背景和边框：浅色主题为浅金底，深色主题为暗棕金底，悬浮时略加强。播放色通过专用语义资源定义，不修改系统强调色；普通选中/多选继续使用主题选中色（当前为蓝色），当前曲同时选中时保留该选中色，并叠加加粗的金色整行边框。键盘焦点仍显示在原单元格，不用播放状态替换选择或焦点。列表、队列和播放栏不再显示占用歌名空间的播放/暂停文字标签或装饰图示，也不保留标签空白；真实播放/暂停按钮保留。列表侧线和队列复用同一播放色系，标题加粗且保持完整标题提示，播放栏保留 16 DIP 歌名。暂停时当前曲保留整行身份；切歌/清空队列及虚拟化复用后旧行高亮清除。播放/暂停状态通过行或标题的 AutomationProperties.HelpText 提供，不占可见布局空间。真实播放状态仍读取现有 `get_status.playing`，当前曲读取 `get_status.track`，不新增视觉样式控制工具或参数。开发版与正式版共用这些 UI 和业务状态。
 
 `get_diagnostics.songVisibility` 和 `queueVisibility` 是兼容性新增，只读取既有控件状态；未创建或已关闭时返回 `created: false`。开发版与正式版同样提供，查询不创建窗口、计算列表、滚动或启动音频。
 
@@ -305,12 +305,14 @@ python desktop/tools/test-build-isolation.py --build-only
 
 `get_output.audioFormat` 与 `get_diagnostics.output.audioFormat` 使用同一业务状态，开发与 NativeAOT 正式版一致：
 
-- `displaySummary` 与播放栏完整文本一致；`resampled` 同时检查解码到客户端流及源到实际端点的采样率变化，输出重建时不提前宣称重采样；`hasWarning` 覆盖格式失败、转换/回退及输出安全门控，提示和右键保留详情。以上为兼容新增的查询字段，控制参数与工具数不变。
+- `outputState` 同时加入 `audioFormat` 和兼容摘要 `sampleRate`：`pending` 表示输出重建/安全门控，优先于 `idle`；`idle` 表示已释放输出；`active` 表示已加载输出流，不等同于正在播放。判断使用业务 `OutputPending` / `IsIdle`，不能只根据 `playing=false` 推断设备空闲。
+- `displaySummary` 与播放栏完整文本一致；空闲时显示源采样率、共享/独占及“输出空闲”，不显示源→输出转换箭头；tooltip/格式菜单明确列出设备默认格式，并解释没有活动输出，默认格式不表示正在重采样。加载期间显示源→…，有输出流时继续显示真实源→输出。`resampled` 同时检查解码到客户端流及源到实际端点的采样率变化，输出重建时不提前宣称重采样；`hasWarning` 覆盖格式失败、转换/回退及输出安全门控，提示和右键保留详情。以上为兼容新增的查询字段，控制参数与工具数不变。
 - `temporaryFormat` 包含 pausedOutputReleased、restoreStatus（none/active/restored/external-change/failed）、restoreReason、diagnostic、ownershipPolicy，以及 owners 中每个端点的 baselineDevice/baselineMix/lastAppliedDevice/lastAppliedMix。`get_status.idle` 现在也可表示已释放输出但仍保留歌曲/队列/位置的暂停状态。
 - `automaticFormat` 为保存的共享偏好；`activePolicy` 为 windows-current/shared-automatic/exclusive-native。
 - `source` 包括 sampleRate、bits（未知为 null）、precision、channels、channelMask、layout。bits 来自可靠整型元数据；precision 对已知有损编码为 lossy-not-applicable，已确认的 PCM 浮点源为 float32/float64，无可靠整数位深为 unknown，整数源为 integer-metadata。MP3 源显示“位深不适用（有损编码）”，无损/PCM 读取不到位深才显示“位深未知”；解码器 floatp 不会被冒充为原始浮点源或设备位深。
 - `clientStream` 为 mpv 实际客户端流 rate/sampleFormat/channels，仅用于流诊断；float 不构成设备为 32 位的证据。
-- `actualDevice`：共享使用独立 `IPropertyStore.PKEY_AudioEngine_DeviceFormat` 读回的真实端点 sampleRate/containerBits/validBits/sampleKind/channels/channelMask/layout；独占实际流率与声道可读，但播放内核不公开其最终有效位深/布局时为 null，UI 明确显示未知，不冒用共享默认值。
+- `actualDevice`：输出空闲时为 null；有输出流时，共享使用独立 `IPropertyStore.PKEY_AudioEngine_DeviceFormat` 读回的真实端点 sampleRate/containerBits/validBits/sampleKind/channels/channelMask/layout；独占实际流率与声道可读，但播放内核不公开其最终有效位深/布局时为 null，UI 明确显示未知，不冒用共享默认值。
+- 空闲时 `audioFormat.applied`、`sampleRate.applied` 与 `audioFormat.resampled` 为 false，`sampleRate.actualRate` 为 null。读取空闲设备配置的旧调用方应改读 `windowsDeviceDefault` / `windowsMix`，不能再把静态默认值当作当前播放输出；字段仍允许 null。恢复失败等真实诊断仍保留警告。本次只新增输出状态字段并澄清空闲值，工具数和输入 Schema 不变，`get_output` 与 `get_diagnostics` 共用实现。
 - `windowsDeviceDefault` 为 Windows 端点持久格式，`windowsMix` 为新 IAudioClient.GetMixFormat 读取的当前混音格式，二者与客户端流分开。
 - `selected` 为自动策略选中且经过完整组合探测的目标；`supportedFormats` 为完整元组数组。范围是标准 8–768 kHz，另加源/当前率，只探测已知源布局和设备现有布局；Windows 没有通用的所有自定义采样率穷举接口。
 - `applied` 表示目标元组已通过实际端点及混音率/布局读回、流重建完成且无格式失败；`conversion` 说明重采样、精度或布局回退，`diagnostic` 为写入/读回失败，`capabilityDiagnostic` 为接口/设备查询限制。不能把开关已选中当成已生效。

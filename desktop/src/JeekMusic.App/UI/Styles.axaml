@@ -1,6 +1,5 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="using:JeekMusic.UI">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Styles.Resources>
       <ResourceDictionary>
         <!-- Playback identity deliberately has its own warm palette, independent of
@@ -10,13 +9,11 @@
                 <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#FFF1D6" />
                 <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#FFE6B5" />
                 <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#A5650D" />
-                <SolidColorBrush x:Key="CurrentTrackMarkerBrush" Color="#805000" />
             </ResourceDictionary>
             <ResourceDictionary x:Key="Dark">
                 <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#3F321E" />
                 <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#514027" />
                 <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#DBA650" />
-                <SolidColorBrush x:Key="CurrentTrackMarkerBrush" Color="#95600D" />
             </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
         <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
@@ -159,9 +156,6 @@
     </Style>
     <Style Selector="DataGrid#Table DataGridRow.current:selected /template/ Rectangle#BackgroundRectangle">
         <Setter Property="StrokeThickness" Value="3" />
-    </Style>
-    <Style Selector="ui|CurrentTrackMarker">
-        <Setter Property="Background" Value="{DynamicResource CurrentTrackMarkerBrush}" />
     </Style>
     <Style Selector="TextBlock.song-title.current">
         <Setter Property="FontWeight" Value="SemiBold" />

@@ -1,6 +1,9 @@
 {
   "正在播放": "Now playing",
-  "已暂停": "Paused",
+  " · 输出空闲": " · Output idle",
+  "设备默认（输出空闲）：": "Device default (output idle): ",
+  "格式读取失败": "Format unavailable",
+  "当前没有活动音频输出，设备默认格式不表示正在重采样。": "No active audio output. The device default format does not indicate resampling.",
   "当前歌曲（已暂停）": "Current track (paused)",
   "当前字母": "Current letter",
   "艺术家字母索引": "Artist letter index",

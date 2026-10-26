@@ -337,7 +337,7 @@ public sealed class PlayingVisibilityTests
         public JsonNode Diagnostic => Tools.Call("get_diagnostics", new())["songVisibility"]!;
         public JsonNode QueueDiagnostic => Tools.Call("get_diagnostics", new())["queueVisibility"]!;
         public long Version => Diagnostic["requestVersion"]!.GetValue<long>();
-        public Harness()
+        public Harness(string? trackFiveTitle = null)
         {
             Directory.CreateDirectory(_root);
             var settings = new SettingsStore(Path.Combine(_root, "settings.json"));
@@ -354,7 +354,7 @@ public sealed class PlayingVisibilityTests
                     var file = $"song {i:D3}.flac";
                     File.WriteAllBytes(Path.Combine(_root, file), []);
                     App.Db.ReplaceFile(tx, folder, "", file, [new Track { FolderId = folder, TrackKey = file, Dir = "", FileName = file,
-                        Title = $"song {i:D3}", Artists = ["Fake artist"], ArtistDisplay = "Fake artist", DurationMs = 120000 }]);
+                        Title = i == 5 && trackFiveTitle is not null ? trackFiveTitle : $"song {i:D3}", Artists = ["Fake artist"], ArtistDisplay = "Fake artist", DurationMs = 120000 }]);
                 }
                 tx.Commit();
             }

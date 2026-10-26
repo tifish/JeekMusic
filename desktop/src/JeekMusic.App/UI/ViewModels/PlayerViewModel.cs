@@ -66,6 +66,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     public bool IsPlaying => _player.IsPlaying;
     public string PlayIcon => IsPlaying ? Icons.Pause : Icons.Play;
     public string PlayTip => IsPlaying ? L.T("暂停（空格）") : L.T("播放（空格）");
+    public string PlaybackStatus => HasTrack ? Text.PlaybackStatus(IsPlaying) : "";
 
     public bool Shuffle => _player.Queue.Shuffle;
     public RepeatMode Repeat => _player.Queue.Repeat;
@@ -178,9 +179,12 @@ public sealed partial class PlayerViewModel : ObservableObject
 
     void OnState()
     {
+        OnPropertyChanged(nameof(FormatText));
+        OnPropertyChanged(nameof(OutputModeTip));
         OnPropertyChanged(nameof(IsPlaying));
         OnPropertyChanged(nameof(PlayIcon));
         OnPropertyChanged(nameof(PlayTip));
+        OnPropertyChanged(nameof(PlaybackStatus));
         OnPropertyChanged(nameof(Shuffle));
         OnPropertyChanged(nameof(Repeat));
         OnPropertyChanged(nameof(RepeatIcon));
@@ -197,11 +201,13 @@ public sealed partial class PlayerViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(Track));
         OnPropertyChanged(nameof(HasTrack));
+        OnPropertyChanged(nameof(PlaybackStatus));
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Artist));
         OnPropertyChanged(nameof(Album));
         OnPropertyChanged(nameof(ArtistAlbum));
         OnPropertyChanged(nameof(FormatText));
+        OnPropertyChanged(nameof(OutputModeTip));
         var duration = _player.Duration.TotalSeconds;
         DurationSeconds = Math.Max(duration, 0.001);
         DurationText = Text.Duration(_player.Duration);

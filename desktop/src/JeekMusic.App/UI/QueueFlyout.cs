@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Presenters;
@@ -28,7 +29,7 @@ public static class QueueFlyout
         flyout.Content = new StackPanel { Children = { new Grid { Children = { header, clear } }, scroll } };
 
         Control? currentRow = null;
-        CurrentTrackMarker? currentMarker = null;
+        TextBlock? currentTitle = null;
         var generation = 0;
         PlayingRowVisibility? visibility = null;
         int dragFrom = -1;
@@ -37,7 +38,7 @@ public static class QueueFlyout
             generation++;
             visibility?.Cancel("queue-changed");
             currentRow = null;
-            currentMarker = null;
+            currentTitle = null;
             list.Children.Clear();
             var q = app.Player.Queue;
             var snapshot = app.Library.Snapshot;
@@ -59,10 +60,13 @@ public static class QueueFlyout
 
         Control Row(int index, Track? track, bool current, bool played)
         {
-            var marker = new CurrentTrackMarker { IsVisible = current, IsPlaying = app.Player.IsPlaying,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
-            if (current) currentMarker = marker;
             var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
+            ToolTip.SetTip(title, title.Text);
+            if (current)
+            {
+                currentTitle = title;
+                AutomationProperties.SetHelpText(title, Text.PlaybackStatus(app.Player.IsPlaying));
+            }
             var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.6, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
             var remove = new Button { Content = Icons.Close, Classes = { "icon" }, FontSize = 10, Padding = new Thickness(6) };
             remove.Click += (_, _) => app.Player.Queue.RemoveAt(index);
@@ -72,11 +76,7 @@ public static class QueueFlyout
                 ColumnDefinitions = new ColumnDefinitions("3,*,Auto,Auto"), Background = Brushes.Transparent,
                 Opacity = played ? 0.55 : 1, Tag = index,
             };
-            var detail = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-            detail.Children.Add(marker);
-            Grid.SetColumn(artist, 1);
-            detail.Children.Add(artist);
-            var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, detail } };
+            var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, artist } };
             if (current)
             {
                 grid[!Panel.BackgroundProperty] = new DynamicResourceExtension("CurrentTrackBackgroundBrush");
@@ -126,7 +126,10 @@ public static class QueueFlyout
         app.QueueVisibility = visibility;
         void OnStarted(Track track) => visibility.Request(track.Id);
         void OnChanged() => Fill();
-        void OnPlaybackState() { if (currentMarker is not null) currentMarker.IsPlaying = app.Player.IsPlaying; }
+        void OnPlaybackState()
+        {
+            if (currentTitle is not null) AutomationProperties.SetHelpText(currentTitle, Text.PlaybackStatus(app.Player.IsPlaying));
+        }
         app.Player.Queue.Changed += OnChanged;
         app.Player.PlaybackStarted += OnStarted;
         app.Player.StateChanged += OnPlaybackState;
@@ -137,7 +140,7 @@ public static class QueueFlyout
             app.Player.StateChanged -= OnPlaybackState;
             visibility.Dispose();
             currentRow = null;
-            currentMarker = null;
+            currentTitle = null;
             if (ReferenceEquals(app.QueueVisibility, visibility)) app.QueueVisibility = null;
         };
         Fill();

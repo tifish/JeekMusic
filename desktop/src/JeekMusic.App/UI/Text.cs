@@ -8,6 +8,8 @@ public static class Text
 {
     public static string UnknownArtist => L.T("未知艺术家");
 
+    public static string PlaybackStatus(bool playing) => playing ? L.T("正在播放") : L.T("当前歌曲（已暂停）");
+
     public static string Duration(TimeSpan t) =>
         t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss", CultureInfo.InvariantCulture) : t.ToString(@"m\:ss", CultureInfo.InvariantCulture);
 

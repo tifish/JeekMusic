@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -67,8 +68,30 @@ public sealed class PlayingAppearanceTests
                 Assert.Contains("current", current.Classes); Assert.Equal(playing, current.Classes.Contains("playing"));
                 Assert.Equal(selectedCurrent, current.IsSelected); Assert.True(selected.IsSelected);
                 Assert.Equal(selectedCurrent ? 3 : 2, h.Table.SelectedItems.Count);
-                // Current identity must not replace selection/hover colors or whiten all text.
-                Assert.Equal(ordinary.Background, current.Background);
+                // The full-row theme layer spans every column. Selection still owns its fill;
+                // current identity adds an outline, independent of the focused title cell.
+                var background = Background(current);
+                Assert.InRange(Math.Abs(background.Bounds.Width - current.Bounds.Width), 0, .5);
+                Assert.NotNull(background.Stroke);
+                Assert.Null(Background(ordinary).Stroke);
+                Assert.Null(Background(selected).Stroke);
+                if (selectedCurrent)
+                {
+                    Assert.Equal(2, background.StrokeThickness);
+                    Assert.Equal(BrushColor(Background(selected).Fill), BrushColor(background.Fill));
+                }
+                else
+                {
+                    Assert.Equal(1, background.StrokeThickness);
+                    Assert.NotEqual(BrushColor(Background(ordinary).Fill), BrushColor(background.Fill));
+                    Assert.InRange(background.Fill!.Opacity, .1, .3);
+                    var normalFill = background.Fill;
+                    ((IPseudoClasses)current.Classes).Set(":pointerover", true); h.Pump();
+                    Assert.True(background.Fill!.Opacity > normalFill!.Opacity);
+                    ((IPseudoClasses)current.Classes).Set(":pointerover", false); h.Pump();
+                    Assert.Equal(normalFill, background.Fill);
+                    AssertFullRowPixels(h.Window, current, ordinary);
+                }
                 Assert.Equal(ordinary.Foreground, current.Foreground);
                 Assert.Equal(titleBounds, title.Bounds); Assert.Equal(rowHeight, current.Bounds.Height);
                 Assert.Equal(columnState, h.Table.Columns.Select(c => (c.Tag, c.IsVisible, c.ActualWidth, c.DisplayIndex)));
@@ -84,7 +107,16 @@ public sealed class PlayingAppearanceTests
             Assert.True(Marker(Row(h, 220)).IsPlaying);
             AssertMarker(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!, true);
             Assert.Equal(h.Track(220).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
+            Assert.NotNull(Background(Row(h, 220)).Stroke);
             SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-offscreen-centered");
+            h.Table.Columns[0].IsVisible = false; h.Pump();
+            Assert.NotNull(Background(Row(h, 220)).Stroke);
+            AssertFullRowPixels(h.Window, Row(h, 220), Row(h, 219));
+            SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-title-hidden");
+            // Revisit recycled containers: the previous track retains only its normal selection.
+            h.ScrollTo(5);
+            Assert.Null(Background(Row(h, 5)).Stroke);
+            Assert.DoesNotContain("current", Row(h, 5).Classes);
         }, CancellationToken.None);
     }
 
@@ -117,15 +149,48 @@ public sealed class PlayingAppearanceTests
             Assert.NotSame(marker, nextMarker);
             AssertMarker(nextMarker, true);
             Assert.Equal(h.Track(6).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
+            Assert.Null(Background(Row(h, 5)).Stroke);
+            Assert.NotNull(Background(Row(h, 6)).Stroke);
+            Assert.All(content.GetVisualDescendants().OfType<Grid>().Where(g => g.Tag is int index && index != 6),
+                row => Assert.Equal(Brushes.Transparent, row.Background));
             flyout.Hide(); h.Pump();
             h.Player.Queue.Clear(); h.Pump();
             Assert.All(h.Rows, row => { Assert.False(row.IsCurrent); Assert.False(row.IsPlaying); });
             Assert.False(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!.IsVisible);
+            Assert.All(h.Realized, row => Assert.Null(Background(row).Stroke));
         }, CancellationToken.None);
     }
 
     static DataGridRow Row(PlayingVisibilityTests.Harness h, int index) => h.Realized.Single(r => ReferenceEquals(r.DataContext, h.Rows[index]));
     static CurrentTrackMarker Marker(DataGridRow row) => row.GetVisualDescendants().OfType<CurrentTrackMarker>().Single();
+    static Rectangle Background(DataGridRow row) => row.GetVisualDescendants().OfType<Rectangle>()
+        .Single(r => r.Name == "BackgroundRectangle" && ReferenceEquals(r.TemplatedParent, row));
+    static Color BrushColor(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
+
+    static void AssertFullRowPixels(Window window, DataGridRow current, DataGridRow ordinary)
+    {
+        using var frame = window.CaptureRenderedFrame();
+        Assert.NotNull(frame);
+        // Sample blank space below the text in several non-title columns, away from
+        // the outline. This catches a title-only mark or a fill hidden by the template.
+        var cells = current.GetVisualDescendants().OfType<DataGridCell>().Where(c => c.IsVisible).Skip(1).Take(3).ToArray();
+        Assert.Equal(3, cells.Length);
+        var colors = cells.Select(cell => Pixel(cell.TranslatePoint(new Point(4, cell.Bounds.Height - 4), window)!.Value)).ToArray();
+        Assert.All(colors, color => Assert.Equal(colors[0], color));
+        var ordinaryPoint = ordinary.TranslatePoint(new Point(4, ordinary.Bounds.Height - 4), window)!.Value;
+        Assert.NotEqual(Pixel(new Point(cells[0].TranslatePoint(new Point(4, 0), window)!.Value.X, ordinaryPoint.Y)), colors[0]);
+
+        int Pixel(Point point)
+        {
+            var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
+            try
+            {
+                frame.CopyPixels(new PixelRect((int)(point.X * window.RenderScaling), (int)(point.Y * window.RenderScaling), 1, 1), buffer, 4, 4);
+                return System.Runtime.InteropServices.Marshal.ReadInt32(buffer);
+            }
+            finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
+        }
+    }
 
     static void AssertMarker(CurrentTrackMarker marker, bool playing)
     {

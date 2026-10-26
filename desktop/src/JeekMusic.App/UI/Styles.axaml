@@ -4,6 +4,8 @@
     <Styles.Resources>
         <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
         <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
+        <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.18" />
+        <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.26" />
     </Styles.Resources>
 
     <!-- Icon-only mode keeps its existing accessible name hint. Expanded names use
@@ -126,7 +128,23 @@
     <Style Selector="DataGridCell">
         <Setter Property="FontSize" Value="13" />
     </Style>
-    <!-- 选中/悬浮/键盘焦点保留 DataGrid 主题状态。当前曲使用独立标记，不占用选择背景。 -->
+    <!-- Paint the existing full-row layer, not the title cell. Selection retains its
+         theme fill/opacity; the current-track outline also survives horizontal scroll. -->
+    <Style Selector="DataGrid#Table DataGridRow.current /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Stroke" Value="{DynamicResource ArtistAccentBrush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+    </Style>
+    <Style Selector="DataGrid#Table DataGridRow.current:not(:selected) /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource CurrentTrackBackgroundBrush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="DataGrid#Table DataGridRow.current:not(:selected):pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource CurrentTrackHoveredBackgroundBrush}" />
+    </Style>
+    <Style Selector="DataGrid#Table DataGridRow.current:selected /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Stroke" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+        <Setter Property="StrokeThickness" Value="2" />
+    </Style>
     <Style Selector="ui|CurrentTrackMarker">
         <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark2}" />
     </Style>

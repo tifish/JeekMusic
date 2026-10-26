@@ -37,7 +37,8 @@ public sealed class PlayingAppearanceTests
             var rowHeight = current.Bounds.Height; var titleBounds = title.Bounds;
             Assert.Equal(ordinary.Bounds.Height, rowHeight);
             Assert.InRange(rowHeight, 32, 42);
-            Assert.Equal(new Size(18, 18), marker.Bounds.Size);
+            Assert.Equal(16, marker.Bounds.Height);
+            Assert.True(marker.Bounds.Width > 40);
             Assert.Equal(FontWeight.SemiBold, title.FontWeight);
             Assert.NotEqual(FontWeight.SemiBold, ordinary.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("song-title")).FontWeight);
 
@@ -55,7 +56,11 @@ public sealed class PlayingAppearanceTests
                 Assert.Contains(":pointerover", selected.Classes);
                 Assert.True(h.Rows[5].IsCurrent); Assert.Equal(playing, h.Rows[5].IsPlaying);
                 Assert.Equal(playing, marker.IsPlaying); Assert.True(marker.IsVisible);
-                Assert.Equal(playing ? Icons.Play : Icons.Pause, ((TextBlock)marker.Child!).Text);
+                AssertMarker(marker, playing);
+                var playerMarker = h.Window.FindControl<CurrentTrackMarker>("NowStatus")!;
+                Assert.True(playerMarker.IsVisible);
+                AssertMarker(playerMarker, playing);
+                Assert.Equal(h.Track(5).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
                 Assert.Equal(CurrentTrackMarker.Status(playing), AutomationProperties.GetName(marker));
                 Assert.Equal(CurrentTrackMarker.Status(playing), AutomationProperties.GetHelpText(current));
                 Assert.False(Marker(ordinary).IsVisible); Assert.False(Marker(selected).IsVisible);
@@ -77,6 +82,8 @@ public sealed class PlayingAppearanceTests
             Assert.Equal(selection, h.Table.SelectedItems.Cast<SongRow>());
             Assert.False(h.Rows[5].IsCurrent); Assert.True(h.Rows[220].IsCurrent);
             Assert.True(Marker(Row(h, 220)).IsPlaying);
+            AssertMarker(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!, true);
+            Assert.Equal(h.Track(220).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
             SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-offscreen-centered");
         }, CancellationToken.None);
     }
@@ -93,22 +100,40 @@ public sealed class PlayingAppearanceTests
             var content = (Control)flyout.Content!;
             var marker = Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible);
             Assert.True(marker.IsPlaying);
-            Assert.Equal(Icons.Play, ((TextBlock)marker.Child!).Text);
+            AssertMarker(marker, true);
             Assert.NotNull(marker.Background);
+            var queueRow = marker.GetVisualAncestors().OfType<Grid>().Single(g => g.Tag is int);
+            Assert.NotEqual(Brushes.Transparent, queueRow.Background);
+            SaveQueue(content, "queue-playing");
             h.Player.Pause(); h.Pump();
             Assert.Same(marker, Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible));
-            Assert.False(marker.IsPlaying); Assert.Equal(Icons.Pause, ((TextBlock)marker.Child!).Text);
+            AssertMarker(marker, false);
             Assert.Equal(CurrentTrackMarker.Status(false), AutomationProperties.GetName(marker));
+            SaveQueue(content, "queue-paused");
             var current = Row(h, 5); Assert.True(h.Rows[5].IsCurrent); Assert.False(h.Rows[5].IsPlaying);
-            Assert.Equal(Icons.Pause, ((TextBlock)Marker(current).Child!).Text);
+            AssertMarker(Marker(current), false);
+            h.Player.Next(); h.Ready();
+            var nextMarker = Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible);
+            Assert.NotSame(marker, nextMarker);
+            AssertMarker(nextMarker, true);
+            Assert.Equal(h.Track(6).Title, h.Window.FindControl<TextBlock>("NowTitle")!.Text);
             flyout.Hide(); h.Pump();
             h.Player.Queue.Clear(); h.Pump();
             Assert.All(h.Rows, row => { Assert.False(row.IsCurrent); Assert.False(row.IsPlaying); });
+            Assert.False(h.Window.FindControl<CurrentTrackMarker>("NowStatus")!.IsVisible);
         }, CancellationToken.None);
     }
 
     static DataGridRow Row(PlayingVisibilityTests.Harness h, int index) => h.Realized.Single(r => ReferenceEquals(r.DataContext, h.Rows[index]));
     static CurrentTrackMarker Marker(DataGridRow row) => row.GetVisualDescendants().OfType<CurrentTrackMarker>().Single();
+
+    static void AssertMarker(CurrentTrackMarker marker, bool playing)
+    {
+        Assert.Equal(playing, marker.IsPlaying);
+        var text = marker.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+        Assert.Contains(playing ? Icons.Play : Icons.Pause, text);
+        Assert.Contains(playing ? L.T("正在播放") : L.T("已暂停"), text);
+    }
 
     static void SaveFrame(Window window, string name)
     {
@@ -119,6 +144,16 @@ public sealed class PlayingAppearanceTests
             Directory.CreateDirectory(path);
             frame.Save(Path.Combine(path, name + ".png"), PngBitmapEncoderOptions.Default);
         }
+    }
+
+    static void SaveQueue(Control content, string name)
+    {
+        if (Environment.GetEnvironmentVariable("JEEKMUSIC_VISUAL_OUTPUT") is not { Length: > 0 } path) return;
+        var root = TopLevel.GetTopLevel(content) ?? content;
+        using var bitmap = new RenderTargetBitmap(PixelSize.FromSize(root.Bounds.Size, 1));
+        bitmap.Render(root);
+        Directory.CreateDirectory(path);
+        bitmap.Save(Path.Combine(path, name + ".png"), PngBitmapEncoderOptions.Default);
     }
 
     static double Contrast(Color a, Color b)

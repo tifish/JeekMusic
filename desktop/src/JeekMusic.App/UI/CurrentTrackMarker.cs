@@ -14,15 +14,29 @@ public sealed class CurrentTrackMarker : Border
     public bool IsPlaying { get => GetValue(IsPlayingProperty); set => SetValue(IsPlayingProperty, value); }
     readonly TextBlock _glyph = new()
     {
-        FontFamily = new FontFamily(Icons.FontFamily), FontSize = 11, Foreground = Brushes.White,
+        FontFamily = new FontFamily(Icons.FontFamily), FontSize = 9, Foreground = Brushes.White,
         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+    };
+    readonly TextBlock _label = new()
+    {
+        FontSize = 11, LineHeight = 14, Foreground = Brushes.White,
+        VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis
     };
 
     public CurrentTrackMarker()
     {
-        Width = Height = 18;
-        CornerRadius = new CornerRadius(9);
-        Child = _glyph;
+        Height = 16;
+        Padding = new Thickness(5, 0);
+        CornerRadius = new CornerRadius(3);
+        ClipToBounds = true;
+        HorizontalAlignment = HorizontalAlignment.Left;
+        _glyph.Margin = new Thickness(0, 0, 4, 0);
+        Grid.SetColumn(_label, 1);
+        Child = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { _glyph, _label }
+        };
         UpdateState();
     }
 
@@ -31,6 +45,7 @@ public sealed class CurrentTrackMarker : Border
     void UpdateState()
     {
         _glyph.Text = IsPlaying ? Icons.Play : Icons.Pause;
+        _label.Text = IsPlaying ? L.T("正在播放") : L.T("已暂停");
         var status = Status(IsPlaying);
         AutomationProperties.SetName(this, status);
         ToolTip.SetTip(this, status);

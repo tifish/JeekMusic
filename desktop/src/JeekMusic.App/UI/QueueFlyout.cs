@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using JeekMusic.Library;
 
 namespace JeekMusic.UI;
@@ -59,7 +60,7 @@ public static class QueueFlyout
         Control Row(int index, Track? track, bool current, bool played)
         {
             var marker = new CurrentTrackMarker { IsVisible = current, IsPlaying = app.Player.IsPlaying,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
             if (current) currentMarker = marker;
             var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
             var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.6, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -68,11 +69,21 @@ public static class QueueFlyout
             var handle = new TextBlock { Text = "", Classes = { "glyph" }, Opacity = 0.5, Margin = new Thickness(6, 0), Cursor = new Cursor(StandardCursorType.SizeNorthSouth) };
             var grid = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("22,*,Auto,Auto"), Background = Brushes.Transparent,
+                ColumnDefinitions = new ColumnDefinitions("3,*,Auto,Auto"), Background = Brushes.Transparent,
                 Opacity = played ? 0.55 : 1, Tag = index,
             };
-            var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, artist } };
-            grid.Children.Add(marker);
+            var detail = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+            detail.Children.Add(marker);
+            Grid.SetColumn(artist, 1);
+            detail.Children.Add(artist);
+            var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, detail } };
+            if (current)
+            {
+                grid[!Panel.BackgroundProperty] = new DynamicResourceExtension("ArtistAccentSubtleBrush");
+                var rail = new Border { Margin = new Thickness(0, 5), CornerRadius = new CornerRadius(2) };
+                rail[!Border.BackgroundProperty] = new DynamicResourceExtension("ArtistAccentBrush");
+                grid.Children.Add(rail);
+            }
             Grid.SetColumn(text, 1);
             grid.Children.Add(text);
             Grid.SetColumn(remove, 2);

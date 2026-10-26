@@ -20,9 +20,7 @@ internal sealed unsafe partial class EndpointVolume : IEndpointVolume
 
     EndpointVolumeSnapshot? Access(string? name, double? target)
     {
-        var id = name is null or "auto" ? null : name.StartsWith("wasapi/", StringComparison.Ordinal) ? name[7..] : name;
-        if (id is not null && !id.StartsWith("{0.0.0.00000000}.", StringComparison.Ordinal))
-            id = "{0.0.0.00000000}." + id;
+        var id = AudioEndpointId.FromDeviceName(name);
         var initialized = CoInitializeEx(0, 0);
         nint enumerator = 0, device = 0, endpoint = 0, idPointer = 0, manager = 0, session = 0;
         LastError = null;
@@ -32,7 +30,7 @@ internal sealed unsafe partial class EndpointVolume : IEndpointVolume
             if (initialized < 0 && initialized != unchecked((int)0x80010106)) Marshal.ThrowExceptionForHR(initialized);
             Marshal.ThrowExceptionForHR(CoCreateInstance(EnumeratorClass, 0, 1, EnumeratorInterface, out enumerator));
             var methods = *(nint**)enumerator;
-            stage = "resolve endpoint";
+            stage = $"resolve endpoint '{id ?? "default-multimedia"}'";
             if (id is null)
                 Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, int, int, out nint, int>)methods[4])(enumerator, 0, 1, out device));
             else

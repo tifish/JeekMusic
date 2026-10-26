@@ -141,6 +141,27 @@ public sealed class OutputModeSwitchTests
     });
 
     [Theory]
+    [InlineData("{3.0.0.00000001}.{6C26BA7D-F0B2-4225-B422-8168C5261E45}")]
+    [InlineData("{0.0.0.00000000}.{1e28f965-2fc2-4bf4-98fb-cdc8804fa144}")]
+    public Task MissingPinnedEndpointBlocksThenRetriesTheSameEndpointWithoutChangingSelection(string id) => Run(f =>
+    {
+        f.Endpoint.Volumes[id] = 37;
+        f.Player.SetDevice("wasapi/" + id);f.Ready();
+        Assert.True(f.Player.IsPlaying);
+        f.Endpoint.Volumes.Remove(id);
+        f.Player.RefreshOutput();
+        Assert.False(f.Player.IsPlaying);
+        Assert.Equal("endpoint-read-failed", f.Player.OutputBlockReason);
+        f.Endpoint.Volumes[id] = 37;
+        f.Player.Resume();f.Ready();
+        Assert.True(f.Player.IsPlaying);
+        Assert.Equal(id, f.Player.ActualDeviceId);
+        Assert.Equal("wasapi/" + id, f.Current.Properties["audio-device"]);
+        Assert.Equal(12.345, f.Player.Position.TotalSeconds, 3);
+        Assert.Empty(f.Endpoint.Writes);
+    });
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public Task ExternalEndpointChangesNeverFeedBackAndMuteIsLocal(bool exclusive) => Run(f =>

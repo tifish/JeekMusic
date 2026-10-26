@@ -131,6 +131,40 @@ public sealed class DeviceSampleRateTests(ITestOutputHelper output)
         Assert.True(f.Player.IsPlaying);
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task RemoteEndpointWithoutExclusiveTuplesKeepsSharedPlaybackAndAutomaticPreference(bool policyAvailable)=>Run((f,formats)=>
+    {
+        const string remote="{3.0.0.00000001}.{6C26BA7D-F0B2-4225-B422-8168C5261E45}";
+        formats.Supported.Clear();
+        formats.SharedAvailable=policyAvailable;
+        f.Endpoint.Volumes[remote]=37;
+        f.Endpoint.DeviceId=remote;
+        f.Player.RefreshOutput();f.Ready();
+        f.Player.SetAutomaticAudioFormat(true);f.Ready();
+        Assert.True(f.Player.IsPlaying);
+        Assert.True(f.Player.AutomaticAudioFormat);
+        Assert.False(f.Player.Exclusive);
+        Assert.Equal(remote,f.Player.ActualDeviceId);
+        Assert.Equal("wasapi/"+remote,f.Current.Properties["audio-device"]);
+        Assert.Equal(12.345,f.Player.Position.TotalSeconds,3);
+        Assert.Equal(48000,f.Player.ActualSampleRate);
+        Assert.True(f.Player.OutputResampled);
+        Assert.NotNull(f.Player.SampleRateDiagnostic);
+        Assert.Empty(formats.Writes);
+        Assert.Empty(f.Endpoint.Writes);
+        f.Player.Pause();
+        Assert.True(f.Player.IsIdle);
+        Assert.False(f.Player.OutputResampled);
+        var paused=McpTools.AudioFormatState(f.Player);
+        Assert.Null(paused["actualDevice"]);
+        Assert.Equal(48000,paused["windowsDeviceDefault"]!["sampleRate"]!.GetValue<int>());
+        f.Player.Resume();f.Ready();
+        Assert.True(f.Player.IsPlaying);
+        Assert.Equal(12.345,f.Player.Position.TotalSeconds,3);
+    });
+
     [Fact]
     public Task ExclusiveAlwaysUsesEachNativeRateAndDoesNotChangeSharedAutomaticPreference()=>Run((f,formats)=>
     {

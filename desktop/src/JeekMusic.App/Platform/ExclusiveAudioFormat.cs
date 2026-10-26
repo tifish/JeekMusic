@@ -29,12 +29,11 @@ internal sealed unsafe partial class ExclusiveAudioFormat : IExclusiveAudioForma
             Marshal.ThrowExceptionForHR(CoCreateInstance(new("bcde0395-e52f-467c-8e3d-c4579291692e"), 0, 1,
                 new("a95664d2-9614-4f35-a746-de8db63617e6"), out enumerator));
             var methods = *(nint**)enumerator;
-            if (deviceName is null or "auto")
+            var id = AudioEndpointId.FromDeviceName(deviceName);
+            if (id is null)
                 Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, int, int, out nint, int>)methods[4])(enumerator, 0, 1, out device));
             else
             {
-                var id = deviceName.StartsWith("wasapi/", StringComparison.Ordinal) ? deviceName[7..] : deviceName;
-                if (!id.StartsWith("{0.0.0.00000000}.", StringComparison.Ordinal)) id = "{0.0.0.00000000}." + id;
                 fixed (char* name = id)
                     Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, char*, out nint, int>)methods[5])(enumerator, name, out device));
             }

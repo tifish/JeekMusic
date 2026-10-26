@@ -211,12 +211,11 @@ internal sealed unsafe partial class DeviceAudioFormat : IDeviceAudioFormat
                 Marshal.ThrowExceptionForHR(CoCreateInstance(new("bcde0395-e52f-467c-8e3d-c4579291692e"), 0, 1,
                     new("a95664d2-9614-4f35-a746-de8db63617e6"), out _enumerator));
                 var v = *(nint**)_enumerator;
-                if (name is null or "auto")
+                var id = AudioEndpointId.FromDeviceName(name);
+                if (id is null)
                     Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, int, int, out nint, int>)v[4])(_enumerator, 0, 1, out _device));
                 else
                 {
-                    var id = name.StartsWith("wasapi/", StringComparison.Ordinal) ? name[7..] : name;
-                    if (!id.StartsWith("{0.0.0.00000000}.", StringComparison.Ordinal)) id = "{0.0.0.00000000}." + id;
                     fixed (char* key = id)
                         Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, char*, out nint, int>)v[5])(_enumerator, key, out _device));
                 }

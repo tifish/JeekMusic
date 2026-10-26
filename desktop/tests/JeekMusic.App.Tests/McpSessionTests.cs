@@ -6,6 +6,19 @@ namespace JeekMusic.App.Tests;
 public sealed class McpSessionTests
 {
     [Fact]
+    public void OutputCatalogDescribesOpaqueEndpointsWithoutChangingInputs()
+    {
+        var catalog = McpTools.BuildCatalog();
+        var read = catalog.Single(x => x!["name"]!.GetValue<string>() == "get_output")!;
+        Assert.Contains("opaque", read["description"]!.GetValue<string>());
+        Assert.Empty(read["inputSchema"]!["properties"]!.AsObject());
+        var write = catalog.Single(x => x!["name"]!.GetValue<string>() == "set_output")!;
+        var fields = write["inputSchema"]!["properties"]!.AsObject();
+        Assert.Equal(new[] { "automaticFormat", "device", "exclusive" }, fields.Select(x => x.Key).Order().ToArray());
+        Assert.Contains("opaque", fields["device"]!["description"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void DiagnosticsDescribeProductionTagWritingPolicy()
     {
         var tool = McpTools.BuildCatalog().Single(x => x!["name"]!.GetValue<string>() == "get_diagnostics")!;

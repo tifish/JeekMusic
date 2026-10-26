@@ -33,6 +33,14 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 ## 工具
 
+### 远程音频端点与设备 ID
+
+`get_output.devices[].id` / `volumeState.actualDeviceId` 中完整的 Windows 端点 ID 按不透明字符串原样使用，包含远程桌面重定向的 `Remote Audio`。`set_output.device` 使用列表返回的准确 ID 或 `auto`，不要自行补本地设备前缀；音量读取、共享格式查询/恢复和独占协商共用同一个转换入口，仅保留旧版 mpv 的裸花括号 GUID 别名兼容。`volumeState.diagnostic` 的端点解析错误包含实际尝试的 ID 和 HRESULT，便于区分设备真正失效与解析错误。24 项工具及字段类型/校验不变，仅补充描述和 device 参数 Schema 的说明；开发与正式版本使用相同代码。
+
+远程端点仍按实际能力处理，不按名称禁用输出。`supportedFormats` / `exclusiveRates` 为空表示没有探测到驱动接受的独占完整组合，不代表当前共享混音不可用。共享自动匹配无法选格式或格式写入失败时，沿用已有策略保留实际 Windows 格式并报告原因，不覆盖 `automaticFormat` 永久偏好；播放格式/转换由真实读回报告。此修复不新增独占转共享或失效固定设备转默认设备的静默回退，端点/音量真实读取失败仍暂停，`auto` 继续跟随系统多媒体默认端点。暂停输出空闲语义及临时格式恢复行为保持不变。
+
+只读实机回归：设置 `JEEKMUSIC_TEST_ENDPOINT_READ=1` 后运行 `AudioEndpointIdTests.RealDefaultEndpointRoundTripsThroughVolumeAndFormatReadersWithoutMutation`，验证默认端点、原始完整 ID、`wasapi/` ID 的音量与格式一致、独占查询一致，以及失效 ID 不回落其他设备；不写音量/格式，也不启动音频流。其余回归覆盖完整远程/本地 ID、旧 GUID 别名、受限格式共享播放、设备失效重试和暂停续播。实际远程播放另由生产 MCP 的 `playback`、`get_status`、`get_output`、`get_logs` 验证；进度推进不能证明远端听到了声音。
+
 实际名称、描述、JSON Schema 和只读/破坏性提示由 `tools/list` 提供。所有工具接受对象参数，拒绝未知参数和类型、枚举、范围错误。列表的默认页大小为 50，最大为 200；使用 `offset`、`limit` 分页，返回 `total`、`items`、`nextOffset`。队列和播放列表的位置均从 **0** 开始；歌曲、文件夹和播放列表的数字 ID 仅在当前数据目录内有效，歌曲另有稳定的 `trackKey`。
 
 `get_diagnostics.tagWriting` 返回生产标签写入策略版本、新MP3/已有v2.3版本策略、文件大小上限、最近检测到的原生格式及 `saved` / `rejected` 结果和原因；不返回歌词内容。`get_logs(kind="app")` 的 `[tagwriter]` 记录同一写入服务的成功、保全验证及拒绝原因。封面/歌词仍通过既有在线/离线保存业务调用写入器；不新增绕过播放避让、验证或回退的直接文件写入工具。两项接口参数 Schema 和22项工具目录保持兼容，Debug/Release/NativeAOT一致。格式、保留字段、复杂输入拒绝和外部保存回退见[跨端写入契约](../../docs/tag-writing-policy.md)。

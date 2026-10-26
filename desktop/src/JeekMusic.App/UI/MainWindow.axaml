@@ -205,7 +205,7 @@
                                     <DataTemplate x:DataType="vm:SongRow">
                                         <Grid ColumnDefinitions="Auto,*" Margin="4,2">
                                             <Border Width="3" Margin="-4,4,0,4" CornerRadius="2" HorizontalAlignment="Left"
-                                                    Background="{DynamicResource ArtistAccentBrush}" IsVisible="{Binding IsCurrent}" />
+                                                    Background="{DynamicResource CurrentTrackBorderBrush}" IsVisible="{Binding IsCurrent}" />
                                             <Border Width="32" Height="32" CornerRadius="3" ClipToBounds="True" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
                                                 <Panel>
                                                     <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="16" Opacity="0.5" HorizontalAlignment="Center" VerticalAlignment="Center" />

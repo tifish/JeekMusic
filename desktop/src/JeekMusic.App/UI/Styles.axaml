@@ -2,10 +2,26 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="using:JeekMusic.UI">
     <Styles.Resources>
+      <ResourceDictionary>
+        <!-- Playback identity deliberately has its own warm palette, independent of
+             the system accent used by selection, navigation and other controls. -->
+        <ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary x:Key="Default">
+                <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#FFF1D6" />
+                <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#FFE6B5" />
+                <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#A5650D" />
+                <SolidColorBrush x:Key="CurrentTrackMarkerBrush" Color="#805000" />
+            </ResourceDictionary>
+            <ResourceDictionary x:Key="Dark">
+                <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#3F321E" />
+                <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#514027" />
+                <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#DBA650" />
+                <SolidColorBrush x:Key="CurrentTrackMarkerBrush" Color="#95600D" />
+            </ResourceDictionary>
+        </ResourceDictionary.ThemeDictionaries>
         <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
         <SolidColorBrush x:Key="ArtistAccentSubtleBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
-        <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.18" />
-        <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.26" />
+      </ResourceDictionary>
     </Styles.Resources>
 
     <!-- Icon-only mode keeps its existing accessible name hint. Expanded names use
@@ -131,7 +147,7 @@
     <!-- Paint the existing full-row layer, not the title cell. Selection retains its
          theme fill/opacity; the current-track outline also survives horizontal scroll. -->
     <Style Selector="DataGrid#Table DataGridRow.current /template/ Rectangle#BackgroundRectangle">
-        <Setter Property="Stroke" Value="{DynamicResource ArtistAccentBrush}" />
+        <Setter Property="Stroke" Value="{DynamicResource CurrentTrackBorderBrush}" />
         <Setter Property="StrokeThickness" Value="1" />
     </Style>
     <Style Selector="DataGrid#Table DataGridRow.current:not(:selected) /template/ Rectangle#BackgroundRectangle">
@@ -142,11 +158,10 @@
         <Setter Property="Fill" Value="{DynamicResource CurrentTrackHoveredBackgroundBrush}" />
     </Style>
     <Style Selector="DataGrid#Table DataGridRow.current:selected /template/ Rectangle#BackgroundRectangle">
-        <Setter Property="Stroke" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeThickness" Value="3" />
     </Style>
     <Style Selector="ui|CurrentTrackMarker">
-        <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark2}" />
+        <Setter Property="Background" Value="{DynamicResource CurrentTrackMarkerBrush}" />
     </Style>
     <Style Selector="TextBlock.song-title.current">
         <Setter Property="FontWeight" Value="SemiBold" />

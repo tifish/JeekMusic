@@ -81,7 +81,7 @@ public static class QueueFlyout
             {
                 grid[!Panel.BackgroundProperty] = new DynamicResourceExtension("CurrentTrackBackgroundBrush");
                 var rail = new Border { Margin = new Thickness(0, 5), CornerRadius = new CornerRadius(2) };
-                rail[!Border.BackgroundProperty] = new DynamicResourceExtension("ArtistAccentBrush");
+                rail[!Border.BackgroundProperty] = new DynamicResourceExtension("CurrentTrackBorderBrush");
                 grid.Children.Add(rail);
             }
             Grid.SetColumn(text, 1);

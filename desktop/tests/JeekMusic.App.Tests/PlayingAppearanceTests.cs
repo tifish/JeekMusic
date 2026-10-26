@@ -73,21 +73,27 @@ public sealed class PlayingAppearanceTests
                 var background = Background(current);
                 Assert.InRange(Math.Abs(background.Bounds.Width - current.Bounds.Width), 0, .5);
                 Assert.NotNull(background.Stroke);
+                AssertWarm(BrushColor(background.Stroke));
                 Assert.Null(Background(ordinary).Stroke);
                 Assert.Null(Background(selected).Stroke);
                 if (selectedCurrent)
                 {
-                    Assert.Equal(2, background.StrokeThickness);
+                    Assert.Equal(3, background.StrokeThickness);
                     Assert.Equal(BrushColor(Background(selected).Fill), BrushColor(background.Fill));
                 }
                 else
                 {
                     Assert.Equal(1, background.StrokeThickness);
                     Assert.NotEqual(BrushColor(Background(ordinary).Fill), BrushColor(background.Fill));
-                    Assert.InRange(background.Fill!.Opacity, .1, .3);
+                    var color = BrushColor(background.Fill);
+                    AssertWarm(color);
+                    var selectedColor = BrushColor(Background(selected).Fill);
+                    Assert.True(selectedColor.B > selectedColor.R); // Actual default selection is cool blue.
+                    Assert.True(Contrast(color, dark ? Colors.White : Colors.Black) >= 4.5);
                     var normalFill = background.Fill;
                     ((IPseudoClasses)current.Classes).Set(":pointerover", true); h.Pump();
-                    Assert.True(background.Fill!.Opacity > normalFill!.Opacity);
+                    Assert.NotEqual(BrushColor(normalFill), BrushColor(background.Fill));
+                    AssertWarm(BrushColor(background.Fill));
                     ((IPseudoClasses)current.Classes).Set(":pointerover", false); h.Pump();
                     Assert.Equal(normalFill, background.Fill);
                     AssertFullRowPixels(h.Window, current, ordinary);
@@ -96,7 +102,8 @@ public sealed class PlayingAppearanceTests
                 Assert.Equal(titleBounds, title.Bounds); Assert.Equal(rowHeight, current.Bounds.Height);
                 Assert.Equal(columnState, h.Table.Columns.Select(c => (c.Tag, c.IsVisible, c.ActualWidth, c.DisplayIndex)));
                 var accent = Assert.IsAssignableFrom<ISolidColorBrush>(marker.Background).Color;
-                Assert.True(Contrast(accent, Colors.White) >= 3, $"Marker contrast: {accent}");
+                AssertWarm(accent);
+                Assert.True(Contrast(accent, Colors.White) >= 4.5, $"Marker contrast: {accent}");
                 SaveFrame(h.Window, $"{(dark ? "dark" : "light")}-{(playing ? "playing" : "paused")}-{(selectedCurrent ? "selected" : "unselected")}");
             }
             ((IPseudoClasses)selected.Classes).Set(":pointerover", false);
@@ -120,13 +127,17 @@ public sealed class PlayingAppearanceTests
         }, CancellationToken.None);
     }
 
-    [Fact]
-    public async Task QueueSharesTheCurrentTrackMarkerAndPauseUpdatesItWithoutRebuildingRows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QueueSharesTheCurrentTrackMarkerAndPauseUpdatesItWithoutRebuildingRows(bool dark)
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(() =>
         {
             using var h = new PlayingVisibilityTests.Harness();
+            h.Window.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            h.Window.Background = dark ? new SolidColorBrush(Color.Parse("#202020")) : Brushes.White;
             h.Window.PlayFrom(h.Track(5)); h.Ready();
             var flyout = QueueFlyout.Show(h.Window, h.App, h.Window.FindControl<Button>("QueueButton")!); h.Pump();
             var content = (Control)flyout.Content!;
@@ -136,12 +147,14 @@ public sealed class PlayingAppearanceTests
             Assert.NotNull(marker.Background);
             var queueRow = marker.GetVisualAncestors().OfType<Grid>().Single(g => g.Tag is int);
             Assert.NotEqual(Brushes.Transparent, queueRow.Background);
-            SaveQueue(content, "queue-playing");
+            Assert.Equal(BrushColor(Background(Row(h, 5)).Fill), BrushColor(queueRow.Background));
+            AssertWarm(BrushColor(queueRow.Background));
+            SaveQueue(content, $"{(dark ? "dark" : "light")}-queue-playing");
             h.Player.Pause(); h.Pump();
             Assert.Same(marker, Assert.Single(content.GetVisualDescendants().OfType<CurrentTrackMarker>(), m => m.IsVisible));
             AssertMarker(marker, false);
             Assert.Equal(CurrentTrackMarker.Status(false), AutomationProperties.GetName(marker));
-            SaveQueue(content, "queue-paused");
+            SaveQueue(content, $"{(dark ? "dark" : "light")}-queue-paused");
             var current = Row(h, 5); Assert.True(h.Rows[5].IsCurrent); Assert.False(h.Rows[5].IsPlaying);
             AssertMarker(Marker(current), false);
             h.Player.Next(); h.Ready();
@@ -166,6 +179,7 @@ public sealed class PlayingAppearanceTests
     static Rectangle Background(DataGridRow row) => row.GetVisualDescendants().OfType<Rectangle>()
         .Single(r => r.Name == "BackgroundRectangle" && ReferenceEquals(r.TemplatedParent, row));
     static Color BrushColor(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
+    static void AssertWarm(Color color) => Assert.True(color.R > color.G && color.G > color.B + 10, $"Expected warm playback palette: {color}");
 
     static void AssertFullRowPixels(Window window, DataGridRow current, DataGridRow ordinary)
     {

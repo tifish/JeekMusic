@@ -18,6 +18,8 @@ import com.tinyfish.jeekmusic.R
 private val LICENSES = listOf(
     "Jeek Music" to "MIT",
     "Android Jetpack (AndroidX, Compose, Room, DataStore, WorkManager, Navigation 3)" to "Apache-2.0",
+    "CameraX" to "Apache-2.0",
+    "Google ML Kit Barcode Scanning (bundled model)" to "ML Kit Terms of Service (developers.google.com/ml-kit/terms); bundled third-party notices",
     "Media3 / ExoPlayer" to "Apache-2.0",
     "Kotlin, kotlinx.coroutines" to "Apache-2.0",
     "Dagger / Hilt" to "Apache-2.0",

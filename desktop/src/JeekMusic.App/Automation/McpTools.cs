@@ -1,3 +1,4 @@
+using JeekMusic.Sync;
 using System.Text;
 using System.Text.Json.Nodes;
 using JeekMusic.Core.Queue;
@@ -48,9 +49,9 @@ public sealed class McpTools
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
         Tool("edit_playlist", "Create/rename/delete/add/remove/move a playlist. create requires name; other actions require playlistId; rename requires name; add requires trackIds; remove/move require positions; move also needs target (index before moving). Changes persist and use normal sync events. Deleting removes only the playlist, never music files.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"rename\",\"delete\",\"add\",\"remove\",\"move\"]},\"playlistId\":{\"type\":\"integer\"},\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200},\"trackIds\":" + Ids + ",\"positions\":" + Positions + ",\"target\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"], destructive: true),
-        Tool("lan_sync_status", "Read LAN sharing status, root IDs, permanent revocation and availability, addresses, port and paired device IDs. Never returns invitation, tokens or private keys. Uses the production service.", "", [], true),
-        Tool("lan_sync_control", "Control the production LAN sync service: start/stop, share/unshare a registered library folder, create a five-minute single-use TLS-pinned invitation, or revoke a device. share/unshare require folderId; invite requires host (LAN IPv4/DNS name); revoke requires deviceId. Only explicit library roots are shared, no arbitrary disk access. stop/revoke invalidate active transfer authorization. Removing a library root permanently invalidates its grant/plans; reusing a folder row ID never shares the new root. Invitation is sensitive: do not log, publish or screenshot the returned value. No firewall changes.",
-            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"share\",\"unshare\",\"invite\",\"revoke\"]},\"folderId\":{\"type\":\"integer\"},\"host\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":253},\"deviceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
+        Tool("lan_sync_status", "Read LAN sharing status, root IDs, permanent revocation and availability, addresses, port, invitationActive (no credential) and paired device IDs. Never returns invitation, tokens or private keys. Uses the production service.", "", [], true),
+        Tool("lan_sync_control", "Control the production LAN sync service: start/stop, share/unshare a registered library folder, create a five-minute single-use TLS-pinned invitation (same credential used by the PC QR and Android scan/manual pairing), or revoke a device. share/unshare require folderId; invite requires host (LAN IPv4/DNS name); optional includeQr=true validates phone reachability and returns an in-memory qrPngBase64 using the same encoder as Settings; revoke requires deviceId. Only explicit library roots are shared, no arbitrary disk access. stop/revoke invalidate active transfer authorization. Removing a library root permanently invalidates its grant/plans; reusing a folder row ID never shares the new root. Invitation and QR are sensitive: do not log, publish or screenshot the returned value. No firewall changes.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"share\",\"unshare\",\"invite\",\"revoke\"]},\"folderId\":{\"type\":\"integer\"},\"host\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":253},\"includeQr\":{\"type\":\"boolean\",\"description\":\"Return sensitive in-memory QR PNG; rejects loopback/unspecified/broadcast/multicast endpoints. Never log or screenshot.\"},\"deviceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
         Tool("list_folders", "Read library folders, IDs, paths and availability.", "", [], true),
         Tool("add_folder", "Schedule adding and scanning an existing absolute local folder. If it contains registered child folders, replaceChildren must explicitly be true. Work runs in the normal library queue; response means queued, not completed.",
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
@@ -82,6 +83,14 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "invite" && a["includeQr"]?.GetValue<bool>() == true)
+        {
+            McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
+            var host = Required(a, "host").GetValue<string>();
+            await LanPairingQr.ValidatePhoneHost(host);
+            var invitation = app.LanSync.Invite(host);
+            return new JsonObject { ["invitation"] = invitation, ["qrPngBase64"] = Convert.ToBase64String(LanPairingQr.Encode(invitation)) };
+        }
         if (name != "set_smart_tags") return Call(name, a);
         McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
         var changes = new Dictionary<TagDimension, Tag?>();

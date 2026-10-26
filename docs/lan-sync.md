@@ -1,11 +1,11 @@
 # 局域网音乐同步首版
 
-PC 是文件主库；Android 选择根或子文件夹及本机目标。文件不反向上传，用户数据仍由既有 format 2 / SyncMerge 合并。首版手动连接，不包含自动发现、公网穿透、中继或云账号。
+PC 是文件主库；Android 选择根或子文件夹及本机目标。文件不反向上传，用户数据仍由既有 format 2 / SyncMerge 合并。支持扫码和手动输入配对，不包含自动发现、公网穿透、中继或云账号。
 
 ## 操作与目录契约
 
 1. Windows「设置 → 同步 → 局域网音乐同步」启用服务，并明确勾选需要共享的**已登记曲库根**。未启用的根不能列目录或读取。稳定 rootId 保存在应用数据目录，绑定曲库记录的不可复用随机身份，由该记录解析当前位置；移除根会永久撤销其共享和计划，整数 folderId 复用不会继承授权或歌曲引用。旧候选的 folderId-only 共享需用户重新明确启用，不把绝对磁盘路径作为网络 API。
-2. 填写 PC 的局域网 IPv4 地址/主机名，生成一次性邀请，私下填入 Android「设置 → 设备同步 → 与 PC 配对」。邀请只用一次，5 分钟过期；包含证书绑定信息，请勿截图、公开或记录。Windows 可撤销单个设备。
+2. 选择或填写手机可达的 PC 局域网 IPv4 地址/主机名，生成一次性二维码；Android「设置 → 设备同步」可选「扫码配对」或「手动输入配对」。扫码只请求正常相机权限，摄像头为可选硬件；拒绝权限时仍可手动输入。识别后关闭相机，核对地址并连接，成功后显示经绑定 TLS 验证的 PC 名称。邀请只用一次，5 分钟过期；包含证书绑定信息，请勿截图、公开或记录。Windows 可撤销单个设备。
 3. 手机打开根列表；同名根显示简短编号以区分，完整 ID、精确路径/URI 放在展开详情。选择整个根或任意子目录（包含子文件夹），可深入浏览、估算所选文件数量和大小。勾选父目录取代其子目录选择。
 4. 通过系统 SAF 选择目标并持久授权，同时申请正常曲库读取音频权限。首版支持本地 ExternalStorageProvider（内部存储/SD 卡），不支持网盘 DocumentsProvider。
 5. 实际位置固定为 `所选目标/JeekMusic-<完整rootId>/根下相对路径`。例如选择 Music 根的 Karajan、Celtic 后，保存为 `目标/JeekMusic-ID/Karajan/...`、`目标/JeekMusic-ID/Celtic/...`。不同根即使同名并选择同一目标也使用独立命名空间；拒绝互相嵌套的不同根目标。
@@ -54,3 +54,11 @@ ARM64/OEM、物理 SD 卡、真实目标满盘、未覆盖的进程崩溃提交�
 `desktop/tools/test-lan-root-reuse.py --exe <隔离候选exe>` 使用新建合成 A/B 根及真实生产 TLS 服务，验证根移除、SQLite ID 复用、旧授权/计划拒绝和重新显式共享。`lan_sync_status.roots[].revoked` 说明授权是否已永久失效，保留原名称，不展示复用 ID 对应的新根名称；现有工具输入兼容。
 
 本轮签名 Release 原版运行及四项定向回归见 [lan-sync-review-fixes.md](lan-sync-review-fixes.md)。Windows 原生 UI 工具阻断仍保留，不重复失败通道。
+
+## 扫码配对
+
+二维码与手动文本是同一个 `jeeklan://host:port/<64位小写hex证书指纹>/<64位小写hex邀请>`，不增加网络协议。手机共用严格解析：限制长度/ASCII、精确 scheme、IPv4/DNS 主机、显式端口 1–65535、两个原始十六进制段；拒绝 userinfo、query、fragment、控制符、百分号编码、额外路径。扫描内容绝不交给浏览器。TLS 证书 pin 及有效期检查不变，错误不回显输入。PC 生成新邀请即替换旧邀请；成功消费、停服或五分钟到期后界面清除二维码/文本。PC 用户二维码拒绝回环、未指定、广播和组播地址，多网卡显示地址选择，保留手动地址。MCP 默认文本邀请保留 loopback 集成兼容。
+
+PC 使用 MIT 的 Net.Codecrete.QrCodeGenerator 3.2.1，仅内存 PNG；发布许可证收集器收集 NuGet 许可。Android 使用 CameraX 1.6.2（Apache-2.0）及 ML Kit barcode-scanning 17.3.0 内置 QR 模型（[ML Kit Terms of Service](https://developers.google.com/ml-kit/terms) 和依赖内第三方许可）。扫描无模型下载等待。参考 [CameraX](https://developer.android.com/jetpack/androidx/releases/camera)、[ML Kit](https://developers.google.com/ml-kit/vision/barcode-scanning/android)、[QR encoder](https://github.com/manuelbl/QrCodeGenerator)。相机帧不保存、不写日志，权限拒绝、取消、识别失败、邀请失效/重放、网络及证书失败均有中英文反馈。
+
+实际扫描验收使用隔离 AVD 的官方 `-camera-back imagefile:<private PNG>`，通过 CameraX 帧与 ML Kit 识别后调用相同配对服务；测试码是凭证，私有临时文件消费后删除，不显示有效码截图。详见本轮验收记录。未测 ARM64/OEM 不由 API35/x86_64 结果推断。

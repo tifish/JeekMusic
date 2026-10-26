@@ -29,7 +29,14 @@ junit = "4.13.2"
 orgJson = "20250517"
 icu4j = "76.1"
 
+camera = "1.6.2"
+mlkitBarcode = "17.3.0"
+
 [libraries]
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
+mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkitBarcode" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }

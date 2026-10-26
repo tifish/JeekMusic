@@ -474,5 +474,11 @@
   "撤销设备": "Revoke device",
   "手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；权限或防火墙阻止连接时可重试，不会自动更改系统规则。": "Every sync hashes all selected content, detecting changes even with identical size and mtime. Large folders take longer to verify. Retry after checking network/firewall permissions; no system rules are changed.",
   "已传输": "Transferred",
-  "已配对设备": "paired devices"
+  "已配对设备": "paired devices",
+  "手机扫码配对，或手动输入邀请。两端须在同一局域网。邀请 5 分钟有效且只能使用一次；请勿截图或公开。": "Scan with your phone or enter the invitation manually. Both devices must use the same LAN. Invitations expire after five minutes and work once. Do not screenshot or share them.",
+  "选择手机可达的 PC 地址（多网卡请核对），也可在下方手动输入。": "Choose the PC address reachable from your phone (check when using multiple adapters), or enter an address below.",
+  "邀请已使用、过期或被替换。需要时重新生成。": "Invitation used, expired or replaced. Generate a new one when needed.",
+  "生成 / 刷新配对二维码": "Generate / refresh pairing QR code",
+  "用手机扫码，或复制下方邀请手动配对。刷新会使旧邀请失效。": "Scan with your phone, or copy the invitation below for manual pairing. Refreshing invalidates the previous invitation.",
+  "请输入手机可达的局域网地址；不能使用 localhost、回环、广播或未指定地址。检查服务和网络。": "Enter a LAN address reachable from your phone. Localhost, loopback, broadcast and unspecified addresses cannot be used. Check the service and network."
 }

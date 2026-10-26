@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
+    <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.2.1" />
     <PackageVersion Include="Avalonia" Version="12.1.4" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />

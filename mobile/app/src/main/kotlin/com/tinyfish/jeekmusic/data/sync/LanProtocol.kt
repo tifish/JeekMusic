@@ -28,7 +28,7 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
             output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
             val size = input!!.readInt(); require(size in 2..32_000_000) { "Invalid LAN response" }
             val result = JSONObject(ByteArray(size).also(input!!::readFully).toString(Charsets.UTF_8))
-            if (result.has("error")) error(result.getString("error"))
+            if (result.has("error")) throw LanRemoteException(result.optString("code"), result.getString("error"))
             return result
         } catch (e: Exception) { close(); throw e }
     }
@@ -67,3 +67,5 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         }
     }
 }
+
+internal class LanRemoteException(val code: String, message: String) : java.io.IOException(message)

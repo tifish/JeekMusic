@@ -340,10 +340,10 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 ## 局域网同步（生产与开发版同套服务）
 
-- `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/lastOperation/bytesServed/addresses/roots/devices`。根带稳定 `rootId`、当前 `folderId`、显示名、启用与可用状态；设备仅返回 ID 和名称。不会返回邀请、令牌、令牌 hash 或私钥。
+- `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/invitationActive/lastOperation/bytesServed/addresses/roots/devices`。根带稳定 `rootId`、当前 `folderId`、显示名、启用与可用状态；设备仅返回 ID 和名称。不会返回邀请、令牌、令牌 hash 或私钥。
 - `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TCP 39843 的 TLS 服务。默认不启动，停用中断连接与计划；不修改防火墙。
 - `lan_sync_control {"action":"share","folderId":1}` / `unshare`：仅能启用/停用已在曲库登记的根。返回稳定 rootId；目录位置由当前曲库服务解析，调用不能指定磁盘路径。停用不删除源或手机下载。
-- `lan_sync_control {"action":"invite","host":"192.168.1.7"}`：生成 5 分钟、单次有效邀请，含地址、证书指纹和随机授权值。此返回值是凭证，只向要配对的手机私下传递，不写日志、截图或报告。
+- `lan_sync_control {"action":"invite","host":"192.168.1.7"}`：生成 5 分钟、单次有效邀请，含地址、证书指纹和随机授权值。可选 `includeQr:true` 同时返回内存 `qrPngBase64`，使用设置界面同一编码器，并异步校验地址不是 loopback/未指定/广播/组播（DNS 解析必须为可用 IPv4）。不传时保持旧文本邀请兼容。文本和二维码均是敏感凭证，只向要配对的手机私下传递，不写日志、截图或报告；`invitationActive` 只报告是否仍有效。
 - `lan_sync_control {"action":"revoke","deviceId":"..."}`：撤销设备。既有 TLS 连接每个请求重新检查授权，后续读取被拒绝；已下载的文件不删除。
 
 所有工具 Schema 禁止额外参数，action 为枚举；share/unshare 要求 folderId，invite 要求 host，revoke 要求 deviceId。沿用正常业务服务，不存在开发专用传输入口。完整产品契约、限制及隔离验证见 [局域网同步](../../docs/lan-sync.md)。

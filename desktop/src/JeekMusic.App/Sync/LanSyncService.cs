@@ -138,8 +138,13 @@ public sealed class LanSyncService : IDisposable
         {
             _invitation = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
             _invitationUntil = DateTime.UtcNow.AddMinutes(5);
+            Notify();
             return $"jeeklan://{host}:{Port}/{Fingerprint}/{_invitation}";
         }
+    }
+    public bool IsInvitationCurrent(string value)
+    {
+        lock (_gate) return Port != 0 && _invitation is not null && DateTime.UtcNow < _invitationUntil && value.EndsWith("/" + _invitation, StringComparison.Ordinal);
     }
     public void Revoke(string id) { lock (_gate) { Devices.Remove(id); _plans.Clear(); Save(); } Notify(); }
     public JsonObject Diagnostics()
@@ -147,9 +152,10 @@ public sealed class LanSyncService : IDisposable
         ReconcileRoots();
         lock (_gate) return new JsonObject
         {
-            ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 1,
+            ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 1, ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
             ["addresses"] = new JsonArray(NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
+                .OrderByDescending(n => n.GetIPProperties().GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any)))
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a.Address))
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
             ["roots"] = new JsonArray(Roots.Select(p => { var f = _app.Library.Snapshot.Folder(p.Value!["folderId"]!.GetValue<long>()); if (f?.Identity != p.Value["folderIdentity"]?.GetValue<string>()) f = null; return (JsonNode)new JsonObject
@@ -213,7 +219,7 @@ public sealed class LanSyncService : IDisposable
                     try { response = await Dispatch(a, cancel); }
                     // Never echo exception/request content: it may contain credentials or local paths.
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)
-                    { response = new JsonObject { ["error"] = e is UnauthorizedAccessException ? "Authorization denied; pair again or ask the PC to authorize this device." : "Request refused: root unavailable, unsafe path, changed source, invalid selection, or access denied. Retry and check PC sharing." }; }
+                    { response = new JsonObject { ["code"] = e is UnauthorizedAccessException ? (a["op"]?.GetValue<string>() == "pair" ? "invitation_rejected" : "unauthorized") : "request_refused", ["error"] = e is UnauthorizedAccessException ? "Authorization denied; pair again or ask the PC to authorize this device." : "Request refused: root unavailable, unsafe path, changed source, invalid selection, or access denied. Retry and check PC sharing." }; }
                     await WriteFrame(ssl, response, cancel);
                     if (response.ContainsKey("error")) break;
                 }
@@ -237,7 +243,7 @@ public sealed class LanSyncService : IDisposable
                 var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
                 Devices[id] = new JsonObject { ["name"] = name, ["tokenHash"] = Hash(token) };
                 _invitation = null; Save(); Notify();
-                return new JsonObject { ["token"] = token, ["protocol"] = 1 };
+                return new JsonObject { ["token"] = token, ["protocol"] = 1, ["name"] = Environment.MachineName };
             }
         }
         var device = a["deviceId"]?.GetValue<string>() ?? "";

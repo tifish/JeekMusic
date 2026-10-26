@@ -39,6 +39,7 @@ public sealed class LanProtocolTests
         Assert.Empty(status["inputSchema"]!["properties"]!.AsObject());
         var control = catalog.Single(t => t!["name"]!.GetValue<string>() == "lan_sync_control")!;
         Assert.False(control["inputSchema"]!["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal("boolean", control["inputSchema"]!["properties"]!["includeQr"]!["type"]!.GetValue<string>());
         Assert.Contains("sensitive", control["description"]!.GetValue<string>());
         Assert.Equal("action", Assert.Single(control["inputSchema"]!["required"]!.AsArray())!.GetValue<string>());
     }

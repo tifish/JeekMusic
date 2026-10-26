@@ -454,4 +454,21 @@
     <string name="artist_format_disabled">开启文件名推断后可选择格式。</string>
     <string name="settings_tabs_help">拖动左侧手柄调整顺序；点 × 取消固定艺术家。</string>
     <string name="settings_keep_source">至少保留一个来源。</string>
+    <string name="lan_scan">扫码配对</string>
+    <string name="lan_pair_manual">手动输入配对</string>
+    <string name="lan_continue">继续</string>
+    <string name="lan_scan_hint">将摄像头对准电脑设置 → 同步中的配对二维码。</string>
+    <string name="lan_scan_cancelled">已取消扫码，可重新扫码或手动输入邀请。</string>
+    <string name="lan_camera_error">无法使用摄像头或识别二维码，请重试或手动输入邀请。</string>
+    <string name="lan_camera_denied">未授予相机权限。可在应用设置中允许后扫码，也可手动输入邀请。</string>
+    <string name="lan_open_settings">应用设置</string>
+    <string name="lan_confirm_pc">连接电脑 %1$s？请核对地址与电脑一致，将使用此单次邀请验证电脑证书。</string>
+    <string name="lan_invalid_invitation">这不是有效的 JeekMusic 配对邀请。请在电脑上重新生成，未打开任何链接。</string>
+    <string name="lan_invitation_rejected">邀请已过期、已使用或已被替换，请在电脑上重新生成。</string>
+    <string name="lan_pair_refused">电脑拒绝配对，请检查局域网共享并重新生成邀请。</string>
+    <string name="lan_pair_certificate">电脑证书验证失败，请核对电脑并使用新生成的邀请。</string>
+    <string name="lan_pair_network">无法连接电脑。请检查两端是否在同一局域网，以及地址、端口和防火墙，再使用新邀请重试。</string>
+    <string name="lan_pair_mappings">配对另一台电脑前，请先移除现有下载任务，已有文件会保留。</string>
+    <string name="lan_pair_busy">请先取消当前同步再配对。</string>
+    <string name="lan_paired_identity">已安全配对 %1$s · %2$s</string>
 </resources>

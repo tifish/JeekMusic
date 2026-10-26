@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using JeekMusic.Infrastructure;
 using JeekMusic.UI;
 using static JeekMusic.UI.SettingsWindow;
@@ -36,12 +38,57 @@ internal static class LanSyncSettings
                 try { service.EnableRoot(id, value); } catch (Exception) { problem.Text = L.T("无法共享此根：路径不可用、权限不足或包含链接。" ); }
             }));
         }
-        panel.Children.Add(Note(L.T("手动连接：两端连接同一局域网，将下面的一次性邀请填入手机。邀请 5 分钟有效，只能使用一次；请勿截图或公开。")));
-        var host = new TextBox { Text = diagnostics["addresses"]!.AsArray().FirstOrDefault()?.GetValue<string>() ?? "", PlaceholderText = L.T("PC 局域网 IP 地址"), Width = 300 };
+        panel.Children.Add(Note(L.T("手机扫码配对，或手动输入邀请。两端须在同一局域网。邀请 5 分钟有效且只能使用一次；请勿截图或公开。")));
+        var addresses = diagnostics["addresses"]!.AsArray().Select(n => n!.GetValue<string>()).Distinct().ToArray();
+        var host = new TextBox { Text = addresses.FirstOrDefault() ?? "", PlaceholderText = L.T("PC 局域网 IP 地址"), Width = 300 };
+        if (addresses.Length > 0)
+        {
+            panel.Children.Add(Note(L.T("选择手机可达的 PC 地址（多网卡请核对），也可在下方手动输入。")));
+            var choices = new ComboBox { ItemsSource = addresses, SelectedIndex = 0, MinWidth = 300 };
+            choices.SelectionChanged += (_, _) => host.Text = choices.SelectedItem as string;
+            panel.Children.Add(choices);
+        }
         panel.Children.Add(host);
         var invitation = new TextBox { IsReadOnly = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, PlaceholderText = L.T("一次性配对邀请"), MinHeight = 65 };
-        panel.Children.Add(Action(L.T("生成配对邀请"), () => { try { invitation.Text = service.Invite(host.Text?.Trim() ?? ""); } catch (Exception) { problem.Text = L.T("请输入有效的局域网地址，并启用服务。" ); } }));
-        panel.Children.Add(invitation);
+        var qr = new Image { Width = 300, Height = 300, IsVisible = false };
+        var lifetime = Note("");
+        bool detached = false, generating = false;
+        string? current = null;
+        Bitmap? bitmap = null;
+        void ClearInvitation()
+        {
+            current = null; invitation.Text = ""; qr.Source = null; qr.IsVisible = false;
+            bitmap?.Dispose(); bitmap = null;
+        }
+        void CheckInvitation()
+        {
+            if (current is not null && !service.IsInvitationCurrent(current))
+            { ClearInvitation(); lifetime.Text = L.T("邀请已使用、过期或被替换。需要时重新生成。"); }
+        }
+        var generate = Action(L.T("生成 / 刷新配对二维码"), async () =>
+        {
+            if (generating) return;
+            generating = true;
+            ClearInvitation(); lifetime.Text = "";
+            try
+            {
+                var address = host.Text?.Trim() ?? "";
+                await LanPairingQr.ValidatePhoneHost(address);
+                if (detached) return;
+                current = service.Invite(address);
+                bitmap = new Bitmap(new MemoryStream(LanPairingQr.Encode(current)));
+                invitation.Text = current; qr.Source = bitmap; qr.IsVisible = true;
+                lifetime.Text = L.T("用手机扫码，或复制下方邀请手动配对。刷新会使旧邀请失效。");
+            }
+            catch (Exception) { ClearInvitation(); problem.Text = L.T("请输入手机可达的局域网地址；不能使用 localhost、回环、广播或未指定地址。检查服务和网络。"); }
+            finally { generating = false; }
+        });
+        panel.Children.Add(generate); panel.Children.Add(qr); panel.Children.Add(lifetime); panel.Children.Add(invitation);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) => CheckInvitation();
+        service.Changed += CheckInvitation;
+        panel.AttachedToVisualTree += (_, _) => { detached = false; timer.Start(); };
+        panel.DetachedFromVisualTree += (_, _) => { detached = true; timer.Stop(); service.Changed -= CheckInvitation; ClearInvitation(); };
         foreach (var device in diagnostics["devices"]!.AsArray())
         {
             var id = device!["id"]!.GetValue<string>();

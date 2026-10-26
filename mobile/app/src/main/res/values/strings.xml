@@ -463,4 +463,21 @@
     <string name="artist_format_disabled">Turn on filename inference to choose a format.</string>
     <string name="settings_tabs_help">Drag the handles to reorder tabs. Use × to unpin an artist.</string>
     <string name="settings_keep_source">Keep at least one source selected.</string>
+    <string name="lan_scan">Scan to pair</string>
+    <string name="lan_pair_manual">Enter invitation manually</string>
+    <string name="lan_continue">Continue</string>
+    <string name="lan_scan_hint">Point the camera at the pairing QR code in PC Settings → Sync.</string>
+    <string name="lan_scan_cancelled">Scanning cancelled. You can scan again or enter the invitation manually.</string>
+    <string name="lan_camera_error">Camera or scanner unavailable. Try again or enter the invitation manually.</string>
+    <string name="lan_camera_denied">Camera access was denied. Allow it in app settings to scan, or enter the invitation manually.</string>
+    <string name="lan_open_settings">App settings</string>
+    <string name="lan_confirm_pc">Connect to PC at %1$s? Check that this address matches your PC. Its certificate is verified using this one-use invitation.</string>
+    <string name="lan_invalid_invitation">This is not a valid JeekMusic pairing invitation. Generate a new code on the PC; no link was opened.</string>
+    <string name="lan_invitation_rejected">Invitation expired, already used, or replaced. Generate a new invitation on the PC.</string>
+    <string name="lan_pair_refused">PC refused pairing. Check LAN sharing and generate a new invitation.</string>
+    <string name="lan_pair_certificate">PC certificate verification failed. Check the PC and scan a newly generated invitation.</string>
+    <string name="lan_pair_network">Cannot reach the PC. Check that both devices use the same LAN, and check the address, port and firewall. Then try a new invitation.</string>
+    <string name="lan_pair_mappings">Remove existing download mappings before pairing a different PC. Downloaded files will be kept.</string>
+    <string name="lan_pair_busy">Cancel the current sync before pairing.</string>
+    <string name="lan_paired_identity">Paired securely with %1$s · %2$s</string>
 </resources>

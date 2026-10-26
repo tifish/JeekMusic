@@ -11,6 +11,8 @@ import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -26,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.sync.LanSyncService
+import com.tinyfish.jeekmusic.data.sync.LanInvitation
+import com.tinyfish.jeekmusic.data.sync.LanRemoteException
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -36,10 +40,19 @@ fun LanSyncSettings(lan: LanSyncService) {
     val revision by lan.revision.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
     var mtimeAllowed by remember { mutableStateOf(Environment.isExternalStorageManager()) }
     LifecycleResumeEffect(Unit) { mtimeAllowed = Environment.isExternalStorageManager(); onPauseOrDispose {} }
     val mappings = remember(revision) { lan.store.mappings() }
-    val paired = remember(revision) { lan.store.read().has("connection") }
+    val connection = remember(revision) { lan.store.read().optJSONObject("connection") }
+    val paired = connection != null
+    var scanning by remember { mutableStateOf(false) }
+    var cameraDenied by remember { mutableStateOf(false) }
+    var candidate by remember { mutableStateOf<LanInvitation?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        if (allowed) scanning = true else cameraDenied = true
+    }
     var pairing by remember { mutableStateOf(false) }
     var invitation by remember { mutableStateOf("") }
     var roots by remember { mutableStateOf<List<JSONObject>?>(null) }
@@ -55,7 +68,13 @@ fun LanSyncSettings(lan: LanSyncService) {
         SettingItem(stringResource(R.string.lan_mtime_title), summary = stringResource(if (mtimeAllowed) R.string.lan_mtime_allowed else R.string.lan_mtime_permission), onClick = {
             context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
         })
-        SettingItem(stringResource(if (paired) R.string.lan_pair_again else R.string.lan_pair), onClick = { pairing = true })
+        SettingItem(stringResource(R.string.lan_scan), enabled = !busy && !status.running, onClick = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) scanning = true
+            else cameraPermission.launch(Manifest.permission.CAMERA)
+        })
+        SettingItem(stringResource(R.string.lan_pair_manual), summary = connection?.let { stringResource(R.string.lan_paired_identity, it.optString("name", it.optString("host")), "${it.optString("host")}:${it.optInt("port")}") },
+            enabled = !busy && !status.running, onClick = { pairing = true })
+        notice?.let { SettingSummary(it, Modifier.padding(horizontal = 16.dp)) }
         if (paired) SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(R.string.lan_manual), enabled = !busy && !status.running, onClick = {
             if (!busy && !status.running) scope.launch { busy = true; try { roots = lan.roots() } catch (e: Exception) { error = e.message } finally { busy = false } }
         })
@@ -89,10 +108,31 @@ fun LanSyncSettings(lan: LanSyncService) {
         for (problem in status.problems.take(20)) Text(problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp))
     }
     if (pairing) AlertDialog(onDismissRequest = { if (!busy) { pairing = false; invitation = "" } }, title = { Text(stringResource(R.string.lan_pair)) },
-        text = { Column { Text(stringResource(R.string.lan_invite_hint)); OutlinedTextField(invitation, { invitation = it }, enabled = !busy, modifier = Modifier.testTag("lan_invitation")) } },
+        text = { Column { Text(stringResource(R.string.lan_invite_hint)); OutlinedTextField(invitation, { invitation = it }, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.testTag("lan_invitation")) } },
         confirmButton = { TextButton(enabled = !busy && invitation.isNotBlank(), onClick = {
-            scope.launch { busy = true; try { lan.pair(invitation); invitation = ""; pairing = false; roots = lan.roots() } catch (e: Exception) { error = e.message } finally { busy = false } }
-        }) { Text(stringResource(R.string.lan_connect)) } }, dismissButton = { TextButton(enabled = !busy, onClick = { pairing = false; invitation = "" }) { Text(stringResource(R.string.cancel)) } })
+            try { candidate = LanInvitation.parse(invitation); pairing = false } catch (_: Exception) { invitation = ""; error = resources.getString(R.string.lan_invalid_invitation) }
+        }) { Text(stringResource(R.string.lan_continue)) } }, dismissButton = { TextButton(enabled = !busy, onClick = { pairing = false; invitation = "" }) { Text(stringResource(R.string.cancel)) } })
+    if (scanning) LanQrScanner(onResult = { raw ->
+        scanning = false
+        try { candidate = LanInvitation.parse(raw); invitation = raw }
+        catch (_: Exception) { invitation = ""; error = resources.getString(R.string.lan_invalid_invitation) }
+    }, onCancel = { scanning = false; notice = resources.getString(R.string.lan_scan_cancelled) },
+        onFailure = { scanning = false; error = resources.getString(R.string.lan_camera_error) })
+    if (cameraDenied) AlertDialog(onDismissRequest = { cameraDenied = false }, title = { Text(stringResource(R.string.lan_scan)) },
+        text = { Text(stringResource(R.string.lan_camera_denied)) },
+        confirmButton = { TextButton(onClick = { cameraDenied = false; context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { Text(stringResource(R.string.lan_open_settings)) } },
+        dismissButton = { TextButton(onClick = { cameraDenied = false; pairing = true }) { Text(stringResource(R.string.lan_pair_manual)) } })
+    candidate?.let { pc -> AlertDialog(onDismissRequest = { if (!busy) { candidate = null; invitation = "" } },
+        title = { Text(stringResource(R.string.lan_pair)) }, text = { Column {
+            Text(stringResource(R.string.lan_confirm_pc, pc.endpoint))
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        } }, confirmButton = { TextButton(enabled = !busy, onClick = { scope.launch {
+            busy = true
+            try { lan.pair(invitation); invitation = ""; candidate = null; notice = null; roots = lan.roots() }
+            catch (e: Exception) { invitation = ""; candidate = null; error = resources.getString(pairingError(e)) }
+            finally { busy = false }
+        } }) { Text(stringResource(R.string.lan_connect)) } },
+        dismissButton = { TextButton(enabled = !busy, onClick = { candidate = null; invitation = "" }) { Text(stringResource(R.string.cancel)) } }) }
     roots?.let { list -> AlertDialog(onDismissRequest = { roots = null }, title = { Text(stringResource(R.string.lan_choose_roots)) },
         text = { Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
             if (list.isEmpty()) Text(stringResource(R.string.lan_no_roots))
@@ -169,3 +209,12 @@ private fun targetLabel(uri: Uri): String = runCatching {
     val path = id.substringAfter(':', "").trimEnd('/')
     if (path.isNotEmpty()) path else volume
 }.getOrDefault(uri.lastPathSegment.orEmpty())
+
+private fun pairingError(e: Exception): Int = when {
+    e is LanRemoteException -> if (e.code == "invitation_rejected" || e.code == "unauthorized" || e.message?.startsWith("Authorization denied") == true) R.string.lan_invitation_rejected else R.string.lan_pair_refused
+    e is javax.net.ssl.SSLException || e is java.security.cert.CertificateException -> R.string.lan_pair_certificate
+    e is java.io.IOException -> R.string.lan_pair_network
+    e.message == "Remove existing mappings before pairing another PC" -> R.string.lan_pair_mappings
+    e.message == "Cancel sync first" -> R.string.lan_pair_busy
+    else -> R.string.lan_invalid_invitation
+}

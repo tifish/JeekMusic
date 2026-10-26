@@ -74,17 +74,16 @@ class LanSyncService @Inject constructor(
     suspend fun pair(invitation: String) = withContext(Dispatchers.IO) {
         gate.withLock {
             require(job?.isActive != true) { "Cancel sync first" }
-            val uri = Uri.parse(invitation.trim())
-            require(uri.scheme == "jeeklan" && !uri.host.isNullOrEmpty() && uri.port in 1..65535 && uri.pathSegments.size == 2) { "Invalid PC invitation" }
-            require(store.mappings().isEmpty() || store.read().optJSONObject("connection")?.optString("pin") == uri.pathSegments[0]) { "Remove existing mappings before pairing another PC" }
+            val uri = LanInvitation.parse(invitation)
+            require(store.mappings().isEmpty() || store.read().optJSONObject("connection")?.optString("pin") == uri.pin) { "Remove existing mappings before pairing another PC" }
             val id = sync.lanDeviceId()
-            val connection = JSONObject().put("host", uri.host).put("port", uri.port).put("pin", uri.pathSegments[0]).put("deviceId", id)
+            val connection = JSONObject().put("host", uri.host).put("port", uri.port).put("pin", uri.pin).put("deviceId", id)
             val client = LanProtocol(connection); transport = client
-            val response = client.call("pair", JSONObject().put("invitation", uri.pathSegments[1]).put("name", Build.MODEL))
+            val response = client.call("pair", JSONObject().put("invitation", uri.token).put("name", Build.MODEL))
             client.close()
-            connection.put("token", response.getString("token"))
+            connection.put("token", response.getString("token")).put("name", response.optString("name", uri.host))
             store.update { it.put("connection", connection) }; report()
-            _status.value = LanStatus(text = context.getString(R.string.lan_paired))
+            _status.value = LanStatus(text = context.getString(R.string.lan_paired_identity, connection.getString("name"), uri.endpoint))
         }
     }
     suspend fun roots(): List<JSONObject> = withContext(Dispatchers.IO) {

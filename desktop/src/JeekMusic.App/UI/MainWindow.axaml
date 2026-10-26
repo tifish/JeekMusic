@@ -214,7 +214,7 @@
                                             </Border>
                                             <TextBlock Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center"
                                                        Classes="song-title" Classes.current="{Binding IsCurrent}"
-                                                       Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                                       Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                                         </Grid>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>

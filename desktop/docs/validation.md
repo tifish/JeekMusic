@@ -1,5 +1,16 @@
 # 实现与验证记录
 
+## 2026-10-27：截断文件夹与主列表歌名的等高无边框浮显
+
+- 将导航专用浮显提取为 `RowTextOverflowReveal`，导航名称/计数与主歌曲列表标题共用窗口 OverlayLayer，主列表取消默认歌名 tooltip。浮层无 border、阴影和额外 padding，按导航 `PART_LayoutRoot`（34 DIP，而非约 19 DIP 的文字 presenter）或 DataGrid `BackgroundRectangle` 实际高度/顶部对齐，保留文字基线、字体与字号。
+- 底色读取实际祖先背景及 DataGrid 的整行 Fill/有效 Opacity，覆盖普通选中蓝色、当前曲暖琥珀、当前曲同时选中蓝底等状态。当前曲已有琥珀整行边框与可见单元格焦点轮廓通过裁剪保留，浮层延伸部分不加边框。不增加状态标签/图示，不修改音频策略。Mica 仍以实际主题的实色背景近似合成，原生合成结果本轮未验收。
+- 只对实际被裁剪文字立即浮显，保留导航行/图标及主列表标题原触发区域；不拦截点击、多选、播放、拖动、滚轮或焦点。行状态/主题/布局/列宽/缩放、滚动、重用、按键等变化关闭旧浮层。靠近右屏幕边缘先向左放置，以物理像素向内取整防止 1px 越界；异常超宽文字在等高单行内横向自动阅读，代替之前增高换行的行为。
+- 相关限定回归 **213 项通过，0 失败/跳过**（NavigationOverflow、SongOverflow、PlayingAppearance、PlayingVisibility、MainWindowLayout、TrackNavigation、FolderNavigation、McpSession、SpacePlaybackShortcut）。此后补充屏幕边缘/极长歌名和导航实际底色像素检查，最终浮显专项 **33 项通过**，与前述回归有重叠。使用真实 Headless 控件、Skia、内存曲库及 fake 引擎/端点，无测试音频。Release win-x64 构建 0 警告/错误；`git diff --check` 通过。
+- 已实际目检浅深主题文件夹选中、歌曲悬浮/选中、当前曲暖色与当前曲选中、屏幕右边缘/极长单行阅读等补充渲染。证据目录为 `D:/MyOpenSource/JeekMusic/desktop/artifacts/row-overflow/`，代表图 `overflow-light-selected-1.5.png`、`overflow-dark-selected-1.25.png`、`song-light-1-current-hover.png`、`song-dark-2-current-selected.png`、`song-right-edge-horizontal-reading.png`；测试记录 `regression.trx`、`row-overflow-final.trx`。这些均为 Headless 补充渲染，不是真实客户端截图。
+- 重新读取 computer-use 技能并尝试原生连接，仍返回 **`Computer Use native pipe is unavailable: failed to connect native pipe: The system cannot find the file specified. (os error 2)`**。本轮真实 Windows 客户端鼠标交互、截图、Mica/远程桌面合成以及真实多屏 DPI 未验收；没有把 Headless 或 MCP 状态检查当成真实 UI 通过。
+- MCP 仅兼容追加 `get_diagnostics.mainLayout.songOverflow`，保留原 `navigationOverflow` 及字段，追加 rowHeight/borderThickness/readingAxis。`wrapped` 保留且为 false，readingOffset 改为横向 DIP。工具描述和中英文文档同步；24 工具、全部输入 Schema 保持不变，开发/正式版共用代码，无视觉控制接口或开发专用开关。
+- 重启前通过生产 MCP 保存完整状态/队列/诊断/工具目录，并对数据库作 SQLite 在线备份，另存设置与 UI 快照，仅留本地证据。接手状态：PID 27348、曲目 1174、队列 20 项、258.830106 秒、暂停、随机开/循环关。最终进程、提交及重启后保持状态的读回结果在交接报告和同目录 `after-restart.json` / `restart-verification.json` 中记录，不覆写用户曲库、队列或设置。
+
 ## 2026-10-26：移除当前曲标签与暂停格式误导
 
 列表、队列和播放栏取消占歌名布局的状态标签/装饰图示，保留琥珀整行高亮和真实播放按钮；暂停释放输出后显示源率及“输出空闲”，不把恢复后的设备默认格式称为重采样。48 项最终针对性回归通过，新客户端 PID 19976 实际 MCP 续播匹配/暂停恢复通过，保留原暂停位置。原生 computer-use 仍因 native pipe 缺失阻断，无真实截图验收。详见 [变化、证据与验收边界](current-track-display-validation.md)。

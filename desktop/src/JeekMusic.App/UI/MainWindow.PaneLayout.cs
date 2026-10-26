@@ -24,14 +24,15 @@ public partial class MainWindow
     int _lastNavMeasuredNodes;
     string _autoNavResult = "none";
     Func<JsonObject>? _layoutDiagnostic;
-    NavigationOverflowReveal? _navigationOverflow;
+    RowTextOverflowReveal? _navigationOverflow, _songOverflow;
 
     internal static double SafeNavWidth(double width) => double.IsFinite(width) && width >= NavMinimum ? width : 230;
 
     void InitMainLayout()
     {
         _layoutReady = true;
-        _navigationOverflow = new NavigationOverflowReveal(this, NavTree, () => _navCollapsed);
+        _navigationOverflow = new RowTextOverflowReveal(this, NavTree, () => _navCollapsed);
+        _songOverflow = new RowTextOverflowReveal(this, Table, () => !Table.IsEffectivelyVisible);
         MainArea.SizeChanged += (_, _) => RefreshLayoutBudget();
         RightArea.SizeChanged += (_, _) => RefreshLayoutBudget();
         _vm.PropertyChanged += OnLayoutViewModelChanged;
@@ -224,6 +225,7 @@ public partial class MainWindow
         ["splitterDragging"] = _navDragging, ["automaticWidthPending"] = _autoNavPending,
         ["lastMeasuredContentWidth"] = _lastNavContentWidth, ["lastMeasuredFolderCount"] = _lastNavMeasuredNodes,
         ["automaticWidthResult"] = _autoNavResult,
-        ["navigationOverflow"] = _navigationOverflow?.Diagnostics()
+        ["navigationOverflow"] = _navigationOverflow?.Diagnostics(),
+        ["songOverflow"] = _songOverflow?.Diagnostics()
     };
 }

@@ -62,6 +62,14 @@ public sealed class NavigationOverflowTests
         Assert.InRange(Math.Abs(origin.X - floated.X), 0, 1 / scale + .01);
         Assert.InRange(Math.Abs(origin.Y - floated.Y), 0, 1 / scale + .01);
         Assert.False(h.D["wrapped"]!.GetValue<bool>());
+        Assert.Equal(new Thickness(0), h.Surface.BorderThickness);
+        Assert.Null(h.Surface.BorderBrush); Assert.Equal(new Thickness(0), h.Surface.Padding);
+        Assert.Equal(h.D["rowHeight"]!.GetValue<double>(), h.Surface.Bounds.Height, 4);
+        var painted = original.GetVisualAncestors().OfType<Border>().First(v =>
+            ReferenceEquals(v.TemplatedParent, h.Row(h.Long)) && v.Name == "PART_LayoutRoot");
+        Assert.Equal(painted.Bounds.Height, h.Surface.Bounds.Height, 4);
+        Assert.InRange(Math.Abs(painted.TranslatePoint(default, h.Window)!.Value.Y - h.Surface.TranslatePoint(default, h.Window)!.Value.Y), 0, .01);
+        h.AssertRenderedRowBackground(original);
         Assert.True(h.D["contrastRatio"]!.GetValue<double>() >= 3, h.D.ToJsonString());
         Assert.Equal(255, ((ISolidColorBrush)h.Surface.Background!).Color.A);
         h.Capture($"overflow-{(dark ? "dark" : "light")}-{(selected ? "selected" : "hover")}-{scale}");
@@ -98,19 +106,20 @@ public sealed class NavigationOverflowTests
     });
 
     [Fact]
-    public Task VeryLongNameWrapsWithoutScalingAndRemainsWithinClientAndScreen() => Run(async () =>
+    public Task VeryLongNameReadsHorizontallyAtRowHeightWithinClientAndScreen() => Run(async () =>
     {
         using var h = new Harness(760);
         var row = h.Long;
         var text = h.Name(row); text.Text = string.Concat(Enumerable.Repeat("很长的目录Name", 18)); h.Pump();
         h.Hover(row); await Task.CompletedTask; Assert.True(h.Visible);
-        Assert.True(h.D["wrapped"]!.GetValue<bool>()); Assert.Equal(text.FontSize, h.RevealText.FontSize);
+        Assert.False(h.D["wrapped"]!.GetValue<bool>()); Assert.True(h.D["automaticReading"]!.GetValue<bool>()); Assert.Equal(text.FontSize, h.RevealText.FontSize);
         Assert.Equal(text.Text, h.RevealText.Text); Assert.Equal(TextTrimming.None, h.RevealText.TextTrimming);
         var bounds = new Rect(h.Surface.Bounds.Size).TransformToAABB(h.Surface.TransformToVisual(h.Window)!.Value);
         Assert.InRange(bounds.Left, 0, h.Window.ClientSize.Width); Assert.True(bounds.Right <= h.Window.ClientSize.Width);
         Assert.True(bounds.Bottom <= h.Window.ClientSize.Height); Assert.True(bounds.Top >= 0);
-        Assert.True(h.RevealText.Bounds.Height > text.Bounds.Height);
-        h.Capture("overflow-long-wrapped-760");
+        Assert.Equal(text.Bounds.Height, h.RevealText.Bounds.Height);
+        Assert.Equal(h.D["rowHeight"]!.GetValue<double>(), h.Surface.Bounds.Height);
+        h.Capture("overflow-long-horizontal-760");
     });
 
     [Theory]
@@ -419,6 +428,24 @@ public sealed class NavigationOverflowTests
             }
             Assert.True((high + .05) / (low + .05) >= 3, $"Rendered contrast={(high + .05) / (low + .05)}; {D}");
             static double Linear(byte value) => value / 255d <= .04045 ? value / 255d / 12.92 : Math.Pow((value / 255d + .055) / 1.055, 2.4);
+        }
+        public void AssertRenderedRowBackground(TextBlock source)
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            using var frame = Window.CaptureRenderedFrame(); Assert.NotNull(frame);
+            var left = source.TranslatePoint(new Point(-4, 0), Window)!.Value.X;
+            var continuation = Surface.TranslatePoint(new Point(Surface.Bounds.Width - 3, Surface.Bounds.Height - 4), Window)!.Value;
+            var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
+            try
+            {
+                int Pixel(double x)
+                {
+                    frame.CopyPixels(new PixelRect((int)(x * Window.RenderScaling), (int)(continuation.Y * Window.RenderScaling), 1, 1), buffer, 4, 4);
+                    return System.Runtime.InteropServices.Marshal.ReadInt32(buffer);
+                }
+                Assert.Equal(Pixel(left), Pixel(continuation.X));
+            }
+            finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
         }
         public void Close() { if (_closed) return; _closed = true; Vm.Player.ProgressVisible = false; Window.Close(); Pump(); }
         public void Dispose() { Close(); App.Dispose(); Assert.Empty(_engines); Assert.Empty(_endpoint.Writes); File.Delete(_path); }

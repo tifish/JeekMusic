@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -16,21 +18,25 @@ using Avalonia.VisualTree;
 namespace JeekMusic.UI;
 
 /// <summary>
-/// A click-through, in-place copy of a clipped navigation text run. It lives in the
+/// A click-through, in-place copy of a clipped row text run. It lives in the
 /// existing window overlay (no popup/window/focus/capture), outside the pane's clip.
 /// Only the text is copied: the original icon, count and input targets stay in place.
 /// </summary>
-internal sealed class NavigationOverflowReveal : IDisposable
+internal sealed class RowTextOverflowReveal : IDisposable
 {
     readonly Window _window;
-    readonly TreeView _tree;
+    readonly Control _host;
+    readonly bool _songs;
     readonly Func<bool> _collapsed;
     readonly DispatcherTimer _readingTimer;
     readonly Stopwatch _readingClock = new();
     INotifyCollectionChanged? _items;
     ScrollViewer? _readingScroll;
     TextBlock? _source;
-    TreeViewItem? _row;
+    Control? _row;
+    Visual? _rowBackground;
+    Color _rowColor;
+    Rect _rowRect;
     object? _identity;
     OverlayLayer? _layer;
     Border? _surface;
@@ -43,9 +49,9 @@ internal sealed class NavigationOverflowReveal : IDisposable
     double _contrast;
     bool _foregroundAdjusted;
 
-    public NavigationOverflowReveal(Window window, TreeView tree, Func<bool> collapsed)
+    public RowTextOverflowReveal(Window window, Control host, Func<bool> collapsed)
     {
-        _window = window; _tree = tree; _collapsed = collapsed;
+        _window = window; _host = host; _songs = host is DataGrid; _collapsed = collapsed;
         _readingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _readingTimer.Tick += OnReadTick;
         window.AddHandler(InputElement.PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel, true);
@@ -58,10 +64,10 @@ internal sealed class NavigationOverflowReveal : IDisposable
         window.PositionChanged += OnPositionChanged;
         window.PropertyChanged += OnWindowChanged;
         window.Closed += OnClosed;
-        tree.LayoutUpdated += OnLayout;
-        tree.EffectiveViewportChanged += OnViewport;
-        tree.AddHandler(ScrollViewer.ScrollChangedEvent, OnScroll, RoutingStrategies.Bubble, true);
-        tree.PropertyChanged += OnTreeChanged;
+        host.LayoutUpdated += OnLayout;
+        host.EffectiveViewportChanged += OnViewport;
+        host.AddHandler(ScrollViewer.ScrollChangedEvent, OnScroll, RoutingStrategies.Bubble, true);
+        host.PropertyChanged += OnTreeChanged;
         ObserveItems();
     }
 
@@ -71,8 +77,9 @@ internal sealed class NavigationOverflowReveal : IDisposable
         ["reason"] = _reason, ["naturalWidth"] = _naturalWidth,
         ["visibleTextWidth"] = _visibleRect.Width, ["wrapped"] = _wrapped,
         ["overlayWidth"] = _surface?.Bounds.Width ?? 0, ["overlayHeight"] = _surface?.Bounds.Height ?? 0,
-        ["automaticReading"] = _readingScroll is not null, ["readingOffset"] = _readingScroll?.Offset.Y ?? 0,
+        ["automaticReading"] = _readingScroll is not null, ["readingOffset"] = _readingScroll?.Offset.X ?? 0,
         ["hitTestVisible"] = false, ["delayMs"] = 0,
+        ["rowHeight"] = _rowRect.Height, ["borderThickness"] = 0, ["readingAxis"] = "horizontal",
         ["theme"] = _theme, ["background"] = _background, ["foreground"] = _foreground,
         ["contrastRatio"] = _contrast, ["foregroundAdjusted"] = _foregroundAdjusted
     };
@@ -83,21 +90,37 @@ internal sealed class NavigationOverflowReveal : IDisposable
         if (_disposed || _collapsed() || e.Pointer.Type != PointerType.Mouse || p.Properties.IsLeftButtonPressed || p.Properties.IsRightButtonPressed || p.Properties.IsMiddleButtonPressed)
         { Close("input"); return; }
         var visual = e.Source as Visual;
-        var row = visual?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
-        if (row is null || row.FindAncestorOfType<TreeView>() != _tree) { Close("pointer-left"); return; }
-        var fields = row.GetVisualDescendants().OfType<TextBlock>()
-            .Where(t => t.Classes.Contains("navtitle") && ReferenceEquals(t.DataContext, row.DataContext)).ToArray();
-        // Hovering the icon/row reveals its name; hovering a clipped count reveals that count.
-        var field = fields.FirstOrDefault(t => t.Classes.Contains("nav-count") && t.IsEffectivelyVisible &&
-            new Rect(t.Bounds.Size).Contains(e.GetPosition(t)))
-            ?? fields.FirstOrDefault(t => t.Classes.Contains("nav-name"));
+        Control? row;
+        TextBlock? field;
+        if (_songs)
+        {
+            row = visual?.FindAncestorOfType<DataGridRow>(includeSelf: true);
+            if (row?.FindAncestorOfType<DataGrid>() != _host) { Close("pointer-left"); return; }
+            field = row.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Classes.Contains("song-title") &&
+                new Rect(t.Bounds.Size).Contains(e.GetPosition(t)));
+        }
+        else
+        {
+            row = visual?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
+            if (row?.FindAncestorOfType<TreeView>() != _host) { Close("pointer-left"); return; }
+            var fields = row.GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.Classes.Contains("navtitle") && ReferenceEquals(t.DataContext, row.DataContext)).ToArray();
+            // Hovering the icon/row reveals its name; a clipped count reveals that count.
+            field = fields.FirstOrDefault(t => t.Classes.Contains("nav-count") && t.IsEffectivelyVisible &&
+                new Rect(t.Bounds.Size).Contains(e.GetPosition(t)))
+                ?? fields.FirstOrDefault(t => t.Classes.Contains("nav-name"));
+        }
         if (ReferenceEquals(field, _source)) return;
         Close("candidate-changed");
         if (field is null || !TryClipped(field, out var source, out var visible, out var width)) { _reason = "fits"; return; }
         _source = field; _row = row; _identity = row.DataContext;
+        _rowBackground = RowBackground(field, row);
+        if (_rowBackground.TransformToVisual(_window) is not { } rowTransform) { Close("no-row"); return; }
+        _rowRect = new Rect(_rowBackground.Bounds.Size).TransformToAABB(rowTransform);
         _sourceRect = source; _visibleRect = visible; _naturalWidth = width;
         field.PropertyChanged += OnSourceChanged;
         field.DetachedFromVisualTree += OnSourceDetached;
+        _rowBackground.PropertyChanged += OnRowBackgroundChanged;
         Show();
     }
 
@@ -114,7 +137,7 @@ internal sealed class NavigationOverflowReveal : IDisposable
         {
             if (!ancestor.IsVisible || ancestor.Opacity <= 0) return false;
             if (ancestor.TransformToVisual(_window) is not { } transform) return false;
-            if (ancestor.ClipToBounds || ancestor == _tree || ancestor == _window)
+            if (ancestor.ClipToBounds || ancestor == _host || ancestor == _window)
                 clipRect = clipRect.Intersect(new Rect(ancestor.Bounds.Size).TransformToAABB(transform));
             if (ancestor.Clip is { } clip) clipRect = clipRect.Intersect(clip.Bounds.TransformToAABB(transform));
             if (ancestor == _window) break;
@@ -139,7 +162,7 @@ internal sealed class NavigationOverflowReveal : IDisposable
     void Show()
     {
         if (!StillValid() || _source is not { } source || _row is null) { Close("stale"); return; }
-        _layer = OverlayLayer.GetOverlayLayer(_tree);
+        _layer = OverlayLayer.GetOverlayLayer(_host);
         if (_layer is null || _window.TransformToVisual(_layer) is not { } toLayer) { Close("no-overlay"); return; }
 
         var text = new TextBlock
@@ -149,7 +172,7 @@ internal sealed class NavigationOverflowReveal : IDisposable
             Foreground = source.Foreground, FlowDirection = source.FlowDirection, LetterSpacing = source.LetterSpacing,
             LineHeight = source.LineHeight, LineSpacing = source.LineSpacing, TextDecorations = source.TextDecorations,
             Padding = source.Padding, TextTrimming = TextTrimming.None, TextWrapping = TextWrapping.NoWrap,
-            Focusable = false, IsHitTestVisible = false, Name = "NavigationOverflowText"
+            Focusable = false, IsHitTestVisible = false, Name = _songs ? "SongOverflowText" : "NavigationOverflowText"
         };
         // Preserve effective text opacity (e.g. secondary counts), not only its brush.
         for (Visual? v = source; v is not null && v != _window; v = v.GetVisualParent()) text.Opacity *= v.Opacity;
@@ -160,76 +183,117 @@ internal sealed class NavigationOverflowReveal : IDisposable
         // an opaque base: the overlay cannot inherit native Mica's backdrop pixels.
         var palette = ResolvePalette(source, text.Opacity);
         text.Foreground = new SolidColorBrush(palette.Foreground);
-        _theme = _tree.ActualThemeVariant.ToString();
+        _theme = _host.ActualThemeVariant.ToString();
         _background = palette.Background.ToString(); _foreground = palette.Foreground.ToString();
         _contrast = palette.Contrast; _foregroundAdjusted = palette.Adjusted;
-        var fill = new Border { Child = text, Padding = new Thickness(1), IsHitTestVisible = false };
+        _rowColor = palette.Background;
+        // The surface continues the painted row, without tooltip chrome or padding.
+        // Position the text explicitly so its baseline is independent of row height.
+        var content = new Canvas { IsHitTestVisible = false };
+        Canvas.SetTop(text, _sourceRect.Top - _rowRect.Top);
         _surface = new Border
         {
-            Name = "NavigationOverflowReveal", Background = new SolidColorBrush(palette.Background), Child = fill, IsHitTestVisible = false, Focusable = false,
-            BorderBrush = _tree.TryFindResource("SystemControlForegroundBaseLowBrush", _tree.ActualThemeVariant, out var line) ? line as IBrush : null,
-            BorderThickness = new Thickness(1), ClipToBounds = true
+            Name = _songs ? "SongOverflowReveal" : "NavigationOverflowReveal",
+            Background = new SolidColorBrush(palette.Background), Child = content,
+            IsHitTestVisible = false, Focusable = false, ClipToBounds = true,
+            BorderThickness = new Thickness(0), Padding = new Thickness(0),
+            Height = _rowRect.Height
         };
-
-        // Keep the normal one-line text origin/baseline. For an exceptional long run,
-        // wrap within the intersection of the client and monitor work area, never scale.
         var available = AvailableClientRect();
-        if (available.Width < 40 || available.Height < 20) { Close("no-space"); return; }
-        var x = Math.Clamp(_sourceRect.X - 2, available.Left, Math.Max(available.Left, available.Right - 40));
-        var y = _sourceRect.Y - 2;
-        var maxWidth = Math.Max(1, available.Right - x);
-        _wrapped = _naturalWidth + 4 > maxWidth;
-        if (_wrapped) text.TextWrapping = TextWrapping.Wrap;
-        _surface.MaxWidth = maxWidth;
-        _surface.Measure(new Size(maxWidth, double.PositiveInfinity));
-        // If a very deep/long name needs the whole client width, use it before moving
-        // upward. The typography stays unchanged and the complete run remains readable.
-        if (_surface.DesiredSize.Height > available.Height && _wrapped)
+        if (available.Width < 40 || available.Height < _rowRect.Height ||
+            _rowRect.Top < available.Top || _rowRect.Bottom > available.Bottom) { Close("no-space"); return; }
+        // Snap inward at the monitor/client edge before Avalonia rounds layout;
+        // rounding a fractional natural width otherwise leaks one physical pixel.
+        var scale = _window.RenderScaling;
+        var left = Math.Ceiling(available.Left * scale) / scale;
+        var right = Math.Floor(available.Right * scale) / scale;
+        var naturalWidth = Math.Ceiling(_naturalWidth * scale) / scale;
+        var x = Math.Clamp(Math.Floor(_sourceRect.X * scale) / scale, left, Math.Max(left, right - 40));
+        var y = _rowRect.Top;
+        // Prefer moving left over shortening a run near the right screen edge.
+        if (naturalWidth > right - x) x = Math.Max(left, right - naturalWidth);
+        var width = Math.Min(naturalWidth, right - x);
+        _wrapped = false;
+        _surface.Width = width;
+        if (_row is DataGridRow songRow)
         {
-            x = available.Left; maxWidth = available.Width;
-            _surface.MaxWidth = maxWidth;
-            _surface.Measure(new Size(maxWidth, double.PositiveInfinity));
+            // Leave holes over existing playback and cell-focus outlines only.
+            // The continuation itself never paints a border.
+            var edges = new GeometryGroup();
+            foreach (var outline in songRow.GetVisualDescendants().OfType<Rectangle>().Where(r =>
+                r.Stroke is not null && r.StrokeThickness > 0 && r.IsEffectivelyVisible && r.Bounds.Width > 0 &&
+                (ReferenceEquals(r, _rowBackground) || r.GetVisualAncestors().OfType<Control>().Any(c => c.Name == "FocusVisual"))))
+            {
+                if (outline.TransformToVisual(_window) is not { } transform) continue;
+                var rect = new Rect(outline.Bounds.Size).TransformToAABB(transform).Translate(new Vector(-x, -y));
+                edges.Children.Add(new CombinedGeometry(GeometryCombineMode.Exclude,
+                    new RectangleGeometry(rect), new RectangleGeometry(rect.Deflate(outline.StrokeThickness))));
+            }
+            if (edges.Children.Count > 0)
+                _surface.Clip = new CombinedGeometry(GeometryCombineMode.Exclude,
+                    new RectangleGeometry(new Rect(new Size(width, _rowRect.Height))), edges);
         }
-        y = Math.Clamp(y, available.Top, Math.Max(available.Top, available.Bottom - _surface.DesiredSize.Height));
-        _surface.MaxHeight = available.Height;
-        if (_surface.DesiredSize.Height > available.Height)
+        text.Width = _naturalWidth;
+        text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        text.Height = text.DesiredSize.Height;
+        if (_naturalWidth > width + .5 / Math.Max(1, _window.RenderScaling))
         {
-            // Arbitrarily long playlist names can exceed even the full monitor height.
-            // Slowly read through the complete run without intercepting the original
-            // wheel/click targets or reducing the font. Normal names never animate.
-            fill.Child = null;
+            // Keep the row height even for arbitrarily long text. Read horizontally
+            // at the original font size rather than growing a second card over rows.
             _readingScroll = new ScrollViewer
             {
-                Content = text, IsHitTestVisible = false, Focusable = false,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Hidden
+                Content = text, Width = width, Height = text.Height,
+                IsHitTestVisible = false, Focusable = false,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
             };
-            fill.Child = _readingScroll;
+            Canvas.SetTop(_readingScroll, _sourceRect.Top - _rowRect.Top);
+            content.Children.Add(_readingScroll);
             _readingClock.Restart(); _readingTimer.Start();
         }
+        else content.Children.Add(text);
         var location = new Point(x, y).Transform(toLayer);
         Canvas.SetLeft(_surface, location.X); Canvas.SetTop(_surface, location.Y);
         _layer.Children.Add(_surface);
         _reason = "revealed";
     }
 
+    static IBrush? BackgroundBrush(Visual visual) => visual switch
+    {
+        Border b => b.Background, Panel p => p.Background,
+        ContentPresenter p => p.Background, TemplatedControl t => t.Background,
+        Rectangle r => r.Fill, _ => null
+    };
+
+    static Visual RowBackground(TextBlock source, Control row)
+    {
+        if (row is DataGridRow)
+            return row.GetVisualDescendants().OfType<Rectangle>().FirstOrDefault(r =>
+                r.Name == "BackgroundRectangle" && ReferenceEquals(r.TemplatedParent, row)) ?? (Visual)row;
+        // TreeViewItem.Bounds includes expanded children. Its own themed header
+        // presenter is the painted selection/hover area, independent of descendants.
+        return source.GetVisualAncestors().OfType<Border>().FirstOrDefault(v =>
+            ReferenceEquals(v.TemplatedParent, row) && v.Name == "PART_LayoutRoot") ?? (Visual)row;
+    }
+
     (Color Background, Color Foreground, double Contrast, bool Adjusted) ResolvePalette(TextBlock source, double opacity)
     {
-        var theme = _tree.ActualThemeVariant;
+        var theme = _host.ActualThemeVariant;
         var fallback = theme == ThemeVariant.Dark ? Color.Parse("#202020") : Colors.White;
-        // Mica is transparent in the visual tree. Its opaque theme counterpart avoids
+        // Mica is transparent in the visual host. Its opaque theme counterpart avoids
         // both text showing through from below and an unrelated default-theme colour.
         var backdropKey = _window.ActualTransparencyLevel == WindowTransparencyLevel.Mica
             ? "SystemControlBackgroundChromeMediumLowBrush" : "SystemControlBackgroundAltHighBrush";
         var background = ResourceColor(backdropKey, fallback);
         foreach (var visual in source.GetVisualAncestors().Reverse())
         {
-            IBrush? brush = visual switch
-            {
-                Border b => b.Background, Panel p => p.Background,
-                TemplatedControl t => t.Background, _ => null
-            };
-            if (brush is ISolidColorBrush solid) background = Composite(BrushColor(solid), background);
+            if (BackgroundBrush(visual) is ISolidColorBrush solid)
+                background = Composite(WithOpacity(BrushColor(solid), EffectiveOpacity(visual)), background);
+            // DataGrid paints row state in a sibling Rectangle, outside the text's
+            // ancestor chain. Its actual opacity differs for hover/selection/focus.
+            if (ReferenceEquals(visual, _row) && _row is DataGridRow && _rowBackground is { } painted &&
+                BackgroundBrush(painted) is ISolidColorBrush fill)
+                background = Composite(WithOpacity(BrushColor(fill), EffectiveOpacity(painted)), background);
         }
         var foreground = source.Foreground is ISolidColorBrush actual ? BrushColor(actual)
             : ResourceColor("SystemControlForegroundBaseHighBrush", theme == ThemeVariant.Dark ? Colors.White : Colors.Black);
@@ -246,8 +310,15 @@ internal sealed class NavigationOverflowReveal : IDisposable
         }
         return (background, foreground, ratio, adjusted);
 
-        Color ResourceColor(string key, Color alternative) => _tree.TryFindResource(key, theme, out var resource) && resource is ISolidColorBrush solid
+        Color ResourceColor(string key, Color alternative) => _host.TryFindResource(key, theme, out var resource) && resource is ISolidColorBrush solid
             ? Composite(BrushColor(solid), fallback) : alternative;
+    }
+
+    double EffectiveOpacity(Visual visual)
+    {
+        var opacity = 1d;
+        for (Visual? v = visual; v is not null && v != _window; v = v.GetVisualParent()) opacity *= v.Opacity;
+        return opacity;
     }
 
     static Color BrushColor(ISolidColorBrush brush) => WithOpacity(brush.Color, brush.Opacity);
@@ -269,7 +340,7 @@ internal sealed class NavigationOverflowReveal : IDisposable
 
     Rect AvailableClientRect()
     {
-        var client = new Rect(_window.ClientSize).Deflate(4);
+        var client = new Rect(_window.ClientSize);
         if (_window.Screens.ScreenFromWindow(_window) is not { } screen) return client;
         var origin = _window.PointToScreen(default);
         var work = screen.WorkingArea;
@@ -281,27 +352,40 @@ internal sealed class NavigationOverflowReveal : IDisposable
         ReferenceEquals(row.DataContext, _identity) && row.IsEffectivelyVisible && row.IsPointerOver &&
         TryClipped(source, out var rect, out var visible, out _) && rect == _sourceRect && visible == _visibleRect;
 
-    void OnLayout(object? sender, EventArgs e) { if (_source is not null && !StillValid()) Close("layout-changed"); }
+    void OnLayout(object? sender, EventArgs e)
+    {
+        if (_source is null) return;
+        if (!StillValid() || _rowBackground?.TransformToVisual(_window) is not { } transform ||
+            new Rect(_rowBackground.Bounds.Size).TransformToAABB(transform) != _rowRect)
+        { Close("layout-changed"); return; }
+        // Selection, playback identity, focus and hover can change without moving
+        // the pointer. Never leave a previous row state's palette on the surface.
+        if (ResolvePalette(_source, EffectiveOpacity(_source)).Background != _rowColor) Close("row-state-changed");
+    }
     void OnSourceChanged(object? sender, AvaloniaPropertyChangedEventArgs e) => Close("text-or-style-changed");
+    void OnRowBackgroundChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property.Name is "Background" or "Fill" or "Opacity" or "Stroke" or "StrokeThickness") Close("row-state-changed");
+    }
     void OnSourceDetached(object? sender, VisualTreeAttachmentEventArgs e) => Close("container-detached");
     void OnReadTick(object? sender, EventArgs e)
     {
         if (_readingScroll is not { } scroll) return;
-        var maximum = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
-        var cycleSeconds = maximum / 20 + 3;
+        var maximum = Math.Max(0, scroll.Extent.Width - scroll.Viewport.Width);
+        var cycleSeconds = maximum / 40 + 3;
         var seconds = _readingClock.Elapsed.TotalSeconds % cycleSeconds;
-        scroll.Offset = new Vector(0, Math.Clamp((seconds - 1) * 20, 0, maximum));
+        scroll.Offset = new Vector(Math.Clamp((seconds - 1) * 40, 0, maximum), 0);
     }
     void ObserveItems()
     {
         if (_items is not null) _items.CollectionChanged -= OnItemsChanged;
-        _items = _tree.ItemsSource as INotifyCollectionChanged;
+        _items = (_host is DataGrid grid ? grid.ItemsSource : (_host as ItemsControl)?.ItemsSource) as INotifyCollectionChanged;
         if (_items is not null) _items.CollectionChanged += OnItemsChanged;
     }
     void OnTreeChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
-        if (e.Property == ItemsControl.ItemsSourceProperty) ObserveItems();
-        if (e.Property == ItemsControl.ItemsSourceProperty || e.Property == TreeView.SelectedItemProperty || e.Property == Visual.IsVisibleProperty) Close("tree-changed");
+        if (e.Property.Name == "ItemsSource") ObserveItems();
+        if (e.Property.Name == "ItemsSource" || e.Property == TreeView.SelectedItemProperty || e.Property == DataGrid.SelectedItemProperty || e.Property == Visual.IsVisibleProperty) Close("tree-changed");
     }
     void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Close("items-changed");
     void OnViewport(object? sender, EffectiveViewportChangedEventArgs e) => Close("viewport-changed");
@@ -326,7 +410,8 @@ internal sealed class NavigationOverflowReveal : IDisposable
             _source.DetachedFromVisualTree -= OnSourceDetached;
         }
         if (_surface is not null) _layer?.Children.Remove(_surface);
-        _surface = null; _layer = null; _source = null; _row = null; _identity = null;
+        if (_rowBackground is not null) _rowBackground.PropertyChanged -= OnRowBackgroundChanged;
+        _surface = null; _layer = null; _source = null; _row = null; _rowBackground = null; _identity = null;
         _reason = reason;
     }
 
@@ -345,10 +430,10 @@ internal sealed class NavigationOverflowReveal : IDisposable
         _window.PositionChanged -= OnPositionChanged;
         _window.PropertyChanged -= OnWindowChanged;
         _window.Closed -= OnClosed;
-        _tree.LayoutUpdated -= OnLayout;
-        _tree.EffectiveViewportChanged -= OnViewport;
-        _tree.RemoveHandler(ScrollViewer.ScrollChangedEvent, OnScroll);
-        _tree.PropertyChanged -= OnTreeChanged;
+        _host.LayoutUpdated -= OnLayout;
+        _host.EffectiveViewportChanged -= OnViewport;
+        _host.RemoveHandler(ScrollViewer.ScrollChangedEvent, OnScroll);
+        _host.PropertyChanged -= OnTreeChanged;
         if (_items is not null) _items.CollectionChanged -= OnItemsChanged;
         _items = null;
     }

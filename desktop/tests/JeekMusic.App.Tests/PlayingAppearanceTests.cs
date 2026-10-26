@@ -39,7 +39,7 @@ public sealed class PlayingAppearanceTests
             Assert.Equal(ordinary.Bounds.Height, rowHeight);
             Assert.InRange(rowHeight, 32, 42);
             Assert.Equal(LongTitle, title.Text);
-            Assert.Equal(LongTitle, ToolTip.GetTip(title));
+            Assert.Null(ToolTip.GetTip(title));
             Assert.InRange(Math.Abs(title.TranslatePoint(new Point(0, title.Bounds.Height / 2), current)!.Value.Y - rowHeight / 2), 0, 1);
             AssertNoDecoration(h.Table);
             var nowTitle = h.Window.FindControl<TextBlock>("NowTitle")!;

@@ -50,6 +50,7 @@ fun TabManagerScreen(viewModel: MainViewModel, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().systemBarsPadding().testTag("tab_manager")) {
         SubScreenHeader(title = stringResource(R.string.settings_tabs), onBack = onBack)
+        SettingSummary(stringResource(R.string.settings_tabs_help), Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
         LazyColumn(state = listState, modifier = Modifier.verticalScrollbar(listState)) {
             items(items, key = { it.key }) { tab ->
                 ReorderableItem(reorderState, key = tab.key) { dragging ->

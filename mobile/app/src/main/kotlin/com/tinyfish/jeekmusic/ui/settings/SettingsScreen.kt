@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.update.AppUpdater
 import com.tinyfish.jeekmusic.update.CheckResult
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,7 +67,6 @@ import java.util.Date
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.analysis.TagRepository
 import com.tinyfish.jeekmusic.analysis.Sensitivity
-import androidx.compose.material3.Switch
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
@@ -77,7 +74,6 @@ import com.tinyfish.jeekmusic.data.settings.OnlineSource
 import com.tinyfish.jeekmusic.data.online.SourceCheck
 import com.tinyfish.jeekmusic.ui.components.sourceName
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.tinyfish.jeekmusic.data.settings.FetchMode
@@ -300,10 +296,11 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true), state = listState) {
             // 检查更新放在最前面，打开设置就能点到，不用滚到底（需求 U-6）
             item {
-                SettingItem(
+                SettingAction(
                     title = stringResource(R.string.update_check_now),
                     summary = if (checkingUpdate) stringResource(R.string.update_checking) else stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                     onClick = viewModel::checkUpdate,
+                    enabled = !checkingUpdate,
                     modifier = Modifier.testTag("check_update"),
                 )
             }
@@ -340,7 +337,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
             item {
                 val running = scanState as? ScanState.Running
-                SettingItem(
+                SettingAction(
                     title = stringResource(R.string.settings_rescan),
                     summary = running?.let { stringResource(R.string.scan_progress, it.done, it.total) }
                         ?: stringResource(R.string.settings_rescan_summary),
@@ -349,7 +346,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             item {
-                SettingItem(
+                SettingAction(
                     title = stringResource(R.string.settings_rebuild),
                     summary = stringResource(R.string.settings_rebuild_summary),
                     onClick = viewModel::rebuild,
@@ -381,7 +378,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             item { SyncSettings(viewModel.sync) }
             item { SectionHeader(stringResource(R.string.settings_backup)) }
             item {
-                SettingItem(
+                SettingAction(
                     title = stringResource(R.string.backup_now),
                     summary = lastBackup?.let {
                         stringResource(R.string.backup_last, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)))
@@ -410,12 +407,12 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             if (settings.onlineLyrics) {
-                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(OnlineSource.FOR_LYRICS) { source ->
-                    SourceRow(source, checked = source in settings.lyricsSources, onClick = { viewModel.toggleLyricsSource(source) }, modifier = Modifier.testTag("lyrics_source_${source.name}"))
+                    SourceRow(source, enabled = source !in settings.lyricsSources || settings.lyricsSources.size > 1, checked = source in settings.lyricsSources, onClick = { viewModel.toggleLyricsSource(source) }, modifier = Modifier.testTag("lyrics_source_${source.name}"))
                 }
                 item {
-                    SettingItem(
+                    SettingAction(
                         title = stringResource(R.string.source_check),
                         summary = stringResource(R.string.source_check_summary),
                         onClick = { viewModel.checkSources(OnlineSource.FOR_LYRICS) },
@@ -424,8 +421,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 }
                 item {
                     val progress = lyricsProgress
-                    SettingItem(
-                        title = stringResource(R.string.lyrics_fetch_missing),
+                    SettingAction(
+                        title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.lyrics_fetch_missing),
                         summary = when {
                             progress == null -> stringResource(R.string.lyrics_fetch_summary)
                             progress.waiting -> stringResource(R.string.cover_fetch_waiting)
@@ -437,7 +434,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("fetch_lyrics"),
                     )
                 }
-                item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(FetchMode.entries) { mode ->
                     RadioRow(
                         selected = settings.lyricsFetchMode == mode,
@@ -453,7 +450,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("lyrics_fetch_${mode.name}"),
                     )
                 }
-                item { Text(stringResource(R.string.lyrics_save_location), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.lyrics_save_location), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(LyricsSaveLocation.entries) { location ->
                     val (title, summary) = when (location) {
                         LyricsSaveLocation.SIDECAR -> R.string.lyrics_save_folder to R.string.lyrics_save_folder_summary
@@ -475,7 +472,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("lyrics_save_${location.name}"),
                     )
                 }
-                item { SettingItem(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
+                item { SettingAction(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
             }
 
             item { SectionHeader(stringResource(R.string.settings_covers)) }
@@ -490,12 +487,12 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             if (settings.onlineCovers) {
-                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(OnlineSource.FOR_COVERS) { source ->
-                    SourceRow(source, checked = source in settings.coverSources, onClick = { viewModel.toggleCoverSource(source) }, modifier = Modifier.testTag("cover_source_${source.name}"))
+                    SourceRow(source, enabled = source !in settings.coverSources || settings.coverSources.size > 1, checked = source in settings.coverSources, onClick = { viewModel.toggleCoverSource(source) }, modifier = Modifier.testTag("cover_source_${source.name}"))
                 }
                 item {
-                    SettingItem(
+                    SettingAction(
                         title = stringResource(R.string.source_check),
                         summary = stringResource(R.string.source_check_summary),
                         onClick = { viewModel.checkSources(OnlineSource.FOR_COVERS) },
@@ -504,8 +501,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 }
                 item {
                     val progress = coverProgress
-                    SettingItem(
-                        title = stringResource(R.string.cover_fetch_missing),
+                    SettingAction(
+                        title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.cover_fetch_missing),
                         summary = when {
                             progress == null -> stringResource(R.string.cover_fetch_summary)
                             progress.waiting -> stringResource(R.string.cover_fetch_waiting)
@@ -517,7 +514,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("fetch_covers"),
                     )
                 }
-                item { Text(stringResource(R.string.cover_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.cover_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(FetchMode.entries) { mode ->
                     RadioRow(
                         selected = settings.coverFetchMode == mode,
@@ -532,7 +529,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         modifier = Modifier.testTag("cover_fetch_${mode.name}"),
                     )
                 }
-                item { Text(stringResource(R.string.cover_save_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+                item { Text(stringResource(R.string.cover_save_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(CoverSaveMode.entries) { mode ->
                     val (title, summary) = when (mode) {
                         CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_save_hidden to R.string.cover_save_hidden_summary
@@ -554,14 +551,14 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
             item { SectionHeader(stringResource(R.string.settings_moods)) }
             item {
-                SettingItem(
+                SettingAction(
                     title = stringResource(R.string.mood_analyze_now),
                     summary = pluralStringResource(R.plurals.mood_pending, pendingAnalysis, pendingAnalysis),
                     onClick = viewModel::analyzeNow,
                     modifier = Modifier.testTag("settings_analyze_now"),
                 )
             }
-            item { Text(stringResource(R.string.settings_analysis_mode), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            item { Text(stringResource(R.string.settings_analysis_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(AnalysisMode.entries) { mode ->
                 RadioRow(
                     selected = settings.analysisMode == mode,
@@ -569,7 +566,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     onClick = { viewModel.setAnalysisMode(mode) },
                 )
             }
-            item { Text(stringResource(R.string.settings_sensitivity), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            item { Text(stringResource(R.string.settings_sensitivity), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(Sensitivity.entries) { s ->
                 RadioRow(
                     selected = settings.sensitivity == s,
@@ -585,28 +582,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
 
             item { SectionHeader(stringResource(R.string.settings_playback)) }
-            item { Text(stringResource(R.string.settings_low_power), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge) }
+            item { Text(stringResource(R.string.settings_low_power), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(LowPowerMode.entries) { mode ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { viewModel.setLowPower(mode) }.padding(horizontal = 16.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = settings.lowPowerMode == mode, onClick = { viewModel.setLowPower(mode) })
-                    Column {
-                        Text(
-                            stringResource(
-                                when (mode) {
-                                    LowPowerMode.BACKGROUND -> R.string.low_power_background
-                                    LowPowerMode.ALWAYS -> R.string.low_power_always
-                                    LowPowerMode.OFF -> R.string.low_power_off
-                                },
-                            ),
-                        )
-                        if (mode == LowPowerMode.ALWAYS) {
-                            Text(stringResource(R.string.low_power_always_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+                SettingRadio(
+                    title = stringResource(when (mode) {
+                        LowPowerMode.BACKGROUND -> R.string.low_power_background
+                        LowPowerMode.ALWAYS -> R.string.low_power_always
+                        LowPowerMode.OFF -> R.string.low_power_off
+                    }),
+                    selected = settings.lowPowerMode == mode, onClick = { viewModel.setLowPower(mode) },
+                    summary = if (mode == LowPowerMode.ALWAYS) stringResource(R.string.low_power_always_summary) else null,
+                )
             }
 
             item { SectionHeader(stringResource(R.string.settings_appearance)) }
@@ -620,21 +606,13 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             items(ThemeMode.entries) { mode ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { viewModel.setTheme(mode) }.padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = settings.themeMode == mode, onClick = { viewModel.setTheme(mode) })
-                    Text(
-                        stringResource(
-                            when (mode) {
-                                ThemeMode.SYSTEM -> R.string.theme_system
-                                ThemeMode.LIGHT -> R.string.theme_light
-                                ThemeMode.DARK -> R.string.theme_dark
-                            },
-                        ),
-                    )
-                }
+                SettingRadio(
+                    title = stringResource(when (mode) {
+                        ThemeMode.SYSTEM -> R.string.theme_system
+                        ThemeMode.LIGHT -> R.string.theme_light
+                        ThemeMode.DARK -> R.string.theme_dark
+                    }), selected = settings.themeMode == mode, onClick = { viewModel.setTheme(mode) },
+                )
             }
 
             item { SectionHeader(stringResource(R.string.settings_about)) }
@@ -759,20 +737,6 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 }
 
 @Composable
-private fun SwitchRow(title: String, summary: String?, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
 private fun RadioRow(
     selected: Boolean,
     text: String,
@@ -784,49 +748,25 @@ private fun RadioRow(
     val context = LocalContext.current
     // 有警告（缺少权限）时点一下去授权
     val click = if (warning) ({ openAllFilesSettings(context) }) else onClick
-    Row(
-        modifier.fillMaxWidth().clickable(onClick = click).padding(horizontal = 16.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = click)
-        Column {
-            Text(text)
-            if (summary != null) {
-                Text(
-                    summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+    SettingRadio(
+        title = text, selected = selected, onClick = click, modifier = modifier,
+        summary = summary,
+    )
 }
 
 /** 一个在线来源：勾选框、名称和国内访问情况的说明。 */
 @Composable
-private fun SourceRow(source: OnlineSource, checked: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = checked, onCheckedChange = { onClick() })
-        Column {
-            Text(sourceName(source))
-            Text(
-                stringResource(
-                    when (source) {
-                        OnlineSource.NETEASE -> R.string.source_netease_summary
-                        OnlineSource.QQ -> R.string.source_qq_summary
-                        OnlineSource.ITUNES -> R.string.source_itunes_summary
-                        OnlineSource.MUSICBRAINZ -> R.string.source_musicbrainz_summary
-                        OnlineSource.LRCLIB -> R.string.source_lrclib_summary
-                    },
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+private fun SourceRow(source: OnlineSource, checked: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    SettingCheckbox(
+        title = sourceName(source), checked = checked, enabled = enabled, onChange = { onClick() }, modifier = modifier,
+        summary = stringResource(when (source) {
+            OnlineSource.NETEASE -> R.string.source_netease_summary
+            OnlineSource.QQ -> R.string.source_qq_summary
+            OnlineSource.ITUNES -> R.string.source_itunes_summary
+            OnlineSource.MUSICBRAINZ -> R.string.source_musicbrainz_summary
+            OnlineSource.LRCLIB -> R.string.source_lrclib_summary
+        }) + if (!enabled) "\n" + stringResource(R.string.settings_keep_source) else "",
+    )
 }
 
 /** 连接检测的状态：[results] 为 null 表示正在检测。 */
@@ -847,32 +787,4 @@ private fun openAllFilesSettings(context: Context) {
     val intent = Intent(SystemSettings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:${context.packageName}".toUri())
     runCatching { context.startActivity(intent) }
         .onFailure { runCatching { context.startActivity(Intent(SystemSettings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) } }
-}
-
-@Composable
-fun SettingItem(
-    title: String,
-    modifier: Modifier = Modifier,
-    summary: String? = null,
-    icon: Int? = null,
-    onClick: (() -> Unit)? = null,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(16.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (summary != null) {
-                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
 }

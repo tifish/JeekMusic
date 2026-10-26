@@ -450,4 +450,8 @@
     <string name="lan_hide_details">收起详情</string>
     <string name="lan_offline">离线</string>
     <string name="lan_target_child">下载子目录：%1$s</string>
+    <string name="settings_unavailable">暂不可用</string>
+    <string name="artist_format_disabled">开启文件名推断后可选择格式。</string>
+    <string name="settings_tabs_help">拖动左侧手柄调整顺序；点 × 取消固定艺术家。</string>
+    <string name="settings_keep_source">至少保留一个来源。</string>
 </resources>

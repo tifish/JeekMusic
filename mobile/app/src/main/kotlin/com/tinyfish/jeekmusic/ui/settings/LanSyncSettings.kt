@@ -10,7 +10,6 @@ import android.provider.Settings
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +29,7 @@ import com.tinyfish.jeekmusic.data.sync.LanSyncService
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LanSyncSettings(lan: LanSyncService) {
     val status by lan.status.collectAsStateWithLifecycle()
@@ -50,38 +50,38 @@ fun LanSyncSettings(lan: LanSyncService) {
     var forget by remember { mutableStateOf<JSONObject?>(null) }
     var details by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.lan_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-        Text(stringResource(R.string.lan_intro), modifier = Modifier.padding(horizontal = 16.dp))
+        com.tinyfish.jeekmusic.ui.components.SectionHeader(stringResource(R.string.lan_title))
+        SettingSummary(stringResource(R.string.lan_intro), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SettingItem(stringResource(R.string.lan_mtime_title), summary = stringResource(if (mtimeAllowed) R.string.lan_mtime_allowed else R.string.lan_mtime_permission), onClick = {
             context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
         })
         SettingItem(stringResource(if (paired) R.string.lan_pair_again else R.string.lan_pair), onClick = { pairing = true })
-        if (paired) SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(R.string.lan_manual), onClick = {
+        if (paired) SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(R.string.lan_manual), enabled = !busy && !status.running, onClick = {
             if (!busy && !status.running) scope.launch { busy = true; try { roots = lan.roots() } catch (e: Exception) { error = e.message } finally { busy = false } }
         })
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
         for (m in mappings) {
             val selected = m.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it).ifEmpty { "/" } }.joinToString(", ") }
-            SettingItem(m.getString("name"), summary = "${targetLabel(Uri.parse(m.getString("treeUri")))} / JeekMusic-${m.getString("rootId").take(8)}…\n$selected", onClick = { if (!status.running) editing = m })
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                TextButton(enabled = !status.running, onClick = { lan.setEnabled(m.getString("rootId"), !m.optBoolean("enabled", true)) }) {
-                    Text(stringResource(if (m.optBoolean("enabled", true)) R.string.lan_pause_keep else R.string.lan_enable))
-                }
-                TextButton(enabled = !status.running, onClick = { clean = m }) { Text(stringResource(R.string.lan_clean)) }
-                TextButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
+            SettingItem(m.getString("name"), summary = "${targetLabel(Uri.parse(m.getString("treeUri")))} / JeekMusic-${m.getString("rootId").take(8)}…\n$selected", enabled = !status.running, onClick = { editing = m })
+            SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
+                checked = m.optBoolean("enabled", true), enabled = !status.running,
+                onChange = { lan.setEnabled(m.getString("rootId"), it) })
+            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled = !status.running, onClick = { clean = m }) { Text(stringResource(R.string.lan_clean)) }
+                OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
             }
         }
-        if (paired) Row(Modifier.padding(horizontal = 12.dp)) {
-            TextButton(enabled = !status.running && mappings.any { it.optBoolean("enabled", true) }, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
-            TextButton(enabled = status.running, onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
+        if (paired) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = !status.running && mappings.any { it.optBoolean("enabled", true) }, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
+            OutlinedButton(enabled = status.running, onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
         }
         if (status.running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        Text(status.text, Modifier.padding(horizontal = 16.dp).testTag("lan_status"))
+        if (status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
         if (status.total > 0) Text("${status.done / 1024} / ${status.total / 1024} KiB", Modifier.padding(horizontal = 16.dp))
         if (status.precisionNs > 0) Text(stringResource(R.string.lan_precision_summary, stringResource(when (status.precisionNs) {
             1_000L -> R.string.lan_microsecond; 1_000_000L -> R.string.lan_millisecond; 1_000_000_000L -> R.string.lan_second; else -> R.string.lan_two_seconds
         })), modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
-        if (mappings.isNotEmpty() || status.timeDetails.isNotEmpty()) TextButton(onClick = { details = !details }) { Text(stringResource(if (details) R.string.lan_hide_details else R.string.lan_details)) }
+        if (mappings.isNotEmpty() || status.timeDetails.isNotEmpty()) OutlinedButton(onClick = { details = !details }) { Text(stringResource(if (details) R.string.lan_hide_details else R.string.lan_details)) }
         if (details) {
             for (m in mappings) Text("${m.getString("name")}\n${m.getString("rootId")}\n${m.getString("treeUri")}\n${m.getString("relative")}", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
             for (detail in status.timeDetails) Text(detail, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
@@ -96,7 +96,10 @@ fun LanSyncSettings(lan: LanSyncService) {
     roots?.let { list -> AlertDialog(onDismissRequest = { roots = null }, title = { Text(stringResource(R.string.lan_choose_roots)) },
         text = { Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
             if (list.isEmpty()) Text(stringResource(R.string.lan_no_roots))
-            for (root in list) TextButton(onClick = { editing = mappings.firstOrNull { it.getString("rootId") == root.getString("rootId") } ?: root; roots = null }) { Text(root.optString("name") + (if (list.count { it.optString("name") == root.optString("name") } > 1) " · " + root.getString("rootId").take(8) else "") + if (!root.optBoolean("available")) " (${stringResource(R.string.lan_offline)})" else "") }
+            for (root in list) SettingItem(
+                title = root.optString("name") + if (list.count { it.optString("name") == root.optString("name") } > 1) " · " + root.getString("rootId").take(8) else "",
+                summary = if (!root.optBoolean("available")) stringResource(R.string.lan_offline) else null,
+                onClick = { editing = mappings.firstOrNull { it.getString("rootId") == root.getString("rootId") } ?: root; roots = null })
         } }, confirmButton = { TextButton(onClick = { roots = null }) { Text(stringResource(R.string.cancel)) } }) }
     editing?.let { root -> LanMappingDialog(lan, root, onDismiss = { editing = null }, onError = { error = it }) }
     clean?.let { m -> AlertDialog(onDismissRequest = { clean = null }, title = { Text(stringResource(R.string.lan_clean)) }, text = { Text(stringResource(R.string.lan_clean_confirm)) },
@@ -131,28 +134,28 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
     }
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { Text(root.getString("name")) },
         text = { Column(Modifier.heightIn(max = 490.dp).verticalScroll(rememberScrollState())) {
-            Text(stringResource(R.string.lan_folders_hint))
-            Row { Checkbox(checked = "" in selection, onCheckedChange = { select("") }, enabled = !busy); Text(stringResource(R.string.lan_whole_root), modifier = Modifier.padding(top = 12.dp)) }
+            SettingSummary(stringResource(R.string.lan_folders_hint))
+            SettingCheckbox(title = stringResource(R.string.lan_whole_root), checked = "" in selection, onChange = { select("") }, enabled = !busy)
             Text("/${path}")
             if (path.isNotEmpty()) TextButton(onClick = { path = path.substringBeforeLast('/', "") }, enabled = !busy) { Text("← ..") }
             for (child in children) {
                 val rel = if (path.isEmpty()) child else "$path/$child"
-                Row(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Checkbox(checked = selection.any { it.isEmpty() || rel == it || rel.startsWith("$it/") }, onCheckedChange = { select(rel) }, enabled = !busy)
-                    TextButton(enabled = !busy, onClick = { path = rel }) { Text("$child  ›") }
+                    SettingItem(title = child, enabled = !busy, modifier = Modifier.weight(1f), onClick = { path = rel })
                 }
             }
             Text(selection.joinToString("\n") { it.ifEmpty { "/" } })
-            TextButton(enabled = !busy && selection.isNotEmpty(), onClick = { scope.launch {
+            OutlinedButton(enabled = !busy && selection.isNotEmpty(), onClick = { scope.launch {
                 busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection); estimate = resources.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
                 catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
             } }) { Text(stringResource(R.string.lan_estimate)) }
             estimate?.let { Text(it) }
-            TextButton(enabled = !busy, onClick = {
+            SettingItem(title = stringResource(R.string.lan_target), summary = target?.let(::targetLabel), enabled = !busy, onClick = {
                 if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) picker.launch(target) else permission.launch(audioPermission)
-            }, modifier = Modifier.testTag("lan_pick_target")) { Text(stringResource(R.string.lan_target)) }
-            target?.let { Text(targetLabel(it)); Text(stringResource(R.string.lan_target_child, "JeekMusic-${root.getString("rootId").take(8)}…"), style = MaterialTheme.typography.bodySmall) }
-            Row { Checkbox(exclusive, { exclusive = it }); Text(stringResource(R.string.lan_exclusive), Modifier.clickable { exclusive = !exclusive }) }
+            }, modifier = Modifier.testTag("lan_pick_target"))
+            target?.let { SettingSummary(stringResource(R.string.lan_target_child, "JeekMusic-${root.getString("rootId").take(8)}…")) }
+            SettingCheckbox(title = stringResource(R.string.lan_exclusive), checked = exclusive, onChange = { exclusive = it })
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } },
         confirmButton = { TextButton(enabled = !busy && selection.isNotEmpty() && target != null && exclusive, onClick = { scope.launch {

@@ -26,9 +26,9 @@ fun SyncSettings(sync: SyncService) {
     var history by remember { mutableStateOf<List<Pair<Int, String>>?>(null) }
     Column {
         SettingItem(stringResource(R.string.sync_device_name), summary = name, onClick = { editing = true })
-        SettingItem(stringResource(R.string.sync_now), summary = status.ifEmpty { stringResource(R.string.sync_summary) },
+        SettingAction(stringResource(R.string.sync_now), summary = status.ifEmpty { stringResource(R.string.sync_summary) },
             onClick = { scope.launch { sync.syncNow() } })
-        for ((device, at) in devices) SettingItem(device, summary = DateFormat.getDateTimeInstance().format(Date(at)), onClick = {})
+        for ((device, at) in devices) SettingItem(device, summary = DateFormat.getDateTimeInstance().format(Date(at)))
         SettingItem(stringResource(R.string.sync_history), summary = stringResource(R.string.sync_history_summary),
             onClick = { scope.launch { history = sync.history() } })
     }

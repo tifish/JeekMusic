@@ -459,4 +459,8 @@
     <string name="lan_hide_details">Hide details</string>
     <string name="lan_offline">offline</string>
     <string name="lan_target_child">Download subfolder: %1$s</string>
+    <string name="settings_unavailable">Temporarily unavailable</string>
+    <string name="artist_format_disabled">Turn on filename inference to choose a format.</string>
+    <string name="settings_tabs_help">Drag the handles to reorder tabs. Use × to unpin an artist.</string>
+    <string name="settings_keep_source">Keep at least one source selected.</string>
 </resources>

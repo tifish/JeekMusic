@@ -2,7 +2,6 @@ package com.tinyfish.jeekmusic.ui.settings
 
 import com.tinyfish.jeekmusic.ui.components.selectedChipColors
 import com.tinyfish.jeekmusic.ui.components.verticalScrollWithScrollbar
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -17,8 +16,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -111,30 +108,21 @@ fun ArtistSettingsScreen(onBack: () -> Unit, viewModel: ArtistSettingsViewModel 
             )
 
             SectionHeader(stringResource(R.string.infer_from_file_name))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.infer_from_file_name_summary), Modifier.weight(1f))
-                Switch(checked = c.inferFromFileName, onCheckedChange = { config = c.copy(inferFromFileName = it) })
-            }
+            SwitchRow(
+                title = stringResource(R.string.infer_from_file_name_summary), checked = c.inferFromFileName,
+                onChange = { config = c.copy(inferFromFileName = it) },
+            )
+            if (!c.inferFromFileName) SettingSummary(stringResource(R.string.artist_format_disabled), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             listOf(FileNameFormat.ARTIST_TITLE to R.string.format_artist_title, FileNameFormat.TITLE_ARTIST to R.string.format_title_artist).forEach { (format, label) ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { config = c.copy(fileNameFormat = format) }.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = c.fileNameFormat == format, onClick = { config = c.copy(fileNameFormat = format) }, enabled = c.inferFromFileName)
-                    Text(stringResource(label))
-                }
+                SettingRadio(title = stringResource(label), selected = c.fileNameFormat == format, enabled = c.inferFromFileName,
+                    onClick = { config = c.copy(fileNameFormat = format) })
             }
 
             SectionHeader(stringResource(R.string.legacy_charset))
             LEGACY_CHARSETS.forEach { name ->
                 val selected = c.legacyCharset?.name() == name?.let { Charset.forName(it).name() }
-                Row(
-                    Modifier.fillMaxWidth().clickable { config = c.copy(legacyCharset = name?.let(Charset::forName)) }.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = selected, onClick = { config = c.copy(legacyCharset = name?.let(Charset::forName)) })
-                    Text(name ?: stringResource(R.string.legacy_charset_auto))
-                }
+                SettingRadio(title = name ?: stringResource(R.string.legacy_charset_auto), selected = selected,
+                    onClick = { config = c.copy(legacyCharset = name?.let(Charset::forName)) })
             }
 
             Button(

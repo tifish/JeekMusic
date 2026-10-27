@@ -1,5 +1,13 @@
 # 实现与验证记录
 
+## 2026-10-27：当前歌曲列表获取全部封面 / 歌词
+
+列表标题栏“更多”新增“获取全部封面”“获取全部歌词”，捕获当前来源/筛选后的完整 Rows（含虚拟化未呈现行，搜索沿用前 200 首上限），保留选中项右键操作。共用既有缺失资源获取与保存服务，补齐单任务保护、快照、取消及按去重单位计算的进度；新增生产 MCP `fetch_resources` 与资源任务诊断。开发/NativeAOT 的 25 工具目录、描述、Schema/注解一致。
+
+145 项相关回归及 1 项目录兼容检查通过，最终 63 项专项通过（与前述有重叠）；开发与 NativeAOT 实际 EXE/MCP 的隔离资源/启动验证通过。新版 `output/JeekMusic.exe` 已运行（PID 5012），曲目 1174、1612 项队列（逐项含 manual 标记）、索引、随机/循环、258.83 秒及暂停状态均与重启前一致，资源任务为空闲。
+
+本轮开始和新版启动后均重试原生 computer-use，仍报 **`Computer Use native pipe is unavailable ... os error 2`**，无法列举真实窗口，**真实菜单呈现、禁用、交互及截图未验收，没有真实截图文件**。Headless 菜单/DataGrid 和 MCP 结果不代替真实客户端 UI 验收；未在用户曲库执行批量资源任务。详见 [范围、行为与验证记录](resource-batch-validation.md)。
+
 ## 2026-10-27：截断文件夹与主列表歌名的等高无边框浮显
 
 - 将导航专用浮显提取为 `RowTextOverflowReveal`，导航名称/计数与主歌曲列表标题共用窗口 OverlayLayer，主列表取消默认歌名 tooltip。浮层无 border、阴影和额外 padding，按导航 `PART_LayoutRoot`（34 DIP，而非约 19 DIP 的文字 presenter）或 DataGrid `BackgroundRectangle` 实际高度/顶部对齐，保留文字基线、字体与字号。

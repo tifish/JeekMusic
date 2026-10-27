@@ -217,7 +217,7 @@ public sealed partial class OnlineFeature
     {
         _backgroundPaused = true; _backgroundAgain = false;
         _backgroundTimer.Stop(); _backgroundRequest?.Cancel();
-        foreach (var batch in _batches) batch.Cancel();
+        Batches.Cancel();
         BackgroundStatusChanged(L.T("已停止后台获取"));
     }
 

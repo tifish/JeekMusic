@@ -6,6 +6,19 @@ namespace JeekMusic.App.Tests;
 public sealed class McpSessionTests
 {
     [Fact]
+    public void ResourceBatchCatalogDocumentsScopeAndProductionSaveSemantics()
+    {
+        var tool = McpTools.BuildCatalog().Single(x => x!["name"]!.GetValue<string>() == "fetch_resources")!;
+        var description = tool["description"]!.GetValue<string>();
+        Assert.Contains("virtualized", description); Assert.Contains("200-song", description);
+        Assert.Contains("no forced overwrite", description); Assert.Contains("save settings", description);
+        Assert.True(tool["annotations"]!["destructiveHint"]!.GetValue<bool>());
+        Assert.True(tool["annotations"]!["openWorldHint"]!.GetValue<bool>());
+        var schema = tool["inputSchema"]!;
+        Assert.Equal(new[] { "action", "kind", "scope", "trackIds" }, schema["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(1000, schema["properties"]!["trackIds"]!["maxItems"]!.GetValue<int>());
+    }
+    [Fact]
     public void OutputCatalogDescribesOpaqueEndpointsWithoutChangingInputs()
     {
         var catalog = McpTools.BuildCatalog();
@@ -48,7 +61,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(24, tools.Count);
+        Assert.Equal(25, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }
@@ -85,6 +98,12 @@ public sealed class McpSessionTests
 
     [Theory]
     [InlineData("set_volume", "{\"volume\":101}")]
+    [InlineData("fetch_resources", "{}")]
+    [InlineData("fetch_resources", "{\"action\":\"force\"}")]
+    [InlineData("fetch_resources", "{\"action\":\"start\",\"kind\":\"both\"}")]
+    [InlineData("fetch_resources", "{\"action\":\"start\",\"scope\":\"library\"}")]
+    [InlineData("fetch_resources", "{\"action\":\"start\",\"trackIds\":[]}")]
+    [InlineData("fetch_resources", "{\"action\":\"start\",\"force\":true}")]
     [InlineData("set_output", "{\"sampleRateMode\":\"invalid\"}")]
     [InlineData("set_output", "{\"sampleRateMode\":\"auto\"}")]
     [InlineData("set_output", "{\"automaticFormat\":\"true\"}")]

@@ -5,6 +5,7 @@ using JeekMusic.Core.Queue;
 using JeekMusic.Core.Analysis;
 using JeekMusic.Infrastructure;
 using JeekMusic.Library;
+using JeekMusic.Online;
 using JeekMusic.UI;
 
 namespace JeekMusic.Automation;
@@ -27,6 +28,8 @@ public sealed class McpTools
 
     internal static JsonArray BuildCatalog() => new(
         Tool("get_status", "Read current playback, queue summary and library scan state. idle means no loaded audio stream and may retain a paused track/queue/position after output release. Playback commands are asynchronous; poll this tool to observe the result.", "", [], true),
+        Tool("fetch_resources", "Start/status/cancel the same missing-resource batch as the song list menu. start requires kind (covers/lyrics) and scope (current_list/track_ids); track_ids additionally requires trackIds (1-1000), current_list rejects trackIds. current_list captures ALL available rows in the current filtered/source result, including virtualized rows, with the existing search 200-song cap; rejects a computing or empty list. Range is frozen before work; navigating later cannot change it. Existing local/cache resources take priority; no forced overwrite. Covers deduplicate albums and may fill missing album-member artwork using existing save policy; lyrics found locally are skipped. Uses current save settings (may embed/modify audio); never changes save preferences or enables online access. Online access for this kind must already be enabled. One batch across UI/MCP; rejects reentry including pending UI confirmation. Returns immediately; status reports preparing/running/cancelling/completed/cancelled/failed, captured targetSongCount and deduplicated totalUnits/processedUnits/savedUnits/failedUnits. cancel is cooperative and does not roll back completed writes. status/cancel accept only action. No playback or navigation changes.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"status\",\"cancel\"]},\"kind\":{\"type\":\"string\",\"enum\":[\"covers\",\"lyrics\"]},\"scope\":{\"type\":\"string\",\"enum\":[\"current_list\",\"track_ids\"]},\"trackIds\":" + Ids, ["action"], destructive: true, openWorld: true),
         Tool("search_tracks", "Search using the UI library matching and sorting services. Empty query lists all tracks. Uses saved sorting, or file modification time newest first without a preference; sort/reverse override this query only. Invalid dates stay last; equal dates keep file/CUE order. Filters combine with AND; sorting precedes pagination. Returns mtimeUtcTicks, modifiedUtc (ISO UTC or null) and modifiedLocal (local display or em dash). Pages default to 50, max 200.",
             "\"query\":{\"type\":\"string\",\"maxLength\":1000},\"folderId\":{\"type\":\"integer\"},\"artistKey\":{\"type\":\"string\"},\"albumKey\":{\"type\":\"string\"},\"sort\":{\"type\":\"string\",\"enum\":[\"FileName\",\"Modified\",\"Title\",\"Artist\",\"Album\",\"Duration\",\"Format\"],\"description\":\"Optional per-query sort, same values as UI settings. Modified is file mtime newest first.\"},\"reverse\":{\"type\":\"boolean\",\"description\":\"Reverse base order; Modified becomes oldest first, unknown dates still last. Defaults to saved direction, or false when sort is supplied. Does not save a preference.\"}," + Page, [], true),
         Tool("get_track", "Read metadata, stable key, path, committed smart tags and tagSources (AUTO/MANUAL, null without a result), and cached file mtime: mtimeUtcTicks (.NET UTC ticks), modifiedUtc (ISO UTC or null), modifiedLocal (local date/time or em dash). No file metadata read or rescan.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
@@ -63,7 +66,7 @@ public sealed class McpTools
         Tool("show_window", "Show and activate the main player window. Other MCP tools do not activate windows.", "", [])
     );
 
-    static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0)
+    static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0, bool openWorld = false)
     {
         var tool = new JsonObject
         {
@@ -73,7 +76,7 @@ public sealed class McpTools
                 ["type"] = "object", ["properties"] = JsonNode.Parse("{" + properties + "}"),
                 ["required"] = new JsonArray(required.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["additionalProperties"] = false
             },
-            ["annotations"] = new JsonObject { ["readOnlyHint"] = readOnly, ["destructiveHint"] = destructive, ["openWorldHint"] = false }
+            ["annotations"] = new JsonObject { ["readOnlyHint"] = readOnly, ["destructiveHint"] = destructive, ["openWorldHint"] = openWorld }
         };
         if (minProperties > 0) tool["inputSchema"]!["minProperties"] = minProperties;
         return tool;
@@ -113,6 +116,7 @@ public sealed class McpTools
         var p = app.Player;
         switch (name)
         {
+            case "fetch_resources": return FetchResources(a);
             case "get_status": return Status();
             case "lan_sync_status": return app.LanSync.Diagnostics();
             case "lan_sync_control":
@@ -269,6 +273,7 @@ public sealed class McpTools
                     ["songVisibility"] = app.SongVisibility?.Diagnostics() ?? new JsonObject { ["created"] = false },
                     ["queueVisibility"] = app.QueueVisibility?.Diagnostics() ?? new JsonObject { ["created"] = false },
                     ["queueSource"] = QueueSourceState(),
+                    ["resourceBatch"] = app.Online?.Batches.Diagnostics() ?? new JsonObject { ["state"] = "unavailable", ["busy"] = false },
                     ["mainLayout"] = app.MainLayoutDiagnostics?.Invoke() ?? new JsonObject { ["created"] = false },
                     ["folderNavigation"] = app.FolderExpansion.Diagnostics(app.Navigation?.Nav)
                 };
@@ -279,6 +284,53 @@ public sealed class McpTools
     }
 
     void OnError(string message) => _lastPlayerError = message;
+
+    JsonObject FetchResources(JsonObject a)
+    {
+        var feature = app.Online ?? throw new InvalidOperationException("Online resource service is not ready");
+        var action = Required(a, "action").GetValue<string>();
+        if (action != "start")
+        {
+            if (a.Count != 1) throw new ArgumentException("status/cancel accept only action");
+            if (action == "cancel") feature.Batches.Cancel();
+            else if (action != "status") throw new ArgumentException("Unknown action");
+        }
+        else
+        {
+            var kind = Required(a, "kind").GetValue<string>() switch
+            { "covers" => DownloadKind.Covers, "lyrics" => DownloadKind.Lyrics, _ => throw new ArgumentException("Unknown kind") };
+            var scope = Required(a, "scope").GetValue<string>();
+            Track[] tracks;
+            string source;
+            if (scope == "current_list")
+            {
+                if (a.ContainsKey("trackIds")) throw new ArgumentException("current_list rejects trackIds");
+                var vm = app.Navigation ?? throw new InvalidOperationException("Song list is not ready");
+                if (vm.ComputingRows) throw new InvalidOperationException("Song list is computing; retry when ready");
+                tracks = vm.CaptureResourceTracks();
+                source = vm.ContentTitle;
+            }
+            else if (scope == "track_ids")
+            {
+                tracks = Required(a, "trackIds").AsArray().Select(n => Track(n!.GetValue<long>())).ToArray();
+                source = "trackIds";
+            }
+            else throw new ArgumentException("Unknown scope");
+            if (!(kind == DownloadKind.Covers ? app.Settings.Current.OnlineCovers : app.Settings.Current.OnlineLyrics))
+                throw new InvalidOperationException("Online access for this resource kind is disabled; enable it in settings first");
+            var job = feature.Batches.Reserve(tracks, kind, scope, source);
+            _ = feature.Batches.Run(job);
+        }
+        var result = feature.Batches.Diagnostics();
+        result["currentList"] = app.Navigation is { } navigation ? new JsonObject
+        {
+            ["ready"] = !navigation.ComputingRows, ["source"] = navigation.CurrentSource?.Encode(),
+            ["title"] = navigation.ContentTitle, ["availableSongCount"] = navigation.CaptureResourceTracks().Length,
+            ["tagFilter"] = new JsonArray(navigation.TagFilter.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()),
+            ["rowsGeneration"] = navigation.RowsGeneration
+        } : null;
+        return result;
+    }
 
     JsonObject Status()
     {

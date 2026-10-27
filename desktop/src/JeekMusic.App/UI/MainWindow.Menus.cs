@@ -100,6 +100,11 @@ public partial class MainWindow
     /// <summary>列表标题栏的"更多"菜单（同移动端 U-12）。</summary>
     void ShowListMenu()
     {
+        CreateListMenu().ShowAt(ListMoreButton);
+    }
+
+    internal MenuFlyout CreateListMenu()
+    {
         var menu = new MenuFlyout();
         void Add(string header, Action action, bool enabled = true)
         {
@@ -144,7 +149,7 @@ public partial class MainWindow
                 break;
         }
         AddListExtras(menu);
-        menu.ShowAt(ListMoreButton);
+        return menu;
     }
 
     /// <summary>播放列表的导出 m3u 等（播放列表功能完成后填充）。</summary>

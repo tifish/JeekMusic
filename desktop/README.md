@@ -10,7 +10,7 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 常听的艺术家可以用艺术家页标题旁的图钉固定到左侧导航栏，也可以右键艺术家或单首歌曲选择“固定到导航栏”（合作歌曲可分别选择艺术家）。固定项支持拖动排序、右键取消固定，重启后保留，并随导航顺序同步到其他设备。
 
-歌曲列表的标题旁显示封面缩略图，支持内嵌封面、同名图片、同专辑共用封面和目录中的 `cover.jpg` 等图片；没有封面时显示音符占位。列表只加载屏幕内的封面，手动更换或下载封面后会刷新。
+歌曲列表的标题旁显示封面缩略图，支持内嵌封面、同名图片、同专辑共用封面和目录中的 `cover.jpg` 等图片；没有封面时显示音符占位。列表只加载屏幕内的封面，手动更换或下载封面后会刷新。列表标题栏的“更多”菜单提供“获取全部封面”“获取全部歌词”，检查当前来源与筛选后的完整歌曲集合（含滚动未呈现项，搜索沿用前 200 首上限），已有本地/缓存资源优先，不强制重新下载或覆盖。选中项的右键获取功能保留；封面按专辑去重，并按现有保存设置补齐资源。任务支持转后台、取消及重复启动保护，开始后切换列表不改变目标。
 
 需求：[requirements.md](docs/requirements.md)。设计：[design.md](docs/design.md)。当前验证结果及未验收项：[validation.md](docs/validation.md)。性能目标和设备兼容性仍以验证报告为准。
 
@@ -65,7 +65,7 @@ build 和 publish 的缓存也相互隔离，发布请使用完整 `dotnet publi
 python desktop/tools/test-build-isolation.py
 ```
 
-它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、24 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
+它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、25 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
 
 `--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
 
@@ -91,7 +91,7 @@ pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -G
 
 ## MCP 接口
 
-开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 24 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
+开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 25 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
 
 仓库提供只依赖 Python 标准库的调试客户端：
 

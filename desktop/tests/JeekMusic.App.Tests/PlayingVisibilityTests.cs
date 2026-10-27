@@ -301,7 +301,7 @@ public sealed class PlayingVisibilityTests
             Assert.Equal(before, h.Version);
             Assert.False(h.Player.EngineReady);
         }
-        Assert.Equal(24, h.Tools.Catalog.Count);
+        Assert.Equal(25, h.Tools.Catalog.Count);
         foreach (var name in new[] { "play_tracks", "playback", "edit_queue" })
             Assert.Contains("reveal", h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == name)!["description"]!.GetValue<string>());
         var schema = h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;

@@ -104,7 +104,7 @@ public sealed class TypographyTests
             var before = h.Player.Queue.Items.ToArray();
             var count = h.Tools.Catalog.Count;
             var diagnostic = h.Tools.Call("get_diagnostics", new())["typography"]!;
-            Assert.Equal(count, h.Tools.Catalog.Count); Assert.Equal(24, count);
+            Assert.Equal(count, h.Tools.Catalog.Count); Assert.Equal(25, count);
             Assert.False(h.Player.EngineReady); Assert.Equal(before, h.Player.Queue.Items);
             Assert.Equal(Typography.Diagnostics().ToJsonString(), diagnostic.ToJsonString());
             foreach (var label in h.Window.GetVisualDescendants().OfType<TextBlock>()

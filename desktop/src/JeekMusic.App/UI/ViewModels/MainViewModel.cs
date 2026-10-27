@@ -251,6 +251,9 @@ public sealed partial class MainViewModel : ObservableObject
     public QueueSource? CurrentSource { get; private set; }
     internal int RowsGeneration { get; private set; }
     internal bool ComputingRows { get; private set; }
+    // Rows is the complete displayed result, including virtualized rows and the search page's existing 200-song cap.
+    internal Track[] CaptureResourceTracks() => ContentKind == ContentKind.Songs && !ComputingRows
+        ? Rows.Select(r => r.Track).OfType<Track>().ToArray() : [];
     internal event Action? RowsInvalidated;
 
     public string? CurrentArtistKey => Current switch

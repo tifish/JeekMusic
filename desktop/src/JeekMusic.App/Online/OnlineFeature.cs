@@ -33,17 +33,29 @@ public sealed partial class OnlineFeature : IFeature
     readonly Dictionary<string, (Track track, string text)> _pendingLyrics = new();
     readonly SemaphoreSlim _writes = new(1, 1);
     readonly SemaphoreSlim _fetches = new(1, 1);
-    readonly HashSet<CancellationTokenSource> _batches = new();
+    internal ResourceBatch Batches { get; private set; } = null!;
 
-    public void Start(AppServices app, Shell shell)
+    public OnlineFeature() { }
+    internal OnlineFeature(AppServices app) => InitializeServices(app);
+
+    void InitializeServices(AppServices app)
     {
-        Current = this; _app = app; _shell = shell;
+        _app = app;
+        app.Online = this;
         Covers = new CoverService(app.Library, app.Settings);
-        shell.Main.SetCoverService(Covers);
         var netEase = new NetEaseMusic(); var qq = new QqMusic(); var lrc = new LrcLibClient();
         CoverClient = new CoverClient(app.Settings, netEase, qq);
         LyricsClient = new OnlineLyricsClient(app.Settings, lrc, netEase, qq);
         _check = new SourceCheck(netEase, qq, lrc);
+        Batches = new ResourceBatch((t, kind, ct) => Fetch(t, kind, ct, ignoreMiss: true), _lifetime.Token);
+        app.OnExit += () => _lifetime.Cancel();
+    }
+
+    public void Start(AppServices app, Shell shell)
+    {
+        Current = this; _shell = shell;
+        InitializeServices(app);
+        shell.Main.SetCoverService(Covers);
         Covers.IsInUse = InUse;
         Covers.DeferEmbed = t => { lock (_pendingCovers) _pendingCovers.Add(t.TrackKey); };
         app.Player.TrackChanged += t => { _ = LoadTrack(t); _ = FlushPending(); };
@@ -308,32 +320,47 @@ public sealed partial class OnlineFeature : IFeature
         catch (Exception e) { Log.Warn("online", "延迟写入失败", e); }
     }
 
-    public async Task Batch(Window owner, IReadOnlyList<Track> tracks, DownloadKind kind)
+    public async Task Batch(Window owner, IReadOnlyList<Track> tracks, DownloadKind kind, string scope = "selected", string source = "")
     {
-        if (!await EnsureOnline(owner, kind)) return;
-        if (tracks.Count > 1 && !await Dialogs.Confirm(owner, L.T("批量获取"), L.F($"将检查 {tracks.Count} 首歌曲，并按所选保存位置保存缺失内容。选择写入音乐文件时会修改文件。"), L.T("开始"))) return;
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        _batches.Add(cts);
-        var status = new TextBlock { Text = L.T("准备获取…"), TextWrapping = TextWrapping.Wrap };
-        var cancel = SettingsWindow.Action(L.T("取消"), cts.Cancel);
-        var window = new Window { Title = kind == DownloadKind.Covers ? L.T("获取封面") : L.T("获取歌词"), Width = 460, Height = 180,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        window.Content = new StackPanel { Margin = new Thickness(20), Spacing = 16, Children = { status, Row(cancel, SettingsWindow.Action(L.T("转到后台"), window.Hide)) } };
-        window.Closing += (_, _) => cts.Cancel();
-        window.Show(owner);
-        int done = 0, saved = 0, failed = 0;
-        foreach (var t in kind == DownloadKind.Covers ? tracks.DistinctBy(CoverService.CacheKey).ToList() : tracks)
+        if (tracks.Count == 0) return;
+        if (Batches.Busy) { _app.Navigation?.ShowToast(L.T("已有批量获取任务，请等待完成或取消。")); return; }
+        var job = Batches.Reserve(tracks, kind, scope, source);
+        Window? progress = null;
+        Action? update = null;
+        try
         {
-            if (cts.IsCancellationRequested) break;
-            status.Text = L.F($"{++done} / {tracks.Count}　{t.Title}\n已保存 {saved}，失败 {failed}");
-            if (!window.IsVisible) BackgroundStatusChanged(status.Text);
-            try { if (await Fetch(t, kind, cts.Token, ignoreMiss: true)) saved++; }
-            catch (OperationCanceledException) { break; }
-            catch (Exception e) { failed++; Log.Warn("online", "获取失败", e); }
+            if (!await EnsureOnline(owner, kind) || job.Cancellation.IsCancellationRequested) return;
+            if (job.Tracks.Length > 1 && !await Dialogs.Confirm(owner, L.T("批量获取"),
+                (source.Length > 0 ? source + "\n" : "") + L.F($"将检查 {job.Tracks.Length} 首歌曲，并按所选保存位置保存缺失内容。选择写入音乐文件时会修改文件。"), L.T("开始"))) return;
+            var status = new TextBlock { Text = L.T("准备获取…"), TextWrapping = TextWrapping.Wrap, MaxLines = 4 };
+            var cancel = SettingsWindow.Action(L.T("取消"), () => Batches.Cancel(job));
+            var window = new Window { Title = kind == DownloadKind.Covers ? L.T("获取封面") : L.T("获取歌词"), Width = 460, Height = 240,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            progress = window;
+            window.Content = new StackPanel { Margin = new Thickness(20), Spacing = 16, Children = { status, Row(cancel, SettingsWindow.Action(L.T("转到后台"), window.Hide)) } };
+            window.Closing += (_, _) => Batches.Cancel(job);
+            update = () =>
+            {
+                var unit = kind == DownloadKind.Covers ? L.T("专辑/歌曲") : L.T("歌曲");
+                status.Text = L.F($"目标 {job.Tracks.Length} 首歌曲；已处理 {job.Done} / {job.Total} {unit}\n已保存 {job.Saved}，失败 {job.Failed}") +
+                    "\n" + (job.State == "cancelling" ? L.T("正在取消…") : job.Title);
+                cancel.IsEnabled = job.State != "cancelling";
+                if (!window.IsVisible) BackgroundStatusChanged(status.Text);
+            };
+            Batches.Changed += update;
+            window.Show(owner);
+            await Batches.Run(job);
+            var summary = (job.State == "cancelled" ? L.T("已取消") : job.State == "failed" ? L.T("批量获取失败") : L.T("批量获取完成")) +
+                " · " + L.F($"已处理 {job.Done} 项，保存 {job.Saved} 项，失败 {job.Failed} 项");
+            BackgroundStatusChanged(summary);
+            _app.Navigation?.ShowToast(summary);
         }
-        window.Close();
-        _batches.Remove(cts);
-        _shell.Main.ViewModel.ShowToast(L.F($"已处理 {done} 首，保存 {saved} 项，失败 {failed} 项"));
+        finally
+        {
+            if (update is not null) Batches.Changed -= update;
+            if (job.State is "preparing" or "cancelling") Batches.FinishPreparation(job);
+            progress?.Close();
+        }
     }
 
     public async Task SearchLyrics(Window owner, Track t) { if (await EnsureOnline(owner, DownloadKind.Lyrics)) await SearchWindow.ShowLyrics(owner, this, t); }
@@ -365,8 +392,8 @@ public sealed partial class OnlineFeature : IFeature
             var result = await _check.CheckAsync(c.S.CoverSources.Concat(c.S.LyricsSources).Select(Sources.ToCore).Distinct());
             await Dialogs.Info(c.Window, L.T("来源连接"), string.Join('\n', result.Select(r => Sources.Name(r.Source) + (r.ImageHost ? L.T(" 图片服务器") : "") + ": " + (r.Millis is { } ms ? $"{ms} ms" : L.T("连接失败")))));
         }));
-        p.Children.Add(Row(SettingsWindow.Action(L.T("获取曲库缺失歌词"), () => _ = Batch(c.Window, c.App.Library.Snapshot.Tracks, DownloadKind.Lyrics)),
-            SettingsWindow.Action(L.T("获取曲库缺失封面"), () => _ = Batch(c.Window, c.App.Library.Snapshot.Tracks, DownloadKind.Covers))));
+        p.Children.Add(Row(SettingsWindow.Action(L.T("获取曲库缺失歌词"), () => _ = Batch(c.Window, c.App.Library.Snapshot.Tracks, DownloadKind.Lyrics, "library", L.T("曲库"))),
+            SettingsWindow.Action(L.T("获取曲库缺失封面"), () => _ = Batch(c.Window, c.App.Library.Snapshot.Tracks, DownloadKind.Covers, "library", L.T("曲库")))));
         var background = Note(BackgroundStatus);
         p.Children.Add(background);
         void UpdateBackground() => background.Text = BackgroundStatus;

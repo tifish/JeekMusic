@@ -1,0 +1,25 @@
+{
+  "file": {
+    "format": 2,
+    "device": {"id": "phone", "name": "Phone", "platform": "android", "app_version": "test"},
+    "written_at": 30,
+    "tag_overrides": {
+      "song": {"MOOD": {"value": "QUIET", "updated_at": 10}, "CALMNESS": {"value": "NON_CALM", "updated_at": 20}},
+      "reset": {"CALMNESS": {"value": "CALM", "updated_at": 20}}
+    },
+    "extended_tag_overrides": {
+      "song": {"CALMNESS": {"value": "CALM", "updated_at": 30}},
+      "reset": {"CALMNESS": {"value": null, "updated_at": 30}},
+      "future": {"FUTURE": {"value": "X", "updated_at": 30}}
+    }
+  },
+  "invalid_extensions": [
+    true,
+    {"song": 42},
+    {"song": {"MOOD": {"value": "SPORT", "updated_at": 30}}},
+    {"song": {"CALMNESS": {"value": "CALM", "updated_at": -1}}},
+    {"song": {"CALMNESS": {"value": 42, "updated_at": 30}}},
+    {"song": {"CALMNESS": {"value": "CALM", "updated_at": "30"}}},
+    {"song": {"CALMNESS": {"value": "CALM", "updated_at": 1.5}}}
+  ]
+}

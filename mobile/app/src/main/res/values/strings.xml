@@ -479,4 +479,7 @@
     <string name="lan_pair_mappings">Remove existing download mappings before pairing a different PC. Downloaded files will be kept.</string>
     <string name="lan_pair_busy">Cancel the current sync before pairing.</string>
     <string name="lan_paired_identity">Paired securely with %1$s · %2$s</string>
+    <string name="tag_calm">Quiet</string>
+    <string name="tag_non_calm">Not quiet</string>
+    <string name="dim_calmness">Calmness</string>
 </resources>

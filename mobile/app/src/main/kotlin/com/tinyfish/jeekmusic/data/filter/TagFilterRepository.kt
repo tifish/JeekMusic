@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 /**
  * 全局的智能标签筛选（需求 M-6）：标题栏上切换，所有歌曲列表都按它过滤，
- * 保存在设置里，切换标签和重启 App 后保持。三个维度可以同时筛选（同时满足）。
+ * 保存在设置里，切换标签和重启 App 后保持。四个维度可以同时筛选（同时满足）。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton

@@ -12,7 +12,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-VALUES = {"VOICE": ("VOCAL", "INSTRUMENTAL"), "MOOD": ("SPORT", "NON_SPORT"), "GENRE": ("CLASSICAL", "NON_CLASSICAL")}
+VALUES = {"VOICE": ("VOCAL", "INSTRUMENTAL"), "MOOD": ("SPORT", "NON_SPORT"), "GENRE": ("CLASSICAL", "NON_CLASSICAL"), "CALMNESS": ("CALM", "NON_CALM")}
 UNKNOWN = (None, "", "?", "UNKNOWN")
 
 

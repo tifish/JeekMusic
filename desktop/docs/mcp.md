@@ -73,7 +73,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `search_tracks` | `query` 可省略或留空浏览全库；沿用 UI 搜索和排序服务，可按 `folderId`、`artistKey`、`albumKey` 同时筛选；默认使用已保存排序，无偏好时文件修改时间倒序。可选 `sort`（`FileName` / `Modified` / `Title` / `Artist` / `Album` / `Duration` / `Format`）、`reverse` 仅覆盖本次查询，不保存设置；先排序再分页。结果包含 `artistKeys`、`albumKey` 和下述修改时间字段 |
 | `get_track` | `trackId`。详细元数据、音频文件路径、稳定键、已提交的智能标签和缓存修改时间，包括 CUE 分轨；原 `tags` 保持兼容，新增 `tagSources`（各维度 `AUTO` / `MANUAL`，无结果为 null） |
 | `explain_analysis` | 必需 `trackId`，可选 `includeReviews`。只读 automatic/final/sources、标题强制古典来源、分析/规则版本、完整性/待重排、片段位置/有效窗/得分/错误、阈值距离（非概率）、追加原因/预算。可返回最多最近 100 条本地审核快照；不启动音频分析或改变状态 |
-| `set_smart_tags` | `trackIds`（1–1000 项）和至少一个 `mood` / `voice` / `genre`，可选 `reason`（<=500 字）。事务内追加纠正前后审核记录，不自动当独立真值。运动为 `SPORT` / `NON_SPORT`，人声为 `VOCAL` / `INSTRUMENTAL`，曲风为 `CLASSICAL` / `NON_CLASSICAL`；每类也可用 `AUTO` 恢复自动。省略的维度及其同步时间戳保持不变。支持曲库中的离线歌曲，不要求文件在线；先验证全部歌曲和输入，再一次事务写入覆盖及重算结果，失败全部回滚。等待提交和同步通知后返回去重歌曲的 `count`、`items`（包含 `tags` 和 `tagSources`），不播放、分析音频或修改文件元数据 |
+| `set_smart_tags` | `trackIds`（1–1000 项）和至少一个 `mood` / `voice` / `genre` / `calmness`，可选 `reason`（<=500 字）。事务内追加纠正前后审核记录，不自动当独立真值。运动为 `SPORT` / `NON_SPORT`，人声为 `VOCAL` / `INSTRUMENTAL`，曲风为 `CLASSICAL` / `NON_CLASSICAL`，独立平静程度为 `CALM`（安静） / `NON_CALM`（非安静）；每类也可用 `AUTO` 恢复自动。省略的维度及其同步时间戳保持不变。支持曲库中的离线歌曲，不要求文件在线；先验证全部歌曲和输入，再一次事务写入覆盖及重算结果，失败全部回滚。等待提交和同步通知后返回去重歌曲的 `count`、`items`（包含 `tags` 和 `tagSources`），不播放、分析音频或修改文件元数据 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
 | `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲，或显式暂停释放后保留的歌曲（只改保存位置，不开启音频），否则返回业务错误。显式 pause/toggle 暂停先关闭流并恢复本客户端临时格式，保留歌曲/队列/位置；resume 先重新匹配共享自动格式，再从原位播放，内部切歌/重建暂停不恢复。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置，以及只读 `sourceState`（当前/待决来源、切源代次/状态、仅作历史的旧当前曲索引）；读取不提交待决切源 |
@@ -95,7 +95,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 `get_logs` 的 `kind: "app"` 可读取 `[tagwriter]` 成功或失败记录。成功记录包含文件路径、是否写封面 / 歌词及 `id3v1Preserved`，不记录歌词内容；它与客户端的真实嵌入流程共用日志，无新增参数或仅开发版开关。旧版本只记录失败，缺少旧成功记录不能证明未发生写入。
 
-智能标签修正与歌曲右键一级「修正智能标签…」使用同一个事务服务。界面三个分类同时显示当前值和来源，默认保持不变；只有应用才保存，取消／Esc／关闭不保存。`set_smart_tags` 不打开编辑器，也不需要额外确认。
+智能标签修正与歌曲右键一级「修正智能标签…」使用同一个事务服务。界面四个分类同时显示当前值和来源，默认保持不变；只有应用才保存，取消／Esc／关闭不保存。`set_smart_tags` 不打开编辑器，也不需要额外确认。
 
 ```json
 {"trackIds":[12,34],"voice":"INSTRUMENTAL","genre":"AUTO"}
@@ -381,3 +381,13 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 
 智能分类 v5 的采样/重试契约、渐进迁移、生产等价校准提取及防泄漏评估见 [analysis-v5](../../docs/analysis-v5.md)。`explain_analysis` 和本地审核导出复用 `SmartTagService`，标题强制古典和手工优先保持不变；该工具及新增可选 reason 在开发版与正式版完全共用。
+
+### 独立安静维度（规则 v6）
+
+`CALMNESS` 是第四维，`CALM` / `NON_CALM` 显示为安静 / 非安静。`set_smart_tags` 的可选 `calmness` 接受这两个值或 `AUTO`。旧参数、原三维、整批校验及回滚不变。`get_track` 与列表的 `tags.calmness` / `tagSources.calmness` 无结果时为 null；`explain_analysis` 的 automatic/final/sources 使用大写 `CALMNESS`。
+
+`explain_analysis.calmness` 给出有效窗数、全局支持比例、最弱片段支持比例、强动感窗比例、全部阈值和无结果原因。它是未校准的听感启发式，独立于系统音量和运动三档偏好。规则和兼容语义见 [安静标签契约](../../docs/calmness-v6.md)。
+
+`search_tracks` 新增可选 `tags` 字符串数组（最多四个，每维最多一个）：如 `{"tags":["CALM","NON_SPORT","INSTRUMENTAL"]}`。复用 UI 的 AND 筛选，返回筛选后 total，分页前筛选；省略或空数组不筛标签。不更改用户筛选偏好；同维重复或互斥标签报错。未分析/失败歌曲不匹配安静或非安静。原调用仍可用。
+
+审核导出提供第四维的 `?` 待人工标注；分组评估支持四维，旧三维输入的安静维度计为 unknown，绝不从旧 QUIET 或非运动推导人工标签。两种构建共享同一 Schema 和业务实现。

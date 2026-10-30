@@ -255,6 +255,7 @@ public sealed class LanSyncService : IDisposable
         {
             var file = a["state"]!.AsObject();
             if (file["format"]?.GetValue<int>() != 2 || file["device"]?["id"]?.GetValue<string>() != device) throw new UnauthorizedAccessException();
+            if (SyncMerge.ParseFile(file.ToJsonString()) is null) throw new ArgumentException("Invalid sync state");
             Directory.CreateDirectory(_inbox);
             SyncFeature.AtomicWrite(Path.Combine(_inbox, device + ".json"), file.ToJsonString());
             if (a["features"] is JsonObject features && features["format"]?.GetValue<int>() == 2)
@@ -308,13 +309,23 @@ public sealed class LanSyncService : IDisposable
         }
         throw new ArgumentException("Unknown operation");
     }
-    internal IEnumerable<JsonObject> Incoming(bool features)
+    internal IEnumerable<JsonObject> Incoming(bool features) => ReadIncoming(_inbox, features);
+
+    internal static IEnumerable<JsonObject> ReadIncoming(string directory, bool features)
     {
-        if (!Directory.Exists(_inbox)) yield break;
-        foreach (var path in Directory.EnumerateFiles(_inbox, "*.json").Where(p => p.EndsWith(".features.json") == features))
+        if (!Directory.Exists(directory)) yield break;
+        foreach (var path in Directory.EnumerateFiles(directory, "*.json").Where(p => p.EndsWith(".features.json") == features))
         {
             JsonObject? file = null;
-            try { if (new FileInfo(path).Length <= 32_000_000) file = JsonNode.Parse(File.ReadAllText(path)) as JsonObject; } catch (IOException) { } catch (System.Text.Json.JsonException) { }
+            try
+            {
+                if (new FileInfo(path).Length <= 32_000_000)
+                {
+                    var text = File.ReadAllText(path);
+                    file = features ? JsonNode.Parse(text) as JsonObject : SyncMerge.ParseFile(text);
+                }
+            }
+            catch (IOException) { } catch (System.Text.Json.JsonException) { }
             if (file is not null) yield return file;
         }
     }

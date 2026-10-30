@@ -1804,6 +1804,142 @@
         ],
         "replaced": []
       }
+    },
+    {
+      "description": "独立安静维度不会解释旧MOOD=QUIET；旧设备缺维度不删除新值",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "song": {
+            "MOOD": {
+              "value": "QUIET",
+              "updated_at": 1799994120000
+            },
+            "CALMNESS": {
+              "value": "CALM",
+              "updated_at": 1799994180000
+            }
+          }
+        },
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994480000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "song": {
+              "MOOD": {
+                "value": "SPORT",
+                "updated_at": 1799994240000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "song": {
+              "MOOD": {
+                "value": "SPORT",
+                "updated_at": 1799994240000
+              },
+              "CALMNESS": {
+                "value": "CALM",
+                "updated_at": 1799994180000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "tag_override:song|MOOD@pc"
+        ],
+        "replaced": []
+      }
+    },
+    {
+      "description": "安静恢复自动的空值时间戳胜过旧人工值，旧QUIET保持原始来源",
+      "self": "phone",
+      "now": 1800000000000,
+      "local": {
+        "playlists": [],
+        "deleted_playlists": [],
+        "tag_overrides": {
+          "song": {
+            "MOOD": {
+              "value": "QUIET",
+              "updated_at": 1799994120000
+            },
+            "CALMNESS": {
+              "value": "CALM",
+              "updated_at": 1799994180000
+            }
+          }
+        },
+        "lyrics_offsets": {}
+      },
+      "remotes": [
+        {
+          "format": 2,
+          "device": {
+            "id": "pc",
+            "name": "pc",
+            "platform": "windows",
+            "app_version": "1.0.0"
+          },
+          "written_at": 1799994480000,
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "song": {
+              "CALMNESS": {
+                "value": null,
+                "updated_at": 1799994240000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        }
+      ],
+      "expected": {
+        "state": {
+          "playlists": [],
+          "deleted_playlists": [],
+          "tag_overrides": {
+            "song": {
+              "MOOD": {
+                "value": "QUIET",
+                "updated_at": 1799994120000
+              },
+              "CALMNESS": {
+                "value": null,
+                "updated_at": 1799994240000
+              }
+            }
+          },
+          "lyrics_offsets": {}
+        },
+        "changes": [
+          "tag_override:song|CALMNESS@pc"
+        ],
+        "replaced": []
+      }
     }
   ]
 }

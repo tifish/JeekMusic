@@ -24,6 +24,65 @@ namespace JeekMusic.App.Tests;
 public sealed class SmartTagTests
 {
     [Fact]
+    public void SavedLegacyFilterAndNewCalmnessNeverCollide()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "jeek-calm-filter-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "settings.json");
+            File.WriteAllText(path, """{"tagFilter":["QUIET","CALM","POP"]}""");
+            var settings = new SettingsStore(path);
+            Assert.Equal(new[] { "NON_SPORT", "CALM", "NON_CLASSICAL" }, settings.Current.TagFilter);
+            settings.WriteNow();
+            Assert.Equal(settings.Current.TagFilter, new SettingsStore(path).Current.TagFilter);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+    [Fact]
+    public Task CalmnessReusesV5CacheAndPreservesLegacyOverridesAndAtomicAuto() => Run(async () =>
+    {
+        using var h = new Harness();
+        var db = h.App.Db;
+        var track = h.Tracks[0];
+        var m = new ModelScores(-3, -1, .04, .01, 0);
+        var e = new AnalysisEvidence(5, [new(0, 9750, false, 156000, 1, 1, m, Enumerable.Repeat(m, 10).ToArray(), null)], [], true, null, 1);
+        var data = FeaturesData.Of(null, m) with { AnalysisEvidence = e.ToJson() };
+        db.SaveFeatures(new FeaturesRow(track.TrackKey, AnalysisFeature.Signature(track), 5, data.ToJson(), false));
+        db.SetTagOverride(track.TrackKey, "MOOD", "QUIET", 123);
+        var before = db.AllFeatures().ToArray();
+        h.App.SmartTags.Recompute();
+        Assert.Equal(before, db.AllFeatures());
+        Assert.False(FeaturesData.NeedsAnalysis(db.Features(track.TrackKey), AnalysisFeature.Signature(track)));
+        var tags = h.App.SmartTags.Read()[track.TrackKey];
+        Assert.Equal("NON_SPORT", tags.Mood); Assert.True(tags.MoodManual);
+        Assert.Equal("CALM", tags.Calmness); Assert.False(tags.CalmnessManual);
+        Assert.Null(h.App.SmartTags.Read()[h.Tracks[1].TrackKey].Calmness);
+        var tools = new McpTools(h.App);
+        await tools.CallAsync("set_smart_tags", new() { ["trackIds"] = new JsonArray(track.Id), ["calmness"] = "NON_CALM" });
+        var result = tools.Call("get_track", new() { ["trackId"] = track.Id });
+        Assert.Equal("NON_CALM", result["tags"]!["calmness"]!.GetValue<string>());
+        Assert.Equal("MANUAL", result["tagSources"]!["calmness"]!.GetValue<string>());
+        db.Exec("CREATE TRIGGER fail_calm BEFORE INSERT ON track_tag WHEN NEW.dimension='CALMNESS' BEGIN SELECT RAISE(ABORT,'fixture'); END");
+        var overrides = db.TagOverrides().ToArray();
+        var reviews = db.TagReviews(track.TrackKey).Count;
+        await Assert.ThrowsAsync<SqliteException>(() => tools.CallAsync("set_smart_tags", new() { ["trackIds"] = new JsonArray(track.Id), ["calmness"] = "AUTO" }));
+        Assert.Equal(overrides, db.TagOverrides()); Assert.Equal(reviews, db.TagReviews(track.TrackKey).Count);
+        db.Exec("DROP TRIGGER fail_calm");
+        await tools.CallAsync("set_smart_tags", new() { ["trackIds"] = new JsonArray(track.Id), ["calmness"] = "AUTO" });
+        Assert.Equal("CALM", h.App.SmartTags.Read()[track.TrackKey].Calmness);
+        Assert.Equal(123, db.TagOverrides().Single(o => o.Dimension == "MOOD").UpdatedAt);
+        Assert.Equal("QUIET", db.TagOverrides().Single(o => o.Dimension == "MOOD").Value);
+        Assert.Null(db.TagOverrides().Single(o => o.Dimension == "CALMNESS").Value);
+        Assert.Equal(before, db.AllFeatures());
+        var snapshot = new LibrarySnapshot([], h.Tracks, h.App.SmartTags.Read());
+        Assert.True(ListBuilder.FilterOf(snapshot, ["NON_SPORT", "CALM"])!(track));
+        Assert.False(ListBuilder.FilterOf(snapshot, ["SPORT", "CALM"])!(track));
+        Assert.False(ListBuilder.FilterOf(snapshot, ["NON_CALM"])!(h.Tracks[1]));
+        Assert.Null(ListBuilder.FilterOf(snapshot, []));
+    });
+
+    [Fact]
     public Task ExplanationAndAuditPreserveTitleAndManualPriority() => Run(async () =>
     {
         using var h = new Harness();
@@ -178,8 +237,8 @@ public sealed class SmartTagTests
         try
         {
             Assert.False(Find<Button>(dialog, "ApplyTags")!.IsEnabled);
-            Assert.Equal(12, dialog.GetLogicalDescendants().OfType<RadioButton>().Count());
-            Assert.Equal(3, dialog.GetLogicalDescendants().OfType<RadioButton>().Count(r => r.IsChecked == true));
+            Assert.Equal(16, dialog.GetLogicalDescendants().OfType<RadioButton>().Count());
+            Assert.Equal(4, dialog.GetLogicalDescendants().OfType<RadioButton>().Count(r => r.IsChecked == true));
             var option = Find<RadioButton>(dialog, "MOODSPORT")!;
             option.IsChecked = true; Assert.True(Find<Button>(dialog, "ApplyTags")!.IsEnabled);
             Find<RadioButton>(dialog, "MOODKeep")!.IsChecked = true;

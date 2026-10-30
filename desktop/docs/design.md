@@ -433,12 +433,14 @@ MainWindow（Mica，标题栏扩展到客户区）
                    "items": ["周杰伦/叶惠美/03. 晴天.flac", "Live/2004.flac#05"] } ],
   "deleted_playlists": [ { "uid": "a9e3…", "deleted_at": 1791980000000 } ],
   "tag_overrides": { "周杰伦/叶惠美/03. 晴天.flac": { "MOOD": { "value": "SPORT", "updated_at": 1791990000000 } } },
+  "extended_tag_overrides": { "周杰伦/叶惠美/03. 晴天.flac": { "CALMNESS": { "value": "CALM", "updated_at": 1791990000000 } } },
   "lyrics_offsets": { "周杰伦/叶惠美/03. 晴天.flac": { "offset_ms": -500, "updated_at": 1791990000000 } }
 }
 ```
 
 - 歌曲引用：相对于音乐文件夹的路径，`/` 分隔（两端一致；Windows 上读写时转换），CUE 虚拟歌曲加 `#NN`。同移动端设计 §3.1
 - 时间：UTC 毫秒
+- `tag_overrides` 的输出仅含历史 MOOD/VOICE/GENRE；新 CALMNESS 及未来维度使用可选 `extended_tag_overrides`，避免旧 Android 对未知维度执行 `enum.valueOf`。两端读入时统一按项时间戳合并（null 仍为恢复自动），缺扩展字段不删除新维；旧端忽略扩展，完整新维同步须升级两端。内部 journal 仍使用统一映射，兼容细节见 [安静规则 v6](../../docs/calmness-v6.md)。
 
 ### 11.2 合并
 

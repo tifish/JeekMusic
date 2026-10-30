@@ -250,6 +250,8 @@ fun tagLabel(tag: Tag): String = stringResource(
         Tag.INSTRUMENTAL -> R.string.tag_instrumental
         Tag.CLASSICAL -> R.string.tag_classical
         Tag.NON_CLASSICAL -> R.string.tag_non_classical
+        Tag.CALM -> R.string.tag_calm
+        Tag.NON_CALM -> R.string.tag_non_calm
     },
 )
 
@@ -259,6 +261,7 @@ fun dimensionLabel(dimension: TagDimension): String = stringResource(
         TagDimension.MOOD -> R.string.dim_mood
         TagDimension.VOICE -> R.string.dim_voice
         TagDimension.GENRE -> R.string.dim_genre
+        TagDimension.CALMNESS -> R.string.dim_calmness
     },
 )
 

@@ -75,7 +75,7 @@ public sealed class SyncFeature : IFeature
                 state["format"] = 2; state["device"] = _device.DeepClone();
                 state["written_at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 foreach (var folder in _app.Library.Snapshot.Folders.Where(f => f.Available))
-                    try { AtomicWrite(Path.Combine(folder.Root, ".jeekmusic", "sync", Str(_device["id"]) + ".json"), state.ToJsonString()); }
+                    try { AtomicWrite(Path.Combine(folder.Root, ".jeekmusic", "sync", Str(_device["id"]) + ".json"), ForWire(state).ToJsonString()); }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("sync", "退出时写入同步文件失败", e); }
             }
             catch (Exception e) { Log.Warn("sync", "退出时保存同步数据失败", e); }
@@ -231,7 +231,7 @@ public sealed class SyncFeature : IFeature
                 if (_lastWritten.GetValueOrDefault(path) == content && File.Exists(path)) continue;
                 try
                 {
-                    var json = state.ToJsonString();
+                    var json = ForWire(state).ToJsonString();
                     await Task.Run(() => { lock (_fileGate) { if (!_stopped) AtomicWrite(path, json); } });
                     if (_stopped) return;
                     _lastWritten[path] = content; written++;
@@ -367,7 +367,7 @@ public sealed class SyncFeature : IFeature
                 items[lan[t.TrackKey]] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(f.Data) };
         _app.Db.SetValue("sync_initialized", "1"); // Pairing explicitly authorizes the normal merge.
         _ = Synchronize();
-        return new JsonObject { ["state"] = state, ["features"] = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } };
+        return new JsonObject { ["state"] = ForWire(state), ["features"] = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } };
     }
 
     Control BuildSettings(SettingsContext c)

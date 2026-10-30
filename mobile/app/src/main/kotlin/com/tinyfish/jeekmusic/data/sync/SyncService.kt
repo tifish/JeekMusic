@@ -155,7 +155,7 @@ class SyncService @Inject constructor(
         for ((ref, dim) in keys) {
             val value = actual[ref to dim]
             val old = previous.tagOverrides[ref]?.get(dim)
-            overrides.getOrPut(ref) { mutableMapOf() }[dim] = if (old != null && old.value == value) old else Stamped(value, now)
+            overrides.getOrPut(ref) { mutableMapOf() }[dim] = if (old != null && old.value == value) old else Stamped(value, maxOf(now, (old?.updatedAt ?: 0) + 1))
         }
         val offsets = previous.lyricsOffsets.toMutableMap()
         val actualOffsets = db.lyricsDao().allOffsets().sortedBy { !it.trackKey.startsWith("foreign:") }.associate { canonical(reference(it.trackKey, roots)) to it.offsetMs }

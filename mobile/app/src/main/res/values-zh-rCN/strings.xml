@@ -470,4 +470,7 @@
     <string name="lan_pair_mappings">配对另一台电脑前，请先移除现有下载任务，已有文件会保留。</string>
     <string name="lan_pair_busy">请先取消当前同步再配对。</string>
     <string name="lan_paired_identity">已安全配对 %1$s · %2$s</string>
+    <string name="tag_calm">安静</string>
+    <string name="tag_non_calm">非安静</string>
+    <string name="dim_calmness">平静程度</string>
 </resources>

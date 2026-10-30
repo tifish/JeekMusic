@@ -77,14 +77,15 @@ data class ScanConfig(
 )
 
 /** 全局的智能标签筛选（需求 M-6）：每个维度不选或选一个，多个维度同时满足。 */
-data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null) {
-    val active: List<Tag> get() = listOfNotNull(mood, voice, genre)
+data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null) {
+    val active: List<Tag> get() = listOfNotNull(mood, voice, genre, calmness)
     val isActive: Boolean get() = active.isNotEmpty()
 
     operator fun get(dimension: TagDimension): Tag? = when (dimension) {
         TagDimension.MOOD -> mood
         TagDimension.VOICE -> voice
         TagDimension.GENRE -> genre
+        TagDimension.CALMNESS -> calmness
     }
 
     /** 点一下选中，再点一下取消。 */
@@ -94,6 +95,7 @@ data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: T
             TagDimension.MOOD -> copy(mood = value)
             TagDimension.VOICE -> copy(voice = value)
             TagDimension.GENRE -> copy(genre = value)
+            TagDimension.CALMNESS -> copy(calmness = value)
         }
     }
 }
@@ -195,6 +197,7 @@ class SettingsRepository @Inject constructor(
         val FILTER_MOOD = stringPreferencesKey("filter_mood")
         val FILTER_VOICE = stringPreferencesKey("filter_voice")
         val FILTER_GENRE = stringPreferencesKey("filter_genre")
+        val FILTER_CALMNESS = stringPreferencesKey("filter_calmness")
         val SONG_SORT = stringPreferencesKey("song_sort")
         val AUTO_UPDATE = booleanPreferencesKey("auto_update_check")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
@@ -274,6 +277,7 @@ class SettingsRepository @Inject constructor(
         put(Keys.FILTER_MOOD, filter.mood)
         put(Keys.FILTER_VOICE, filter.voice)
         put(Keys.FILTER_GENRE, filter.genre)
+        put(Keys.FILTER_CALMNESS, filter.calmness)
     }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
@@ -324,6 +328,7 @@ class SettingsRepository @Inject constructor(
             mood = Tag.of(TagDimension.MOOD, this[Keys.FILTER_MOOD] ?: this[Keys.MOOD_FILTER]),
             voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
+            calmness = Tag.of(TagDimension.CALMNESS, this[Keys.FILTER_CALMNESS]),
         ),
         songSort = SongSort.fromSaved(this[Keys.SONG_SORT]),
         hasSongSortPreference = SongSort.hasPreference(this[Keys.SONG_SORT]),

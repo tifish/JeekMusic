@@ -1,14 +1,15 @@
 namespace JeekMusic.Core.Analysis;
 
-/// <summary>智能标签的三个维度（需求 M-1，移动端 TagClassifier.kt）。存储名（数据库、同步文件）是 MOOD、VOICE、GENRE。</summary>
+/// <summary>智能标签的四个维度（需求 M-1，移动端 TagClassifier.kt）。存储名（数据库、同步文件）是 MOOD、VOICE、GENRE、CALMNESS。</summary>
 public enum TagDimension
 {
     MOOD,
     VOICE,
     GENRE,
+    CALMNESS,
 }
 
-/// <summary>智能标签。存储名同移动端：SPORT、NON_SPORT、VOCAL、INSTRUMENTAL、CLASSICAL、NON_CLASSICAL。</summary>
+/// <summary>智能标签。存储名同移动端：SPORT、NON_SPORT、VOCAL、INSTRUMENTAL、CLASSICAL、NON_CLASSICAL、CALM、NON_CALM。</summary>
 public enum Tag
 {
     SPORT,
@@ -17,6 +18,8 @@ public enum Tag
     INSTRUMENTAL,
     CLASSICAL,
     NON_CLASSICAL,
+    CALM,
+    NON_CALM,
 }
 
 public static class Tags
@@ -32,6 +35,7 @@ public static class Tags
     {
         Tag.SPORT or Tag.NON_SPORT => TagDimension.MOOD,
         Tag.VOCAL or Tag.INSTRUMENTAL => TagDimension.VOICE,
+        Tag.CALM or Tag.NON_CALM => TagDimension.CALMNESS,
         _ => TagDimension.GENRE,
     };
 
@@ -45,6 +49,7 @@ public static class Tags
         "MOOD" => TagDimension.MOOD,
         "VOICE" => TagDimension.VOICE,
         "GENRE" => TagDimension.GENRE,
+        "CALMNESS" => TagDimension.CALMNESS,
         _ => null,
     };
 
@@ -154,6 +159,7 @@ public static class TagClassifier
             [TagDimension.MOOD] = a is null ? Mood(m, sensitivity) : a.Sport >= sensitivity.Sport() ? Tag.SPORT : Tag.NON_SPORT,
             [TagDimension.VOICE] = a is null ? Voice(m) : a.Vocal >= VocalThreshold ? Tag.VOCAL : Tag.INSTRUMENTAL,
             [TagDimension.GENRE] = classicalTitle ? Tag.CLASSICAL : genre,
+            [TagDimension.CALMNESS] = CalmnessEvidence.From(evidence)?.Tag,
         };
     }
 
@@ -201,7 +207,7 @@ public static class AnalysisVersions
     public const int AnalyzerVersion = 5;
 
     /// <summary>分类规则的版本：规则变了但不需要重新分析时提高，启动时按保存的版本判断是否全部重算一次。</summary>
-    public const int RulesVersion = 5;
+    public const int RulesVersion = 6;
 
     public const string SourceAuto = "AUTO";
     public const string SourceManual = "MANUAL";

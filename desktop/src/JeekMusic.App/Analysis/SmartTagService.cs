@@ -19,7 +19,8 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         return Db.AllTags().ToDictionary(kv => kv.Key, kv => new SongTags(
             kv.Value.GetValueOrDefault("MOOD").value, kv.Value.GetValueOrDefault("VOICE").value,
             kv.Value.GetValueOrDefault("GENRE").value, kv.Value.GetValueOrDefault("MOOD").source == "MANUAL",
-            kv.Value.GetValueOrDefault("VOICE").source == "MANUAL", kv.Value.GetValueOrDefault("GENRE").source == "MANUAL"));
+            kv.Value.GetValueOrDefault("VOICE").source == "MANUAL", kv.Value.GetValueOrDefault("GENRE").source == "MANUAL",
+            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL"));
     }
 
     /// <summary>Read-only committed analysis explanation, shared by MCP and review snapshots.</summary>
@@ -43,11 +44,12 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         {
             var name = d.ToString();
             auto[name] = automatic.GetValueOrDefault(d)?.ToString();
-            var manual = overrides.GetValueOrDefault(name)?.Value;
+            var manual = Tags.Of(d, overrides.GetValueOrDefault(name)?.Value)?.ToString();
             final[name] = manual ?? automatic.GetValueOrDefault(d)?.ToString();
             sources[name] = manual is not null ? "MANUAL" : automatic.GetValueOrDefault(d) is not null ? "AUTO" : null;
         }
         var a = evidence?.Aggregate();
+        var calm = usable && row!.AnalyzerVersion == 5 ? CalmnessEvidence.From(evidence) : null;
         return new JsonObject {
             ["trackId"] = track.Id, ["automatic"] = auto, ["final"] = final, ["sources"] = sources,
             ["classicalTitleMatched"] = title, ["genreEvidenceSource"] = title ? "ClassicalTitles (forced before manual override)" : "model",
@@ -61,6 +63,14 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             ["marginsNotProbabilities"] = a is null ? null : new JsonObject {
                 ["VOICE"] = a.Vocal - TagClassifier.VocalThreshold, ["MOOD"] = a.Sport - sensitivity.Sport(), ["GENRE"] = a.Classical - TagClassifier.ClassicalThreshold },
             ["sampleSupportNotProbabilities"] = a is null ? null : new JsonObject { ["VOICE"] = a.VocalSupport, ["MOOD_NORMAL"] = a.SportSupport, ["GENRE"] = a.ClassicalSupport },
+            ["calmness"] = new JsonObject {
+                ["heuristicNotCalibrated"] = true, ["unavailableReason"] = calm is null ? "requires_complete_v5_at_least_3_windows_and_mood_signal" : null,
+                ["windows"] = calm?.Windows, ["support"] = calm?.Support, ["minimumSegmentSupport"] = calm?.MinimumSegmentSupport,
+                ["energeticShare"] = calm?.EnergeticShare,
+                ["thresholds"] = new JsonObject { ["calmFloor"] = CalmnessEvidence.CalmFloor, ["energyCeiling"] = CalmnessEvidence.EnergyCeiling,
+                    ["energyToCalmCeiling"] = CalmnessEvidence.EnergyToCalmCeiling, ["supportAtLeast"] = CalmnessEvidence.SupportThreshold,
+                    ["eachSegmentSupportAtLeast"] = CalmnessEvidence.SegmentSupportThreshold, ["energeticAbove"] = CalmnessEvidence.EnergeticThreshold,
+                    ["energeticShareAtMost"] = CalmnessEvidence.EnergeticShareCeiling } },
             ["evidence"] = evidence is null ? null : JsonNode.Parse(evidence.ToJson()),
             ["budget"] = new JsonObject { ["additionalSegments"] = 2, ["additionalSeconds"] = 20, ["attemptsPerModulePerSegment"] = 3,
                 ["retryBackoffMs"] = new JsonArray(200, 800), ["terminalUntilSignatureVersionChangeOrExplicitReset"] = true }
@@ -91,7 +101,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             foreach (var dimension in Enum.GetValues<TagDimension>())
             {
                 var name = dimension.ToString();
-                var manual = overrides.GetValueOrDefault((t.TrackKey, name))?.Value;
+                var manual = Tags.Of(dimension, overrides.GetValueOrDefault((t.TrackKey, name))?.Value)?.ToString();
                 var value = manual ?? auto.GetValueOrDefault(dimension)?.ToString();
                 if (value is null && classical && dimension == TagDimension.GENRE) value = Tag.CLASSICAL.ToString();
                 if (value is not null) tags.Add((t.TrackKey, name, value, manual is null ? "AUTO" : "MANUAL"));

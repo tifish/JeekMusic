@@ -168,6 +168,15 @@ case("旧版备份（legacy uid）：两端从同一份旧 backup.json 读入的
      [file("pc", T(7), state(playlists=[(legacy("跑步"), "跑步", 1, A), (legacy("睡前"), "睡前", 1, B)]))],
      state(playlists=[(legacy("跑步"), "跑步", 1, A), (legacy("睡前"), "睡前", 1, B)]), changes=[f"playlist:{legacy('睡前')}@pc"])
 
+case("独立安静维度不会解释旧MOOD=QUIET；旧设备缺维度不删除新值",
+     state(overrides={"song": {"MOOD": ("QUIET", T(2)), "CALMNESS": ("CALM", T(3))}}),
+     [file("pc", T(8), state(overrides={"song": {"MOOD": ("SPORT", T(4))}}))],
+     state(overrides={"song": {"MOOD": ("SPORT", T(4)), "CALMNESS": ("CALM", T(3))}}), changes=["tag_override:song|MOOD@pc"])
+case("安静恢复自动的空值时间戳胜过旧人工值，旧QUIET保持原始来源",
+     state(overrides={"song": {"MOOD": ("QUIET", T(2)), "CALMNESS": ("CALM", T(3))}}),
+     [file("pc", T(8), state(overrides={"song": {"CALMNESS": (None, T(4))}}))],
+     state(overrides={"song": {"MOOD": ("QUIET", T(2)), "CALMNESS": (None, T(4))}}), changes=["tag_override:song|CALMNESS@pc"])
+
 doc = {
     "description": "多设备同步的合并（desktop/docs/design.md §11.2，需求 SY-3 ~ SY-6、B-7）。"
                    "self 是本机的设备 ID，now 是当前时间（UTC 毫秒）；local 是本机的状态（同步文件去掉 format / device / written_at 的部分），"

@@ -441,7 +441,7 @@ private fun TopBarMoreMenu(viewModel: MainViewModel, modifier: Modifier = Modifi
 
 /**
  * 标题栏上的智能标签筛选（需求 M-6）：筛选中图标高亮并显示选中的标签（比如"非运动·纯音乐"）。
- * 菜单分三组（氛围 / 人声 / 曲风），每组点一下选中、再点一下取消，可以组合；
+ * 菜单分四组（氛围 / 人声 / 曲风 / 平静程度），每组点一下选中、再点一下取消，可以组合；
  * 菜单里还显示未分析的歌曲数，可以立即分析。
  */
 @OptIn(ExperimentalLayoutApi::class)

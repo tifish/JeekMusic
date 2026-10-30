@@ -373,7 +373,7 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
 }
 
 /**
- * 修正智能标签（需求 M-4）：三个维度各一行，"自动"表示用识别结果（括号里是识别出的标签），
+ * 修正智能标签（需求 M-4）：四个维度各一行，"自动"表示用识别结果（括号里是识别出的标签），
  * 其余选项是手动指定；手动结果优先，重新扫描或重新分析后依然保留。
  */
 @OptIn(ExperimentalLayoutApi::class)

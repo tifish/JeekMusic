@@ -34,7 +34,7 @@ def main():
             records.append(dict(song_id=identity("song", track["trackKey"]),
                 album_id=identity("album", track.get("albumKey")),
                 artist_ids=[identity("artist", a) for a in track.get("artistKeys", [])],
-                labels={d: "?" for d in ("MOOD", "VOICE", "GENRE")}, automatic=review["automatic"],
+                labels={d: "?" for d in ("MOOD", "VOICE", "GENRE", "CALMNESS")}, automatic=review["automatic"],
                 provenance=dict(labels="unreviewed", scores="desktop_production_v5_onnx" if review["complete"] else "legacy_or_incomplete", independent=False),
                 review=review))
     # Exclusive creation avoids clobbering an already reviewed export.

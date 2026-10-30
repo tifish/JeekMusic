@@ -39,10 +39,10 @@ public sealed class DirNode
     }
 }
 
-/// <summary>一首歌三个维度的智能标签（需求 M-1）；没有分析过的维度是 null。</summary>
-public sealed record SongTags(string? Mood, string? Voice, string? Genre, bool MoodManual, bool VoiceManual, bool GenreManual)
+/// <summary>一首歌四个维度的智能标签（需求 M-1）；没有分析过的维度是 null。</summary>
+public sealed record SongTags(string? Mood, string? Voice, string? Genre, bool MoodManual, bool VoiceManual, bool GenreManual, string? Calmness = null, bool CalmnessManual = false)
 {
-    public string? this[string dimension] => dimension switch { "MOOD" => Mood, "VOICE" => Voice, "GENRE" => Genre, _ => null };
+    public string? this[string dimension] => dimension switch { "MOOD" => Mood, "VOICE" => Voice, "GENRE" => Genre, "CALMNESS" => Calmness, _ => null };
 }
 
 /// <summary>

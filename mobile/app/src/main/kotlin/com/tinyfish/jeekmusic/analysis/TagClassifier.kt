@@ -5,8 +5,8 @@ import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.log2
 
-/** 智能标签的三个维度（需求 M-1）：每首歌在每个维度上最多一个标签。 */
-enum class TagDimension { MOOD, VOICE, GENRE }
+/** 智能标签的四个维度（需求 M-1）：每首歌在每个维度上最多一个标签。 */
+enum class TagDimension { MOOD, VOICE, GENRE, CALMNESS }
 
 enum class Tag(val dimension: TagDimension) {
     SPORT(TagDimension.MOOD),
@@ -15,6 +15,8 @@ enum class Tag(val dimension: TagDimension) {
     INSTRUMENTAL(TagDimension.VOICE),
     CLASSICAL(TagDimension.GENRE),
     NON_CLASSICAL(TagDimension.GENRE),
+    CALM(TagDimension.CALMNESS),
+    NON_CALM(TagDimension.CALMNESS),
     ;
 
     companion object {
@@ -87,6 +89,7 @@ object TagClassifier {
             TagDimension.MOOD to if (a == null) mood(m, sensitivity) else if (a.sport >= sensitivity.sport) Tag.SPORT else Tag.NON_SPORT,
             TagDimension.VOICE to if (a == null) voice(m) else if (a.vocal >= VOCAL_THRESHOLD) Tag.VOCAL else Tag.INSTRUMENTAL,
             TagDimension.GENRE to if (classicalTitle) Tag.CLASSICAL else genre,
+            TagDimension.CALMNESS to if (f.failed) null else CalmnessEvidence.from(evidence)?.tag,
         )
     }
 

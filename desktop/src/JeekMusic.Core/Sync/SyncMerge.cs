@@ -20,6 +20,28 @@ public static class SyncMerge
     public static IEnumerable<JsonObject> Objects(JsonNode? n) => n is JsonArray a ? a.OfType<JsonObject>() : [];
     static JsonObject Copy(JsonObject n) => (JsonObject)n.DeepClone();
     static string Id(JsonObject file) => Str(file["device"]?["id"]);
+    /// <summary>Keep new dimensions outside the legacy map: older Android editors
+    /// parse every legacy dimension with enum.valueOf. Old peers ignore this extension.</summary>
+    public static JsonObject ForWire(JsonObject state)
+    {
+        var file = Copy(state);
+        var extra = file["extended_tag_overrides"] is JsonObject existing ? Copy(existing) : new JsonObject();
+        if (file["tag_overrides"] is JsonObject tags)
+            foreach (var item in tags)
+                if (item.Value is JsonObject dims)
+                    foreach (var dim in dims.ToArray())
+                        if (dim.Key is not ("MOOD" or "VOICE" or "GENRE"))
+                        {
+                            extra[item.Key] ??= new JsonObject();
+                            var old = extra[item.Key]![dim.Key];
+                            if (old is null || Number(dim.Value?["updated_at"]) >= Number(old["updated_at"]))
+                                extra[item.Key]![dim.Key] = dim.Value?.DeepClone();
+                            dims.Remove(dim.Key);
+                        }
+        if (extra.Count > 0) file["extended_tag_overrides"] = extra;
+        return file;
+    }
+
     public static JsonArray NormalizeNavigation(JsonNode? items)
     {
         string[] builtins = ["FOLDERS", "ARTISTS", "PLAYLISTS"];
@@ -55,7 +77,7 @@ public static class SyncMerge
                 foreach (var key in new[] { "file_name_format", "legacy_charset" }) if (value[key] is { } s && !Text(s)) return null;
                 if (value["infer_from_file_name"] is { } flag && (flag is not JsonValue v || !v.TryGetValue<bool>(out _))) return null;
             }
-            foreach (var category in new[] { "tag_overrides", "lyrics_offsets" })
+            foreach (var category in new[] { "tag_overrides", "extended_tag_overrides", "lyrics_offsets" })
             {
                 if (file[category] is null) continue;
                 if (file[category] is not JsonObject map) return null;
@@ -69,6 +91,22 @@ public static class SyncMerge
                     else foreach (var dim in entry)
                         if (dim.Value is not JsonObject d || !Stamp(d["updated_at"]) || d["value"] is { } val && !Text(val)) return null;
                 }
+            }
+            if (file["extended_tag_overrides"] is JsonObject extra)
+            {
+                file["tag_overrides"] ??= new JsonObject();
+                foreach (var item in extra)
+                {
+                    file["tag_overrides"]![item.Key] ??= new JsonObject();
+                    foreach (var dim in item.Value!.AsObject())
+                    {
+                        if (dim.Key is "MOOD" or "VOICE" or "GENRE") return null;
+                        var old = file["tag_overrides"]![item.Key]![dim.Key];
+                        if (old is null || Number(dim.Value!["updated_at"]) > Number(old["updated_at"]))
+                            file["tag_overrides"]![item.Key]![dim.Key] = dim.Value!.DeepClone();
+                    }
+                }
+                file.Remove("extended_tag_overrides");
             }
             return file;
         }

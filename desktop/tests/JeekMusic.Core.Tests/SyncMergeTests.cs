@@ -6,6 +6,30 @@ namespace JeekMusic.Core.Tests;
 public sealed class SyncMergeTests
 {
     [Fact]
+    public void ExtendedDimensionsRoundTripWithoutExposingThemToLegacyEditors()
+    {
+        var fixture = Core.Tests.SharedCases.Load("sync-calmness-wire.json");
+        var parsed = SyncMerge.ParseFile(fixture["file"]!.ToJsonString())!;
+        var tags = parsed["tag_overrides"]!;
+        Assert.Equal("QUIET", SyncMerge.Str(tags["song"]!["MOOD"]!["value"]));
+        Assert.Equal("CALM", SyncMerge.Str(tags["song"]!["CALMNESS"]!["value"]));
+        Assert.Equal(30, SyncMerge.Number(tags["reset"]!["CALMNESS"]!["updated_at"]));
+        Assert.Null(tags["reset"]!["CALMNESS"]!["value"]);
+        var wire = SyncMerge.ForWire(parsed);
+        Assert.All(wire["tag_overrides"]!.AsObject(), item =>
+            Assert.All(item.Value!.AsObject(), dim => Assert.Contains(dim.Key, new[] { "MOOD", "VOICE", "GENRE" })));
+        Assert.True(JsonNode.DeepEquals(parsed, SyncMerge.ParseFile(wire.ToJsonString())));
+        Assert.True(JsonNode.DeepEquals(wire, SyncMerge.ForWire(wire)));
+        Assert.True(JsonNode.DeepEquals(parsed, SyncMerge.ParseFile(SyncMerge.ForWire(fixture["file"]!.AsObject()).ToJsonString())));
+        foreach (var invalid in fixture["invalid_extensions"]!.AsArray())
+        {
+            var file = fixture["file"]!.DeepClone();
+            file["extended_tag_overrides"] = invalid!.DeepClone();
+            Assert.Null(SyncMerge.ParseFile(file.ToJsonString()));
+        }
+    }
+
+    [Fact]
     public void PartialNavigationKeepsBuiltinPagesAndCanonicalArtistKeys()
     {
         var input = JsonNode.Parse("""[{"type":"PLAYLISTS","ref":""},{"type":"ARTIST","ref":" Test   Artist "},{"type":"ARTIST","ref":"test artist"},{"type":"ARTIST","ref":" "},{"type":"UNKNOWN"}]""");

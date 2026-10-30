@@ -26,6 +26,8 @@ public static class Text
     {
         "SPORT" => L.T("运动"),
         "NON_SPORT" => L.T("非运动"),
+        "CALM" => L.T("安静"),
+        "NON_CALM" => L.T("非安静"),
         "VOCAL" => L.T("人声"),
         "INSTRUMENTAL" => L.T("纯音乐"),
         "CLASSICAL" => L.T("古典"),
@@ -36,6 +38,6 @@ public static class Text
     public static string Tags(SongTags? tags)
     {
         if (tags is null) return "";
-        return string.Join(" · ", new[] { tags.Mood, tags.Voice, tags.Genre }.Where(t => t is not null).Select(TagName));
+        return string.Join(" · ", new[] { tags.Mood, tags.Voice, tags.Genre, tags.Calmness }.Where(t => t is not null).Select(TagName));
     }
 }

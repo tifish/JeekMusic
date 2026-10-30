@@ -204,7 +204,7 @@ data class TrackFeaturesEntity(
 @Entity(tableName = "tag_override", primaryKeys = ["track_key", "dimension"])
 data class TagOverrideEntity(
     @ColumnInfo(name = "track_key") val trackKey: String,
-    /** MOOD | VOICE | GENRE */
+    /** MOOD | VOICE | GENRE | CALMNESS */
     val dimension: String,
     val value: String?,
 )

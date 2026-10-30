@@ -30,7 +30,12 @@ public sealed class SettingsStore
         try
         {
             if (File.Exists(path))
-                return JsonSerializer.Deserialize(File.ReadAllBytes(path), SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
+            {
+                var loaded = JsonSerializer.Deserialize(File.ReadAllBytes(path), SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
+                // Unqualified QUIET in historical filters always meant the old MOOD negative.
+                loaded.TagFilter = loaded.TagFilter.Select(t => t switch { "QUIET" => "NON_SPORT", "POP" => "NON_CLASSICAL", _ => t }).Distinct().ToList();
+                return loaded;
+            }
         }
         catch (Exception e) when (e is JsonException or IOException)
         {

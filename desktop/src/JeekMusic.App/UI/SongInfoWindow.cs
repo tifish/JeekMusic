@@ -32,7 +32,7 @@ public static class SongInfoWindow
         if (app.Library.Snapshot.Tags.TryGetValue(t.TrackKey, out var tags))
             rows.Add((L.T("智能标签"), string.Join("  ", new[]
             {
-                (tags.Mood, tags.MoodManual), (tags.Voice, tags.VoiceManual), (tags.Genre, tags.GenreManual),
+                (tags.Mood, tags.MoodManual), (tags.Voice, tags.VoiceManual), (tags.Genre, tags.GenreManual), (tags.Calmness, tags.CalmnessManual),
             }.Where(x => x.Item1 is not null).Select(x => Text.TagName(x.Item1) + (x.Item2 ? L.T("（手动修正）") : "")))));
         ExtraRows?.Invoke(t, rows);
 

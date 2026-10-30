@@ -75,7 +75,44 @@ object SyncFormat {
                 .put("platform", file.device.platform).put("app_version", file.device.appVersion),
         )
         .put("written_at", file.writtenAt)
-        .also { stateToJson(file.state, it) }
+        .also { stateToJson(file.state, it); splitExtendedTags(it) }
+
+    // Older Android editors call enum.valueOf on every legacy dimension.
+    // Keep new overrides in an ignored extension on the wire, unified internally.
+    private fun splitExtendedTags(json: JSONObject) {
+        val tags = json.getJSONObject("tag_overrides")
+        val extra = JSONObject()
+        for (ref in tags.keys().asSequence().toList()) {
+            val dims = tags.getJSONObject(ref)
+            for (dim in dims.keys().asSequence().toList()) if (dim !in listOf("MOOD", "VOICE", "GENRE")) {
+                val target = extra.optJSONObject(ref) ?: JSONObject().also { extra.put(ref, it) }
+                target.put(dim, dims.remove(dim))
+            }
+        }
+        if (extra.length() > 0) json.put("extended_tag_overrides", extra)
+    }
+
+    private fun readTagOverrides(json: JSONObject): Map<String, Map<String, Stamped<String?>>> {
+        val result = mutableMapOf<String, MutableMap<String, Stamped<String?>>>()
+        for (key in listOf("tag_overrides", "extended_tag_overrides")) {
+            if (!json.has(key) || json.isNull(key)) continue
+            val map = json.getJSONObject(key)
+            for (ref in map.keys()) {
+                val dims = map.getJSONObject(ref)
+                val target = result.getOrPut(ref) { mutableMapOf() }
+                for (dim in dims.keys()) {
+                    require(key != "extended_tag_overrides" || dim !in listOf("MOOD", "VOICE", "GENRE"))
+                    val entry = dims.getJSONObject(dim)
+                    require(entry.isNull("value") || entry.get("value") is String)
+                    require(entry.get("updated_at") is Int || entry.get("updated_at") is Long)
+                    val stamp = Stamped(entry.optStringOrNull("value"), entry.getLong("updated_at"))
+                    require(stamp.updatedAt >= 0)
+                    if (target[dim] == null || stamp.updatedAt > target.getValue(dim).updatedAt) target[dim] = stamp
+                }
+            }
+        }
+        return result
+    }
 
     /** 把状态写进 [json]（同步文件和测试用例的"本机状态"共用这个结构）。 */
     fun stateToJson(state: SyncState, json: JSONObject = JSONObject()): JSONObject {
@@ -148,15 +185,7 @@ object SyncFormat {
             SyncPlaylist(p.getString("uid"), p.getString("name"), p.getLong("updated_at"), p.optJSONArray("items").strings())
         }.associateBy { it.uid },
         deletedPlaylists = json.optJSONArray("deleted_playlists").objects().associate { it.getString("uid") to it.getLong("deleted_at") },
-        tagOverrides = json.optJSONObject("tag_overrides")?.let { o ->
-            o.keys().asSequence().associateWith { ref ->
-                val dims = o.getJSONObject(ref)
-                dims.keys().asSequence().associateWith { dim ->
-                    val s = dims.getJSONObject(dim)
-                    Stamped(s.optStringOrNull("value"), s.getLong("updated_at"))
-                }
-            }
-        }.orEmpty(),
+        tagOverrides = readTagOverrides(json),
         lyricsOffsets = json.optJSONObject("lyrics_offsets")?.let { o ->
             o.keys().asSequence().associateWith { ref -> o.getJSONObject(ref).let { Stamped(it.getLong("offset_ms"), it.getLong("updated_at")) } }
         }.orEmpty(),

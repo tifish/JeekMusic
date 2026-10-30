@@ -60,12 +60,12 @@ class LibraryRepository @Inject constructor(
     private val sorter: SongSorter,
 ) {
     /** 根级音乐文件夹；歌曲数只算符合筛选的（需求 M-6），文件夹本身总是显示。 */
-    val folders: Flow<List<FolderWithCount>> = tagFilter.filter.flatMapLatest { folderDao.observeWithCounts(it.mood?.name, it.voice?.name, it.genre?.name) }
+    val folders: Flow<List<FolderWithCount>> = tagFilter.filter.flatMapLatest { folderDao.observeWithCounts(it.mood?.name, it.voice?.name, it.genre?.name, it.calmness?.name) }
 
     /** 艺术家列表；筛选时只保留有这类歌的艺术家，歌曲数也只算这类歌（需求 M-6）。 */
     val artists: Flow<List<ArtistEntity>> = tagFilter.filter.flatMapLatest { filter ->
         if (!filter.isActive) return@flatMapLatest artistDao.observeAll()
-        combine(artistDao.observeAll(), artistDao.observeCounts(filter.mood?.name, filter.voice?.name, filter.genre?.name)) { artists, counts ->
+        combine(artistDao.observeAll(), artistDao.observeCounts(filter.mood?.name, filter.voice?.name, filter.genre?.name, filter.calmness?.name)) { artists, counts ->
             val byId = counts.associate { it.artistId to it.count }
             artists.mapNotNull { artist -> byId[artist.id]?.let { artist.copy(trackCount = it) } }
         }
@@ -127,7 +127,7 @@ class LibraryRepository @Inject constructor(
         // 筛选时没有符合歌曲的子文件夹不显示（计数查询里已经过滤）
         return tagFilter.filter.flatMapLatest { filter ->
             combine(
-                trackDao.observeDirectoryCounts(folderId, prefix, filter.mood?.name, filter.voice?.name, filter.genre?.name),
+                trackDao.observeDirectoryCounts(folderId, prefix, filter.mood?.name, filter.voice?.name, filter.genre?.name, filter.calmness?.name),
                 trackDao.observeInDirectory(folderId, path),
                 tagFilter.allowedKeys,
             ) { counts, tracks, allowed -> Triple(counts, tracks.filterByTags(allowed) { it.trackKey }, allowed) }

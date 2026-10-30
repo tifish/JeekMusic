@@ -41,7 +41,9 @@ class TagRepository @Inject constructor(
 
     fun pendingCount(): Flow<Int> = dao.observePendingCount(ANALYZER_VERSION)
 
-    suspend fun recomputeAll() = mutex.withLock {
+    suspend fun recomputeAll() = mutex.withLock { db.withTransaction { recomputeCore() } }
+
+    private suspend fun recomputeCore() {
         val sensitivity = settings.current().sensitivity
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
         val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
@@ -82,31 +84,33 @@ class TagRepository @Inject constructor(
         Tag.of(dimension, value) ?: when (dimension) {
             TagDimension.GENRE -> Tag.NON_CLASSICAL
             TagDimension.MOOD -> Tag.NON_SPORT
-            TagDimension.VOICE -> null
+            TagDimension.VOICE, TagDimension.CALMNESS -> null
         }
 
     /** 手动修正（需求 M-4）：[tag] 为 null 表示"这个维度的哪个标签都不是"（只有氛围可以）。 */
-    suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) {
+    suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) = mutex.withLock {
+        require(tag == null || tag.dimension == dimension) { "Invalid tag dimension" }
+        require(dimension != TagDimension.CALMNESS || tag != null) { "Use clearManual to restore automatic calmness" }
         db.withTransaction {
             val before = reviewSnapshot(trackKey)
             dao.setOverride(TagOverrideEntity(trackKey, dimension.name, tag?.name))
+            recomputeCore()
             dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
                 .put("recordedAt", System.currentTimeMillis()).put("provenance", "manual_correction_not_independent_truth")
                 .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
         }
-        recomputeAll()
     }
 
     /** 恢复自动识别。 */
-    suspend fun clearManual(trackKey: String, dimension: TagDimension) {
+    suspend fun clearManual(trackKey: String, dimension: TagDimension) = mutex.withLock {
         db.withTransaction {
             val before = reviewSnapshot(trackKey)
             dao.clearOverride(trackKey, dimension.name)
+            recomputeCore()
             dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
                 .put("recordedAt", System.currentTimeMillis()).put("provenance", "restore_automatic")
                 .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
         }
-        recomputeAll()
     }
 
     private suspend fun reviewSnapshot(key: String): JSONObject {
@@ -122,7 +126,7 @@ class TagRepository @Inject constructor(
         val features = dao.currentFeatures(trackKey)
         val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
         val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, settings.current().sensitivity, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
-        val overrides = dao.overrides(trackKey).associateBy { TagDimension.valueOf(it.dimension) }
+        val overrides = dao.overrides(trackKey).mapNotNull { o -> TagDimension.entries.firstOrNull { it.name == o.dimension }?.let { it to o } }.toMap()
         val tags = TagDimension.entries.associateWith { d ->
             if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]
         }
@@ -138,7 +142,7 @@ class TagRepository @Inject constructor(
          */
         const val ANALYZER_VERSION = 5
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 5
+        const val RULES_VERSION = 6
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

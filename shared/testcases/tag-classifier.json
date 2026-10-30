@@ -73,9 +73,15 @@
     { "description": "旧版本保存的流行读成非古典", "dimension": "GENRE", "value": "POP", "expected": "NON_CLASSICAL" },
     { "description": "古典", "dimension": "GENRE", "value": "CLASSICAL", "expected": "CLASSICAL" },
     { "description": "POP 不属于氛围", "dimension": "MOOD", "value": "POP", "expected": null },
-    { "description": "不属于这个维度", "dimension": "VOICE", "value": "SPORT", "expected": null }
+    { "description": "不属于这个维度", "dimension": "VOICE", "value": "SPORT", "expected": null },
+    {"description": "CALMNESS/CALM has independent legacy semantics", "dimension": "CALMNESS", "value": "CALM", "expected": "CALM"},
+    {"description": "CALMNESS/NON_CALM has independent legacy semantics", "dimension": "CALMNESS", "value": "NON_CALM", "expected": "NON_CALM"},
+    {"description": "CALMNESS/QUIET has independent legacy semantics", "dimension": "CALMNESS", "value": "QUIET", "expected": null},
+    {"description": "MOOD/CALM has independent legacy semantics", "dimension": "MOOD", "value": "CALM", "expected": null},
+    {"description": "MOOD/QUIET has independent legacy semantics", "dimension": "MOOD", "value": "QUIET", "expected": "NON_SPORT"}
   ],
   "tagsOfDimension": [
-    { "description": "曲风的所有标签", "dimension": "GENRE", "expected": ["CLASSICAL", "NON_CLASSICAL"] }
+    { "description": "曲风的所有标签", "dimension": "GENRE", "expected": ["CLASSICAL", "NON_CLASSICAL"] },
+    {"description": "independent calmness pair", "dimension": "CALMNESS", "expected": ["CALM", "NON_CALM"]}
   ]
 }

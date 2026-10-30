@@ -8,10 +8,33 @@ import com.tinyfish.jeekmusic.strings
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** 多设备同步的合并（需求 B-7）：两端共用的用例 shared/testcases/sync-merge.json。 */
 class SyncMergeTest {
+    @Test
+    fun extendedDimensionsRoundTripWithoutExposingThemToLegacyEditors() {
+        val fixture = SharedCases.load("sync-calmness-wire.json")
+        val parsed = requireNotNull(SyncFormat.parse(fixture.getJSONObject("file").toString()))
+        val tags = parsed.state.tagOverrides
+        assertEquals(Stamped("QUIET", 10), tags["song"]!!["MOOD"])
+        assertEquals(Stamped("CALM", 30), tags["song"]!!["CALMNESS"])
+        assertEquals(Stamped<String?>(null, 30), tags["reset"]!!["CALMNESS"])
+        assertEquals(Stamped("X", 30), tags["future"]!!["FUTURE"])
+        val wire = SyncFormat.toJson(parsed)
+        val legacy = wire.getJSONObject("tag_overrides")
+        for (ref in legacy.keys()) for (dim in legacy.getJSONObject(ref).keys())
+            assertTrue(dim in listOf("MOOD", "VOICE", "GENRE"))
+        assertEquals(parsed, SyncFormat.parse(wire.toString()))
+        val invalid = fixture.getJSONArray("invalid_extensions")
+        for (i in 0 until invalid.length()) {
+            val file = JSONObject(fixture.getJSONObject("file").toString())
+            file.put("extended_tag_overrides", invalid.get(i))
+            assertNull(SyncFormat.parse(file.toString()))
+        }
+    }
+
     @Test
     fun partialNavigationKeepsBuiltinPagesAndCanonicalArtistKeys() {
         val normalized = SyncFormat.normalizeNavigation(listOf(NavRef("PLAYLISTS", ""),

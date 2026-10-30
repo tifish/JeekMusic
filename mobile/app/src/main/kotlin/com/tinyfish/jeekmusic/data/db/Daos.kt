@@ -56,11 +56,12 @@ interface FolderDao {
             AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
             AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
             AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
+        AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         ) AS track_count
         FROM library_folder f ORDER BY f.display_name
         """,
     )
-    fun observeWithCounts(mood: String?, voice: String?, genre: String?): Flow<List<FolderWithCount>>
+    fun observeWithCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null): Flow<List<FolderWithCount>>
 }
 
 @Dao
@@ -100,10 +101,11 @@ interface TrackDao {
         AND (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
         AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
         AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
+        AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         GROUP BY relative_path
         """,
     )
-    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?, voice: String?, genre: String?): Flow<List<DirectoryCount>>
+    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?, voice: String?, genre: String?, calmness: String? = null): Flow<List<DirectoryCount>>
 
     @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path = :relativePath")
     fun observeInDirectory(folderId: Long, relativePath: String): Flow<List<TrackEntity>>
@@ -174,10 +176,11 @@ interface ArtistDao {
         WHERE (:mood IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'MOOD' AND value = :mood))
         AND (:voice IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'VOICE' AND value = :voice))
         AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
+        AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         GROUP BY ta.artist_id
         """,
     )
-    fun observeCounts(mood: String?, voice: String?, genre: String?): Flow<List<ArtistCount>>
+    fun observeCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null): Flow<List<ArtistCount>>
 }
 
 @Dao

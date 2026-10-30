@@ -321,6 +321,7 @@ public partial class MainWindow : Window
         Group(L.T("氛围"), "SPORT", "NON_SPORT");
         Group(L.T("人声"), "VOCAL", "INSTRUMENTAL");
         Group(L.T("曲风"), "CLASSICAL", "NON_CLASSICAL");
+        Group(L.T("平静程度"), "CALM", "NON_CALM");
         menu.Items.Add(new Separator());
         var clear = new MenuItem { Header = L.T("清除筛选"), IsEnabled = _vm.FilterActive };
         clear.Click += (_, _) => _vm.ClearFilterCommand.Execute(null);

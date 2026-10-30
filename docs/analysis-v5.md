@@ -72,3 +72,5 @@ dotnet build desktop/tools/AnalysisProbe -p:_IsPublishing=true -p:SelfContained=
 
 
 最终针对性验证：Windows App 80 项、Core（含同步）34 项通过；Android JVM 100 项通过，Android 15 模拟器原生解码/TFLite 1 项、Room 迁移 3 项、DAO 7 项通过；Python 防泄漏工具 3 项通过。托管开发 EXE 和 Release NativeAOT 均通过真实 MCP 手工覆盖/审核/回滚测试。Release NativeAOT 的隔离受控曲库经正常扫描→后台分析→MCP explain 链路验证，3 段/30 窗/各 160,000 样本，约 132ms，无播放。AOT 首次构建因 vswhere 不在 PATH 失败，给该构建进程补充 VS Installer 路径后发布成功；第三方 DataGrid 的既有 trim/AOT 警告保留。
+
+后续规则 v6 新增独立安静维度，分析器及 evidence contract 继续为 v5，无条件重解码不适用；见 [安静标签契约及验证](calmness-v6.md)。

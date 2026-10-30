@@ -92,7 +92,8 @@ public sealed class LibraryService : ITrackSource, IDisposable
         var tags = Db.AllTags().ToDictionary(kv => kv.Key, kv => new SongTags(
             kv.Value.GetValueOrDefault("MOOD").value, kv.Value.GetValueOrDefault("VOICE").value, kv.Value.GetValueOrDefault("GENRE").value,
             kv.Value.GetValueOrDefault("MOOD").source == "MANUAL", kv.Value.GetValueOrDefault("VOICE").source == "MANUAL",
-            kv.Value.GetValueOrDefault("GENRE").source == "MANUAL"));
+            kv.Value.GetValueOrDefault("GENRE").source == "MANUAL",
+            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL"));
         var snapshot = new LibrarySnapshot(folders, tracks, tags);
         Dispatcher.UIThread.Post(() =>
         {

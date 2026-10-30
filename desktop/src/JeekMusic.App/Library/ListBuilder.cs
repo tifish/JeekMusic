@@ -26,6 +26,7 @@ public static class ListBuilder
         "SPORT" or "NON_SPORT" => "MOOD",
         "VOCAL" or "INSTRUMENTAL" => "VOICE",
         "CLASSICAL" or "NON_CLASSICAL" => "GENRE",
+        "CALM" or "NON_CALM" => "CALMNESS",
         _ => null,
     };
 

@@ -92,6 +92,64 @@ class LibraryDaoTest {
     }
 
     @Test
+    fun calmnessCacheManualAutoAndRollback() = runTest {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = com.tinyfish.jeekmusic.data.settings.SettingsRepository(context)
+        val previous = settings.current()
+        val repository = com.tinyfish.jeekmusic.analysis.TagRepository(db, db.tagDao(), settings)
+        val folder = addFolder("Calmness/")
+        val track = track(folder, "Calmness/", "Sonata Op. 1.mp3")
+        tracks.insert(listOf(track))
+        val m = com.tinyfish.jeekmusic.analysis.ModelScores(-3.0, -1.0, .04, .01, 0.0)
+        val e = com.tinyfish.jeekmusic.analysis.AnalysisEvidence(listOf(
+            com.tinyfish.jeekmusic.analysis.SegmentEvidence(0, 9750, false, 156000, 1, 1, m, List(10) { m }, null)), emptyList(), true, null, 1)
+        val f = TrackFeaturesEntity(track.trackKey, "0:0", 5, null, 0.0, -20.0, 0.0, 0.0, 0.0, 0.0, 0,
+            vocalScore = m.vocal, classicalScore = m.classical, calmLevel = m.calm, energyLevel = m.energy,
+            orchestraLevel = m.orchestra, analysisEvidence = e.toJson())
+        val dao = db.tagDao()
+        dao.saveFeatures(f)
+        dao.setOverride(TagOverrideEntity(track.trackKey, "MOOD", "QUIET"))
+        val dim = com.tinyfish.jeekmusic.analysis.TagDimension.CALMNESS
+        val calm = com.tinyfish.jeekmusic.analysis.Tag.CALM
+        try {
+            settings.setTagRulesVersion(5)
+            repository.recomputeIfRulesChanged()
+            assertEquals(6, settings.current().tagRulesVersion)
+            assertEquals(f, dao.currentFeatures(track.trackKey))
+            assertEquals(0, dao.pending(5, 10).size)
+            assertEquals(calm, repository.info(track.trackKey).tags[dim])
+            assertEquals(com.tinyfish.jeekmusic.analysis.Tag.NON_SPORT, repository.info(track.trackKey).tags[com.tinyfish.jeekmusic.analysis.TagDimension.MOOD])
+            repository.setManual(track.trackKey, dim, com.tinyfish.jeekmusic.analysis.Tag.NON_CALM)
+            assertEquals(setOf(track.trackKey), dao.observeKeys("CALMNESS", "NON_CALM").first().toSet())
+            val reviews = dao.reviews(track.trackKey).size
+            db.openHelper.writableDatabase.execSQL("CREATE TRIGGER fail_calm BEFORE INSERT ON track_tag WHEN NEW.dimension='CALMNESS' BEGIN SELECT RAISE(ABORT,'fixture'); END")
+            var failed = false
+            try { repository.clearManual(track.trackKey, dim) } catch (_: android.database.sqlite.SQLiteException) { failed = true }
+            assertEquals(true, failed)
+            assertEquals(reviews, dao.reviews(track.trackKey).size)
+            assertEquals(com.tinyfish.jeekmusic.analysis.Tag.NON_CALM, repository.info(track.trackKey).tags[dim])
+            db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_calm")
+            repository.clearManual(track.trackKey, dim)
+            assertEquals(calm, repository.info(track.trackKey).tags[dim])
+            assertEquals(false, dim in repository.info(track.trackKey).manual)
+            assertEquals("QUIET", dao.overrides(track.trackKey).single().value)
+            assertEquals(f, dao.currentFeatures(track.trackKey))
+            val filter = com.tinyfish.jeekmusic.data.settings.TagFilter(mood = com.tinyfish.jeekmusic.analysis.Tag.NON_SPORT, calmness = calm)
+            settings.setTagFilter(filter)
+            assertEquals(filter, com.tinyfish.jeekmusic.data.settings.SettingsRepository(context).current().tagFilter)
+            settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter())
+            assertEquals(false, settings.current().tagFilter.isActive)
+            dao.saveFeatures(f.copy(failed = true, analysisAttempts = 3))
+            repository.recomputeAll()
+            assertEquals(null, repository.info(track.trackKey).tags[dim])
+            assertEquals(0, dao.pending(5, 10).size)
+        } finally {
+            settings.setTagFilter(previous.tagFilter)
+            settings.setTagRulesVersion(previous.tagRulesVersion)
+        }
+    }
+
+    @Test
     fun directoryCountsFoldIntoChildren() = runTest {
         val id = addFolder("Music/")
         tracks.insert(
@@ -192,8 +250,10 @@ class LibraryDaoTest {
             listOf(
                 TrackTagEntity("external_primary:Music/a.mp3", "MOOD", "SPORT", "AUTO"),
                 TrackTagEntity("external_primary:Music/a.mp3", "VOICE", "VOCAL", "AUTO"),
+                TrackTagEntity("external_primary:Music/a.mp3", "CALMNESS", "NON_CALM", "AUTO"),
                 TrackTagEntity("external_primary:Music/Pop/b.mp3", "MOOD", "SPORT", "MANUAL"),
                 TrackTagEntity("external_primary:Music/Pop/b.mp3", "VOICE", "INSTRUMENTAL", "AUTO"),
+                TrackTagEntity("external_primary:Music/Pop/b.mp3", "CALMNESS", "CALM", "MANUAL"),
                 TrackTagEntity("external_primary:Music/Rock/c.mp3", "MOOD", "QUIET", "AUTO"),
                 TrackTagEntity("external_primary:Music/Rock/c.mp3", "VOICE", "VOCAL", "AUTO"),
             ),
@@ -215,5 +275,10 @@ class LibraryDaoTest {
         assertEquals(listOf(ArtistCount(artistId, 2)), artists.observeCounts("SPORT", null, null).first())
         assertEquals(listOf(ArtistCount(artistId, 2)), artists.observeCounts(null, "VOCAL", null).first())
         assertEquals(emptyList<ArtistCount>(), artists.observeCounts("QUIET", "INSTRUMENTAL", null).first())
+        assertEquals(listOf(1), folders.observeWithCounts(null, null, null, "CALM").first().map { it.trackCount })
+        assertEquals(listOf(0), folders.observeWithCounts("SPORT", "VOCAL", null, "CALM").first().map { it.trackCount })
+        assertEquals(listOf(ArtistCount(artistId, 1)), artists.observeCounts("SPORT", "INSTRUMENTAL", null, "CALM").first())
+        assertEquals(1, tracks.observeDirectoryCounts(id, "Music/", null, null, null, "NON_CALM").first().sumOf { it.count })
+        assertEquals(listOf(3), folders.observeWithCounts(null, null, null, null).first().map { it.trackCount })
     }
 }

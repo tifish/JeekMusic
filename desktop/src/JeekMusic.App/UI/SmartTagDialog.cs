@@ -9,7 +9,7 @@ using JeekMusic.Library;
 
 namespace JeekMusic.UI;
 
-/// <summary>三个二元分类在同一面板编辑；只有应用时才提交明确选中的维度。</summary>
+/// <summary>四个二元分类在同一面板编辑；只有应用时才提交明确选中的维度。</summary>
 internal sealed class SmartTagDialog : Window
 {
     readonly Dictionary<TagDimension, Tag?> _changes = [];
@@ -107,7 +107,7 @@ internal sealed class SmartTagDialog : Window
 
     static string DimensionName(TagDimension dimension) => dimension switch
     {
-        TagDimension.MOOD => L.T("运动"), TagDimension.VOICE => L.T("人声"), _ => L.T("曲风"),
+        TagDimension.MOOD => L.T("运动"), TagDimension.VOICE => L.T("人声"), TagDimension.CALMNESS => L.T("平静程度"), _ => L.T("曲风"),
     };
 
     internal static string Summary(IReadOnlyList<Track> tracks, IReadOnlyDictionary<string, SongTags> tags, TagDimension dimension)
@@ -118,7 +118,7 @@ internal sealed class SmartTagDialog : Window
             var value = state?[dimension.ToString()];
             var manual = state is not null && dimension switch
             {
-                TagDimension.MOOD => state.MoodManual, TagDimension.VOICE => state.VoiceManual, _ => state.GenreManual,
+                TagDimension.MOOD => state.MoodManual, TagDimension.VOICE => state.VoiceManual, TagDimension.CALMNESS => state.CalmnessManual, _ => state.GenreManual,
             };
             return (value, manual);
         }).Distinct().ToArray();

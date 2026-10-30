@@ -9,6 +9,16 @@ def row(song, album, artists, independent=True):
         provenance=dict(labels="human_reviewed", scores="desktop_production_v5_onnx", independent=independent))
 
 class GroupedEvaluationTest(unittest.TestCase):
+    def test_calmness_is_independent_and_old_inputs_remain_unknown(self):
+        old = row("old", "x", ["one"], False)
+        new = row("new", "y", ["two"], False)
+        new["labels"]["CALMNESS"] = "CALM"
+        new["automatic"]["CALMNESS"] = "NON_CALM"
+        metrics = evaluate([old, new])["results"]["regression"]["dimensions"]["CALMNESS"]
+        self.assertEqual(1, metrics["unknown"])
+        self.assertEqual(1, metrics["fn"])
+        new["labels"]["CALMNESS"] = "QUIET"
+        with self.assertRaises(ValueError): evaluate([new])
     def test_transitive_artist_album_and_duplicates_never_leak(self):
         rows = [row("a", "x", ["one"]), row("b", "x", ["two"]), row("c", "y", ["two"])]
         result = evaluate(rows + [rows[0]])

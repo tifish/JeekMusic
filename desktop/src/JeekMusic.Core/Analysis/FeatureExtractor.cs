@@ -1,8 +1,8 @@
 namespace JeekMusic.Core.Analysis;
 
 /// <summary>一首歌的音频特征（移动端 FeatureExtractor.kt，移动端设计 §6.3）。</summary>
-/// <param name="Loudness">近似 LUFS。</param>
-/// <param name="LoudnessRange">动态范围，单位 LU。</param>
+/// <param name="Loudness">相对响度代理（非标准 LUFS）。</param>
+/// <param name="LoudnessRange">分位响度差代理（非标准 LRA）。</param>
 /// <param name="OnsetRate">每秒起音数。</param>
 /// <param name="LowRatio">150Hz 以下能量占比。</param>
 public sealed record AudioFeatures(
@@ -16,7 +16,7 @@ public sealed record AudioFeatures(
 
 /// <summary>
 /// 从单声道 PCM（[-1, 1]）中提取特征（移动端 FeatureExtractor.kt）。帧长 1024、帧移 256、汉宁窗。
-/// 输入通常是 3 个各 10 秒的片段拼起来，片段之间的接缝对统计特征影响很小。
+/// v5 使用最长的独立已解码片段，避免接缝制造起音；不据此推断整曲标准响度。
 /// </summary>
 public static class FeatureExtractor
 {
@@ -184,7 +184,7 @@ public static class FeatureExtractor
     }
 
     /// <summary>
-    /// 近似 LUFS：400ms 块的均方，绝对门限 -70、相对门限 -10（ITU-R BS.1770 的门限积分，省略 K 计权的高架滤波）。
+    /// 相对响度代理（非标准 LUFS）：400ms 块的均方，绝对门限 -70、相对门限 -10（ITU-R BS.1770 的门限积分，省略 K 计权的高架滤波）。
     /// 动态范围：3 秒短时响度的第 10 到第 95 百分位之差（相对门限 -20）。
     /// </summary>
     private static (double Integrated, double Range) Loudness(float[] samples)

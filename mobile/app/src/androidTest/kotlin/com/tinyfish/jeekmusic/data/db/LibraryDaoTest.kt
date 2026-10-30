@@ -71,6 +71,27 @@ class LibraryDaoTest {
     )
 
     @Test
+    fun partialAnalysisRetriesOnceUntilTerminalAndStaleSignaturesAreNotDisplayed() = runTest {
+        val folder = addFolder("Music/")
+        val track = track(folder, "Music/", "controlled.wav")
+        tracks.insert(listOf(track))
+        val dao = db.tagDao()
+        val partial = TrackFeaturesEntity(track.trackKey, "0:0", 5, null, 0.0, -20.0, 0.0, 0.0, 0.0, 0.0, 0,
+            failed = false, vocalScore = 0.0, analysisEvidence = "{}", analysisAttempts = 1)
+        dao.saveFeatures(partial)
+        assertEquals(1, dao.pending(5, 10).size)
+        dao.saveFeatures(partial.copy(failed = true, analysisAttempts = 3))
+        assertEquals(0, dao.pending(5, 10).size)
+        assertEquals(0, dao.observePendingCount(5).first())
+        dao.saveFeatures(partial.copy(failed = true, analysisAttempts = 3, analyzerVersion = 4))
+        assertEquals(1, dao.pending(5, 10).size)
+        dao.saveFeatures(partial.copy(signature = "stale", analysisAttempts = 3))
+        assertEquals(1, dao.pending(5, 10).size)
+        assertEquals(0, dao.allFeatures().size)
+        assertEquals(null, dao.currentFeatures(track.trackKey))
+    }
+
+    @Test
     fun directoryCountsFoldIntoChildren() = runTest {
         val id = addFolder("Music/")
         tracks.insert(

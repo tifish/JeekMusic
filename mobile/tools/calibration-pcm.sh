@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# LEGACY v4 only: not production-equivalent v5. Use desktop/tools/AnalysisProbe; see docs/analysis-v5.md.
 # 为智能标签校准准备 PCM：对每首歌取 30%、50%、70% 处各 10 秒（与 App 中的 PcmDecoder 一致），
 # 下混为单声道 16kHz 的 32 位浮点（YAMNet 的输入），写入 build/calibration16/*.f32。
 # 然后（docs/design.md §6.6）：

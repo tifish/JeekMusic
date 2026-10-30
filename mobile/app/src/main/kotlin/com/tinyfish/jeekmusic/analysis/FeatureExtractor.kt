@@ -13,9 +13,9 @@ import kotlin.math.sqrt
 data class AudioFeatures(
     val bpm: Double?,
     val bpmConfidence: Double,
-    /** 近似 LUFS。 */
+    /** 相对响度代理（非标准 LUFS）。 */
     val loudness: Double,
-    /** 动态范围，单位 LU。 */
+    /** 分位响度差代理（非标准 LRA）。 */
     val loudnessRange: Double,
     /** 每秒起音数。 */
     val onsetRate: Double,
@@ -26,7 +26,7 @@ data class AudioFeatures(
 
 /**
  * 从单声道 PCM（[-1, 1]）中提取特征。帧长 1024、帧移 256、汉宁窗。
- * 输入通常是 3 个各 10 秒的片段拼起来，片段之间的接缝对统计特征影响很小。
+ * v5 使用最长的独立已解码片段，避免接缝制造起音；不据此推断整曲标准响度。
  */
 object FeatureExtractor {
 
@@ -177,7 +177,7 @@ object FeatureExtractor {
     }
 
     /**
-     * 近似 LUFS：400ms 块的均方，绝对门限 -70、相对门限 -10（ITU-R BS.1770 的门限积分，省略 K 计权的高架滤波）。
+     * 相对响度代理（非标准 LUFS）：400ms 块的均方，绝对门限 -70、相对门限 -10（ITU-R BS.1770 的门限积分，省略 K 计权的高架滤波）。
      * 动态范围：3 秒短时响度的第 10 到第 95 百分位之差（相对门限 -20）。
      */
     private fun loudness(samples: FloatArray): Pair<Double, Double> {

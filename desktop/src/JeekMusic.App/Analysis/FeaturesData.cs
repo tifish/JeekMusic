@@ -21,15 +21,24 @@ public sealed record FeaturesData(
     double? ClassicalScore,
     double? CalmLevel,
     double? EnergyLevel,
-    double? OrchestraLevel)
+    double? OrchestraLevel,
+    string? AnalysisEvidence = null,
+    int AnalysisAttempts = 0)
 {
     public TrackFeatures ToFeatures(int analyzerVersion) =>
         new(analyzerVersion, Bpm, BpmConfidence, Loudness, LoudnessRange, OnsetRate, CentroidHz, LowRatio,
-            VocalScore, ClassicalScore, CalmLevel, EnergyLevel, OrchestraLevel);
+            VocalScore, ClassicalScore, CalmLevel, EnergyLevel, OrchestraLevel, AnalysisEvidence);
 
     public static FeaturesData Of(AudioFeatures? f, ModelScores? m) => new(
         f?.Bpm, f?.BpmConfidence ?? 0, f?.Loudness ?? -70, f?.LoudnessRange ?? 0, f?.OnsetRate ?? 0, f?.CentroidHz ?? 0, f?.LowRatio ?? 0,
         m?.Vocal, m?.Classical, m?.Calm, m?.Energy, m?.Orchestra);
+
+    public bool Complete => ToFeatures(5).ModelScores() is not null &&
+        global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(AnalysisEvidence)?.Complete == true;
+
+    public static bool NeedsAnalysis(FeaturesRow? row, string signature) => row is null || row.Signature != signature ||
+        row.AnalyzerVersion != AnalysisVersions.AnalyzerVersion ||
+        ((row.Failed || Parse(row.Data)?.Complete != true) && (Parse(row.Data)?.AnalysisAttempts ?? 0) < 3);
 
     public string ToJson() => JsonSerializer.Serialize(this, AnalysisJson.Default.FeaturesData);
 
@@ -41,7 +50,7 @@ public sealed record FeaturesData(
     }
 
     /// <summary>数据库行 → 分类用的特征；失败的、解析不了的返回 null。</summary>
-    public static TrackFeatures? FromRow(FeaturesRow row) => row.Failed ? null : Parse(row.Data)?.ToFeatures(row.AnalyzerVersion);
+    public static TrackFeatures? FromRow(FeaturesRow row) => row.Failed ? null : Parse(row.Data) is { } data && (row.AnalyzerVersion < 5 || data.Complete) ? data.ToFeatures(row.AnalyzerVersion) : null;
 }
 
 /// <summary>导出给同步用的一首歌的分析结果（需求 SY-8）：带文件大小和时长作为校验。</summary>

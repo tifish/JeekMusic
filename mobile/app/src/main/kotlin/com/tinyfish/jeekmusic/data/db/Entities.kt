@@ -185,7 +185,7 @@ data class TrackFeaturesEntity(
     @ColumnInfo(name = "centroid_hz") val centroidHz: Double,
     @ColumnInfo(name = "low_ratio") val lowRatio: Double,
     @ColumnInfo(name = "analyzed_at") val analyzedAt: Long,
-    /** 解码失败；不再重试，除非文件签名变了。 */
+    /** 任一必需模块不完整；每模块最多三次尝试，达到终止上限后等待签名/版本变化或显式清除。 */
     val failed: Boolean = false,
     /**
      * YAMNet 模型给出的几组得分（docs/design.md §6.3），模型失败或旧版本分析时为 null。
@@ -196,6 +196,8 @@ data class TrackFeaturesEntity(
     @ColumnInfo(name = "calm_level") val calmLevel: Double? = null,
     @ColumnInfo(name = "energy_level") val energyLevel: Double? = null,
     @ColumnInfo(name = "orchestra_level") val orchestraLevel: Double? = null,
+    @ColumnInfo(name = "analysis_evidence") val analysisEvidence: String? = null,
+    @ColumnInfo(name = "analysis_attempts", defaultValue = "0") val analysisAttempts: Int = 0,
 )
 
 /** 手动修正（需求 M-4）：每首歌每个维度一条；value 为 null 表示"明确不属于这个维度的任何标签"。 */
@@ -216,3 +218,7 @@ data class TrackTagEntity(
     /** AUTO | MANUAL */
     val source: String,
 )
+
+@Entity(tableName = "tag_review")
+data class TagReviewEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "track_key") val trackKey: String, val record: String)

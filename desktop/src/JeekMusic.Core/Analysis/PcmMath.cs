@@ -6,50 +6,73 @@ namespace JeekMusic.Core.Analysis;
 /// </summary>
 public static class PcmMath
 {
-    /// <summary>取样窗口：时长 ≥ 40 秒时取 30%、50%、70% 处各 10 秒，否则整首（最多 60 秒）。时间都相对于 <paramref name="startMs"/>。</summary>
-    /// <returns>每个窗口的 [起点, 终点)，毫秒</returns>
+    /// <summary>Half-open source intervals, bounded by the logical track (including CUE).</summary>
     public static IReadOnlyList<(long StartMs, long EndMs)> Windows(long startMs, long durationMs)
     {
-        if (durationMs < 40_000) return [(startMs, startMs + Math.Min(durationMs, 60_000))];
-        return new[] { 0.3, 0.5, 0.7 }.Select(p =>
+        if (durationMs <= 0) return [];
+        if (durationMs < 40_000) return [(startMs, startMs + durationMs)];
+        // Avoid overlap on 40–50 second tracks.
+        var result = new List<(long StartMs, long EndMs)>();
+        foreach (var p in new[] { .3, .5, .7 })
         {
-            var from = startMs + (long)(durationMs * p);
-            return (from, from + 10_000);
-        }).ToList();
+            var from = Math.Min(startMs + (long)(durationMs * p), startMs + durationMs - 10_000);
+            if (result.Count > 0) from = Math.Max(from, result[^1].EndMs);
+            if (from + 10_000 <= startMs + durationMs) result.Add((from, from + 10_000));
+        }
+        return result;
     }
 
-    /// <summary>
-    /// 交错的多声道 float 样本 → 单声道。除以 √声道数（功率守恒）：对声道高度相关的音乐，响度与 BS.1770 的"各声道功率之和"一致
-    /// （ffmpeg 也是这样下混的）。
-    /// </summary>
+    public static IReadOnlyList<(long StartMs, long EndMs)> AdditionalWindows(long startMs, long durationMs,
+        IReadOnlyList<(long StartMs, long EndMs)> used)
+    {
+        if (durationMs < 40_000) return []; // Already sampled the complete short track.
+        var result = new List<(long StartMs, long EndMs)>();
+        foreach (var p in new[] { .1, .85, 0.0, .9 })
+        {
+            var from = Math.Min(startMs + (long)(durationMs * p), startMs + durationMs - 10_000);
+            var end = from + 10_000;
+            if (used.Concat(result).Any(w => from < w.EndMs && end > w.StartMs)) continue;
+            result.Add((from, end));
+            if (result.Count == 2) break;
+        }
+        return result;
+    }
+
+    /// <summary>Arithmetic channel mean, finite and clamped to [-1,1]. Not BS.1770 loudness.</summary>
     public static float[] MixToMono(ReadOnlySpan<float> interleaved, int channels)
     {
-        channels = Math.Max(1, channels);
-        var scale = 1f / MathF.Sqrt(channels);
-        var frames = interleaved.Length / channels;
-        var mono = new float[frames];
-        for (var i = 0; i < frames; i++)
+        ArgumentOutOfRangeException.ThrowIfLessThan(channels, 1);
+        var mono = new float[interleaved.Length / channels];
+        for (var i = 0; i < mono.Length; i++)
         {
-            var sum = 0f;
-            for (var c = 0; c < channels; c++) sum += interleaved[i * channels + c];
-            mono[i] = sum * scale;
+            double sum = 0;
+            for (var c = 0; c < channels; c++)
+            {
+                var v = interleaved[i * channels + c];
+                sum += float.IsFinite(v) ? Math.Clamp(v, -1f, 1f) : 0;
+            }
+            mono[i] = (float)(sum / channels);
         }
         return mono;
     }
 
-    /// <summary>
-    /// 抽取到 <paramref name="target"/>：每个输出样本取对应区间的平均值（简单的盒式低通）。
-    /// 对统计特征和 YAMNet 的分类都够用；目标采样率不低于源时原样返回。
-    /// </summary>
+    /// <summary>v5 contract: box reduction, linear interpolation for upsampling, floor output length.</summary>
     public static float[] Downsample(float[] input, int sourceRate, int target)
     {
-        if (sourceRate <= target) return input;
+        ArgumentOutOfRangeException.ThrowIfLessThan(sourceRate, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(target, 1);
+        if (sourceRate == target) return input;
         var ratio = (double)sourceRate / target;
-        var count = (int)(input.Length / ratio);
-        var output = new float[count];
-        for (var i = 0; i < count; i++)
+        var output = new float[(int)(input.Length / ratio)];
+        for (var i = 0; i < output.Length; i++)
         {
-            var from = (int)(i * ratio);
+            var position = i * ratio;
+            var from = (int)position;
+            if (sourceRate < target)
+            {
+                output[i] = (float)(input[from] + (input[Math.Min(from + 1, input.Length - 1)] - input[from]) * (position - from));
+                continue;
+            }
             var to = Math.Min(input.Length, Math.Max((int)((i + 1) * ratio), from + 1));
             var sum = 0f;
             for (var j = from; j < to; j++) sum += input[j];
@@ -57,6 +80,7 @@ public static class PcmMath
         }
         return output;
     }
+
 }
 
 /// <summary>

@@ -72,34 +72,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         Result.success()
     }
 
-    private fun analyze(decoder: PcmDecoder, tagger: AudioTagger, track: TrackEntity): TrackFeaturesEntity {
-        val signature = "${track.dateModified}:${track.size}"
+    private suspend fun analyze(decoder: PcmDecoder, tagger: AudioTagger, track: TrackEntity): TrackFeaturesEntity {
         val uri = MediaStoreSource.contentUri(track.volumeName, track.mediaStoreId)
-        // 解码一次 16kHz：原样给 YAMNet，再抽取到 11025Hz 给节奏、响度等手工特征
-        val pcm = decoder.decode(uri, decoder.windows(track.startMs ?: 0, track.durationMs), AudioTagger.SAMPLE_RATE)
-        val f = pcm?.let {
-            runCatching { FeatureExtractor.extract(PcmDecoder.downsample(it, AudioTagger.SAMPLE_RATE, FeatureExtractor.SAMPLE_RATE)) }.getOrNull()
-        }
-        val m = pcm?.let { runCatching { tagger.meanScores(it)?.let(AudioTagger::scores) }.onFailure { e -> Log.w(TAG, "model failed", e) }.getOrNull() }
-        return TrackFeaturesEntity(
-            trackKey = track.trackKey,
-            signature = signature,
-            analyzerVersion = TagRepository.ANALYZER_VERSION,
-            bpm = f?.bpm,
-            bpmConfidence = f?.bpmConfidence ?: 0.0,
-            loudness = f?.loudness ?: -70.0,
-            loudnessRange = f?.loudnessRange ?: 0.0,
-            onsetRate = f?.onsetRate ?: 0.0,
-            centroidHz = f?.centroidHz ?: 0.0,
-            lowRatio = f?.lowRatio ?: 0.0,
-            analyzedAt = System.currentTimeMillis(),
-            failed = f == null && m == null,
-            vocalScore = m?.vocal,
-            classicalScore = m?.classical,
-            calmLevel = m?.calm,
-            energyLevel = m?.energy,
-            orchestraLevel = m?.orchestra,
-        )
+        return TrackAnalyzer.analyze(track,
+            { window, check -> decoder.decode(uri, listOf(window), checkCancelled = check) },
+            { pcm, check -> tagger.analyzeWindows(pcm, check).let { it.first?.let(AudioTagger::scores) to it.second } })
     }
 
     companion object {

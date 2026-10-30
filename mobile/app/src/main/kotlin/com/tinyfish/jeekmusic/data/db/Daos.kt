@@ -352,7 +352,9 @@ interface TagDao {
     @Query(
         """
         SELECT t.* FROM track t LEFT JOIN track_features f ON f.track_key = t.track_key
-        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version < :version
+        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version != :version
+        OR (f.analysis_attempts < 3 AND (f.failed = 1 OR f.analysis_evidence IS NULL OR f.vocal_score IS NULL
+            OR f.classical_score IS NULL OR f.calm_level IS NULL OR f.energy_level IS NULL OR f.orchestra_level IS NULL))
         LIMIT :limit
         """,
     )
@@ -361,7 +363,9 @@ interface TagDao {
     @Query(
         """
         SELECT COUNT(*) FROM track t LEFT JOIN track_features f ON f.track_key = t.track_key
-        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version < :version
+        WHERE f.track_key IS NULL OR f.signature != (t.date_modified || ':' || t.size) OR f.analyzer_version != :version
+        OR (f.analysis_attempts < 3 AND (f.failed = 1 OR f.analysis_evidence IS NULL OR f.vocal_score IS NULL
+            OR f.classical_score IS NULL OR f.calm_level IS NULL OR f.energy_level IS NULL OR f.orchestra_level IS NULL))
         """,
     )
     fun observePendingCount(version: Int): Flow<Int>
@@ -376,11 +380,14 @@ interface TagDao {
     @Query("SELECT track_key AS trackKey, title, album FROM track WHERE track_key = :trackKey LIMIT 1")
     suspend fun title(trackKey: String): TrackTitle?
 
-    @Query("SELECT * FROM track_features WHERE failed = 0")
+    @Query("SELECT f.* FROM track_features f JOIN track t ON f.track_key = t.track_key WHERE f.failed = 0 AND f.signature = (t.date_modified || ':' || t.size)")
     suspend fun allFeatures(): List<TrackFeaturesEntity>
 
     @Query("SELECT * FROM track_features WHERE track_key = :trackKey")
     suspend fun features(trackKey: String): TrackFeaturesEntity?
+
+    @Query("SELECT f.* FROM track_features f JOIN track t ON f.track_key = t.track_key WHERE f.track_key = :trackKey AND f.signature = (t.date_modified || ':' || t.size)")
+    suspend fun currentFeatures(trackKey: String): TrackFeaturesEntity?
 
     @Query("SELECT * FROM tag_override")
     suspend fun overrides(): List<TagOverrideEntity>
@@ -390,6 +397,12 @@ interface TagDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun setOverride(entity: TagOverrideEntity)
+
+    @Insert
+    suspend fun saveReview(entity: TagReviewEntity)
+
+    @Query("SELECT * FROM tag_review WHERE track_key = :trackKey ORDER BY id DESC LIMIT 100")
+    suspend fun reviews(trackKey: String): List<TagReviewEntity>
 
     @Query("DELETE FROM tag_override WHERE track_key = :trackKey AND dimension = :dimension")
     suspend fun clearOverride(trackKey: String, dimension: String)
@@ -444,6 +457,9 @@ interface FileMoveDao {
     @Query("UPDATE OR REPLACE tag_override SET track_key = :newKey WHERE track_key = :oldKey")
     suspend fun moveTagOverrides(oldKey: String, newKey: String)
 
+    @Query("UPDATE tag_review SET track_key = :newKey WHERE track_key = :oldKey")
+    suspend fun moveTagReviews(oldKey: String, newKey: String)
+
     @Query("UPDATE OR REPLACE track_tag SET track_key = :newKey WHERE track_key = :oldKey")
     suspend fun moveTags(oldKey: String, newKey: String)
 
@@ -456,6 +472,7 @@ interface FileMoveDao {
         moveLyricsCache(oldKey, newKey)
         moveFeatures(oldKey, newKey)
         moveTagOverrides(oldKey, newKey)
+        moveTagReviews(oldKey, newKey)
         moveTags(oldKey, newKey)
     }
 }

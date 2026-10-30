@@ -35,7 +35,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 ### 当前列表全部封面 / 歌词
 
-`fetch_resources` 与歌曲列表标题栏“更多 → 获取全部封面 / 获取全部歌词”、右键选中项获取、设置页全库获取共用同一个批量任务入口和 `OnlineFeature.Fetch`。Debug、Release、NativeAOT 完整共用，无额外开关；工具总数为 25，其余工具参数保持兼容。该工具可能联网和按保存选项写入音频，标记 `openWorldHint` / `destructiveHint` 为 true；status 是同一工具内的只读操作。
+`fetch_resources` 与歌曲列表标题栏“更多 → 获取全部封面 / 获取全部歌词”、右键选中项获取、设置页全库获取共用同一个批量任务入口和 `OnlineFeature.Fetch`。Debug、Release、NativeAOT 完整共用，无额外开关；工具总数为 26，其余工具参数保持兼容。该工具可能联网和按保存选项写入音频，标记 `openWorldHint` / `destructiveHint` 为 true；status 是同一工具内的只读操作。
 
 ```json
 {"action":"start","kind":"covers","scope":"current_list"}
@@ -72,7 +72,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `get_status` | 无参数。当前歌曲、播放/暂停、秒数、音量、随机/循环、队列位置、曲库数量、扫描状态和快照版本 |
 | `search_tracks` | `query` 可省略或留空浏览全库；沿用 UI 搜索和排序服务，可按 `folderId`、`artistKey`、`albumKey` 同时筛选；默认使用已保存排序，无偏好时文件修改时间倒序。可选 `sort`（`FileName` / `Modified` / `Title` / `Artist` / `Album` / `Duration` / `Format`）、`reverse` 仅覆盖本次查询，不保存设置；先排序再分页。结果包含 `artistKeys`、`albumKey` 和下述修改时间字段 |
 | `get_track` | `trackId`。详细元数据、音频文件路径、稳定键、已提交的智能标签和缓存修改时间，包括 CUE 分轨；原 `tags` 保持兼容，新增 `tagSources`（各维度 `AUTO` / `MANUAL`，无结果为 null） |
-| `set_smart_tags` | `trackIds`（1–1000 项）和至少一个 `mood` / `voice` / `genre`。运动为 `SPORT` / `NON_SPORT`，人声为 `VOCAL` / `INSTRUMENTAL`，曲风为 `CLASSICAL` / `NON_CLASSICAL`；每类也可用 `AUTO` 恢复自动。省略的维度及其同步时间戳保持不变。支持曲库中的离线歌曲，不要求文件在线；先验证全部歌曲和输入，再一次事务写入覆盖及重算结果，失败全部回滚。等待提交和同步通知后返回去重歌曲的 `count`、`items`（包含 `tags` 和 `tagSources`），不播放、分析音频或修改文件元数据 |
+| `explain_analysis` | 必需 `trackId`，可选 `includeReviews`。只读 automatic/final/sources、标题强制古典来源、分析/规则版本、完整性/待重排、片段位置/有效窗/得分/错误、阈值距离（非概率）、追加原因/预算。可返回最多最近 100 条本地审核快照；不启动音频分析或改变状态 |
+| `set_smart_tags` | `trackIds`（1–1000 项）和至少一个 `mood` / `voice` / `genre`，可选 `reason`（<=500 字）。事务内追加纠正前后审核记录，不自动当独立真值。运动为 `SPORT` / `NON_SPORT`，人声为 `VOCAL` / `INSTRUMENTAL`，曲风为 `CLASSICAL` / `NON_CLASSICAL`；每类也可用 `AUTO` 恢复自动。省略的维度及其同步时间戳保持不变。支持曲库中的离线歌曲，不要求文件在线；先验证全部歌曲和输入，再一次事务写入覆盖及重算结果，失败全部回滚。等待提交和同步通知后返回去重歌曲的 `count`、`items`（包含 `tags` 和 `tagSources`），不播放、分析音频或修改文件元数据 |
 | `play_tracks` | `trackIds` 数组（1–1000 项）、可选 `startIndex`（默认 0）、`shuffle`。先校验全部歌曲可用，再按指定列表播放；与界面一样保留待播的手动队列 |
 | `playback` | `action`：`resume` / `pause` / `toggle` / `next` / `previous` / `seek`；`seek` 另需 `seconds`，相对于当前分轨起点（绝对位置，不是增量）；需已加载可 seek 的歌曲，或显式暂停释放后保留的歌曲（只改保存位置，不开启音频），否则返回业务错误。显式 pause/toggle 暂停先关闭流并恢复本客户端临时格式，保留歌曲/队列/位置；resume 先重新匹配共享自动格式，再从原位播放，内部切歌/重建暂停不恢复。保留播放/暂停；终点限制在曲尾前 1s（不足 1s 的歌曲为 0），避免直接 seek 到 EOF；超出时长仍返回参数错误。`next` / `previous` 成功选曲或回到开头后直接播放，包括原先暂停的情况；上一首仍遵循超过 3 秒先回到当前分轨开头的规则。空队列无操作；加载或 seek 失败不会恢复旧曲播放。切歌仍受输出安全门控约束，不会代替物理音量确认 |
 | `get_queue` | 支持分页，返回实际播放顺序、手动条目标记、当前位置，以及只读 `sourceState`（当前/待决来源、切源代次/状态、仅作历史的旧当前曲索引）；读取不提交待决切源 |
@@ -138,7 +139,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 - `revision`：切源代次；`status` 为 `none`、`pending`、`committed`、`cancelled` 或 `empty`（无当前队列，未开始切源）。
 - `sourceAnchorIndex`：旧当前曲仅作为历史锚点的零基队列索引，无锚点为 -1；普通历史可由上一首访问，前向及循环不会选到此锚点。该索引随队列编辑调整并随队列持久化，旧配置缺省为 -1。
 
-这些读取不启动播放、解析待决来源、计算 Rows 或创建窗口。继续使用现有播放/队列工具，无新导航或 UI 专用工具，25 个工具及输入字段/范围保持兼容；参数说明同步描述共用业务行为。回归位于 `SourceSwitchTests` 和 `PlayQueueTests`，使用 fake 引擎/端点、内存数据库和真实 Headless 控件验证竞态及状态，不能代替解锁后的真实客户端操作与截图验收。
+这些读取不启动播放、解析待决来源、计算 Rows 或创建窗口。继续使用现有播放/队列工具，无新导航或 UI 专用工具，26 个工具及输入字段/范围保持兼容；参数说明同步描述共用业务行为。回归位于 `SourceSwitchTests` 和 `PlayQueueTests`，使用 fake 引擎/端点、内存数据库和真实 Headless 控件验证竞态及状态，不能代替解锁后的真实客户端操作与截图验收。
 
 ### 播放时当前歌曲可见性
 
@@ -155,7 +156,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 - `alignment` 为 `none`、`awaiting-layout`、`keep` 或 `center`；`initiallyFullyVisible` 在可靠布局前为 null，之后记录本次请求的原始判断，虚拟化实现行后也不改写；`centerErrorY` 为当前行中心相对实际数据视口中心的纵向差（逻辑像素），无行布局时为 null。首尾无法居中时可以非零，判断是否完整可见仍以 `currentFullyVisible` 为准。
 - `result`：`no-request`、`pending`、`already-visible`、`centered`、`clamped`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。原 `revealed` 结果随居中规则改为 `centered` 或 `clamped`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
 
-现共 25 个工具（包含智能标签修正与资源批量获取）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
+现共 26 个工具（包含智能标签修正与资源批量获取）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
 
 ### 歌曲修改时间与排序
 
@@ -218,7 +219,7 @@ English: The visible six-DIP navigation splitter resizes both ways. Expanding a 
 
 ### 文件夹展开诊断
 
-`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 25 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
+`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 26 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
 
 - `defaultExpanded: true`、`persistence: "device-local-ui-snapshot"`、`keyVersion: 1`。
 - `automaticNavigation: "preserve-collapsed"`：恢复选中项、普通导航/历史、刷新/扫描不打开已主动收起的文件夹祖先。
@@ -303,7 +304,7 @@ python desktop/tools/test-mcp.py --audio --exclusive
 python desktop/tools/test-build-isolation.py --build-only
 ```
 
-`test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、25 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
+`test-mcp.py` 默认只验证真实 EXE 路径/运行诊断、26 个工具、冷启动、stdio 关闭退出码及输出和正常退出，不发播放或输出切换命令。`--startup-only` 保留为默认行为的显式别名；`--sdk` 可叠加验证协议与参数 Schema。`--audio` 才额外验证静音 WAV、多客户端、中文/分页、曲库、播放列表、播放、队列、日志、错误校验、重启后应用静音恢复及共享输出；`--exclusive` 必须同时指定 `--audio` 才能打开真实独占设备。构建隔离脚本使用同样的显式选项规则，默认传入 `--startup-only`。
 
 **静音 WAV / 应用静音仍会打开 WASAPI 设备，独占能中断游戏等其他程序声音。** 独立数据目录只隔离曲库和单实例，不隔离物理音频设备。默认启动诊断也会启动 GUI 并读取系统音频状态；用户要求禁止启动或正在处理游戏失声时，不运行任何 EXE/MCP（包括 `--startup-only`、`mcp_client.py` 的只读命令）。仅可编译/静态检查和确认使用模拟端点的测试。测试结束后只清理自己的播放器，不激活窗口或使用正式曲库；`show_window` 的激活行为不在后台测试中调用。
 
@@ -325,7 +326,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 声道布局来自已加载解码器的明确 `audio-params/channels`，mono/stereo 可安全识别；5.1 与 5.1(side) 区分。首次加载保持静音/暂停，拿到可靠布局后若有必要，再切换设备并重开流；确认完成才继续播放。只知道“6 声道”等数量时不推断通用掩码，保留当前扬声器布局，标明布局未知和必要声道转换。已知源布局直接输出不可行时，使用设备当前布局并报告转换；原采样率不可行时保留可用率并明确报告重采样/精度降低。独占仍交给播放内核自动协商，多声道未知布局不强套固定掩码。
 
-关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正与资源批量获取共 25 个工具。
+关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正与资源批量获取共 26 个工具。
 
 共享自动格式是临时配置：每个物理端点首次实际写入前，保存当时真实 Windows 设备默认格式与混音格式的完整原始结构，不使用 factory default、硬编码 48k/16/2 或其他端点快照。显式暂停（界面、媒体键、快捷键与 MCP 共用业务）先静音并关闭流，恢复基线，保留歌曲/队列/CUE 精确位置；暂停 seek 只更新保存位置。续播重新读取当前基线并匹配，确认真实输出后继续。切歌和内部重建不恢复；自然队列结束、清空、正常退出、释放旧设备和进入独占恢复。独占本身不改共享格式，暂停仅释放其流。
 
@@ -377,3 +378,6 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 - `lan_sync_control {"action":"revoke","deviceId":"..."}`：撤销设备。既有 TLS 连接每个请求重新检查授权，后续读取被拒绝；已下载的文件不删除。
 
 所有工具 Schema 禁止额外参数，action 为枚举；share/unshare 要求 folderId，invite 要求 host，revoke 要求 deviceId。沿用正常业务服务，不存在开发专用传输入口。完整产品契约、限制及隔离验证见 [局域网同步](../../docs/lan-sync.md)。
+
+
+智能分类 v5 的采样/重试契约、渐进迁移、生产等价校准提取及防泄漏评估见 [analysis-v5](../../docs/analysis-v5.md)。`explain_analysis` 和本地审核导出复用 `SmartTagService`，标题强制古典和手工优先保持不变；该工具及新增可选 reason 在开发版与正式版完全共用。

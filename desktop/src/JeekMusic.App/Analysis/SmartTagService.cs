@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using JeekMusic.Core.Analysis;
 using JeekMusic.Infrastructure;
 using JeekMusic.Library;
@@ -21,6 +22,51 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             kv.Value.GetValueOrDefault("VOICE").source == "MANUAL", kv.Value.GetValueOrDefault("GENRE").source == "MANUAL"));
     }
 
+    /// <summary>Read-only committed analysis explanation, shared by MCP and review snapshots.</summary>
+    public JsonObject Explain(Track track)
+    {
+        var row = Db.Features(track.TrackKey);
+        var data = FeaturesData.Parse(row?.Data);
+        var evidence = AnalysisEvidence.Parse(data?.AnalysisEvidence);
+        var sensitivity = Enum.TryParse<Sensitivity>(settings.Current.Sensitivity, out var s) ? s : Sensitivity.NORMAL;
+        var title = ClassicalTitles.Matches(track.Title, track.Album);
+        var current = row is not null && row.Signature == AnalysisFeature.Signature(track);
+        var usable = current && row!.AnalyzerVersion <= AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is not null;
+        var automatic = usable ? TagClassifier.Classify(FeaturesData.FromRow(row!)!, sensitivity, title).ToDictionary()
+            : new Dictionary<TagDimension, Tag?>();
+        if (title) automatic[TagDimension.GENRE] = Tag.CLASSICAL;
+        var overrides = Db.TagOverrides().Where(o => o.TrackKey == track.TrackKey).ToDictionary(o => o.Dimension);
+        var final = new JsonObject();
+        var auto = new JsonObject();
+        var sources = new JsonObject();
+        foreach (var d in Enum.GetValues<TagDimension>())
+        {
+            var name = d.ToString();
+            auto[name] = automatic.GetValueOrDefault(d)?.ToString();
+            var manual = overrides.GetValueOrDefault(name)?.Value;
+            final[name] = manual ?? automatic.GetValueOrDefault(d)?.ToString();
+            sources[name] = manual is not null ? "MANUAL" : automatic.GetValueOrDefault(d) is not null ? "AUTO" : null;
+        }
+        var a = evidence?.Aggregate();
+        return new JsonObject {
+            ["trackId"] = track.Id, ["automatic"] = auto, ["final"] = final, ["sources"] = sources,
+            ["classicalTitleMatched"] = title, ["genreEvidenceSource"] = title ? "ClassicalTitles (forced before manual override)" : "model",
+            ["analyzerVersion"] = row?.AnalyzerVersion, ["currentAnalyzerVersion"] = AnalysisFeature.AnalyzerVersion,
+            ["rulesVersion"] = AnalysisVersions.RulesVersion, ["signatureMatches"] = current, ["usable"] = usable,
+            ["complete"] = current && row?.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && row.Failed == false && data?.Complete == true,
+            ["pendingReanalysis"] = FeaturesData.NeedsAnalysis(row, AnalysisFeature.Signature(track)),
+            ["attempts"] = data?.AnalysisAttempts, ["failed"] = row?.Failed,
+            ["legacyResult"] = row is not null && row.AnalyzerVersion < AnalysisFeature.AnalyzerVersion,
+            ["thresholds"] = new JsonObject { ["VOICE"] = TagClassifier.VocalThreshold, ["MOOD"] = sensitivity.Sport(), ["GENRE"] = TagClassifier.ClassicalThreshold },
+            ["marginsNotProbabilities"] = a is null ? null : new JsonObject {
+                ["VOICE"] = a.Vocal - TagClassifier.VocalThreshold, ["MOOD"] = a.Sport - sensitivity.Sport(), ["GENRE"] = a.Classical - TagClassifier.ClassicalThreshold },
+            ["sampleSupportNotProbabilities"] = a is null ? null : new JsonObject { ["VOICE"] = a.VocalSupport, ["MOOD_NORMAL"] = a.SportSupport, ["GENRE"] = a.ClassicalSupport },
+            ["evidence"] = evidence is null ? null : JsonNode.Parse(evidence.ToJson()),
+            ["budget"] = new JsonObject { ["additionalSegments"] = 2, ["additionalSeconds"] = 20, ["attemptsPerModulePerSegment"] = 3,
+                ["retryBackoffMs"] = new JsonArray(200, 800), ["terminalUntilSignatureVersionChangeOrExplicitReset"] = true }
+        };
+    }
+
     public void Recompute()
     {
         bool changed = false;
@@ -40,7 +86,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         {
             var classical = ClassicalTitles.Matches(t.Title, t.Album);
             var auto = features.TryGetValue(t.TrackKey, out var row) && row.Signature == AnalysisFeature.Signature(t) &&
-                row.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is { } f
+                row.AnalyzerVersion <= AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is { } f
                 ? TagClassifier.Classify(f, sensitivity, classical) : new Dictionary<TagDimension, Tag?>();
             foreach (var dimension in Enum.GetValues<TagDimension>())
             {
@@ -59,8 +105,9 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
     }
 
     /// <summary>省略的维度保持不变；null 写带时间戳的恢复自动记录。全部歌曲和维度校验后一次事务保存、重算。</summary>
-    public async Task Override(IReadOnlyList<Track> tracks, IReadOnlyDictionary<TagDimension, Tag?> changes)
+    public async Task Override(IReadOnlyList<Track> tracks, IReadOnlyDictionary<TagDimension, Tag?> changes, string? reason = null)
     {
+        if (reason?.Length > 500) throw new ArgumentException("reason must be at most 500 characters");
         ArgumentNullException.ThrowIfNull(tracks);
         ArgumentNullException.ThrowIfNull(changes);
         if (tracks.Count == 0) throw new ArgumentException("At least one track is required");
@@ -87,10 +134,16 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
                 // A rapid reset, or an override synced from a clock ahead of us,
                 // must be newer than the manual value it clears on other devices.
                 var now = Math.Max(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), checked(previous + 1));
+                var before = targets.ToDictionary(t => t.TrackKey, t => Explain(byId[t.Id]));
                 foreach (var (_, key) in targets)
                     foreach (var (dimension, tag) in edits)
                         Db.SetTagOverride(key, dimension.ToString(), tag?.ToString(), now);
                 RecomputeCore(current);
+                foreach (var (id, key) in targets)
+                    Db.SaveTagReview(key, new JsonObject {
+                        ["recordedAt"] = now, ["provenance"] = "manual_correction_not_independent_truth",
+                        ["reason"] = reason, ["before"] = before[key], ["after"] = Explain(byId[id])
+                    }.ToJsonString());
             });
         });
         // The commit succeeded. A broken refresh/event subscriber must not make

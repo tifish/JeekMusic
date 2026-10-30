@@ -96,11 +96,12 @@ public class PortTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void MixToMonoKeepsPower()
+    public void MixToMonoKeepsModelRange()
     {
         var mono = PcmMath.MixToMono([0.5f, 0.5f, 1f, 1f], 2);
         Assert.Equal(2, mono.Length);
-        Assert.Equal(0.5f * 2 / MathF.Sqrt(2), mono[0], 5);
+        Assert.Equal(0.5f, mono[0]);
+        Assert.Equal(1f, mono[1]);
         Assert.Equal([(0L, 30_000L)], PcmMath.Windows(0, 30_000));
         Assert.Equal([(30_000L, 40_000L), (50_000L, 60_000L), (70_000L, 80_000L)], PcmMath.Windows(0, 100_000));
     }

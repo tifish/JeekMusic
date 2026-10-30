@@ -17,26 +17,13 @@ import javax.inject.Inject
 class PcmDecoder @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
-    /** 取样窗口：时长 ≥ 40 秒时取 30%、50%、70% 处各 10 秒，否则整首。时间都相对于 [startMs]。 */
-    fun windows(startMs: Long, durationMs: Long): List<LongRange> =
-        if (durationMs < 40_000) {
-            listOf(startMs until startMs + durationMs.coerceAtMost(60_000))
-        } else {
-            listOf(0.3, 0.5, 0.7).map { p ->
-                val from = startMs + (durationMs * p).toLong()
-                from until from + 10_000
-            }
-        }
+    fun windows(startMs: Long, durationMs: Long) = PcmContract.windows(startMs, durationMs)
 
-    /**
-     * 失败（格式不支持、文件损坏）时返回 null。
-     * 有些文件在 MediaExtractor 中跳转不可靠（实测某个 Ogg Vorbis 跳转后直接越过了窗口），
-     * 按窗口解码得不到数据时，退回到不跳转、从头解码 30 秒。
-     */
-    fun decode(uri: Uri, windowsMs: List<LongRange>, rate: Int = AudioTagger.SAMPLE_RATE): FloatArray? =
-        decodeWindows(uri, windowsMs, rate) ?: decodeWindows(uri, listOf(0L until 30_000L), rate, seek = false)
+    // Fail closed: never substitute the physical file head for a CUE subtrack.
+    fun decode(uri: Uri, windowsMs: List<LongRange>, rate: Int = AudioTagger.SAMPLE_RATE,
+        checkCancelled: () -> Unit = {}): FloatArray? = decodeWindows(uri, windowsMs, rate, checkCancelled)
 
-    private fun decodeWindows(uri: Uri, windowsMs: List<LongRange>, rate: Int, seek: Boolean = true): FloatArray? = runCatching {
+    private fun decodeWindows(uri: Uri, windowsMs: List<LongRange>, rate: Int, checkCancelled: () -> Unit): FloatArray? {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, uri, null)
@@ -50,20 +37,20 @@ class PcmDecoder @Inject constructor(
                 codec.configure(format, null, null, 0)
                 codec.start()
                 val out = FloatList()
-                for (window in windowsMs) decodeWindow(extractor, codec, window, rate, out, seek)
-                out.toArray().takeIf { it.isNotEmpty() }
+                for (window in windowsMs) decodeWindow(extractor, codec, window, rate, out, checkCancelled)
+                return out.toArray().takeIf { it.isNotEmpty() }
             } finally {
                 codec.release()
             }
         } finally {
             extractor.release()
         }
-    }.getOrNull()
+    }
 
-    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, rate: Int, out: FloatList, seek: Boolean) {
+    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, rate: Int, out: FloatList, checkCancelled: () -> Unit) {
         val startUs = window.first * 1000
         val endUs = (window.last + 1) * 1000
-        if (seek) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+        extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         codec.flush()
 
         var outputFormat = codec.outputFormat
@@ -71,7 +58,10 @@ class PcmDecoder @Inject constructor(
         val info = MediaCodec.BufferInfo()
         var inputDone = false
         var guard = 0
+        val deadline = android.os.SystemClock.elapsedRealtime() + 45_000
         while (guard++ < 100_000) {
+            checkCancelled()
+            check(android.os.SystemClock.elapsedRealtime() < deadline) { "decode_timeout" }
             if (!inputDone) {
                 val inIndex = codec.dequeueInputBuffer(TIMEOUT_US)
                 if (inIndex >= 0) {
@@ -91,11 +81,24 @@ class PcmDecoder @Inject constructor(
             when {
                 outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> outputFormat = codec.outputFormat
                 outIndex >= 0 -> {
-                    if (info.size > 0 && info.presentationTimeUs in startUs until endUs) {
+                    if (info.size > 0) {
                         val buffer = codec.getOutputBuffer(outIndex)!!.order(ByteOrder.nativeOrder())
                         buffer.position(info.offset)
                         buffer.limit(info.offset + info.size)
-                        appendMono(buffer, outputFormat, mono)
+                        val channels = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        val sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        val floatPcm = outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
+                            outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
+                        val frameBytes = channels * if (floatPcm) 4 else 2
+                        val total = info.size / frameBytes
+                        fun frameAt(time: Long) = kotlin.math.ceil((time - info.presentationTimeUs) * sampleRate / 1_000_000.0).toInt().coerceIn(0, total)
+                        val first = frameAt(startUs)
+                        val last = frameAt(endUs)
+                        if (last > first) {
+                            buffer.position(info.offset + first * frameBytes)
+                            buffer.limit(info.offset + last * frameBytes)
+                            appendMono(buffer, outputFormat, mono)
+                        }
                     }
                     codec.releaseOutputBuffer(outIndex, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
@@ -103,27 +106,30 @@ class PcmDecoder @Inject constructor(
             }
         }
         val sourceRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        downsample(mono.toArray(), sourceRate, rate).forEach(out::add)
+        val decoded = mono.toArray()
+        // Timestamp rounding may expose one extra source sample at the right boundary.
+        val count = minOf(decoded.size, ((endUs - startUs) * sourceRate / 1_000_000).toInt())
+        downsample(decoded.copyOf(count), sourceRate, rate).forEach(out::add)
     }
 
     private fun appendMono(buffer: java.nio.ByteBuffer, format: MediaFormat, out: FloatList) {
         val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
-        // 下混时除以 √声道数（功率守恒）：对声道高度相关的音乐，响度与 BS.1770 的"各声道功率之和"一致（ffmpeg 也是这样下混的）
-        val scale = 1f / kotlin.math.sqrt(channels.toFloat())
+        // Arithmetic mean, finite and bounded, identical to desktop v5.
+        val scale = 1.0 / channels
         val encoding = if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) format.getInteger(MediaFormat.KEY_PCM_ENCODING) else AudioFormat.ENCODING_PCM_16BIT
         if (encoding == AudioFormat.ENCODING_PCM_FLOAT) {
             val floats = buffer.asFloatBuffer()
             while (floats.remaining() >= channels) {
-                var sum = 0f
-                repeat(channels) { sum += floats.get() }
-                out.add(sum * scale)
+                var sum = 0.0
+                repeat(channels) { sum += PcmContract.sample(floats.get()) }
+                out.add((sum * scale).toFloat())
             }
         } else {
             val shorts = buffer.asShortBuffer()
             while (shorts.remaining() >= channels) {
-                var sum = 0f
+                var sum = 0.0
                 repeat(channels) { sum += shorts.get() / 32768f }
-                out.add(sum * scale)
+                out.add((sum * scale).toFloat())
             }
         }
     }
@@ -145,21 +151,7 @@ class PcmDecoder @Inject constructor(
     companion object {
         private const val TIMEOUT_US = 10_000L
 
-        /**
-         * 抽取到 [target]：每个输出样本取对应区间的平均值（简单的盒式低通）。
-         * 对统计特征和 YAMNet 的分类都够用；目标采样率不低于源时原样返回。
-         */
-        fun downsample(input: FloatArray, sourceRate: Int, target: Int): FloatArray {
-            if (sourceRate <= target) return input
-            val ratio = sourceRate.toDouble() / target
-            val count = (input.size / ratio).toInt()
-            return FloatArray(count) { i ->
-                val from = (i * ratio).toInt()
-                val to = minOf(input.size, ((i + 1) * ratio).toInt().coerceAtLeast(from + 1))
-                var sum = 0f
-                for (j in from until to) sum += input[j]
-                sum / (to - from)
-            }
-        }
+        fun downsample(input: FloatArray, sourceRate: Int, target: Int): FloatArray =
+            PcmContract.resample(input, sourceRate, target)
     }
 }

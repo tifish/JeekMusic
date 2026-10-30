@@ -1,6 +1,8 @@
 package com.tinyfish.jeekmusic.analysis
 
 import android.util.Log
+import org.json.JSONObject
+import com.tinyfish.jeekmusic.data.db.TagReviewEntity
 import androidx.room.withTransaction
 import com.tinyfish.jeekmusic.data.db.JeekDatabase
 import com.tinyfish.jeekmusic.data.db.TagDao
@@ -43,7 +45,7 @@ class TagRepository @Inject constructor(
         val sensitivity = settings.current().sensitivity
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
         val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
-        val auto = dao.allFeatures().flatMap { f ->
+        val auto = dao.allFeatures().filter { it.usable() }.flatMap { f ->
             val manual = overrides[f.trackKey].orEmpty()
             TagClassifier.classify(f, sensitivity, f.trackKey in classicalTitles).mapNotNull { (dimension, tag) ->
                 if (dimension.name in manual || tag == null) null else TrackTagEntity(f.trackKey, dimension.name, tag.name, SOURCE_AUTO)
@@ -55,7 +57,10 @@ class TagRepository @Inject constructor(
         }
         db.withTransaction {
             dao.clearTags()
-            dao.insertTags(auto + manual)
+            val covered = (auto + manual).filter { it.dimension == TagDimension.GENRE.name }.map { it.trackKey }.toSet()
+            val titleOnly = classicalTitles.filter { it !in covered && TagDimension.GENRE.name !in overrides[it].orEmpty() }
+                .map { TrackTagEntity(it, TagDimension.GENRE.name, Tag.CLASSICAL.name, SOURCE_AUTO) }
+            dao.insertTags(auto + manual + titleOnly)
         }
     }
 
@@ -82,20 +87,41 @@ class TagRepository @Inject constructor(
 
     /** 手动修正（需求 M-4）：[tag] 为 null 表示"这个维度的哪个标签都不是"（只有氛围可以）。 */
     suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) {
-        dao.setOverride(TagOverrideEntity(trackKey, dimension.name, tag?.name))
+        db.withTransaction {
+            val before = reviewSnapshot(trackKey)
+            dao.setOverride(TagOverrideEntity(trackKey, dimension.name, tag?.name))
+            dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
+                .put("recordedAt", System.currentTimeMillis()).put("provenance", "manual_correction_not_independent_truth")
+                .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
+        }
         recomputeAll()
     }
 
     /** 恢复自动识别。 */
     suspend fun clearManual(trackKey: String, dimension: TagDimension) {
-        dao.clearOverride(trackKey, dimension.name)
+        db.withTransaction {
+            val before = reviewSnapshot(trackKey)
+            dao.clearOverride(trackKey, dimension.name)
+            dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
+                .put("recordedAt", System.currentTimeMillis()).put("provenance", "restore_automatic")
+                .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
+        }
         recomputeAll()
     }
 
+    private suspend fun reviewSnapshot(key: String): JSONObject {
+        val info = info(key)
+        fun values(map: Map<TagDimension, Tag?>) = JSONObject().also { o -> map.forEach { (d, v) -> o.put(d.name, v?.name ?: JSONObject.NULL) } }
+        return JSONObject().put("automatic", values(info.auto)).put("final", values(info.tags))
+            .put("manual", org.json.JSONArray(info.manual.map { it.name })).put("analyzerVersion", info.features?.analyzerVersion)
+            .put("rulesVersion", RULES_VERSION).put("evidence", AnalysisEvidence.parse(info.features?.analysisEvidence)?.toJson()?.let(::JSONObject))
+            .put("classicalTitleMatched", dao.title(key)?.let { ClassicalTitles.matches(it.title, it.album) } == true)
+    }
+
     suspend fun info(trackKey: String): TagInfo {
-        val features = dao.features(trackKey)
+        val features = dao.currentFeatures(trackKey)
         val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
-        val auto = features?.takeIf { !it.failed }?.let { TagClassifier.classify(it, settings.current().sensitivity, classicalTitle) }.orEmpty()
+        val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, settings.current().sensitivity, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
         val overrides = dao.overrides(trackKey).associateBy { TagDimension.valueOf(it.dimension) }
         val tags = TagDimension.entries.associateWith { d ->
             if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]
@@ -110,9 +136,9 @@ class TagRepository @Inject constructor(
          * 3：加入 YAMNet 模型，识别人声 / 纯音乐、古典 / 流行，运动 / 安静改用模型得分。
          * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
-        const val ANALYZER_VERSION = 4
+        const val ANALYZER_VERSION = 5
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 4
+        const val RULES_VERSION = 5
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

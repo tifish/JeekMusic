@@ -243,7 +243,7 @@ public sealed partial class LibraryDb
     /// <summary>track_key 变了：播放列表、手动修正、分析结果、歌词偏移、队列跟着改。</summary>
     public void RekeyReferences(SqliteTransaction tx, string oldKey, string newKey)
     {
-        foreach (var table in new[] { "playlist_item", "tag_override", "track_tag", "track_features", "lyrics_offset", "lyrics_cache", "queue_item" })
+        foreach (var table in new[] { "playlist_item", "tag_override", "tag_review", "track_tag", "track_features", "lyrics_offset", "lyrics_cache", "queue_item" })
             Exec($"UPDATE OR REPLACE {table} SET track_key = $new WHERE track_key = $old", tx, ("$new", newKey), ("$old", oldKey));
     }
 }

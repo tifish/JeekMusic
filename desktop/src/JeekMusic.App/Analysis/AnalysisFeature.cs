@@ -13,7 +13,7 @@ namespace JeekMusic.Analysis;
 /// <summary>低优先级、事件驱动的本地分析；已完成的结果立即保存，断电或全屏后暂停。</summary>
 public sealed class AnalysisFeature : IFeature, IDisposable
 {
-    public const int AnalyzerVersion = 4;
+    public const int AnalyzerVersion = AnalysisVersions.AnalyzerVersion;
     public static AnalysisFeature Current { get; private set; } = null!;
     AppServices _app = null!;
     readonly AutoResetEvent _wake = new(false);
@@ -70,11 +70,12 @@ public sealed class AnalysisFeature : IFeature, IDisposable
                     {
                         var rows = _app.Db.AllFeatures().ToDictionary(f => f.TrackKey);
                         _pending = _app.Library.Snapshot.Tracks.Where(t => _app.Library.PathOf(t) is not null)
-                            .Where(t => !rows.TryGetValue(t.TrackKey, out var f) || f.Signature != Signature(t) || f.AnalyzerVersion != AnalyzerVersion).ToList();
+                            .Where(t => FeaturesData.NeedsAnalysis(rows.GetValueOrDefault(t.TrackKey), Signature(t))).ToList();
                     }
                     var pending = _pending;
                     if (pending.Count == 0) { _manual = false; SetStatus(L.T("所有歌曲已分析")); continue; }
-                    using var model = new AudioTagger();
+                    AudioTagger? model = null;
+                    using var cleanup = new ModelCleanup(() => model?.Dispose());
                     int done = 0;
                     foreach (var t in pending)
                     {
@@ -82,19 +83,17 @@ public sealed class AnalysisFeature : IFeature, IDisposable
                         SetStatus(L.F($"正在分析 {++done}/{pending.Count}：{t.Title}"));
                         try
                         {
-                            var pcm = PcmDecoder.Decode(_app.Library.PathOf(t)!, t, _stop.Token).GetAwaiter().GetResult();
-                            var features = FeatureExtractor.Extract(PcmMath.Downsample(pcm, 16000, FeatureExtractor.SampleRate));
-                            var scores = model.Analyze(pcm, _stop.Token);
-                            var data = FeaturesData.Of(features, scores);
+                            var data = TrackAnalyzer.Analyze(_app.Library.PathOf(t)!, t, _stop.Token,
+                                (pcm, ct) => (model ??= new AudioTagger()).AnalyzeWindows(pcm, ct)).GetAwaiter().GetResult();
                             if (_app.Library.ByKey(t.TrackKey) is not { } current || Signature(current) != Signature(t)) continue;
                             _stop.Token.ThrowIfCancellationRequested();
-                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, data.ToJson(), pcm.Length == 0));
+                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, data.ToJson(), !data.Complete));
                         }
-                        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
+                        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { done--; break; }
                         catch (Exception e)
                         {
                             Log.Warn("analysis", $"分析失败：{t.FileName}", e);
-                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, null, true));
+                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, (FeaturesData.Of(null, null) with { AnalysisAttempts = 3, AnalysisEvidence = new AnalysisEvidence(5, [], [], false, "pipeline:" + e.GetType().Name, 0).ToJson() }).ToJson(), true));
                         }
                         if (done % 25 == 0) Recompute();
                     }
@@ -110,6 +109,8 @@ public sealed class AnalysisFeature : IFeature, IDisposable
         }
         finally { SystemState.EndBackgroundThread(); }
     }
+
+    sealed class ModelCleanup(Action dispose) : IDisposable { public void Dispose() => dispose(); }
 
     public static string Signature(Track t) => $"{t.Mtime}:{t.Size}";
     public void Recompute() => _app.SmartTags.Recompute();

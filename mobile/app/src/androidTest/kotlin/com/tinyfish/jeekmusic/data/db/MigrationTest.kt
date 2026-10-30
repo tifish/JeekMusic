@@ -79,6 +79,21 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun migrate6To7PreservesOverridesAndCreatesEmptyEvidence() {
+        helper.createDatabase(DB, 6).use { db ->
+            db.execSQL("INSERT INTO tag_override (track_key, dimension, value) VALUES ('song', 'MOOD', 'SPORT')")
+            db.execSQL("INSERT INTO track_features (track_key, signature, analyzer_version, bpm_confidence, loudness, loudness_range, onset_rate, centroid_hz, low_ratio, analyzed_at, failed) VALUES ('song', 's', 4, 0, -20, 0, 0, 0, 0, 0, 0)")
+        }
+        helper.runMigrationsAndValidate(DB, 7, true, MIGRATION_6_7).use { db ->
+            db.query("SELECT analysis_evidence, analysis_attempts, analyzer_version FROM track_features").use { c ->
+                c.moveToFirst(); assertNull(c.getString(0)); assertEquals(0, c.getInt(1)); assertEquals(4, c.getInt(2))
+            }
+            db.query("SELECT value FROM tag_override").use { c -> c.moveToFirst(); assertEquals("SPORT", c.getString(0)) }
+            db.execSQL("INSERT INTO tag_review (track_key, record) VALUES ('song', '{}')")
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

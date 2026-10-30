@@ -50,7 +50,7 @@ def main():
                 diagnostic = startup.call(client, "get_diagnostics")
                 player_pid = diagnostic["processId"]
                 catalog = client.request("tools/list")["tools"]
-                assert len(catalog) == 25
+                assert len(catalog) == 26
                 tool = next(t for t in catalog if t["name"] == "set_smart_tags")
                 assert tool["inputSchema"]["minProperties"] == 2
                 # Offline songs remain addressable by ID but are deliberately
@@ -59,6 +59,15 @@ def main():
                 assert startup.call(client, "get_track", trackId=1)["title"] == "Synthetic song 1"
                 result = startup.call(client, "set_smart_tags", trackIds=[1, 2, 1], voice="VOCAL", genre="CLASSICAL")
                 assert result["count"] == 2
+                explanation = startup.call(client, "explain_analysis", trackId=1, includeReviews=True)
+                assert explanation["automatic"]["VOICE"] == "VOCAL"
+                assert explanation["final"]["VOICE"] == "VOCAL"
+                assert explanation["sources"]["VOICE"] == "MANUAL"
+                assert explanation["legacyResult"] and explanation["pendingReanalysis"]
+                assert not explanation["complete"]
+                assert len(explanation["reviews"]) == 1
+                assert explanation["reviews"][0]["before"]["sources"]["VOICE"] == "AUTO"
+                assert explanation["reviews"][0]["after"]["sources"]["VOICE"] == "MANUAL"
                 assert all(t["tagSources"]["voice"] == "MANUAL" and t["tags"]["voice"] == "VOCAL" for t in result["items"])
                 assert all(t["path"] is None for t in result["items"])
                 with closing(sqlite3.connect(data / "library.db")) as db, db:
@@ -95,7 +104,7 @@ def main():
                     assert db.execute("SELECT DISTINCT genre FROM track").fetchall() == [('file genre',)]
                 startup.close_player(player_pid)
                 player_pid = None
-            print("PASS: 25 tools, real async MCP, offline single/batch, same-value manual, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
+            print("PASS: 26 tools, real async MCP, offline single/batch, same-value manual, read-only v5 explanation/audit, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
         except Exception:
             with closing(sqlite3.connect(data / "library.db")) as db:
                 print("Fixture database:", db.execute("SELECT id,title FROM track").fetchall(), flush=True)

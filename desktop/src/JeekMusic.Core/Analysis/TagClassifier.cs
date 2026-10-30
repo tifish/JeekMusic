@@ -106,7 +106,8 @@ public sealed record TrackFeatures(
     double? ClassicalScore = null,
     double? CalmLevel = null,
     double? EnergyLevel = null,
-    double? OrchestraLevel = null)
+    double? OrchestraLevel = null,
+    string? AnalysisEvidence = null)
 {
     public ModelScores? ModelScores() =>
         VocalScore is { } v && ClassicalScore is { } c && CalmLevel is { } calm && EnergyLevel is { } e && OrchestraLevel is { } o
@@ -144,11 +145,14 @@ public static class TagClassifier
             if (classicalTitle) legacy[TagDimension.GENRE] = Tag.CLASSICAL;
             return legacy;
         }
-        var genre = f.AnalyzerVersion >= GenreOnlyVersion ? Genre(m) : LegacyGenre(m);
+        var evidence = f.AnalyzerVersion == 5 ? global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(f.AnalysisEvidence) : null;
+        var a = evidence?.Complete == true ? evidence.Aggregate() : null;
+        var genre = a is not null ? (a.Classical >= ClassicalThreshold ? Tag.CLASSICAL : Tag.NON_CLASSICAL) :
+            f.AnalyzerVersion >= GenreOnlyVersion ? Genre(m) : LegacyGenre(m);
         return new Dictionary<TagDimension, Tag?>
         {
-            [TagDimension.MOOD] = Mood(m, sensitivity),
-            [TagDimension.VOICE] = Voice(m),
+            [TagDimension.MOOD] = a is null ? Mood(m, sensitivity) : a.Sport >= sensitivity.Sport() ? Tag.SPORT : Tag.NON_SPORT,
+            [TagDimension.VOICE] = a is null ? Voice(m) : a.Vocal >= VocalThreshold ? Tag.VOCAL : Tag.INSTRUMENTAL,
             [TagDimension.GENRE] = classicalTitle ? Tag.CLASSICAL : genre,
         };
     }
@@ -194,10 +198,10 @@ public static class LegacyMoodClassifier
 public static class AnalysisVersions
 {
     /// <summary>分析算法的版本：升级后所有歌曲重新分析（需求 M-5）。</summary>
-    public const int AnalyzerVersion = 4;
+    public const int AnalyzerVersion = 5;
 
     /// <summary>分类规则的版本：规则变了但不需要重新分析时提高，启动时按保存的版本判断是否全部重算一次。</summary>
-    public const int RulesVersion = 4;
+    public const int RulesVersion = 5;
 
     public const string SourceAuto = "AUTO";
     public const string SourceManual = "MANUAL";

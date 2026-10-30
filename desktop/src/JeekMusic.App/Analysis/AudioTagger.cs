@@ -19,9 +19,13 @@ public sealed class AudioTagger : IDisposable
     }
 
     public ModelScores? Analyze(float[] pcm, CancellationToken ct = default)
+        => AnalyzeWindows(pcm, ct).Mean;
+
+    public (ModelScores? Mean, ModelScores[] Frames) AnalyzeWindows(float[] pcm, CancellationToken ct = default)
     {
         var frames = pcm.Length / YamnetScores.Frame;
-        if (frames == 0) return null;
+        if (frames == 0) return (null, []);
+        var windows = new List<ModelScores>();
         var sum = new float[YamnetScores.Classes];
         var frame = new float[YamnetScores.Frame];
         using var input = OrtValue.CreateTensorValueFromMemory(frame, new long[] { YamnetScores.Frame });
@@ -33,10 +37,12 @@ public sealed class AudioTagger : IDisposable
             using var output = _session.Run(options, _inputs, new[] { input }, _outputs);
             var scores = output[0].GetTensorDataAsSpan<float>();
             if (scores.Length != sum.Length) throw new InvalidDataException("YAMNet 输出类别数不匹配");
+            foreach (var score in scores) if (!float.IsFinite(score)) throw new InvalidDataException("Non-finite YAMNet output");
+            windows.Add(YamnetScores.Scores(scores));
             for (int i = 0; i < sum.Length; i++) sum[i] += scores[i];
         }
         for (int i = 0; i < sum.Length; i++) sum[i] /= frames;
-        return YamnetScores.Scores(sum);
+        return (YamnetScores.Scores(sum), windows.ToArray());
     }
     public void Dispose() => _session.Dispose();
 }

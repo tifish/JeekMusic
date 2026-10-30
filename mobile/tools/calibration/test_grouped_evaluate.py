@@ -1,0 +1,36 @@
+import unittest
+from grouped_evaluate import evaluate
+
+
+def row(song, album, artists, independent=True):
+    return dict(song_id=song, album_id=album, artist_ids=artists,
+        labels={"VOICE": "VOCAL", "MOOD": "?", "GENRE": "NON_CLASSICAL"},
+        automatic={"VOICE": "VOCAL", "MOOD": "SPORT", "GENRE": "CLASSICAL"},
+        provenance=dict(labels="human_reviewed", scores="desktop_production_v5_onnx", independent=independent))
+
+class GroupedEvaluationTest(unittest.TestCase):
+    def test_transitive_artist_album_and_duplicates_never_leak(self):
+        rows = [row("a", "x", ["one"]), row("b", "x", ["two"]), row("c", "y", ["two"])]
+        result = evaluate(rows + [rows[0]])
+        self.assertEqual(1, result["components"])
+        self.assertEqual(1, result["duplicates"])
+        self.assertEqual(1, len({r["split"] for r in result["manifest"]}))
+        split = result["manifest"][0]["split"]
+        self.assertEqual(3, result["results"][split]["dimensions"]["MOOD"]["unknown"])
+        self.assertEqual(3, result["results"][split]["dimensions"]["GENRE"]["fp"])
+        self.assertIsNone(result["results"][split]["dimensions"]["MOOD"]["recall"])
+    def test_weak_labels_contaminate_entire_component(self):
+        result = evaluate([row("a", "x", ["one"], False), row("b", "x", ["two"])])
+        self.assertEqual(2, result["results"]["regression"]["songs"])
+        self.assertEqual(0, result["results"]["test"]["songs"])
+    def test_deterministic_split_and_conflicting_duplicates_rejected(self):
+        rows = [row(str(i), "album"+str(i), ["artist"+str(i)]) for i in range(100)]
+        first = evaluate(rows)
+        second = evaluate(list(reversed(rows)))
+        self.assertEqual({r["song_id"]: r["split"] for r in first["manifest"]}, {r["song_id"]: r["split"] for r in second["manifest"]})
+        self.assertTrue(0 < first["results"]["test"]["songs"] < 100)
+        other = row("0", "album0", ["artist0"])
+        other["labels"]["VOICE"] = "INSTRUMENTAL"
+        with self.assertRaises(ValueError): evaluate(rows + [other])
+
+if __name__ == "__main__": unittest.main()

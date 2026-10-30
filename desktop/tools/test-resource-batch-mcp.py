@@ -53,7 +53,7 @@ def main():
                 player_pid = diagnostic["processId"]
                 startup.wait_for(client, "get_diagnostics", lambda d: d["resourceBatch"]["state"] != "unavailable")
                 catalog = client.request("tools/list")["tools"]
-                assert len(catalog) == 25
+                assert len(catalog) == 26
                 tool = next(t for t in catalog if t["name"] == "fetch_resources")
                 assert tool["inputSchema"]["additionalProperties"] is False
                 assert tool["annotations"]["openWorldHint"] and tool["annotations"]["destructiveHint"]
@@ -85,7 +85,7 @@ def main():
                     assert settings_before.get(key) == settings_after.get(key), key
                 startup.close_player(player_pid)
                 player_pid = None
-            print("PASS: 25 production tools, frozen explicit batch, duplicate tracks, cached-lyrics skip, status/cancel, errors/empty/disabled-online validation, unchanged save settings/cache/queue; no network or playback")
+            print("PASS: 26 production tools, frozen explicit batch, duplicate tracks, cached-lyrics skip, status/cancel, errors/empty/disabled-online validation, unchanged save settings/cache/queue; no network or playback")
         finally:
             if player_pid is not None:
                 subprocess.run(["taskkill", "/PID", str(player_pid), "/F"], capture_output=True, timeout=10)

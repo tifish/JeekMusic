@@ -23,8 +23,12 @@ class AudioTagger @Inject constructor(
      * 16kHz 单声道 PCM → 各类别在所有帧上的平均分（帧长 0.975 秒、不重叠）。不足一帧时返回 null。
      */
     @Synchronized
-    fun meanScores(pcm: FloatArray): FloatArray? {
-        if (pcm.size < FRAME) return null
+    fun meanScores(pcm: FloatArray): FloatArray? = analyzeWindows(pcm).first
+
+    @Synchronized
+    fun analyzeWindows(pcm: FloatArray, checkCancelled: () -> Unit = {}): Pair<FloatArray?, List<ModelScores>> {
+        if (pcm.size < FRAME) return null to emptyList()
+        val windows = mutableListOf<ModelScores>()
         val model = interpreter ?: Interpreter(loadModel(), Interpreter.Options().setNumThreads(2)).also { interpreter = it }
         val input = FloatArray(FRAME)
         val output = arrayOf(FloatArray(CLASSES))
@@ -32,13 +36,16 @@ class AudioTagger @Inject constructor(
         var frames = 0
         var start = 0
         while (start + FRAME <= pcm.size) {
+            checkCancelled()
             System.arraycopy(pcm, start, input, 0, FRAME)
             model.run(input, output)
+            check(output[0].all { it.isFinite() }) { "Non-finite YAMNet output" }
+            windows += scores(output[0])
             for (i in 0 until CLASSES) sum[i] += output[0][i]
             frames++
             start += FRAME
         }
-        return FloatArray(CLASSES) { sum[it] / frames }
+        return FloatArray(CLASSES) { sum[it] / frames } to windows
     }
 
     /** 释放模型（约 20MB 内存）；分析任务结束时调用。 */

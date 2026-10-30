@@ -55,10 +55,9 @@ public static class PcmDecoder
             var frameBytes = channels * sizeof(float);
             var buffer = new byte[16384 + frameBytes];
             var samples = new List<float>();
-            var ratio = Math.Max(1.0, rate / 16000.0);
-            var scale = 1f / MathF.Sqrt(channels);
-            int carried = 0, frames = 0, bucketFrames = 0;
-            float bucket = 0;
+
+
+            int carried = 0;
             long totalBytes = 0;
             int read;
             var max = (endMs - startMs + 2000) * rate / 1000 * frameBytes;
@@ -70,23 +69,19 @@ public static class PcmDecoder
                 var complete = bytes / frameBytes * frameBytes;
                 for (int offset = 0; offset < complete; offset += frameBytes)
                 {
-                    float mono = 0;
+                    double mono = 0;
                     for (int channel = 0; channel < channels; channel++)
-                        mono += BinaryPrimitives.ReadSingleLittleEndian(buffer.AsSpan(offset + channel * 4, 4));
-                    bucket += mono * scale;
-                    frames++; bucketFrames++;
-                    // Same equal-power mix and box downsampling as Android / PcmMath.
-                    if (frames >= (int)((samples.Count + 1) * ratio))
                     {
-                        samples.Add(bucket / bucketFrames);
-                        bucket = 0; bucketFrames = 0;
+                        var value = BinaryPrimitives.ReadSingleLittleEndian(buffer.AsSpan(offset + channel * 4, 4));
+                        mono += float.IsFinite(value) ? Math.Clamp(value, -1f, 1f) : 0;
                     }
+                    samples.Add((float)(mono / channels));
                 }
                 carried = bytes - complete;
                 buffer.AsSpan(complete, carried).CopyTo(buffer);
             }
             await ended.Task.WaitAsync(token);
-            return samples.Take((int)((endMs - startMs) * Math.Min(rate, 16000) / 1000)).ToArray();
+            return PcmMath.Downsample(samples.Take((int)((endMs - startMs) * rate / 1000)).ToArray(), rate, 16000);
         }
         finally
         {

@@ -24,6 +24,43 @@ namespace JeekMusic.App.Tests;
 public sealed class SmartTagTests
 {
     [Fact]
+    public Task ExplanationAndAuditPreserveTitleAndManualPriority() => Run(async () =>
+    {
+        using var h = new Harness();
+        var t = h.Tracks[0];
+        var before = h.App.SmartTags.Explain(t);
+        Assert.Equal("VOCAL", before["automatic"]!["VOICE"]!.GetValue<string>());
+        Assert.True(before["legacyResult"]!.GetValue<bool>());
+        await h.App.SmartTags.Override([t], new Dictionary<TagDimension, Tag?> { [TagDimension.VOICE] = Tag.INSTRUMENTAL }, "audible instrumental");
+        var tool = new McpTools(h.App);
+        var explained = tool.Call("explain_analysis", new JsonObject { ["trackId"] = t.Id, ["includeReviews"] = true });
+        Assert.Equal("VOCAL", explained["automatic"]!["VOICE"]!.GetValue<string>());
+        Assert.Equal("INSTRUMENTAL", explained["final"]!["VOICE"]!.GetValue<string>());
+        var review = Assert.Single(explained["reviews"]!.AsArray());
+        Assert.Equal("audible instrumental", review!["reason"]!.GetValue<string>());
+        Assert.Equal("VOCAL", review["before"]!["final"]!["VOICE"]!.GetValue<string>());
+        Assert.Equal("INSTRUMENTAL", review["after"]!["final"]!["VOICE"]!.GetValue<string>());
+        Assert.Single(h.App.Db.TagReviews(t.TrackKey));
+    });
+
+    [Fact]
+    public Task TitleRuleStillForcesClassicalUntilManualOverride() => Run(async () =>
+    {
+        using var h = new Harness();
+        h.App.Db.Exec("UPDATE track SET title = 'Sonata Op. 1'");
+        var track = h.App.Db.AllTracks()[0];
+        h.App.SmartTags.Recompute();
+        Assert.Equal("CLASSICAL", h.App.SmartTags.Explain(track)["automatic"]!["GENRE"]!.GetValue<string>());
+        await h.App.SmartTags.Override([track], new Dictionary<TagDimension, Tag?> { [TagDimension.GENRE] = Tag.NON_CLASSICAL });
+        var explained = h.App.SmartTags.Explain(track);
+        Assert.True(explained["classicalTitleMatched"]!.GetValue<bool>());
+        Assert.Equal("CLASSICAL", explained["automatic"]!["GENRE"]!.GetValue<string>());
+        Assert.Equal("NON_CLASSICAL", explained["final"]!["GENRE"]!.GetValue<string>());
+        await h.App.SmartTags.Override([track], new Dictionary<TagDimension, Tag?> { [TagDimension.GENRE] = null });
+        Assert.Equal("CLASSICAL", h.App.SmartTags.Read()[track.TrackKey].Genre);
+    });
+
+    [Fact]
     public Task BatchChangesOnlyExplicitDimensionsAndSameAutomaticValueBecomesManual() => Run(async () =>
     {
         using var h = new Harness();
@@ -285,7 +322,7 @@ public sealed class SmartTagTests
             App.Db.UpdateFolderLocation(folder, "Z:\\offline-tags\\", false);
             Tracks = App.Db.AllTracks();
             var data = FeaturesData.Of(null, new ModelScores(0, -1, 0, 10, 0));
-            App.Db.SaveFeatures(Tracks.Select(t => new FeaturesRow(t.TrackKey, AnalysisFeature.Signature(t), AnalysisFeature.AnalyzerVersion, data.ToJson(), false)));
+            App.Db.SaveFeatures(Tracks.Select(t => new FeaturesRow(t.TrackKey, AnalysisFeature.Signature(t), 4, data.ToJson(), false)));
             App.SmartTags.Recompute(); App.Library.RebuildSnapshot(); Dispatcher.UIThread.RunJobs();
         }
         public void Dispose() { App.Dispose(); L.Initialize("zh-CN"); }

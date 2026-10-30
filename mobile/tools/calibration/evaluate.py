@@ -57,6 +57,7 @@ def predict(frames, name=""):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    print("LEGACY REGRESSION ONLY: reused labels, rule-generated genres and incomplete provenance; not independent accuracy or v5 evaluation.")
     data = np.load(sys.argv[1], allow_pickle=True)
     labels = {}
     for line in open(os.path.join(os.path.dirname(__file__), "labels.tsv"), encoding="utf-8"):

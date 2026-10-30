@@ -37,3 +37,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `sync_journal` (`id` INTEGER NOT NULL, `content` TEXT NOT NULL, PRIMARY KEY(`id`))")
     }
 }
+
+/** Per-segment evidence and bounded terminal failures; existing corrections are untouched. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `track_features` ADD COLUMN `analysis_evidence` TEXT")
+        db.execSQL("ALTER TABLE `track_features` ADD COLUMN `analysis_attempts` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `tag_review` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `track_key` TEXT NOT NULL, `record` TEXT NOT NULL)")
+    }
+}

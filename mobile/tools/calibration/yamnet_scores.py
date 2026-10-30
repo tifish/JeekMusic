@@ -1,3 +1,4 @@
+# LEGACY v4 only: not production-equivalent v5. Use desktop/tools/AnalysisProbe; see docs/analysis-v5.md.
 """对校准用的 PCM（16kHz 单声道 f32，tools/calibration-pcm.sh 生成）逐帧运行 YAMNet，保存每帧 521 类分数。
 
 用法（需要 numpy 和 ai-edge-litert：python -m pip install numpy ai-edge-litert）：

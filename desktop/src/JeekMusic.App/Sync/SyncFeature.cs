@@ -328,15 +328,15 @@ public sealed class SyncFeature : IFeature
             {
                 if (match(item.Key) is not { } key || _app.Library.ByKey(key) is not { } t || item.Value is not JsonObject data) continue;
                 if (Number(data["size"]) != t.Size || Math.Abs(Number(data["duration_ms"]) - t.DurationMs) > 1000) continue;
-                if (_app.Db.Features(key) is { Failed: false } old && old.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && old.Signature == AnalysisFeature.Signature(t)) continue;
-                if (data["features"] is not { } features || FeaturesData.Parse(features.ToJsonString()) is null) continue;
+                if (_app.Db.Features(key) is { Failed: false } old && old.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && old.Signature == AnalysisFeature.Signature(t) && FeaturesData.Parse(old.Data)?.Complete == true) continue;
+                if (data["features"] is not { } features || FeaturesData.Parse(features.ToJsonString())?.Complete != true) continue;
                 _app.Db.SaveFeatures(new FeaturesRow(key, AnalysisFeature.Signature(t), AnalysisFeature.AnalyzerVersion, features.ToJsonString(), false));
                 imported = true;
             }
         }
         var output = new JsonObject();
         foreach (var row in _app.Db.AllFeatures().Where(r => !r.Failed && r.AnalyzerVersion == AnalysisFeature.AnalyzerVersion))
-            if (refs.TryGetValue(row.TrackKey, out var reference) && _app.Library.ByKey(row.TrackKey) is { } t && row.Signature == AnalysisFeature.Signature(t) && row.Data is not null)
+            if (refs.TryGetValue(row.TrackKey, out var reference) && _app.Library.ByKey(row.TrackKey) is { } t && row.Signature == AnalysisFeature.Signature(t) && row.Data is not null && FeaturesData.Parse(row.Data)?.Complete == true)
                 output[reference] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(row.Data) };
         var text = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = output }.ToJsonString();
         if (imported) AnalysisFeature.Current.Invalidate();

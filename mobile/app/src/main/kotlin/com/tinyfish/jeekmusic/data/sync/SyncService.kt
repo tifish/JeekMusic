@@ -1,5 +1,8 @@
 package com.tinyfish.jeekmusic.data.sync
 
+import com.tinyfish.jeekmusic.analysis.complete
+import com.tinyfish.jeekmusic.analysis.AnalysisEvidence
+
 import android.content.Context
 import android.os.Build
 import android.util.AtomicFile
@@ -309,25 +312,29 @@ class SyncService @Inject constructor(
                 val item = items.optJSONObject(ref) ?: continue
                 if (item.optLong("size") != t.size || kotlin.math.abs(item.optLong("duration_ms") - t.durationMs) > 1000) continue
                 val old = db.tagDao().features(t.trackKey)
-                if (old != null && !old.failed && old.analyzerVersion == TagRepository.ANALYZER_VERSION && old.signature == "${t.dateModified}:${t.size}") continue
+                if (old != null && old.complete() && old.analyzerVersion == TagRepository.ANALYZER_VERSION && old.signature == "${t.dateModified}:${t.size}") continue
                 val f = item.optJSONObject("features") ?: continue
+                val evidence = f.optString("analysis_evidence").takeIf { AnalysisEvidence.parse(it)?.complete == true } ?: continue
+                if (listOf("vocal_score", "classical_score", "calm_level", "energy_level", "orchestra_level")
+                    .any { f.isNull(it) || !f.optDouble(it).isFinite() }) continue
                 fun number(key: String): Double? = if (!f.has(key) || f.isNull(key)) null else f.optDouble(key).takeIf(Double::isFinite)
                 db.tagDao().saveFeatures(TrackFeaturesEntity(t.trackKey, "${t.dateModified}:${t.size}", TagRepository.ANALYZER_VERSION,
                     number("bpm"), number("bpm_confidence") ?: 0.0, number("loudness") ?: -70.0, number("loudness_range") ?: 0.0,
                     number("onset_rate") ?: 0.0, number("centroid_hz") ?: 0.0, number("low_ratio") ?: 0.0, System.currentTimeMillis(), false,
-                    number("vocal_score"), number("classical_score"), number("calm_level"), number("energy_level"), number("orchestra_level")))
+                    number("vocal_score"), number("classical_score"), number("calm_level"), number("energy_level"), number("orchestra_level"), evidence, 1))
                 imported = true
             }
         }
         if (imported) tags.recomputeAll()
         val items = JSONObject()
-        for (f in db.tagDao().allFeatures().filter { !it.failed && it.analyzerVersion == TagRepository.ANALYZER_VERSION }) {
+        for (f in db.tagDao().allFeatures().filter { it.complete() && it.analyzerVersion == TagRepository.ANALYZER_VERSION }) {
             val t = byKey[f.trackKey] ?: continue
             if (f.signature != "${t.dateModified}:${t.size}") continue
             val data = JSONObject().put("bpm", f.bpm ?: JSONObject.NULL).put("bpm_confidence", f.bpmConfidence).put("loudness", f.loudness)
                 .put("loudness_range", f.loudnessRange).put("onset_rate", f.onsetRate).put("centroid_hz", f.centroidHz).put("low_ratio", f.lowRatio)
                 .put("vocal_score", f.vocalScore ?: JSONObject.NULL).put("classical_score", f.classicalScore ?: JSONObject.NULL)
                 .put("calm_level", f.calmLevel ?: JSONObject.NULL).put("energy_level", f.energyLevel ?: JSONObject.NULL).put("orchestra_level", f.orchestraLevel ?: JSONObject.NULL)
+                .put("analysis_evidence", f.analysisEvidence).put("analysis_attempts", f.analysisAttempts)
             items.put(reference(t.trackKey, roots), JSONObject().put("size", t.size).put("duration_ms", t.durationMs).put("features", data))
         }
         val text = JSONObject().put("format", 2).put("analyzer_version", TagRepository.ANALYZER_VERSION).put("items", items).toString()

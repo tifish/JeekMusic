@@ -123,6 +123,7 @@ public sealed partial class LibraryDb : IDisposable
           UPDATE library_folder SET identity = lower(hex(randomblob(16))) WHERE id = NEW.id;
         END;
         """,
+        "CREATE TABLE tag_review(id INTEGER PRIMARY KEY AUTOINCREMENT, track_key TEXT NOT NULL, record TEXT NOT NULL);",
     ];
 
     void Migrate()

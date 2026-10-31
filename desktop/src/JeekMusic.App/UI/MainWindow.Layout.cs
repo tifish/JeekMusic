@@ -24,6 +24,9 @@ public partial class MainWindow
             column.IsVisible = state.Visible;
             if (state.Order >= 0) column.DisplayIndex = columnOrder++;
         }
+        // New dimensions stay hidden when absent from an older snapshot; explicit choices survive.
+        foreach (var (tag, _, _) in TagColumns)
+            if (!ui.Columns.Any(c => c.Tag == tag)) Table.Columns.Single(c => c.Tag as string == tag).IsVisible = false;
         // 默认隐藏的列：文件名、智能标签（右键表头可以打开）
         if (ui.Columns.Count == 0)
             foreach (var c in Table.Columns)

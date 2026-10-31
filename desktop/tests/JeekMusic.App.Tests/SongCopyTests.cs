@@ -13,6 +13,7 @@ public sealed class SongCopyTests
     public Task CopiesFullTitlesInListOrderIncludingVirtualizedSelection() => Run(async () =>
     {
         using var h = new PlayingVisibilityTests.Harness(trackFiveTitle: "完整歌名 — 中文 🎵 (Live) " + new string('长', 120));
+        foreach (var (tag, _, _) in MainWindow.TagColumns) h.Table.Columns.Single(c => c.Tag as string == tag).IsVisible = true;
         h.Table.SelectedItems.Clear();
         h.Table.SelectedItems.Add(h.Rows[230]);
         h.Table.SelectedItems.Add(h.Rows[5]);

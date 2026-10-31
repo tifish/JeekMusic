@@ -115,11 +115,8 @@ internal sealed class SmartTagDialog : Window
         var states = tracks.Select(t =>
         {
             var state = tags.GetValueOrDefault(t.TrackKey);
-            var value = state?[dimension.ToString()];
-            var manual = state is not null && dimension switch
-            {
-                TagDimension.MOOD => state.MoodManual, TagDimension.VOICE => state.VoiceManual, TagDimension.CALMNESS => state.CalmnessManual, _ => state.GenreManual,
-            };
+            var value = Text.TagValue(state, dimension)?.ToString();
+            var manual = Text.TagManual(state, dimension);
             return (value, manual);
         }).Distinct().ToArray();
         var values = states.Select(s => s.value).Distinct().ToArray();

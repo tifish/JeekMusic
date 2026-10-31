@@ -33,7 +33,7 @@ public partial class MainWindow : Window
         DataContext = _vm;
         InitializeComponent();
 
-        Table.DoubleTapped += (_, e) => { if (e.Source is not DataGridColumnHeader) PlaySelected(); };
+        Table.DoubleTapped += (_, e) => { if (e.Source is not DataGridColumnHeader && !((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any(b => b.Classes.Contains("tag-cell")) ?? false)) PlaySelected(); };
         Table.KeyDown += OnTableKeyDown;
         Table.AddHandler(KeyDownEvent, OnSongCopyKeyDown, RoutingStrategies.Tunnel);
         Table.Sorting += OnSorting;
@@ -153,6 +153,7 @@ public partial class MainWindow : Window
     {
         ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
         ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"), ["Tags"] = L.T("智能标签"),
+        ["Mood"] = L.T("运动"), ["Voice"] = L.T("人声"), ["Genre"] = L.T("古典"), ["Calmness"] = L.T("安静"),
     };
 
     /// <summary>表头的排序箭头自己画（DataGrid 自带的只反映它自己的排序）。</summary>

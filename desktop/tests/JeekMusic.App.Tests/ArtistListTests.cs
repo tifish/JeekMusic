@@ -217,7 +217,7 @@ public sealed class ArtistListTests
         Assert.Equal("B", d["currentLetter"]!.GetValue<string>());
         Assert.Equal(h.List.Groups.Count, d["groups"]!.AsArray().Count);
         Assert.Equal(h.List.Groups.Single(g => g.Letter == "B").FirstIndex, d["firstVisibleIndex"]!.GetValue<int>());
-        Assert.Equal(25, tools.Catalog.Count);
+        Assert.Equal(28, tools.Catalog.Count);
         var schema = tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject()); Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         h.Window.Close(); h.Pump();

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using JeekMusic.Library;
+using JeekMusic.Core.Analysis;
 
 namespace JeekMusic.UI.ViewModels;
 
@@ -38,5 +39,17 @@ public sealed partial class SongRow : ObservableObject
     public string Modified => Track is { } t ? Text.Modified(t.Mtime) : "—";
     public string Format => Track?.FormatLabel ?? "";
     public string TagText => Text.Tags(Tags);
+    public string MoodText => Text.TagCell(Tags, TagDimension.MOOD);
+    public string VoiceText => Text.TagCell(Tags, TagDimension.VOICE);
+    public string GenreText => Text.TagCell(Tags, TagDimension.GENRE);
+    public string CalmnessText => Text.TagCell(Tags, TagDimension.CALMNESS);
+    public string MoodSource => Text.TagSource(Tags, TagDimension.MOOD);
+    public string VoiceSource => Text.TagSource(Tags, TagDimension.VOICE);
+    public string GenreSource => Text.TagSource(Tags, TagDimension.GENRE);
+    public string CalmnessSource => Text.TagSource(Tags, TagDimension.CALMNESS);
+    public string MoodActionName => L.T("修正标签") + ": " + L.T("运动") + " · " + MoodText + " · " + MoodSource;
+    public string VoiceActionName => L.T("修正标签") + ": " + L.T("人声") + " · " + VoiceText + " · " + VoiceSource;
+    public string GenreActionName => L.T("修正标签") + ": " + L.T("古典") + " · " + GenreText + " · " + GenreSource;
+    public string CalmnessActionName => L.T("修正标签") + ": " + L.T("安静") + " · " + CalmnessText + " · " + CalmnessSource;
     public double Opacity => Available ? 1 : 0.45;
 }

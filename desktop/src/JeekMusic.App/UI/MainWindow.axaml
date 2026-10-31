@@ -32,6 +32,17 @@
         <Style Selector="Grid#TitleBar TextBox">
             <Setter Property="WindowDecorationProperties.ElementRole" Value="User" />
         </Style>
+        <Style Selector="Button.tag-cell">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </Window.Styles>
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- 工具栏：后退 / 前进、搜索、筛选 -->
@@ -226,6 +237,50 @@
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;修改时间&apos;}" Binding="{Binding Modified}" Width="154" Tag="Modified" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;格式&apos;}" Binding="{Binding Format}" Width="96" Tag="Format" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;智能标签&apos;}" Binding="{Binding TagText}" Width="140" Tag="Tags" />
+                            <DataGridTemplateColumn Header="{ui:Tr &apos;运动&apos;}" Width="100" MinWidth="64" Tag="Mood" IsVisible="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SongRow">
+                                        <Button Classes="tag-cell" Tag="MOOD" IsEnabled="{Binding Available}"
+                                                AutomationProperties.Name="{Binding MoodActionName}" AutomationProperties.HelpText="{Binding MoodSource}"
+                                                ToolTip.Tip="{Binding MoodSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
+                                            <TextBlock Text="{Binding MoodText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="{ui:Tr &apos;人声&apos;}" Width="100" MinWidth="64" Tag="Voice" IsVisible="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SongRow">
+                                        <Button Classes="tag-cell" Tag="VOICE" IsEnabled="{Binding Available}"
+                                                AutomationProperties.Name="{Binding VoiceActionName}" AutomationProperties.HelpText="{Binding VoiceSource}"
+                                                ToolTip.Tip="{Binding VoiceSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
+                                            <TextBlock Text="{Binding VoiceText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="{ui:Tr &apos;古典&apos;}" Width="100" MinWidth="64" Tag="Genre" IsVisible="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SongRow">
+                                        <Button Classes="tag-cell" Tag="GENRE" IsEnabled="{Binding Available}"
+                                                AutomationProperties.Name="{Binding GenreActionName}" AutomationProperties.HelpText="{Binding GenreSource}"
+                                                ToolTip.Tip="{Binding GenreSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
+                                            <TextBlock Text="{Binding GenreText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="{ui:Tr &apos;安静&apos;}" Width="100" MinWidth="64" Tag="Calmness" IsVisible="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:SongRow">
+                                        <Button Classes="tag-cell" Tag="CALMNESS" IsEnabled="{Binding Available}"
+                                                AutomationProperties.Name="{Binding CalmnessActionName}" AutomationProperties.HelpText="{Binding CalmnessSource}"
+                                                ToolTip.Tip="{Binding CalmnessSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
+                                            <TextBlock Text="{Binding CalmnessText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

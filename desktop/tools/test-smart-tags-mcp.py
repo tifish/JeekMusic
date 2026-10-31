@@ -51,6 +51,15 @@ def main():
                 player_pid = diagnostic["processId"]
                 catalog = client.request("tools/list")["tools"]
                 assert len(catalog) == 28
+                columns = diagnostic["mainLayout"]["smartTagColumns"]
+                assert [c["dimension"] for c in columns["columns"]] == ["MOOD", "VOICE", "GENRE", "CALMNESS"]
+                assert all(not c["visible"] for c in columns["columns"])
+                assert columns["missingValue"] == "—" and columns["manualCheckPolicy"] == "manual-overrides-only"
+                assert columns["cellAction"] == "single-track-dimension-menu" and columns["cellKeyboard"] == "Enter/Space"
+                assert columns["batchAction"] == "inline-four-row-panel"
+                assert columns["quickCorrection"] == dict(state="idle", dimension=None, targetCount=0, busy=False)
+                assert "smartTagColumns" in next(t for t in catalog if t["name"] == "get_diagnostics")["description"]
+                assert next(t for t in catalog if t["name"] == "get_diagnostics")["inputSchema"]["properties"] == {}
                 tool = next(t for t in catalog if t["name"] == "set_smart_tags")
                 assert tool["inputSchema"]["minProperties"] == 2
                 # Offline songs remain addressable by ID but are deliberately

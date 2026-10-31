@@ -72,6 +72,7 @@ internal static class PlaybackShortcuts
 
         bool IsEditingOrPopup(Visual? target) => target is not null &&
             (TopLevel.GetTopLevel(target) != window || target.GetSelfAndVisualAncestors().Any(v =>
-                v is TextBox or AutoCompleteBox or ComboBox or NumericUpDown or MenuBase or MenuItem or OverlayPopupHost));
+                v is TextBox or AutoCompleteBox or ComboBox or NumericUpDown or MenuBase or MenuItem or OverlayPopupHost ||
+                v is Button button && button.Classes.Contains("tag-cell")));
     }
 }

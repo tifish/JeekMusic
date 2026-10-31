@@ -212,7 +212,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         });
         // The commit succeeded. A broken refresh/event subscriber must not make
         // the caller report a save failure after persisting the whole batch.
-        try { Online.LibraryRefresh.Soon(library); }
+        try { await library.RefreshAsync(); }
         catch (Exception e) { Log.Warn("analysis", "标签已保存，刷新失败", e); }
         if (ResultsChanged is { } handlers)
             foreach (Action handler in handlers.GetInvocationList())

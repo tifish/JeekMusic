@@ -227,6 +227,7 @@ public partial class MainWindow
         ["automaticWidthResult"] = _autoNavResult,
         ["navigationOverflow"] = _navigationOverflow?.Diagnostics(),
         ["songOverflow"] = _songOverflow?.Diagnostics(),
-        ["songCopy"] = SongCopyDiagnostics()
+        ["songCopy"] = SongCopyDiagnostics(),
+        ["smartTagColumns"] = SmartTagColumnDiagnostics()
     };
 }

@@ -268,7 +268,7 @@ public sealed class SourceSwitchTests
         var after = h.Tools.Call("get_diagnostics", new())["queueSource"]!;
         Assert.Null(after["pendingContext"]); Assert.Equal("committed", after["status"]!.GetValue<string>());
         Assert.Equal(0, after["sourceAnchorIndex"]!.GetValue<int>());
-        Assert.Equal(25, h.Tools.Catalog.Count);
+        Assert.Equal(28, h.Tools.Catalog.Count);
     });
 
     [Fact]

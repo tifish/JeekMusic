@@ -1,4 +1,5 @@
 using System.Globalization;
+using JeekMusic.Core.Analysis;
 using JeekMusic.Library;
 
 namespace JeekMusic.UI;
@@ -34,6 +35,18 @@ public static class Text
         "NON_CLASSICAL" => L.T("非古典"),
         _ => "",
     };
+
+    public static Tag? TagValue(SongTags? tags, TagDimension dimension) => Core.Analysis.Tags.Of(dimension, tags?[dimension.ToString()]);
+
+    public static bool TagManual(SongTags? tags, TagDimension dimension) => tags is not null && dimension switch
+    {
+        TagDimension.MOOD => tags.MoodManual, TagDimension.VOICE => tags.VoiceManual,
+        TagDimension.GENRE => tags.GenreManual, TagDimension.CALMNESS => tags.CalmnessManual, _ => false,
+    };
+
+    public static string TagCell(SongTags? tags, TagDimension dimension) => TagValue(tags, dimension) is { } value ? TagName(value.ToString()) : "—";
+    public static string TagSource(SongTags? tags, TagDimension dimension) => TagValue(tags, dimension) is null
+        ? L.T("无分析结果") : TagManual(tags, dimension) ? L.T("手动修正") : L.T("自动");
 
     public static string Tags(SongTags? tags)
     {

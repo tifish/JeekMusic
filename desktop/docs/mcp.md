@@ -2,6 +2,12 @@
 
 Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使用相同的工具、参数校验和业务服务，没有开发专用开关。播放器的窗口、托盘和 MCP 操作共享同一份播放状态、队列和曲库。
 
+## 主列表标签列与纠正诊断
+
+四维独立可选列与单元格/右键快捷纠正见[使用说明](../../docs/smart-tag-columns.md)。单元格只针对点击歌曲的单维度，右键直接显示四行并排操作按钮，支持捕获的批量目标；两者与完整面板共用现有 `set_smart_tags` 对应服务，不新增重复工具。具体值即使等于自动也写手工覆盖，恢复自动仍写带时戳的 null 同步记录，审核不作独立真值。提交后立即刷新快照与筛选。
+
+只读 `get_diagnostics.mainLayout.smartTagColumns` 返回 `columns[]` 的 `tag`（Mood/Voice/Genre/Calmness）、`dimension`（MOOD/VOICE/GENRE/CALMNESS）、`visible`、实际 DIP `width` 和 `order`；`missingValue="—"`、`sourceDisplay="cell-tooltip-and-menu"`、`manualCheckPolicy="manual-overrides-only"`、`cellAction="single-track-dimension-menu"`、`cellKeyboard="Enter/Space"`、`batchAction="inline-four-row-panel"` 说明 UI 语义。`quickCorrection` 包含 `state`（idle/saving/saved/failed）、`dimension`、`targetCount`、`busy`，只报最近快捷操作，不含歌曲名称。主窗尚未创建或关闭时沿用 `mainLayout.created=false`；读取不创建窗口、改布局或读取剪贴板。来源详情继续使用 `get_track.tagSources` / `explain_analysis.sources`；不新增参数，原严格对象 Schema 保持一致。
+
 ## 连接
 
 向支持 MCP stdio 的软件添加以下配置，把 `command` 改为本机的实际程序路径：

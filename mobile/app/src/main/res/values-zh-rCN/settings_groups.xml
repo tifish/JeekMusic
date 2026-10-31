@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_group_music">音乐与外观</string>
+    <string name="settings_group_resources">在线资源与智能分类</string>
+    <string name="settings_group_transfer">同步与备份</string>
+    <string name="settings_group_app">应用</string>
+    <string name="settings_group_library">音乐库与扫描</string>
+    <string name="settings_group_library_hint">音乐目录、扫描与艺人名称</string>
+    <plurals name="settings_group_library_summary">
+        <item quantity="other">%1$d 个目录 · 扫描与艺人名称</item>
+    </plurals>
+    <string name="settings_group_scanning">正在扫描音乐库</string>
+    <string name="settings_group_appearance_summary">主题与导航标签</string>
+    <string name="settings_group_online_summary">来源、下载与保存位置</string>
+    <string name="settings_group_online_on">在线获取已开启 · 来源与保存位置</string>
+    <string name="settings_group_online_off">在线获取已关闭 · 来源与保存位置</string>
+    <string name="settings_group_analysis_summary">分析时机与分类灵敏度</string>
+    <plurals name="settings_group_pending">
+        <item quantity="other">%1$d 首待分析 · 时机与灵敏度</item>
+    </plurals>
+    <string name="settings_group_devices">设备同步 / 连接电脑</string>
+    <string name="settings_group_device_summary">连接电脑并选择要同步的音乐</string>
+    <string name="settings_group_device_paired">已配对电脑 · 音乐选择与下载</string>
+    <string name="settings_group_sync_running">正在同步音乐</string>
+    <string name="settings_group_data">数据同步与备份</string>
+    <string name="settings_group_data_summary">播放列表、同步历史与备份文件</string>
+    <string name="settings_group_data_sync">播放列表数据同步</string>
+    <string name="settings_group_data_explanation">通过音乐目录同步播放列表数据。连接电脑和下载音乐，请返回设置首页打开“设备同步”。</string>
+    <string name="settings_group_about">关于与更新</string>
+    <string name="settings_group_about_summary">自动更新、开源许可与源代码</string>
+    <string name="settings_group_device_header">设备同步</string>
+    <string name="settings_group_fetch_waiting">等待网络 · 点此管理</string>
+    <string name="settings_group_fetch_checking">正在检查音乐库 · 点此管理</string>
+    <string name="settings_group_fetching">正在获取 %1$d / %2$d · 点此管理</string>
+</resources>

@@ -1,6 +1,11 @@
 package com.tinyfish.jeekmusic.ui.settings
 
 import com.tinyfish.jeekmusic.ui.components.libraryPathLabel
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.update.AppUpdater
@@ -32,7 +37,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -87,7 +91,6 @@ import com.tinyfish.jeekmusic.data.settings.LowPowerMode
 import com.tinyfish.jeekmusic.data.settings.ThemeMode
 import com.tinyfish.jeekmusic.ui.navigation.LocalNavigator
 import com.tinyfish.jeekmusic.ui.navigation.TopRoute
-import com.tinyfish.jeekmusic.ui.components.SectionHeader
 import com.tinyfish.jeekmusic.ui.components.SubScreenHeader
 import com.tinyfish.jeekmusic.ui.components.songCount
 import com.tinyfish.jeekmusic.ui.folders.rememberAddFolder
@@ -289,344 +292,386 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val context = LocalContext.current
     var showLicenses by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().systemBarsPadding().testTag("settings")) {
-        SubScreenHeader(title = stringResource(R.string.settings_title), onBack = onBack)
-        val listState = rememberLazyListState()
-        val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
-        LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true), state = listState) {
-            // 检查更新放在最前面，打开设置就能点到，不用滚到底（需求 U-6）
-            item {
-                SettingAction(
-                    title = stringResource(R.string.update_check_now),
-                    summary = if (checkingUpdate) stringResource(R.string.update_checking) else stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
-                    onClick = viewModel::checkUpdate,
-                    enabled = !checkingUpdate,
-                    modifier = Modifier.testTag("check_update"),
-                )
-            }
-            item { SectionHeader(stringResource(R.string.settings_library)) }
-            items(folders, key = { it.folder.id }) { (folder, count) ->
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(painterResource(R.drawable.ic_folder), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(folder.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "${libraryPathLabel(folder.relativePath).ifEmpty { "/" }} · ${songCount(count)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    val pageStates = rememberSaveableStateHolder()
+    val goBack: () -> Unit = { if (page == null) onBack() else page = null }
+    BackHandler(enabled = page != null) { page = null }
+    val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
+    val lanStatus by viewModel.lan.status.collectAsStateWithLifecycle()
+    val lanRevision by viewModel.lan.revision.collectAsStateWithLifecycle()
+    val paired = remember(lanRevision) { viewModel.lan.store.read().optJSONObject("connection") != null }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).systemBarsPadding().testTag("settings")) {
+        SubScreenHeader(title = stringResource(if (page == SettingsPage.DEVICES) R.string.settings_group_device_header else page?.title ?: R.string.settings_title), onBack = goBack)
+        // Each page owns a saved scroll position, including when another top-level editor is opened.
+        pageStates.SaveableStateProvider(page?.name ?: "home") {
+            val listState = rememberLazyListState()
+            val librarySummary = if (scanState is ScanState.Running) stringResource(R.string.settings_group_scanning)
+                else pluralStringResource(R.plurals.settings_group_library_summary, folders.size, folders.size)
+            val lyricsStatus = fetchSummary(lyricsProgress)
+            val coversStatus = fetchSummary(coverProgress)
+            val deviceSummary = stringResource(when {
+                lanStatus.running -> R.string.settings_group_sync_running
+                paired -> R.string.settings_group_device_paired
+                else -> R.string.settings_group_device_summary
+            })
+            LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true), state = listState,
+                contentPadding = PaddingValues(bottom = 24.dp)) {
+                if (page == null) {
+                    settingsHome(
+                        onOpen = { page = it },
+                        librarySummary = librarySummary,
+                        lyricsEnabled = settings.onlineLyrics,
+                        coversEnabled = settings.onlineCovers,
+                        lyricsStatus = lyricsStatus,
+                        coversStatus = coversStatus,
+                        pendingAnalysis = pendingAnalysis,
+                        deviceSummary = deviceSummary,
+                        version = BuildConfig.VERSION_NAME,
+                        checkingUpdate = checkingUpdate,
+                        onCheckUpdate = viewModel::checkUpdate,
+                    )
+                }
+                if (page == SettingsPage.LIBRARY) {
+                    item { SettingsSectionHeader(stringResource(R.string.settings_library)) }
+                    items(folders, key = { it.folder.id }) { (folder, count) ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(painterResource(R.drawable.ic_folder), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(folder.displayName)
+                                Text(
+                                    "${libraryPathLabel(folder.relativePath).ifEmpty { "/" }} · ${songCount(count)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { removing = folder }) {
+                                Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.action_remove))
+                            }
+                        }
+                    }
+                    item {
+                        SettingItem(
+                            title = stringResource(R.string.action_add_folder),
+                            icon = R.drawable.ic_add,
+                            onClick = addFolder,
+                            modifier = Modifier.testTag("settings_add_folder"),
                         )
                     }
-                    IconButton(onClick = { removing = folder }) {
-                        Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.action_remove))
+                    item {
+                        val running = scanState as? ScanState.Running
+                        SettingAction(
+                            title = stringResource(R.string.settings_rescan),
+                            summary = running?.let { stringResource(R.string.scan_progress, it.done, it.total) }
+                                ?: stringResource(R.string.settings_rescan_summary),
+                            icon = R.drawable.ic_refresh,
+                            onClick = viewModel::rescan,
+                        )
+                    }
+                    item {
+                        SettingAction(
+                            title = stringResource(R.string.settings_rebuild),
+                            summary = stringResource(R.string.settings_rebuild_summary),
+                            onClick = viewModel::rebuild,
+                        )
+                    }
+                    if (settings.unsupportedFileCount > 0) {
+                        item {
+                            Text(
+                                pluralStringResource(R.plurals.settings_unsupported_files, settings.unsupportedFileCount, settings.unsupportedFileCount),
+                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingItem(
+                            title = stringResource(R.string.settings_artists),
+                            summary = stringResource(R.string.settings_artists_summary),
+                            icon = R.drawable.ic_person,
+                            onClick = { navigator.open(TopRoute.ArtistSettings) },
+                            modifier = Modifier.testTag("open_artist_settings"),
+                        )
                     }
                 }
-            }
-            item {
-                SettingItem(
-                    title = stringResource(R.string.action_add_folder),
-                    icon = R.drawable.ic_add,
-                    onClick = addFolder,
-                    modifier = Modifier.testTag("settings_add_folder"),
-                )
-            }
-            item {
-                val running = scanState as? ScanState.Running
-                SettingAction(
-                    title = stringResource(R.string.settings_rescan),
-                    summary = running?.let { stringResource(R.string.scan_progress, it.done, it.total) }
-                        ?: stringResource(R.string.settings_rescan_summary),
-                    icon = R.drawable.ic_refresh,
-                    onClick = viewModel::rescan,
-                )
-            }
-            item {
-                SettingAction(
-                    title = stringResource(R.string.settings_rebuild),
-                    summary = stringResource(R.string.settings_rebuild_summary),
-                    onClick = viewModel::rebuild,
-                )
-            }
-            if (settings.unsupportedFileCount > 0) {
-                item {
-                    Text(
-                        pluralStringResource(R.plurals.settings_unsupported_files, settings.unsupportedFileCount, settings.unsupportedFileCount),
-                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            item {
-                SettingItem(
-                    title = stringResource(R.string.settings_artists),
-                    summary = stringResource(R.string.settings_artists_summary),
-                    icon = R.drawable.ic_person,
-                    onClick = { navigator.open(TopRoute.ArtistSettings) },
-                    modifier = Modifier.testTag("open_artist_settings"),
-                )
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_sync)) }
-            item { LanSyncSettings(viewModel.lan) }
-            item { SyncSettings(viewModel.sync) }
-            item { SectionHeader(stringResource(R.string.settings_backup)) }
-            item {
-                SettingAction(
-                    title = stringResource(R.string.backup_now),
-                    summary = lastBackup?.let {
-                        stringResource(R.string.backup_last, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)))
-                    } ?: stringResource(R.string.backup_summary),
-                    onClick = viewModel::backupNow,
-                    modifier = Modifier.testTag("backup_now"),
-                )
-            }
-            item {
-                SettingItem(
-                    title = stringResource(R.string.restore_from_file),
-                    onClick = { pickBackup.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    modifier = Modifier.testTag("restore_from_file"),
-                )
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_lyrics)) }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.online_lyrics),
-                    summary = stringResource(R.string.online_lyrics_summary),
-                    checked = settings.onlineLyrics,
-                    // 开启时先说明会发送哪些信息、发给谁（需求 LY-9）
-                    onChange = { if (it) confirmOnline = true else viewModel.setOnlineLyrics(false) },
-                    modifier = Modifier.testTag("online_lyrics"),
-                )
-            }
-            if (settings.onlineLyrics) {
-                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(OnlineSource.FOR_LYRICS) { source ->
-                    SourceRow(source, enabled = source !in settings.lyricsSources || settings.lyricsSources.size > 1, checked = source in settings.lyricsSources, onClick = { viewModel.toggleLyricsSource(source) }, modifier = Modifier.testTag("lyrics_source_${source.name}"))
-                }
-                item {
-                    SettingAction(
-                        title = stringResource(R.string.source_check),
-                        summary = stringResource(R.string.source_check_summary),
-                        onClick = { viewModel.checkSources(OnlineSource.FOR_LYRICS) },
-                        modifier = Modifier.testTag("check_lyrics_sources"),
-                    )
-                }
-                item {
-                    val progress = lyricsProgress
-                    SettingAction(
-                        title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.lyrics_fetch_missing),
-                        summary = when {
-                            progress == null -> stringResource(R.string.lyrics_fetch_summary)
-                            progress.waiting -> stringResource(R.string.cover_fetch_waiting)
-                            progress.checking -> stringResource(R.string.lyrics_fetch_checking)
-                            progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
-                            else -> stringResource(R.string.lyrics_fetch_done, progress.found, progress.missing)
-                        },
-                        onClick = { fetchClicked(DownloadKind.LYRICS, progress) },
-                        modifier = Modifier.testTag("fetch_lyrics"),
-                    )
-                }
-                item { Text(stringResource(R.string.lyrics_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(FetchMode.entries) { mode ->
-                    RadioRow(
-                        selected = settings.lyricsFetchMode == mode,
-                        text = stringResource(
-                            when (mode) {
-                                FetchMode.MANUAL -> R.string.lyrics_fetch_manual
-                                FetchMode.AUTO -> R.string.lyrics_fetch_auto
-                                FetchMode.WIFI -> R.string.lyrics_fetch_wifi
-                            },
-                        ),
-                        summary = if (mode == FetchMode.MANUAL) null else stringResource(R.string.auto_fetch_lyrics_summary),
-                        onClick = { viewModel.setLyricsFetchMode(mode) },
-                        modifier = Modifier.testTag("lyrics_fetch_${mode.name}"),
-                    )
-                }
-                item { Text(stringResource(R.string.lyrics_save_location), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(LyricsSaveLocation.entries) { location ->
-                    val (title, summary) = when (location) {
-                        LyricsSaveLocation.SIDECAR -> R.string.lyrics_save_folder to R.string.lyrics_save_folder_summary
-                        LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_save_hidden to R.string.lyrics_save_hidden_summary
-                        LyricsSaveLocation.EMBED -> R.string.lyrics_save_embed to R.string.lyrics_save_embed_summary
-                        LyricsSaveLocation.APP_CACHE -> R.string.lyrics_save_app to null
+                if (page == SettingsPage.PLAYBACK) {
+                    item { SettingsSectionHeader(stringResource(R.string.settings_low_power)) }
+                    items(LowPowerMode.entries) { mode ->
+                        SettingRadio(
+                            title = stringResource(when (mode) {
+                                LowPowerMode.BACKGROUND -> R.string.low_power_background
+                                LowPowerMode.ALWAYS -> R.string.low_power_always
+                                LowPowerMode.OFF -> R.string.low_power_off
+                            }),
+                            selected = settings.lowPowerMode == mode, onClick = { viewModel.setLowPower(mode) },
+                            modifier = Modifier.testTag("low_power_${mode.name}"),
+                            summary = if (mode == LowPowerMode.ALWAYS) stringResource(R.string.low_power_always_summary) else null,
+                        )
                     }
-                    val embed = location == LyricsSaveLocation.EMBED
-                    val missing = embed && settings.lyricsSaveLocation == location && !allFilesAccess
-                    RadioRow(
-                        selected = settings.lyricsSaveLocation == location,
-                        text = stringResource(title),
-                        summary = if (missing) stringResource(R.string.all_files_missing) else summary?.let { stringResource(it) },
-                        warning = missing,
-                        onClick = {
-                            // 写入文件要"所有文件访问权限"才能保持修改时间不变，先说明再去授权
-                            if (embed && !allFilesAccess) askAllFiles = { viewModel.setLyricsSaveLocation(location) } else viewModel.setLyricsSaveLocation(location)
-                        },
-                        modifier = Modifier.testTag("lyrics_save_${location.name}"),
-                    )
                 }
-                item { SettingAction(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_covers)) }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.online_covers),
-                    summary = stringResource(R.string.online_covers_summary),
-                    checked = settings.onlineCovers,
-                    // 开启时先说明会发送哪些信息、发给谁（需求 C-3）
-                    onChange = { if (it) confirmCovers = true else viewModel.setOnlineCovers(false) },
-                    modifier = Modifier.testTag("online_covers"),
-                )
-            }
-            if (settings.onlineCovers) {
-                item { Text(stringResource(R.string.online_sources), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(OnlineSource.FOR_COVERS) { source ->
-                    SourceRow(source, enabled = source !in settings.coverSources || settings.coverSources.size > 1, checked = source in settings.coverSources, onClick = { viewModel.toggleCoverSource(source) }, modifier = Modifier.testTag("cover_source_${source.name}"))
-                }
-                item {
-                    SettingAction(
-                        title = stringResource(R.string.source_check),
-                        summary = stringResource(R.string.source_check_summary),
-                        onClick = { viewModel.checkSources(OnlineSource.FOR_COVERS) },
-                        modifier = Modifier.testTag("check_cover_sources"),
-                    )
-                }
-                item {
-                    val progress = coverProgress
-                    SettingAction(
-                        title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.cover_fetch_missing),
-                        summary = when {
-                            progress == null -> stringResource(R.string.cover_fetch_summary)
-                            progress.waiting -> stringResource(R.string.cover_fetch_waiting)
-                            progress.checking -> stringResource(R.string.cover_fetch_checking)
-                            progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
-                            else -> stringResource(R.string.cover_fetch_done, progress.found, progress.missing)
-                        },
-                        onClick = { fetchClicked(DownloadKind.COVERS, progress) },
-                        modifier = Modifier.testTag("fetch_covers"),
-                    )
-                }
-                item { Text(stringResource(R.string.cover_fetch_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(FetchMode.entries) { mode ->
-                    RadioRow(
-                        selected = settings.coverFetchMode == mode,
-                        text = stringResource(
-                            when (mode) {
-                                FetchMode.MANUAL -> R.string.cover_fetch_manual
-                                FetchMode.AUTO -> R.string.cover_fetch_auto
-                                FetchMode.WIFI -> R.string.cover_fetch_wifi
-                            },
-                        ),
-                        onClick = { viewModel.setCoverFetchMode(mode) },
-                        modifier = Modifier.testTag("cover_fetch_${mode.name}"),
-                    )
-                }
-                item { Text(stringResource(R.string.cover_save_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(CoverSaveMode.entries) { mode ->
-                    val (title, summary) = when (mode) {
-                        CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_save_hidden to R.string.cover_save_hidden_summary
-                        CoverSaveMode.EMBED -> R.string.cover_save_embed to R.string.cover_save_embed_summary
-                        CoverSaveMode.SIDECAR -> R.string.cover_save_sidecar to R.string.cover_save_sidecar_summary
+                if (page == SettingsPage.APPEARANCE) {
+                    item {
+                        SettingItem(
+                            title = stringResource(R.string.settings_tabs),
+                            summary = stringResource(R.string.settings_tabs_summary),
+                            icon = R.drawable.ic_push_pin,
+                            onClick = { navigator.open(TopRoute.TabManager) },
+                            modifier = Modifier.testTag("open_tab_manager"),
+                        )
                     }
-                    val embed = mode == CoverSaveMode.EMBED
-                    val missing = embed && settings.coverSaveMode == mode && !allFilesAccess
-                    RadioRow(
-                        selected = settings.coverSaveMode == mode,
-                        text = stringResource(title),
-                        summary = stringResource(if (missing) R.string.all_files_missing else summary),
-                        warning = missing,
-                        onClick = { if (embed && !allFilesAccess) askAllFiles = { viewModel.setCoverSaveMode(mode) } else viewModel.setCoverSaveMode(mode) },
-                        modifier = Modifier.testTag("cover_mode_${mode.name}"),
-                    )
+                    items(ThemeMode.entries) { mode ->
+                        SettingRadio(
+                            title = stringResource(when (mode) {
+                                ThemeMode.SYSTEM -> R.string.theme_system
+                                ThemeMode.LIGHT -> R.string.theme_light
+                                ThemeMode.DARK -> R.string.theme_dark
+                            }), selected = settings.themeMode == mode, onClick = { viewModel.setTheme(mode) },
+                            modifier = Modifier.testTag("theme_${mode.name}"),
+                        )
+                    }
+                }
+                if (page == SettingsPage.LYRICS) {
+                    item {
+                        SwitchRow(
+                            title = stringResource(R.string.online_lyrics),
+                            summary = stringResource(R.string.online_lyrics_summary),
+                            checked = settings.onlineLyrics,
+                            // 开启时先说明会发送哪些信息、发给谁（需求 LY-9）
+                            onChange = { if (it) confirmOnline = true else viewModel.setOnlineLyrics(false) },
+                            modifier = Modifier.testTag("online_lyrics"),
+                        )
+                    }
+                    if (settings.onlineLyrics) {
+                        item { SettingsSectionHeader(stringResource(R.string.online_sources)) }
+                        items(OnlineSource.FOR_LYRICS) { source ->
+                            SourceRow(source, enabled = source !in settings.lyricsSources || settings.lyricsSources.size > 1, checked = source in settings.lyricsSources, onClick = { viewModel.toggleLyricsSource(source) }, modifier = Modifier.testTag("lyrics_source_${source.name}"))
+                        }
+                        item {
+                            SettingAction(
+                                title = stringResource(R.string.source_check),
+                                summary = stringResource(R.string.source_check_summary),
+                                onClick = { viewModel.checkSources(OnlineSource.FOR_LYRICS) },
+                                modifier = Modifier.testTag("check_lyrics_sources"),
+                            )
+                        }
+                        item {
+                            val progress = lyricsProgress
+                            SettingAction(
+                                title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.lyrics_fetch_missing),
+                                summary = when {
+                                    progress == null -> stringResource(R.string.lyrics_fetch_summary)
+                                    progress.waiting -> stringResource(R.string.cover_fetch_waiting)
+                                    progress.checking -> stringResource(R.string.lyrics_fetch_checking)
+                                    progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
+                                    else -> stringResource(R.string.lyrics_fetch_done, progress.found, progress.missing)
+                                },
+                                onClick = { fetchClicked(DownloadKind.LYRICS, progress) },
+                                modifier = Modifier.testTag("fetch_lyrics"),
+                            )
+                        }
+                        item { SettingsSectionHeader(stringResource(R.string.lyrics_fetch_mode)) }
+                        items(FetchMode.entries) { mode ->
+                            RadioRow(
+                                selected = settings.lyricsFetchMode == mode,
+                                text = stringResource(
+                                    when (mode) {
+                                        FetchMode.MANUAL -> R.string.lyrics_fetch_manual
+                                        FetchMode.AUTO -> R.string.lyrics_fetch_auto
+                                        FetchMode.WIFI -> R.string.lyrics_fetch_wifi
+                                    },
+                                ),
+                                summary = if (mode == FetchMode.MANUAL) null else stringResource(R.string.auto_fetch_lyrics_summary),
+                                onClick = { viewModel.setLyricsFetchMode(mode) },
+                                modifier = Modifier.testTag("lyrics_fetch_${mode.name}"),
+                            )
+                        }
+                        item { SettingsSectionHeader(stringResource(R.string.lyrics_save_location)) }
+                        items(LyricsSaveLocation.entries) { location ->
+                            val (title, summary) = when (location) {
+                                LyricsSaveLocation.SIDECAR -> R.string.lyrics_save_folder to R.string.lyrics_save_folder_summary
+                                LyricsSaveLocation.HIDDEN_FOLDER -> R.string.lyrics_save_hidden to R.string.lyrics_save_hidden_summary
+                                LyricsSaveLocation.EMBED -> R.string.lyrics_save_embed to R.string.lyrics_save_embed_summary
+                                LyricsSaveLocation.APP_CACHE -> R.string.lyrics_save_app to null
+                            }
+                            val embed = location == LyricsSaveLocation.EMBED
+                            val missing = embed && settings.lyricsSaveLocation == location && !allFilesAccess
+                            RadioRow(
+                                selected = settings.lyricsSaveLocation == location,
+                                text = stringResource(title),
+                                summary = if (missing) stringResource(R.string.all_files_missing) else summary?.let { stringResource(it) },
+                                warning = missing,
+                                onClick = {
+                                    // 写入文件要"所有文件访问权限"才能保持修改时间不变，先说明再去授权
+                                    if (embed && !allFilesAccess) askAllFiles = { viewModel.setLyricsSaveLocation(location) } else viewModel.setLyricsSaveLocation(location)
+                                },
+                                modifier = Modifier.testTag("lyrics_save_${location.name}"),
+                            )
+                        }
+                        item { SettingAction(title = stringResource(R.string.lyrics_clear_cache), onClick = viewModel::clearLyricsCache) }
+                    }
+                }
+                if (page == SettingsPage.COVERS) {
+                    item {
+                        SwitchRow(
+                            title = stringResource(R.string.online_covers),
+                            summary = stringResource(R.string.online_covers_summary),
+                            checked = settings.onlineCovers,
+                            // 开启时先说明会发送哪些信息、发给谁（需求 C-3）
+                            onChange = { if (it) confirmCovers = true else viewModel.setOnlineCovers(false) },
+                            modifier = Modifier.testTag("online_covers"),
+                        )
+                    }
+                    if (settings.onlineCovers) {
+                        item { SettingsSectionHeader(stringResource(R.string.online_sources)) }
+                        items(OnlineSource.FOR_COVERS) { source ->
+                            SourceRow(source, enabled = source !in settings.coverSources || settings.coverSources.size > 1, checked = source in settings.coverSources, onClick = { viewModel.toggleCoverSource(source) }, modifier = Modifier.testTag("cover_source_${source.name}"))
+                        }
+                        item {
+                            SettingAction(
+                                title = stringResource(R.string.source_check),
+                                summary = stringResource(R.string.source_check_summary),
+                                onClick = { viewModel.checkSources(OnlineSource.FOR_COVERS) },
+                                modifier = Modifier.testTag("check_cover_sources"),
+                            )
+                        }
+                        item {
+                            val progress = coverProgress
+                            SettingAction(
+                                title = stringResource(if (progress?.running == true) R.string.list_download_stop else R.string.cover_fetch_missing),
+                                summary = when {
+                                    progress == null -> stringResource(R.string.cover_fetch_summary)
+                                    progress.waiting -> stringResource(R.string.cover_fetch_waiting)
+                                    progress.checking -> stringResource(R.string.cover_fetch_checking)
+                                    progress.running -> stringResource(R.string.cover_fetch_progress, progress.done, progress.total, progress.found)
+                                    else -> stringResource(R.string.cover_fetch_done, progress.found, progress.missing)
+                                },
+                                onClick = { fetchClicked(DownloadKind.COVERS, progress) },
+                                modifier = Modifier.testTag("fetch_covers"),
+                            )
+                        }
+                        item { SettingsSectionHeader(stringResource(R.string.cover_fetch_mode)) }
+                        items(FetchMode.entries) { mode ->
+                            RadioRow(
+                                selected = settings.coverFetchMode == mode,
+                                text = stringResource(
+                                    when (mode) {
+                                        FetchMode.MANUAL -> R.string.cover_fetch_manual
+                                        FetchMode.AUTO -> R.string.cover_fetch_auto
+                                        FetchMode.WIFI -> R.string.cover_fetch_wifi
+                                    },
+                                ),
+                                onClick = { viewModel.setCoverFetchMode(mode) },
+                                modifier = Modifier.testTag("cover_fetch_${mode.name}"),
+                            )
+                        }
+                        item { SettingsSectionHeader(stringResource(R.string.cover_save_mode)) }
+                        items(CoverSaveMode.entries) { mode ->
+                            val (title, summary) = when (mode) {
+                                CoverSaveMode.HIDDEN_FOLDER -> R.string.cover_save_hidden to R.string.cover_save_hidden_summary
+                                CoverSaveMode.EMBED -> R.string.cover_save_embed to R.string.cover_save_embed_summary
+                                CoverSaveMode.SIDECAR -> R.string.cover_save_sidecar to R.string.cover_save_sidecar_summary
+                            }
+                            val embed = mode == CoverSaveMode.EMBED
+                            val missing = embed && settings.coverSaveMode == mode && !allFilesAccess
+                            RadioRow(
+                                selected = settings.coverSaveMode == mode,
+                                text = stringResource(title),
+                                summary = stringResource(if (missing) R.string.all_files_missing else summary),
+                                warning = missing,
+                                onClick = { if (embed && !allFilesAccess) askAllFiles = { viewModel.setCoverSaveMode(mode) } else viewModel.setCoverSaveMode(mode) },
+                                modifier = Modifier.testTag("cover_mode_${mode.name}"),
+                            )
+                        }
+                    }
+                }
+                if (page == SettingsPage.ANALYSIS) {
+                    item {
+                        SettingAction(
+                            title = stringResource(R.string.mood_analyze_now),
+                            summary = pluralStringResource(R.plurals.mood_pending, pendingAnalysis, pendingAnalysis),
+                            onClick = viewModel::analyzeNow,
+                            modifier = Modifier.testTag("settings_analyze_now"),
+                        )
+                    }
+                    item { SettingsSectionHeader(stringResource(R.string.settings_analysis_mode)) }
+                    items(AnalysisMode.entries) { mode ->
+                        RadioRow(
+                            selected = settings.analysisMode == mode,
+                            text = stringResource(if (mode == AnalysisMode.CHARGING) R.string.analysis_charging else R.string.analysis_anytime),
+                            onClick = { viewModel.setAnalysisMode(mode) },
+                        )
+                    }
+                    item { SettingsSectionHeader(stringResource(R.string.settings_sensitivity)) }
+                    items(Sensitivity.entries) { s ->
+                        RadioRow(
+                            selected = settings.sensitivity == s,
+                            text = stringResource(
+                                when (s) {
+                                    Sensitivity.LOOSE -> R.string.sensitivity_loose
+                                    Sensitivity.NORMAL -> R.string.sensitivity_normal
+                                    Sensitivity.STRICT -> R.string.sensitivity_strict
+                                },
+                            ),
+                            onClick = { viewModel.setSensitivity(s) },
+                        )
+                    }
+                }
+                if (page == SettingsPage.DEVICES) {
+                    item { LanSyncSettings(viewModel.lan) }
+                }
+                if (page == SettingsPage.DATA) {
+                    item { SettingsSectionHeader(stringResource(R.string.settings_group_data_sync)) }
+                    item { SettingSummary(stringResource(R.string.settings_group_data_explanation), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                    item { SyncSettings(viewModel.sync) }
+                    item { SettingsSectionHeader(stringResource(R.string.settings_backup)) }
+                    item {
+                        SettingAction(
+                            title = stringResource(R.string.backup_now),
+                            summary = lastBackup?.let {
+                                stringResource(R.string.backup_last, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)))
+                            } ?: stringResource(R.string.backup_summary),
+                            onClick = viewModel::backupNow,
+                            modifier = Modifier.testTag("backup_now"),
+                        )
+                    }
+                    item {
+                        SettingItem(
+                            title = stringResource(R.string.restore_from_file),
+                            onClick = { pickBackup.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
+                            modifier = Modifier.testTag("restore_from_file"),
+                        )
+                    }
+                }
+                if (page == SettingsPage.ABOUT) {
+                    // 检查更新放在最前面，打开设置就能点到，不用滚到底（需求 U-6）
+                    item {
+                        SettingAction(
+                            title = stringResource(R.string.update_check_now),
+                            summary = if (checkingUpdate) stringResource(R.string.update_checking) else stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                            onClick = viewModel::checkUpdate,
+                            enabled = !checkingUpdate,
+                            modifier = Modifier.testTag("check_update"),
+                        )
+                    }
+                    item {
+                        SwitchRow(
+                            title = stringResource(R.string.update_auto_check),
+                            summary = stringResource(R.string.update_auto_check_summary),
+                            checked = settings.autoUpdateCheck,
+                            onChange = viewModel::setAutoUpdateCheck,
+                            modifier = Modifier.testTag("auto_update"),
+                        )
+                    }
+                    item { SettingItem(title = stringResource(R.string.settings_licenses), onClick = { showLicenses = true }) }
+                    item { SettingItem(title = stringResource(R.string.settings_source), summary = "github.com/tifish/JeekMusic") }
                 }
             }
-
-            item { SectionHeader(stringResource(R.string.settings_moods)) }
-            item {
-                SettingAction(
-                    title = stringResource(R.string.mood_analyze_now),
-                    summary = pluralStringResource(R.plurals.mood_pending, pendingAnalysis, pendingAnalysis),
-                    onClick = viewModel::analyzeNow,
-                    modifier = Modifier.testTag("settings_analyze_now"),
-                )
-            }
-            item { Text(stringResource(R.string.settings_analysis_mode), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            items(AnalysisMode.entries) { mode ->
-                RadioRow(
-                    selected = settings.analysisMode == mode,
-                    text = stringResource(if (mode == AnalysisMode.CHARGING) R.string.analysis_charging else R.string.analysis_anytime),
-                    onClick = { viewModel.setAnalysisMode(mode) },
-                )
-            }
-            item { Text(stringResource(R.string.settings_sensitivity), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            items(Sensitivity.entries) { s ->
-                RadioRow(
-                    selected = settings.sensitivity == s,
-                    text = stringResource(
-                        when (s) {
-                            Sensitivity.LOOSE -> R.string.sensitivity_loose
-                            Sensitivity.NORMAL -> R.string.sensitivity_normal
-                            Sensitivity.STRICT -> R.string.sensitivity_strict
-                        },
-                    ),
-                    onClick = { viewModel.setSensitivity(s) },
-                )
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_playback)) }
-            item { Text(stringResource(R.string.settings_low_power), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            items(LowPowerMode.entries) { mode ->
-                SettingRadio(
-                    title = stringResource(when (mode) {
-                        LowPowerMode.BACKGROUND -> R.string.low_power_background
-                        LowPowerMode.ALWAYS -> R.string.low_power_always
-                        LowPowerMode.OFF -> R.string.low_power_off
-                    }),
-                    selected = settings.lowPowerMode == mode, onClick = { viewModel.setLowPower(mode) },
-                    summary = if (mode == LowPowerMode.ALWAYS) stringResource(R.string.low_power_always_summary) else null,
-                )
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_appearance)) }
-            item {
-                SettingItem(
-                    title = stringResource(R.string.settings_tabs),
-                    summary = stringResource(R.string.settings_tabs_summary),
-                    icon = R.drawable.ic_push_pin,
-                    onClick = { navigator.open(TopRoute.TabManager) },
-                    modifier = Modifier.testTag("open_tab_manager"),
-                )
-            }
-            items(ThemeMode.entries) { mode ->
-                SettingRadio(
-                    title = stringResource(when (mode) {
-                        ThemeMode.SYSTEM -> R.string.theme_system
-                        ThemeMode.LIGHT -> R.string.theme_light
-                        ThemeMode.DARK -> R.string.theme_dark
-                    }), selected = settings.themeMode == mode, onClick = { viewModel.setTheme(mode) },
-                )
-            }
-
-            item { SectionHeader(stringResource(R.string.settings_about)) }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.update_auto_check),
-                    summary = stringResource(R.string.update_auto_check_summary),
-                    checked = settings.autoUpdateCheck,
-                    onChange = viewModel::setAutoUpdateCheck,
-                    modifier = Modifier.testTag("auto_update"),
-                )
-            }
-            item { SettingItem(title = stringResource(R.string.settings_licenses), onClick = { showLicenses = true }) }
-            item { SettingItem(title = stringResource(R.string.settings_source), summary = "github.com/tifish/JeekMusic") }
         }
     }
 
@@ -734,6 +779,15 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
+}
+
+@Composable
+private fun fetchSummary(progress: FetchProgress?): String? = when {
+    progress == null -> null
+    progress.waiting -> stringResource(R.string.settings_group_fetch_waiting)
+    progress.checking -> stringResource(R.string.settings_group_fetch_checking)
+    progress.running -> stringResource(R.string.settings_group_fetching, progress.done, progress.total)
+    else -> null
 }
 
 @Composable

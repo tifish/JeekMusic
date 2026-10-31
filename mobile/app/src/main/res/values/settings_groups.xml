@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_group_music">Music &amp; appearance</string>
+    <string name="settings_group_resources">Online resources &amp; classification</string>
+    <string name="settings_group_transfer">Sync &amp; backup</string>
+    <string name="settings_group_app">Application</string>
+    <string name="settings_group_library">Music library &amp; scanning</string>
+    <string name="settings_group_library_hint">Folders, scanning and artist names</string>
+    <plurals name="settings_group_library_summary">
+        <item quantity="one">%1$d folder · scanning and artist names</item>
+        <item quantity="other">%1$d folders · scanning and artist names</item>
+    </plurals>
+    <string name="settings_group_scanning">Library scan in progress</string>
+    <string name="settings_group_appearance_summary">Theme and navigation tabs</string>
+    <string name="settings_group_online_summary">Sources, downloading and storage</string>
+    <string name="settings_group_online_on">Online lookup on · sources and storage</string>
+    <string name="settings_group_online_off">Online lookup off · sources and storage</string>
+    <string name="settings_group_analysis_summary">Analysis timing and sensitivity</string>
+    <plurals name="settings_group_pending">
+        <item quantity="one">%1$d track pending · timing and sensitivity</item>
+        <item quantity="other">%1$d tracks pending · timing and sensitivity</item>
+    </plurals>
+    <string name="settings_group_devices">Device sync / connect to computer</string>
+    <string name="settings_group_device_summary">Connect to a computer and choose music to sync</string>
+    <string name="settings_group_device_paired">Computer paired · music selection and downloads</string>
+    <string name="settings_group_sync_running">Music sync in progress</string>
+    <string name="settings_group_data">Data sync &amp; backup</string>
+    <string name="settings_group_data_summary">Playlists, sync history and backup files</string>
+    <string name="settings_group_data_sync">Playlist data sync</string>
+    <string name="settings_group_data_explanation">Sync playlist data through your library folders. To connect to a computer or download music, use Device sync on the settings overview.</string>
+    <string name="settings_group_about">About &amp; updates</string>
+    <string name="settings_group_about_summary">Automatic updates, licenses and source code</string>
+    <string name="settings_group_device_header">Device sync</string>
+    <string name="settings_group_fetch_waiting">Waiting for network · open to manage</string>
+    <string name="settings_group_fetch_checking">Checking library · open to manage</string>
+    <string name="settings_group_fetching">Fetching %1$d / %2$d · open to manage</string>
+</resources>

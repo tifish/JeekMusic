@@ -89,7 +89,10 @@ public sealed class PreferenceHeadTests
             s.Store.Append(p,id,"recording",new JsonObject { ["contentSignature"]=new string('b',64),["title"]="Fixture" });
             s.Store.Append(p,"dev","manifest",new JsonObject { ["dimension"]="VOICE",["items"]=Strings([id]),["role"]="development" });
             foreach(var d in Dimensions) s.Store.Append(p,"model:"+d,"model",new JsonObject { ["dimension"]=d,["state"]="development_required" });
-            s.SelectDimension("VOICE"); s.Batch(); s.Answer(id,"UNCERTAIN","unclear");
+            s.SelectDimension("VOICE"); s.Batch(); s.Answer(id,"UNCERTAIN","whole_recording_familiar","Synthetic saved reason");
+            Assert.Equal("whole_recording_familiar",S(s.Batch()["items"]![0]?["basis"]));
+            Assert.Equal("Synthetic saved reason",S(s.Batch()["items"]![0]?["reason"]));
+            Assert.Equal("",S(s.Batch(false)["items"]![0]?["reason"]));
             Assert.All(s.Store.Current(p,"model"),e=>Assert.Equal("development_required",S(e["payload"]?["state"])));
             s.Answer(id,"UNRESOLVED","unclear");
             foreach(var e in s.Store.Current(p,"model")) Assert.Equal(Dimension(e["payload"])=="VOICE"?"invalidated":"development_required",S(e["payload"]?["state"]));

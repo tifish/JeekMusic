@@ -94,7 +94,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
             val repeat=id in strings(manifest.getJSONObject("payload").optJSONArray("repeatIds") ?: JSONArray())
             val a=answers[if(repeat) hash("$p:${context(activeDimension)}:$id:repeat:"+manifest.getString("entityId")) else hash("$p:${context(activeDimension)}:$id")]
             rows.put(JSONObject().put("recordingId",id).put("title",r.optString("title")).put("artist",r.optString("artist")).put("album",r.optString("album")).put("durationMs",r.optLong("durationMs"))
-                .put("answer",a?.singleOrNull()?.getJSONObject("payload")?.optString("answer").orEmpty()).put("conflict",(a?.size ?: 0)>1).put("contentSignature",r.getString("contentSignature")))
+                .put("answer",a?.singleOrNull()?.getJSONObject("payload")?.optString("answer").orEmpty()).put("basis",a?.singleOrNull()?.getJSONObject("payload")?.optString("basis").orEmpty()).put("reason",a?.singleOrNull()?.getJSONObject("payload")?.optString("reason").orEmpty()).put("conflict",(a?.size ?: 0)>1).put("contentSignature",r.getString("contentSignature")))
         }
         return JSONObject().put("manifestId",manifest.getString("entityId")).put("state",manifest.getJSONObject("payload").optString("state")).put("items",rows)
     }

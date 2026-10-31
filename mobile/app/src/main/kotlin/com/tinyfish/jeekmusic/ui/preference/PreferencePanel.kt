@@ -78,9 +78,9 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
                 TextButton(onClick={currentIndex++},enabled=currentIndex<rows.lastIndex) { Text(stringResource(R.string.preference_next)) }
             }
         }
-        for(item in rows.drop(currentIndex).take(1)) key(dimension+":"+item.getString("recordingId")) {
-            var basis by remember { mutableIntStateOf(3) }
-            var reason by remember { mutableStateOf("") }
+        for(item in rows.drop(currentIndex).take(1)) key(data.optJSONObject("status")?.optString("profileId")+":"+dimension+":"+data.optJSONObject("batch")?.optString("manifestId")+":"+item.getString("recordingId")) {
+            var basis by remember(item.optString("answer"),item.optString("basis")) { mutableIntStateOf(PreferenceStore.bases.indexOf(item.optString("basis")).takeIf { it>=0 } ?: 3) }
+            var reason by remember(item.optString("answer"),item.optString("reason")) { mutableStateOf(item.optString("reason")) }
             var chooseBasis by remember { mutableStateOf(false) }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {

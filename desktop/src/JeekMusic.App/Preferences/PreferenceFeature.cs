@@ -28,6 +28,7 @@ public sealed class PreferenceFeature : IFeature
         panel.Children.Add(Note(L.T("独立的人工标注档案，不修改日常四维手工标签。题目隐藏自动结果；不会替换播放队列。当前不提供隔离试听，只有能确认整首及版本时才选整曲依据。")));
         var message=new TextBlock { TextWrapping=Avalonia.Media.TextWrapping.Wrap }; panel.Children.Add(message);
         var profiles=new ComboBox { Name="PreferenceProfiles",HorizontalAlignment=HorizontalAlignment.Stretch,MinWidth=0 };
+        ComboBox? dimensionChoice=null;
         var drafts=new Dictionary<string,(int Basis,string Reason)>();
         var status=Note(""); var training=Note(""); var batchPanel=new StackPanel { Spacing=12 }; bool refreshing=false;
         async void Run(Func<Task> action)
@@ -42,7 +43,7 @@ public sealed class PreferenceFeature : IFeature
         profiles.SelectedIndex=Array.FindIndex(live,p=>S(p?["profileId"])==service.ActiveProfile);
         profiles.SelectionChanged+=(_,_)=> { if(!refreshing && profiles.SelectedIndex>=0) Run(()=> { service.SelectProfile(S(live[profiles.SelectedIndex]?["profileId"])); return Task.CompletedTask; }); };
         panel.Children.Add(Note(L.T("当前档案（同步不会自动混入）"))); panel.Children.Add(profiles);
-        var dimensionChoice=Choice(new[] {("MOOD",L.T("运动 / 非运动")),("VOICE",L.T("人声 / 纯器乐")),("GENRE",L.T("古典 / 非古典")),("CALMNESS",L.T("安静 / 非安静"))},service.ActiveDimension,d=>Run(()=> { service.SelectDimension(d); return Task.CompletedTask; }));
+        dimensionChoice=Choice(new[] {("MOOD",L.T("运动 / 非运动")),("VOICE",L.T("人声 / 纯器乐")),("GENRE",L.T("古典 / 非古典")),("CALMNESS",L.T("安静 / 非安静"))},service.ActiveDimension,d=> { if(!refreshing) Run(()=> { service.SelectDimension(d); return Task.CompletedTask; }); });
         dimensionChoice.Name="PreferenceDimension"; panel.Children.Add(Note(L.T("独立标注维度"))); panel.Children.Add(dimensionChoice);
         panel.Children.Add(Note(L.T("每首可只标一个维度，其他维度保持未标。GENRE 的 ClassicalTitles 强制自动古典优先于个人预测；手工覆盖最终优先。旧 QUIET 只兼容为非运动，不推导安静。")));
         panel.Children.Add(status);
@@ -85,6 +86,7 @@ public sealed class PreferenceFeature : IFeature
             try
             {
                 var s=service.Status();
+                if(dimensionChoice!=null) dimensionChoice.SelectedIndex=Array.IndexOf(Dimensions,service.ActiveDimension);
                 live=s["profiles"]!.AsArray().Where(n=>n?["deleted"]?.GetValue<bool>()!=true).ToArray();
                 profiles.Items.Clear(); foreach(var p in live) profiles.Items.Add(S(p?["name"])+" · "+S(p?["profileId"])[..8]);
                 profiles.SelectedIndex=Array.FindIndex(live,p=>S(p?["profileId"])==service.ActiveProfile);
@@ -104,7 +106,9 @@ public sealed class PreferenceFeature : IFeature
                     var card=new StackPanel { Spacing=5 };
                     card.Children.Add(new TextBlock { Text=$"{S(item?["title"])} — {S(item?["artist"])}\n{S(item?["album"])} · {item?["durationMs"]} ms",TextWrapping=Avalonia.Media.TextWrapping.Wrap });
                     card.Children.Add(Note(L.T("当前答案：")+AnswerText(S(item?["answer"]))+(item?["conflict"]?.GetValue<bool>()==true ? L.T(" · 存在并发冲突，需核对后复核") : "")));
-                    var draftKey=service.ActiveDimension+":"+id; var draft=drafts.GetValueOrDefault(draftKey,(3,""));
+                    var draftKey=service.ActiveProfile+":"+service.ActiveDimension+":"+S(batch["manifestId"])+":"+id;
+                    var savedBasis=Array.IndexOf(Bases,S(item?["basis"]));
+                    var draft=drafts.GetValueOrDefault(draftKey,(savedBasis<0?3:savedBasis,S(item?["reason"])));
                     var basis=new ComboBox { MinWidth=240,ItemsSource=new[] { L.T("熟悉并能确认整首及版本"),L.T("完整听过"),L.T("仅片段"),L.T("尚未确认") },SelectedIndex=draft.Item1 };
                     var reason=new TextBox { PlaceholderText=L.T("可选理由（最多500字）"),MaxLength=500,Text=draft.Item2 };
                     basis.SelectionChanged+=(_,_)=>drafts[draftKey]=(basis.SelectedIndex,reason.Text??"");

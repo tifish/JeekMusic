@@ -96,7 +96,7 @@ public sealed partial class PreferenceService : IDisposable
             var a=answers.GetValueOrDefault(AnswerEntity(p,id,m,d));
             rows.Add((JsonNode)new JsonObject { ["recordingId"]=id,["title"]=S(r["title"]),["artist"]=S(r["artist"]),["album"]=S(r["album"]),["durationMs"]=r["durationMs"]?.DeepClone(),
                 ["contentSignature"]=S(r["contentSignature"]),["answer"]=!revealEvaluationAnswers && S(payload["role"]) is "development" or "sealed_test" ? "" : a?.Count==1 ? S(a[0]["payload"]?["answer"]) : "",["completed"]=a?.Count==1,["conflict"]=a?.Count>1,
-                ["basis"]=a?.Count==1 ? S(a[0]["payload"]?["basis"]) : "",["available"]=FindLocal(id)!=null });
+                ["basis"]=a?.Count==1 ? S(a[0]["payload"]?["basis"]) : "",["reason"]=revealEvaluationAnswers && a?.Count==1 ? S(a[0]["payload"]?["reason"]) : "",["available"]=FindLocal(id)!=null });
         }
         return new JsonObject { ["manifestId"]=manifestId,["manifestHash"]=S(payload["hash"]),["state"]=S(payload["state"]),["items"]=rows,["dimension"]=d,["question"]=Question(d),["previewAvailable"]=false };
     }

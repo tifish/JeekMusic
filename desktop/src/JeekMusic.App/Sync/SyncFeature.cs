@@ -20,6 +20,7 @@ public sealed class SyncFeature : IFeature
     Shell _shell = null!;
     JsonObject _device = null!;
     DispatcherTimer _timer = null!;
+    readonly SemaphoreSlim _mergeGate = new(1,1);
     bool _running, _again, _applying, _stopped, _restoreDeclined;
     readonly Dictionary<string, string> _lastWritten = new(StringComparer.OrdinalIgnoreCase);
     readonly Lock _fileGate = new();
@@ -35,6 +36,7 @@ public sealed class SyncFeature : IFeature
     public void Start(AppServices app, Shell shell)
     {
         _app = app; _shell = shell;
+        if(app.Db.GetValue("legacy_directory_sync") is null) app.Db.SetValue("legacy_directory_sync",app.Db.GetValue("sync_initialized") is null?"0":"1");
         app.LanSync.Merge = this;
         try { _device = JsonNode.Parse(File.ReadAllText(AppPaths.Device))!.AsObject(); }
         catch (Exception e) when (e is IOException or JsonException) { _device = new JsonObject(); }
@@ -68,7 +70,7 @@ public sealed class SyncFeature : IFeature
         lock (_fileGate)
         {
             _stopped = true;
-            if (_app.Db.GetValue("sync_initialized") is null) return;
+            if (_app.Db.GetValue("sync_initialized") is null || !DirectoryEnabled) return;
             try
             {
                 var state = Capture(References());
@@ -179,16 +181,18 @@ public sealed class SyncFeature : IFeature
         return result;
     }
 
-    public async Task Synchronize()
+    public async Task Synchronize(bool directory = true, JsonObject? incoming = null, JsonObject? incomingFeatures = null)
     {
         if (_stopped) return;
-        if (_running) { _again = true; return; }
+        if (_running && incoming is null) { _again = true; return; }
+        await _mergeGate.WaitAsync();
         _running = true;
+        directory &= DirectoryEnabled;
         try
         {
             var folders = _app.Library.Snapshot.Folders.ToList();
-            if (folders.Count == 0) return;
-            var files = await Task.Run(() => ReadFiles(folders, false).Concat(_app.LanSync.Incoming(false)).ToList());
+            if (folders.Count == 0 && directory) return;
+            var files = await Task.Run(() => (directory ? ReadFiles(folders, false).Concat(_app.LanSync.Incoming(false)) : incoming is null ? [] : new[] { incoming }).ToList());
             if (_stopped) return;
             _devices = LatestPerDevice(files, Str(_device["id"]));
             var refs = References();
@@ -225,7 +229,7 @@ public sealed class SyncFeature : IFeature
             var content = state.ToJsonString();
             state["format"] = 2; state["device"] = _device.DeepClone(); state["written_at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             int written = 0;
-            foreach (var folder in folders.Where(f => f.Available))
+            foreach (var folder in (directory ? folders : []).Where(f => f.Available))
             {
                 var path = Path.Combine(folder.Root, ".jeekmusic", "sync", Str(_device["id"]) + ".json");
                 if (_lastWritten.GetValueOrDefault(path) == content && File.Exists(path)) continue;
@@ -238,7 +242,7 @@ public sealed class SyncFeature : IFeature
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("sync", "写入同步文件失败", e); }
             }
-            await ShareFeatures(folders, refs, Match);
+            await ShareFeatures(directory ? folders : [], refs, Match, incomingFeatures);
             if (_stopped) return;
             Status = L.F($"上次同步 {DateTime.Now:HH:mm:ss}；发现 {_devices.Count} 台设备");
             Changed?.Invoke();
@@ -250,8 +254,8 @@ public sealed class SyncFeature : IFeature
                 foreach (var group in merged.Changes.GroupBy(c => c.DeviceName)) _shell.Main.ViewModel.ShowToast(L.F($"已同步来自「{group.Key}」的 {group.Count()} 项改动"));
             }
         }
-        catch (Exception e) { Log.Error("sync", "同步失败", e); Status = L.T("同步失败：") + e.Message; Changed?.Invoke(); }
-        finally { _running = false; if (_again) { _again = false; Schedule(); } }
+        catch (Exception e) { Log.Error("sync", "同步失败", e); Status = L.T("同步失败：") + e.Message; Changed?.Invoke(); if(incoming is not null) throw; }
+        finally { _running = false; _mergeGate.Release(); if (_again) { _again = false; Schedule(); } }
     }
 
     void Apply(MergeResult result, Func<string, string?> match)
@@ -316,9 +320,10 @@ public sealed class SyncFeature : IFeature
         });
     }
 
-    async Task ShareFeatures(List<LibraryFolder> folders, Dictionary<string, string> refs, Func<string, string?> match)
+    async Task ShareFeatures(List<LibraryFolder> folders, Dictionary<string, string> refs, Func<string, string?> match, JsonObject? incoming = null)
     {
-        var files = await Task.Run(() => ReadFiles(folders, true).Concat(_app.LanSync.Incoming(true)).ToList());
+        if(folders.Count==0 && incoming is null) return;
+        var files = await Task.Run(() => ReadFiles(folders, true).Concat(incoming is null ? _app.LanSync.Incoming(true) : new[] { incoming }).ToList());
         if (_stopped) return;
         bool imported = false;
         foreach (var file in files)
@@ -334,12 +339,13 @@ public sealed class SyncFeature : IFeature
                 imported = true;
             }
         }
+        if (imported) AnalysisFeature.Current.Invalidate();
+        if(folders.Count==0) return;
         var output = new JsonObject();
         foreach (var row in _app.Db.AllFeatures().Where(r => !r.Failed && r.AnalyzerVersion == AnalysisFeature.AnalyzerVersion))
             if (refs.TryGetValue(row.TrackKey, out var reference) && _app.Library.ByKey(row.TrackKey) is { } t && row.Signature == AnalysisFeature.Signature(t) && row.Data is not null && FeaturesData.Parse(row.Data)?.Complete == true)
                 output[reference] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(row.Data) };
         var text = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = output }.ToJsonString();
-        if (imported) AnalysisFeature.Current.Invalidate();
         foreach (var folder in folders.Where(f => f.Available))
         {
             var path = Path.Combine(folder.Root, ".jeekmusic", "sync", Str(_device["id"]) + ".features.json");
@@ -354,27 +360,30 @@ public sealed class SyncFeature : IFeature
         }
     }
 
-    internal JsonObject LanExchange()
+    internal async Task<JsonObject> LanExchange(JsonObject incoming, JsonObject? features, bool includeFeatures = true)
     {
+        _app.Db.SetValue("sync_initialized", "1");
+        await Synchronize(false, incoming, features);
         var refs = References();
         var lan = _app.Library.Snapshot.ByKey.Values.ToDictionary(t => t.TrackKey,
             t => _app.LanSync.Reference(t.FolderId, t.RelativePath + (t.CueTrackNo is { } n ? $"#{n:00}" : "")) ?? refs.GetValueOrDefault(t.TrackKey, t.TrackKey));
         var state = Capture(lan);
         state["format"] = 2; state["device"] = _device.DeepClone(); state["written_at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var items = new JsonObject();
-        foreach (var f in _app.Db.AllFeatures().Where(f => !f.Failed && f.AnalyzerVersion == AnalysisFeature.AnalyzerVersion))
+        foreach (var f in (includeFeatures ? _app.Db.AllFeatures() : []).Where(f => !f.Failed && f.AnalyzerVersion == AnalysisFeature.AnalyzerVersion))
             if (_app.Library.ByKey(f.TrackKey) is { } t && f.Signature == AnalysisFeature.Signature(t) && f.Data is not null)
                 items[lan[t.TrackKey]] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(f.Data) };
         _app.Db.SetValue("sync_initialized", "1"); // Pairing explicitly authorizes the normal merge.
-        _ = Synchronize();
-        return new JsonObject { ["state"] = ForWire(state), ["features"] = new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } };
+        return new JsonObject { ["state"] = ForWire(state), ["features"] = includeFeatures ? new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } : null };
     }
 
+    bool DirectoryEnabled => _app.Db.GetValue("legacy_directory_sync") != "0";
     Control BuildSettings(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 8 };
         LanSyncSettings.Build(panel, c);
-        panel.Children.Add(Note(L.T("同步工具负责传输音乐文件夹，Jeek Music 合并其中的用户数据。每台设备只写自己的同步文件。")));
+        panel.Children.Add(Note(L.T("主动 LAN 直接合并数据库用户数据，不经过每设备 inbox。目录同步是独立兼容适配器；关闭不删除旧文件，也不影响 LAN。布局、播放位置、输出设备、路径与凭证始终留在本机。")));
+        panel.Children.Add(Toggle(L.T("目录同步兼容（Syncthing / format 2）"), DirectoryEnabled, enabled => { _app.Db.SetValue("legacy_directory_sync",enabled?"1":"0"); Schedule(); }));
         var name = new TextBox { Text = Str(_device["name"]), Width = 280 };
         name.LostFocus += (_, _) => { if (!string.IsNullOrWhiteSpace(name.Text)) { _device["name"] = name.Text.Trim(); File.WriteAllText(AppPaths.Device, _device.ToJsonString()); _lastWritten.Clear(); Schedule(); } };
         panel.Children.Add(Labeled(L.T("本机名称"), name));

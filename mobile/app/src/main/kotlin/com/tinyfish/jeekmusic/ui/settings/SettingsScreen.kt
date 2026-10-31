@@ -622,6 +622,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                         )
                     }
                 }
+                if (page == SettingsPage.PREFERENCE) { item { com.tinyfish.jeekmusic.ui.preference.PreferencePanel() } }
                 if (page == SettingsPage.DEVICES) {
                     item { LanSyncSettings(viewModel.lan) }
                 }

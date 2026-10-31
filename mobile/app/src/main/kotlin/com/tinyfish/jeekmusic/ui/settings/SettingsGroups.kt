@@ -22,6 +22,7 @@ internal enum class SettingsPage(@param:StringRes val title: Int, @param:StringR
     APPEARANCE(R.string.settings_appearance, R.string.settings_group_appearance_summary),
     LYRICS(R.string.settings_lyrics, R.string.settings_group_online_summary),
     COVERS(R.string.settings_covers, R.string.settings_group_online_summary),
+    PREFERENCE(R.string.preference_title, R.string.preference_home_summary),
     ANALYSIS(R.string.settings_moods, R.string.settings_group_analysis_summary),
     DEVICES(R.string.settings_group_devices, R.string.settings_group_device_summary),
     DATA(R.string.settings_group_data, R.string.settings_group_data_summary),
@@ -67,10 +68,11 @@ internal fun LazyListScope.settingsHome(
         }
     }
     item(key = "resources") {
-        SettingsHomeGroup(R.string.settings_group_resources, listOf(SettingsPage.LYRICS, SettingsPage.COVERS, SettingsPage.ANALYSIS), onOpen) {
+        SettingsHomeGroup(R.string.settings_group_resources, listOf(SettingsPage.LYRICS, SettingsPage.COVERS, SettingsPage.ANALYSIS, SettingsPage.PREFERENCE), onOpen) {
             when (it) {
                 SettingsPage.LYRICS -> lyricsStatus ?: stringResource(if (lyricsEnabled) R.string.settings_group_online_on else R.string.settings_group_online_off)
                 SettingsPage.COVERS -> coversStatus ?: stringResource(if (coversEnabled) R.string.settings_group_online_on else R.string.settings_group_online_off)
+                SettingsPage.PREFERENCE -> stringResource(R.string.preference_home_summary)
                 else -> pluralStringResource(R.plurals.settings_group_pending, pendingAnalysis, pendingAnalysis)
             }
         }

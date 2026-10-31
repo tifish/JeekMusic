@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="JeekMusic.Core.Tests" />
+    <EmbeddedResource Include="..\..\..\shared\testcases\personal-tag-heads-v2.json" LogicalName="JeekMusic.PersonalHeadContract" />
   </ItemGroup>
   <ItemGroup>
     <!-- 拼音、繁简对照表（shared/pinyin/，由 ICU4J 生成），编进程序集 -->

@@ -50,7 +50,7 @@ def main():
                 diagnostic = startup.call(client, "get_diagnostics")
                 player_pid = diagnostic["processId"]
                 catalog = client.request("tools/list")["tools"]
-                assert len(catalog) == 28
+                assert len(catalog) == 36
                 columns = diagnostic["mainLayout"]["smartTagColumns"]
                 assert [c["dimension"] for c in columns["columns"]] == ["MOOD", "VOICE", "GENRE", "CALMNESS"]
                 assert all(not c["visible"] for c in columns["columns"])
@@ -113,7 +113,7 @@ def main():
                     assert db.execute("SELECT DISTINCT genre FROM track").fetchall() == [('file genre',)]
                 startup.close_player(player_pid)
                 player_pid = None
-            print("PASS: 28 tools, real async MCP, offline single/batch, same-value manual, read-only explanation/audit, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
+            print("PASS: 36 tools, real async MCP, offline single/batch, same-value manual, read-only explanation/audit, AUTO/null sync record, omitted timestamps, validation and computed-write rollback; no audio")
         except Exception:
             with closing(sqlite3.connect(data / "library.db")) as db:
                 print("Fixture database:", db.execute("SELECT id,title FROM track").fetchall(), flush=True)

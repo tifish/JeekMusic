@@ -98,7 +98,7 @@ def verify():
     # A real navigation round trip checks that grouping did not orphan settings.
     targets = {"library": "settings_add_folder", "playback": None, "appearance": "open_tab_manager",
                "devices": None, "data": "backup_now", "lyrics": "online_lyrics",
-               "covers": "online_covers", "analysis": "settings_analyze_now", "about": "auto_update"}
+               "covers": "online_covers", "analysis": "settings_analyze_now", "preference": None, "about": "auto_update"}
     find("check_update")
     scroll(False)
     shot("home-top")

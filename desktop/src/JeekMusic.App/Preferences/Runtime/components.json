@@ -1,0 +1,31 @@
+{
+  "protocol": 1,
+  "repository": "laion/clap-htsat-unfused",
+  "revision": "8fa0f1c6d0433df6e97c127f64b2a1d6c0dcda8a",
+  "license": "Apache-2.0",
+  "files": {
+    "config.json": {
+      "sha256": "9efb9557bc804f2ca6e394486af2e45dfed0b18554909735a99c6220b84e4288",
+      "size": 5390
+    },
+    "preprocessor_config.json": {
+      "sha256": "9739f58296aa6f9ac18008fd0150fb2649bc554985fbde86d0a4041c882ac753",
+      "size": 541
+    },
+    "README.md": {
+      "sha256": "3542c5c4ce25e7868f2c9c97c16229d876bd8d02049e1e0f4d7675da0e5b5db6",
+      "size": 4454
+    },
+    "pytorch_model.bin": {
+      "sha256": "1cd3c601bc4afe0fa87be3de4c13dd2cfadd249fac1e29acf74a9b296c3219bb",
+      "size": 614525833
+    }
+  },
+  "dependencies": {
+    "torch": "2.9.0+cpu",
+    "transformers": "4.57.1",
+    "numpy": "2.3.4"
+  },
+  "verifiedAt": "2026-10-31",
+  "source": "https://huggingface.co/api/models/laion/clap-htsat-unfused/revision/8fa0f1c6d0433df6e97c127f64b2a1d6c0dcda8a?blobs=true"
+}

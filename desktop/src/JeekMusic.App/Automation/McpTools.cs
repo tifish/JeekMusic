@@ -32,6 +32,14 @@ public sealed class McpTools
     internal JsonArray Catalog { get; } = BuildCatalog();
 
     internal static JsonArray BuildCatalog() => new(
+        Tool("preference_inventory", "status reads the bounded identity review page; register hashes at most six additional local recordings for explicit identity review, does not ask labels or consume attempt budget; freeze locks complete component-disjoint lists before evaluation: full workout frame 48/12/48; other heads may use compact training12/24/36, development8/sealed24 without requiring workout material. Incomplete identities/components fail closed; no title-based content matching, no component splitting, no inferred answers. Training pilot remains non-independent. Current deterministic sampling deviation is recorded in frozen manifest.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"register\",\"freeze\"]}", ["action"]),
+        Tool("preference_profile", "Private local SQLite personal tag profiles shared with paired devices by revision deltas. list is read-only. create requires name; select requires profileId and explicitly switches profile (never silently merges people). delete tombstones the active profile and invalidates derived candidates. export requires a local path and includes private labels. No playback or production tag changes.", "\"action\":{\"type\":\"string\",\"enum\":[\"list\",\"create\",\"select\",\"dimension\",\"import_regression\",\"delete\",\"export\"]},\"name\":{\"type\":\"string\",\"maxLength\":80},\"profileId\":{\"type\":\"string\",\"maxLength\":160},\"path\":{\"type\":\"string\",\"maxLength\":1000}", ["action"], destructive:true),
+        Tool("preference_batch", "status resumes the current frozen blind batch (at most six), without predictions. prepare hashes at most selected supported local recordings, preserving queue; no audio inference or playback. Unreviewed identity graph yields an explicitly non-independent training pilot; development/sealed test locked. No answers generated, no manual correction import. Head-specific training attempt budgets: MOOD at most48, other heads at most36. Previous incomplete batch resumes. match explicitly checks at most six local candidate files per call/60s, verifies full content SHA-256 across paths, never binds by title, and retains missing references.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"prepare\",\"match\"]}", ["action"]),
+        Tool("preference_answer", "Save an explicit HUMAN answer to the active frozen batch; never infer from automatic tags or missing labels. SPORT/NON_SPORT require whole_recording_familiar or listened_full for training. UNCERTAIN/UNRESOLVED/SKIP/WITHDRAWN never become negatives. Withdrawal propagates and invalidates candidates. resolve=true explicitly reviews ALL concurrent heads; ordinary writes reject conflicts. Does not modify daily smart tags or queue.", "\"recordingId\":{\"type\":\"string\",\"minLength\":64,\"maxLength\":64},\"answer\":{\"type\":\"string\",\"enum\":[\"SPORT\",\"NON_SPORT\",\"VOCAL\",\"INSTRUMENTAL\",\"CLASSICAL\",\"NON_CLASSICAL\",\"CALM\",\"NON_CALM\",\"UNCERTAIN\",\"UNRESOLVED\",\"SKIP\",\"WITHDRAWN\"]},\"basis\":{\"type\":\"string\",\"enum\":[\"whole_recording_familiar\",\"listened_full\",\"excerpts_only\",\"unclear\"]},\"reason\":{\"type\":\"string\",\"maxLength\":500},\"resolve\":{\"type\":\"boolean\"}", ["recordingId","answer","basis"]),
+        Tool("preference_identity", "Explicit reviewed recording identity: work includes versions/covers, album is release including compilations, artists includes canonical aliases/collaborators/member relations. exposed records cannot train or be independent. Never assume title equality proves content identity. Review affects candidate validity; full cross-pool identity freeze remains required before evaluation.", "\"recordingId\":{\"type\":\"string\",\"minLength\":64,\"maxLength\":64},\"work\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200},\"album\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200},\"artists\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":100}},\"exposed\":{\"type\":\"boolean\"}", ["recordingId","work","album","artists","exposed"]),
+        Tool("preference_training", "Local optional Windows CPU CLAP worker shared with UI/NativeAOT. status/cancel accept action and optional dimension. prepare explicitly downloads official pinned 615 MB weights plus isolated CPU Python dependencies (several GB disk); requires installed Python 3.13+ and FFmpeg. extract resumes pending recordings from the frozen current-stage manifests, max six local recordings per call, 2 threads, 240s, monitored 2 GiB worker; completed vectors resume. train checks explicit training-only material, fixed fold-local PCA2 balanced ridge alpha1; head-specific frozen margins MOOD .25, VOICE/CALMNESS .35, GENRE .4 (not probability). Insufficient material/components/failure/cancel visible; no production activation. Sealed labels never in training input; model gates remain locked until validated.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"prepare\",\"extract\",\"regression_extract\",\"train\",\"evaluate\",\"cancel\"]}", ["action"], openWorld:true),
+        Tool("preference_conflicts", "Read active-profile concurrent training-answer revisions for explicit neutral review. No sealed test answers, raw reason text, paths, credentials or vectors returned. Resolve via preference_answer resolve=true; withdrawal remains non-training.", "", [], true),
+        Tool("checkpoint_client", "Capture the current queue entries/manual flags, committed source/anchor, shuffle/repeat and current position through the same QueuePersistence service as shutdown; flush current device-local settings. No playback, volume, queue, source handoff or tag changes. Useful immediately before a controlled client restart; subsequent user edits remain live and require a fresh checkpoint. Does not export data or write media/library roots.", "", []),
         Tool("get_status", "Read current playback, queue summary and library scan state. idle means no loaded audio stream and may retain a paused track/queue/position after output release. Playback commands are asynchronous; poll this tool to observe the result.", "", [], true),
         Tool("fetch_resources", "Start/status/cancel the same missing-resource batch as the song list menu. start requires kind (covers/lyrics) and scope (current_list/track_ids); track_ids additionally requires trackIds (1-1000), current_list rejects trackIds. current_list captures ALL available rows in the current filtered/source result, including virtualized rows, with the existing search 200-song cap; rejects a computing or empty list. Range is frozen before work; navigating later cannot change it. Existing local/cache resources take priority; no forced overwrite. Covers deduplicate albums and may fill missing album-member artwork using existing save policy; lyrics found locally are skipped. Uses current save settings (may embed/modify audio); never changes save preferences or enables online access. Online access for this kind must already be enabled. One batch across UI/MCP; rejects reentry including pending UI confirmation. Returns immediately; status reports preparing/running/cancelling/completed/cancelled/failed, captured targetSongCount and deduplicated totalUnits/processedUnits/savedUnits/failedUnits. cancel is cooperative and does not roll back completed writes. status/cancel accept only action. No playback or navigation changes.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"status\",\"cancel\"]},\"kind\":{\"type\":\"string\",\"enum\":[\"covers\",\"lyrics\"]},\"scope\":{\"type\":\"string\",\"enum\":[\"current_list\",\"track_ids\"]},\"trackIds\":" + Ids, ["action"], destructive: true, openWorld: true),
@@ -89,6 +97,13 @@ public sealed class McpTools
             },
             ["annotations"] = new JsonObject { ["readOnlyHint"] = readOnly, ["destructiveHint"] = destructive, ["openWorldHint"] = openWorld }
         };
+        if(name=="preference_profile") tool["inputSchema"]!["properties"]!["ownerConfirmed"]=new JsonObject { ["type"]="boolean",["description"]="import_regression only: explicit current profile owner and current recording-version confirmation; exactly eleven local legacy answers, regression only, never training" };
+        if(name=="preference_profile") tool["inputSchema"]!["properties"]!["purpose"]=new JsonObject { ["type"]="string",["enum"]=new JsonArray("personal","synthetic_validation"),["description"]="create only; synthetic validation archives never create an eligible personal model or claim human truth" };
+        if(name is "preference_profile" or "preference_batch" or "preference_answer" or "preference_training" or "preference_conflicts")
+        {
+            tool["inputSchema"]!["properties"]!["dimension"]=new JsonObject { ["type"]="string",["enum"]=new JsonArray("MOOD","VOICE","GENRE","CALMNESS"),["description"]="Independent head; defaults to active UI dimension. No missing labels are inferred. Shared audio cache and leakage-safe recording split." };
+            tool["description"]=description+" Four independent dimensions: MOOD SPORT/NON_SPORT, VOICE VOCAL/INSTRUMENTAL, GENRE CLASSICAL/NON_CLASSICAL, CALMNESS CALM/NON_CALM. Single-dimension withdrawal/conflict invalidates that head only; identity pollution invalidates affected evaluation across heads. Manual overrides final; ClassicalTitles overrides personal GENRE in automatic output; legacy QUIET is NON_SPORT only.";
+        }
         if (minProperties > 0) tool["inputSchema"]!["minProperties"] = minProperties;
         return tool;
     }
@@ -97,6 +112,10 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if (name=="preference_profile" && a["action"]?.GetValue<string>()=="import_regression") return await app.Preferences.ImportWorkoutRegression(Required(a,"path").GetValue<string>(),a["ownerConfirmed"]?.GetValue<bool>()==true);
+        if(name=="preference_batch" && a["action"]?.GetValue<string>()=="match") { if(a["dimension"] is { } dim) app.Preferences.SelectDimension(dim.GetValue<string>()); return await app.Preferences.MatchLocalBatch(); }
+        if (name == "preference_inventory" && a["action"]?.GetValue<string>() == "register") return await app.Preferences.PrepareBatch(inventoryOnly:true);
+        if (name == "preference_batch" && a["action"]?.GetValue<string>() == "prepare") { if(a["dimension"] is { } dim) app.Preferences.SelectDimension(dim.GetValue<string>()); await app.Preferences.PrepareBatch(); return app.Preferences.Batch(false); }
         if (name == "lan_sync_control" && a["port"] is not null && a["action"]?.GetValue<string>() != "start")
             throw new ArgumentException("port is only supported for start");
         if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "invite" && a["includeQr"]?.GetValue<bool>() == true)
@@ -178,8 +197,31 @@ public sealed class McpTools
         var p = app.Player;
         switch (name)
         {
+            case "preference_inventory": return Required(a,"action").GetValue<string>() switch { "status"=>app.Preferences.Inventory(), "freeze"=>app.Preferences.FreezeStudy(), _=>throw new ArgumentException("Use asynchronous register") };
+            case "preference_profile":
+                switch (Required(a,"action").GetValue<string>())
+                {
+                    case "list": break;
+                    case "create": app.Preferences.CreateProfile(Required(a,"name").GetValue<string>(),a["purpose"]?.GetValue<string>()??"personal"); break;
+                    case "select": app.Preferences.SelectProfile(Required(a,"profileId").GetValue<string>()); break;
+                    case "dimension": app.Preferences.SelectDimension(Required(a,"dimension").GetValue<string>()); break;
+                    case "delete": app.Preferences.DeleteProfile(); break;
+                    case "export": app.Preferences.Store.Export(app.Preferences.ActiveProfile,Required(a,"path").GetValue<string>()); break;
+                    default: throw new ArgumentException("Unknown profile action");
+                }
+                return app.Preferences.Status();
+            case "preference_batch": if(Required(a,"action").GetValue<string>()!="status") throw new ArgumentException("Use asynchronous prepare"); return app.Preferences.Batch(false,a["dimension"]?.GetValue<string>());
+            case "preference_answer": return app.Preferences.Answer(Required(a,"recordingId").GetValue<string>(),Required(a,"answer").GetValue<string>(),Required(a,"basis").GetValue<string>(),a["reason"]?.GetValue<string>()??"",a["resolve"]?.GetValue<bool>()??false,a["dimension"]?.GetValue<string>());
+            case "preference_identity": app.Preferences.ReviewIdentity(Required(a,"recordingId").GetValue<string>(),Required(a,"work").GetValue<string>(),Required(a,"album").GetValue<string>(),Required(a,"artists").AsArray().Select(n=>n!.GetValue<string>()).ToArray(),Required(a,"exposed").GetValue<bool>()); return app.Preferences.Status();
+            case "preference_training":
+                var trainingAction=Required(a,"action").GetValue<string>();
+                if(trainingAction=="cancel") app.Preferences.Training.Cancel(a["dimension"]?.GetValue<string>());
+                else if(trainingAction!="status") return app.Preferences.Training.Start(trainingAction,a["dimension"]?.GetValue<string>());
+                return app.Preferences.Training.Status(a["dimension"]?.GetValue<string>());
+            case "preference_conflicts": return app.Preferences.Conflicts(a["dimension"]?.GetValue<string>());
             case "analyze_tracks": return AnalyzeTracks(a);
             case "fetch_resources": return FetchResources(a);
+            case "checkpoint_client": app.QueuePersistence.SaveQueue(); app.Settings.WriteNow(); return new JsonObject { ["saved"]=true,["status"]=Status() };
             case "get_status": return Status();
             case "lan_sync_status": return app.LanSync.Diagnostics();
             case "lan_sync_control":
@@ -252,6 +294,7 @@ public sealed class McpTools
             case "explain_analysis":
                 var explained = Track(Required(a, "trackId").GetValue<long>());
                 var explanation = app.SmartTags.Explain(explained);
+                explanation["personalLearning"]=new JsonObject { ["heads"]=app.Preferences.Status()["heads"]!.DeepClone(),["enabled"]=false,["automaticSource"]="PUBLIC_AUTO",["priority"]="MANUAL > ClassicalTitles(GENRE automatic) > validated personal head > public fallback",["legacyQuiet"]="NON_SPORT only; no CALMNESS inference" };
                 if (a["includeReviews"]?.GetValue<bool>() == true)
                     explanation["reviews"] = new JsonArray(app.Db.TagReviews(explained.TrackKey).Select(r => JsonNode.Parse(r)).ToArray());
                 return explanation;

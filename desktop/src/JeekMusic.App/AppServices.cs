@@ -33,6 +33,7 @@ public sealed class AppServices : IDisposable
     internal Func<System.Text.Json.Nodes.JsonObject>? MainLayoutDiagnostics { get; set; }
     public Automation.McpServer Mcp { get; }
     public Sync.LanSyncService LanSync { get; }
+    public Preferences.PreferenceService Preferences { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();
     public Hotkeys Hotkeys { get; } = new();
@@ -63,6 +64,7 @@ public sealed class AppServices : IDisposable
         QueuePersistence = new QueuePersistence(Db, Player);
         SleepTimer = new SleepTimer(Player);
         Lyrics = new LyricsService(Library);
+        Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
         LanSync = new Sync.LanSyncService(this);
         Mcp = new Automation.McpServer(new Automation.McpTools(this));
     }
@@ -71,6 +73,7 @@ public sealed class AppServices : IDisposable
     {
         Mcp.Dispose();
         LanSync.Dispose();
+        Preferences.Dispose();
         if (OnExit is { } handlers)
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception e) { Log.Warn("app", "停止后台服务失败", e); }

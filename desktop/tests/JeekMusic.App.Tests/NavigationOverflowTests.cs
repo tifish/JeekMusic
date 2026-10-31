@@ -199,7 +199,7 @@ public sealed class NavigationOverflowTests
     public Task DiagnosticsReadOnlyKeepExistingToolsAndReleaseReferencesOnClose() => Run(async () =>
     {
         using var h = new Harness(); var width = h.Save().NavWidth;
-        Assert.Equal(28, h.Tools.Catalog.Count);
+        Assert.Equal(36, h.Tools.Catalog.Count);
         var schema = h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject()); Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         h.Hover(h.Long);

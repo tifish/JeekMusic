@@ -129,7 +129,7 @@ public sealed class SongOverflowTests
         h.Window.MouseMove(point); h.Pump(); Assert.True(D(h)["automaticReading"]!.GetValue<bool>());
         Assert.False(D(h)["wrapped"]!.GetValue<bool>()); Assert.Equal(row.Bounds.Height, Surface(h).Bounds.Height);
         Assert.False(Surface(h).IsHitTestVisible);
-        Assert.Equal(28, h.Tools.Catalog.Count);
+        Assert.Equal(36, h.Tools.Catalog.Count);
         Assert.Contains("songOverflow", h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["description"]!.GetValue<string>());
         using var frame = Frame(h); Save(frame, "song-right-edge-horizontal-reading");
     });

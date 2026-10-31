@@ -70,7 +70,7 @@ def run(exe, root):
             db.execute("INSERT OR REPLACE INTO track_features VALUES(?,?,?,?,0,1)",(key,f"{mtime}:{size}",5,json.dumps(features)))
         with McpClient(exe,data) as c:
             pid = startup.call(c,"get_diagnostics")["processId"]
-            assert len(c.request("tools/list")["tools"]) == 28
+            assert len(c.request("tools/list")["tools"]) == 36
             startup.wait_for(c,"get_track",lambda r:(r.get("tags") or {}).get("mood") == "NON_SPORT",trackId=tid)
             before = startup.call(c,"explain_analysis",trackId=tid)
             assert before["analyzerVersion"] == 5 and before["pendingReanalysis"]

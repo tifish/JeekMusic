@@ -19,6 +19,7 @@ public static class Features
         new Online.OnlineFeature(),
         new Analysis.AnalysisFeature(),
         new Sync.SyncFeature(),
+        new Preferences.PreferenceFeature(),
     ];
 
     public static void StartAll(AppServices app, Shell shell)

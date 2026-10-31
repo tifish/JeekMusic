@@ -1,0 +1,14 @@
+{
+  "protocol": 2,
+  "purpose": "Predeclared personal research gates, not measured accuracy or calibrated probabilities",
+  "representation": "frozen_CLAP_audio_512_L2_mean_L2",
+  "learner": { "pcaDimensions": 2, "ridgeAlpha": 1.0, "classBalancedMeanSquaredLoss": true, "foldLocalTransforms": true },
+  "sharedIsolation": "All recording/work/artist/album components have one global role across all dimensions; reserved recordings never enter any head's fit or PCA",
+  "deployment": "disabled until independent research, preprocessing equivalence and target-platform resource gates are actually verified",
+  "heads": {
+    "MOOD": { "positive": "SPORT", "negative": "NON_SPORT", "margin": 0.25, "nodes": [24,36,48], "minimum": 16, "per_class": 8, "components": 8, "development": 12, "test": 48, "coverage": 0.7, "miss": 0.25, "dualClassArtists": 3, "legacyRegressionOnly": true },
+    "VOICE": { "positive": "VOCAL", "negative": "INSTRUMENTAL", "margin": 0.35, "nodes": [12,24,36], "minimum": 12, "per_class": 6, "components": 6, "development": 8, "test": 24, "coverage": 0.8, "miss": 0.2, "testMinimumEachClass": 8, "testFalseAcceptance": 0.1, "testOneSidedUpper": 0.35 },
+    "GENRE": { "positive": "CLASSICAL", "negative": "NON_CLASSICAL", "margin": 0.4, "nodes": [12,24,36], "minimum": 12, "per_class": 6, "components": 6, "development": 8, "test": 24, "coverage": 0.8, "miss": 0.2, "testMinimumEachClass": 8, "testFalseAcceptance": 0.1, "testOneSidedUpper": 0.35, "classicalTitleOverridesPersonalAutomatic": true },
+    "CALMNESS": { "positive": "CALM", "negative": "NON_CALM", "margin": 0.35, "nodes": [12,24,36], "minimum": 12, "per_class": 6, "components": 6, "development": 8, "test": 24, "coverage": 0.7, "miss": 0.25, "testMinimumEachClass": 8, "testFalseAcceptance": 0.15, "testOneSidedUpper": 0.4, "independentOfMood": true }
+  }
+}

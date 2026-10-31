@@ -62,5 +62,9 @@
     <InternalsVisibleTo Include="JeekMusic.App.Tests" />
     <InternalsVisibleTo Include="JeekMusic.TagWriteProbe" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\shared\testcases\personal-tag-heads-v2.json" Link="Preferences\Runtime\head_protocol.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Preferences\Runtime\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <Import Project="..\..\BuildSupport\JeekMusic.Output.targets" />
 </Project>

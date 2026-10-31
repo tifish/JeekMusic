@@ -21,6 +21,8 @@ class MainActivity : ComponentActivity() {
         viewModel.onForeground()
     }
 
+    override fun onPause() { viewModel.onBackground(); super.onPause() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)

@@ -24,7 +24,9 @@ fun SyncSettings(sync: SyncService) {
     var name by remember { mutableStateOf(sync.deviceName) }
     var editing by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<Pair<Int, String>>?>(null) }
+    var legacy by remember { mutableStateOf(sync.directoryEnabled) }
     Column {
+        SwitchRow(stringResource(R.string.preference_directory_adapter),legacy,{ legacy=it; sync.setDirectoryEnabled(it) })
         SettingItem(stringResource(R.string.sync_device_name), summary = name, onClick = { editing = true })
         SettingAction(stringResource(R.string.sync_now), summary = status.ifEmpty { stringResource(R.string.sync_summary) },
             onClick = { scope.launch { sync.syncNow() } })

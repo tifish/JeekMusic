@@ -430,3 +430,29 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 `explain_analysis.workout` 新增节奏版本、状态、复用标志、持续强窗与独立支持片段数；`diagnose_analysis` 增加 productionPulse 及其实际源区间，仍不写缓存或标签。三档原阈值、手工优先、标题强制古典、独立 CALMNESS/旧 QUIET 兼容保留。算法、研究来源、限制与验证见 [运动 v8](../../docs/workout-music-v8.md)。
 
 后续[重音/音乐标签受控评估](../../docs/workout-accent-evaluation.md)已记录和光慢主拍正例及未通过的候选。该研究未新增生产特征或模型：MCP仍为Analyzer6/Rules8及相同28工具，没有研究特征导入接口，`analyze_tracks`不会执行musicnn或改写人工反馈。
+
+
+## 个人标签学习（协议2；开发版与 NativeAOT 同为36工具）
+
+新增工具复用客户端服务：
+
+| 工具 | 操作 / 参数 | 边界 |
+|---|---|---|
+| preference_profile | list/create/select/dimension/import_regression/export/delete；name、profileId、dimension、path；create 可选 purpose=personal/synthetic_validation | 档案主动选择，删除传播，私有导出；import_regression 须本机 path 和 ownerConfirmed=true，严格绑定当前档案/当前版本，11条只作该用户运动回归、不拟合且不随包内置；合成档案永不启用模型 |
+| preference_inventory | status/register/freeze | 每次登记最多6首身份；不生成答案；不足不能伪造冻结 |
+| preference_batch | status/prepare，可选 dimension | 六首盲标、续接；不显示预测/分数；MCP 不返回封存答案 |
+| preference_answer | recordingId、answer、basis、reason≤500、resolve，可选 dimension | 明确人工答案；单维冲突需复核全部头；撤回只失效受影响头 |
+| preference_identity | recordingId、work、album、artists、exposed | 跨维共用作品/艺人/专辑分组；身份污染停止评估 |
+| preference_training | status/prepare/extract/train/evaluate/regression_extract/cancel，可选 dimension | 独立CPU worker；单次最多6录音、2 CPU、240秒、总2GiB job；按需公共组件；旧11仅运动回归 |
+| preference_conflicts | 可选 dimension | 只读该维训练冲突；不返回封存标签、原话、路径、向量或凭证 |
+| checkpoint_client | 无参数 | 使用 QueuePersistence 保存实时队列/手动项、源与锚点、模式、进度并刷新设备本地设置；不暂停、不改音量、不解析待交接源，不写媒体 |
+
+四个 dimension：MOOD SPORT/NON_SPORT，VOICE VOCAL/INSTRUMENTAL，GENRE CLASSICAL/NON_CLASSICAL，CALMNESS CALM/NON_CALM。省略 dimension 使用当前界面维度；旧无 dimension 的档案事件仅按 MOOD 迁移。答题另支持 UNCERTAIN/UNRESOLVED/SKIP/WITHDRAWN，未答不补自动值，AUTO 不属于个人人工答案。basis=whole_recording_familiar/listened_full/excerpts_only/unclear；仅前两种明确二元答案拟合。
+
+四维共享表示缓存和全局隔离角色，监督头、样本计数、分数边界、验证、失效各自独立。个人分数是未校准 margin。MOOD ±.25，VOICE/CALMNESS ±.35，GENRE ±.4；阈值等号弃权。详细材料及各维验收门槛见 [当前协议](../../docs/personal-tag-learning.md)。真实用户独立验收和部署未完成前 candidate only，不能把 synthetic_validation 的链路成绩作为用户准确率。
+
+preference_profile list 返回每头正负/不确定/冲突、阈值契约、模型元数据和有界同步游标/本地提交时间，不默认给原话/向量。explain_analysis 增加 personalLearning，明确 PUBLIC_AUTO、未启用个人层、手工最终优先及 ClassicalTitles 的 GENRE 自动优先级；旧 QUIET 只为 NON_SPORT，不推导 CALM。
+
+LAN preference_delta 使用版本2、最多100事件/页和独立上传/下载游标。旧 state/exchange 继续兼容 format 2，改为直接领域合并，不写每设备 inbox。标签与模型状态分别同步；手机只标注、同步和看训练状态，不执行桌面 Python 产物。
+
+`preference_batch(action="match")` 每次最多核验六个本机文件、60秒，只按完整内容 SHA-256 建立跨路径绑定，保留缺文件引用与继续核验游标。

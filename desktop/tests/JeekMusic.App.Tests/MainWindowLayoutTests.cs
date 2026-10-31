@@ -259,7 +259,7 @@ public sealed class MainWindowLayoutTests
         for (var i = 0; i < 3; i++) Assert.True(h.D["created"]!.GetValue<bool>());
         Assert.Equal(before.NavWidth, h.Save().NavWidth);
         Assert.False(h.Window.IsVisible); Assert.False(h.App.Player.EngineReady);
-        Assert.Equal(28, count);
+        Assert.Equal(36, count);
         var schema = h.Tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject()); Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         h.Window.Show(); h.Pump(); h.AssertBudget(); h.Close();

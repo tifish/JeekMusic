@@ -294,7 +294,7 @@ public sealed class FolderNavigationTests
         }
         Assert.Same(selected, h.Vm.SelectedNav); Assert.Equal(current, h.Vm.Current);
         Assert.Equal(state, h.Save().CollapsedFolders); Assert.Equal(queue, h.App.Player.Queue.Items);
-        Assert.Equal(28, tools.Catalog.Count);
+        Assert.Equal(36, tools.Catalog.Count);
         var schema = tools.Catalog.Single(t => t!["name"]!.GetValue<string>() == "get_diagnostics")!["inputSchema"]!;
         Assert.Empty(schema["properties"]!.AsObject()); Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         h.CloseWindow();

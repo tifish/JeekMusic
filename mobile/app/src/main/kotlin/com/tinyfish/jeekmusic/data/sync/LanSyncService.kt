@@ -47,6 +47,7 @@ class LanSyncService @Inject constructor(
     private val db: JeekDatabase,
     private val playing: PlayingFiles,
     private val sync: SyncService,
+    private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val gate = Mutex()
@@ -193,6 +194,7 @@ class LanSyncService @Inject constructor(
                     val payload = sync.exportLan()
                     val remote = protocol().call("state", payload)
                     sync.acceptLan(remote)
+                    try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }
                     _status.value = LanStatus(false, context.getString(if (problems.isEmpty()) R.string.lan_done else R.string.lan_issues), done, total, problems, timeDetails, precisionNs)
                 } catch (e: CancellationException) {
                     _status.value = LanStatus(false, context.getString(R.string.lan_cancelled), done, total, problems, timeDetails, precisionNs)

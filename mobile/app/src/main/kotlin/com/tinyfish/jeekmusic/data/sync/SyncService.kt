@@ -94,6 +94,7 @@ class SyncService @Inject constructor(
     private suspend fun ensureLoaded() {
         if (loaded) return
         val stored = db.syncJournalDao().read()
+        if(!adapterSettings.contains("legacy_directory")) adapterSettings.edit().putBoolean("legacy_directory",stored!=null || journal.baseFile.exists()).apply()
         metadata = stored?.let(::JSONObject) ?: runCatching { JSONObject(journal.readFully().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
         previous = metadata.optJSONObject("state")?.let(SyncFormat::stateFromJson) ?: SyncState()
         ids = metadata.optJSONObject("playlist_ids") ?: JSONObject()
@@ -171,14 +172,15 @@ class SyncService @Inject constructor(
         )
     }
 
-    suspend fun syncNow(forceWrite: Boolean = false): Int = withContext(Dispatchers.IO) {
+    suspend fun syncNow(forceWrite: Boolean = false, directoryRequested: Boolean = true, incoming: SyncFile? = null, incomingFeatures: JSONObject? = null): Int = withContext(Dispatchers.IO) {
         mutex.withLock {
             try {
                 ensureLoaded()
+                val directory = directoryRequested && directoryEnabled
                 applyPendingRules()
-                if (scanner.busy.value) return@withLock 0
+                if (scanner.busy.value) { if(incoming!=null) error("Library scan busy; retry user-data exchange"); return@withLock 0 }
                 val folders = db.folderDao().all()
-                if (folders.isEmpty()) return@withLock 0
+                if (folders.isEmpty() && incoming==null && directory) return@withLock 0
                 val roots = folders.map { BackupRefs.Root(it.volumeName, it.relativePath) }
                 val tracks = db.trackDao().all()
                 val refToKey = tracks.map { reference(it.trackKey, roots).lowercase() to it.trackKey }.groupBy { it.first }
@@ -187,10 +189,11 @@ class SyncService @Inject constructor(
                 fun match(ref: String) = matcher.match(ref.replace('\\', '/').lowercase())
                 fun canonical(ref: String) = match(ref)?.let { reference(it, roots) } ?: ref
                 val remotes = mutableListOf<SyncFile>()
-                File(context.filesDir, "lan-inbox.json").takeIf { it.exists() }?.let { file ->
+                incoming?.let { remotes += it.copy(state = SyncMerge.normalizeReferences(it.state, ::canonical)) }
+                if(directory) File(context.filesDir, "lan-inbox.json").takeIf { it.exists() }?.let { file ->
                     SyncFormat.parse(file.readText())?.let { f -> remotes += f.copy(state = SyncMerge.normalizeReferences(f.state, ::canonical)) }
                 }
-                for (folder in folders) {
+                for (folder in if(directory) folders else emptyList()) {
                     val files = tree.list(folder, DocumentTree.appPath(folder, "sync")).filter { it.name.endsWith(".json") && !it.name.endsWith(".features.json") }
                     for (file in files) {
                         val text = tree.readLimited(folder, file.documentId, 32_000_000)?.toString(Charsets.UTF_8) ?: continue
@@ -223,16 +226,16 @@ class SyncService @Inject constructor(
                 val stateText = SyncFormat.stateToJson(previous).toString()
                 val bytes = SyncFormat.toJson(SyncFile(device, System.currentTimeMillis(), previous)).toString(2).toByteArray()
                 var written = 0
-                for (folder in folders) {
+                for (folder in if(directory) folders else emptyList()) {
                     val exists = tree.list(folder, DocumentTree.appPath(folder, "sync")).any { it.name == SyncFormat.fileName(device.id) }
                     if (forceWrite || stateText != lastWritten[folder.id] || !exists) if (write(folder, SyncFormat.fileName(device.id), bytes)) { lastWritten[folder.id] = stateText; written++ }
                 }
-                shareFeatures(folders, tracks, roots, ::match)
+                shareFeatures(if(directory) folders else emptyList(), tracks, roots, ::match, incomingFeatures)
                 if (result.changes.isNotEmpty()) tags.recomputeAll()
                 _status.value = if (result.changes.isEmpty()) context.getString(R.string.sync_done) else result.changes.groupBy { it.deviceName }.entries.joinToString("; ") { context.getString(R.string.sync_changes, it.key, it.value.size) }
                 written
             } catch (e: CancellationException) { loaded = false; throw e }
-            catch (e: Exception) { loaded = false; Log.w("SyncService", "同步失败", e); _status.value = context.getString(R.string.sync_failed, e.message.orEmpty()); 0 }
+            catch (e: Exception) { loaded = false; Log.w("SyncService", "同步失败", e); _status.value = context.getString(R.string.sync_failed, e.message.orEmpty()); if(incoming!=null) throw e; 0 }
         }
     }
 
@@ -298,12 +301,14 @@ class SyncService @Inject constructor(
         return false
     }
 
-    private suspend fun shareFeatures(folders: List<LibraryFolderEntity>, tracks: List<TrackEntity>, roots: List<BackupRefs.Root>, match: (String) -> String?) {
+    private suspend fun shareFeatures(folders: List<LibraryFolderEntity>, tracks: List<TrackEntity>, roots: List<BackupRefs.Root>, match: (String) -> String?, incoming: JSONObject? = null, export: Boolean = false): JSONObject {
+        if(folders.isEmpty() && incoming==null && !export) return JSONObject()
         val byKey = tracks.associateBy { it.trackKey }
         var imported = false
         val featureInputs = folders.flatMap { folder -> tree.list(folder, DocumentTree.appPath(folder, "sync")).filter { it.name.endsWith(".features.json") && it.name != SyncFormat.featuresFileName(device.id) }
             .mapNotNull { file -> runCatching { JSONObject(tree.readLimited(folder, file.documentId, 32_000_000)?.toString(Charsets.UTF_8) ?: "") }.getOrNull() } }.toMutableList()
-        File(context.filesDir, "lan-inbox.features.json").takeIf { it.exists() }?.let { file -> runCatching { JSONObject(file.readText()) }.getOrNull()?.let(featureInputs::add) }
+        incoming?.let(featureInputs::add)
+        if(incoming==null) File(context.filesDir, "lan-inbox.features.json").takeIf { it.exists() }?.let { file -> runCatching { JSONObject(file.readText()) }.getOrNull()?.let(featureInputs::add) }
         for (json in featureInputs) {
             if (json.optInt("format") != 2 || json.optInt("analyzer_version") != TagRepository.ANALYZER_VERSION) continue
             val items = json.optJSONObject("items") ?: continue
@@ -326,6 +331,7 @@ class SyncService @Inject constructor(
             }
         }
         if (imported) tags.recomputeAll()
+        if(folders.isEmpty() && !export) return JSONObject()
         val items = JSONObject()
         for (f in db.tagDao().allFeatures().filter { it.complete() && it.analyzerVersion == TagRepository.ANALYZER_VERSION }) {
             val t = byKey[f.trackKey] ?: continue
@@ -343,35 +349,31 @@ class SyncService @Inject constructor(
             if (lastFeatures[folder.id] != text || tree.list(folder, DocumentTree.appPath(folder, "sync")).none { it.name == name })
                 if (write(folder, name, text.toByteArray())) lastFeatures[folder.id] = text
         }
+        return JSONObject(text)
     }
 
     suspend fun renameDevice(name: String) = withContext(Dispatchers.IO) { mutex.withLock { ensureLoaded(); device = device.copy(name = name.trim().ifEmpty { Build.MODEL }); lastWritten.clear(); saveJournal() } }
     suspend fun lanDeviceId(): String = mutex.withLock { ensureLoaded(); device.id }
-    suspend fun exportLan(): JSONObject = withContext(Dispatchers.IO) {
-        syncNow()
+    suspend fun exportLan(includeFeatures: Boolean = true): JSONObject = withContext(Dispatchers.IO) {
         mutex.withLock {
             ensureLoaded()
             val folders = db.folderDao().all()
             val state = capture(folders) { it }
             val result = JSONObject().put("state", SyncFormat.toJson(SyncFile(device, System.currentTimeMillis(), state)))
-            lastFeatures.values.firstOrNull()?.let { result.put("features", JSONObject(it)) }
+            val roots=folders.map { BackupRefs.Root(it.volumeName,it.relativePath) }
+            if(includeFeatures) result.put("features",shareFeatures(emptyList(),db.trackDao().all(),roots,{ null },export=true))
+            saveJournal()
             result
         }
     }
     suspend fun acceptLan(payload: JSONObject) = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            ensureLoaded()
-            fun save(name: String, value: JSONObject) {
-                val atomic = AtomicFile(File(context.filesDir, name)); val out = atomic.startWrite()
-                try { out.write(value.toString().toByteArray()); atomic.finishWrite(out) } catch (e: Exception) { atomic.failWrite(out); throw e }
-            }
-            val state = payload.getJSONObject("state"); require(SyncFormat.parse(state.toString()) != null)
-            save("lan-inbox.json", state)
-            payload.optJSONObject("features")?.let { save("lan-inbox.features.json", it) }
-            metadata.put("initialized", true); saveJournal()
-        }
-        syncNow()
+        val state=SyncFormat.parse(payload.getJSONObject("state").toString()) ?: error("Invalid LAN state")
+        mutex.withLock { ensureLoaded(); metadata.put("initialized",true); saveJournal() }
+        syncNow(directoryRequested=false,incoming=state,incomingFeatures=payload.optJSONObject("features"))
     }
+    private val adapterSettings=context.getSharedPreferences("sync-adapter",Context.MODE_PRIVATE)
+    val directoryEnabled get()=adapterSettings.getBoolean("legacy_directory",true)
+    fun setDirectoryEnabled(enabled: Boolean) { adapterSettings.edit().putBoolean("legacy_directory",enabled).apply() }
     suspend fun history(): List<Pair<Int, String>> = withContext(Dispatchers.IO) { mutex.withLock { ensureLoaded(); List(history.length()) { it to history.getJSONObject(it).getJSONObject("playlist").getString("name") } } }
     suspend fun restoreHistory(index: Int) = withContext(Dispatchers.IO) {
         mutex.withLock {

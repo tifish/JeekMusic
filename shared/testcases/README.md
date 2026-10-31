@@ -25,7 +25,9 @@
 | `tag-classifier.json` | 智能标签分类 | `TagClassifier` | 同名 |
 | `workout-v8.json` | 持续强窗与音乐周期的合成契约、三档/失败兼容 | `WorkoutEvidenceTest` | `WorkoutEvidenceTests` |
 
-`workout-feedback.json` 单独保存八个具体录音的人工反馈及核对身份，全部为调参/回归样本，不是可分发音频或生产手工覆盖表。生产分类不得读取这个文件，也不能把这些样本报告为独立准确率。
+`workout-feedback.json` 单独保存九个具体录音的人工反馈及核对身份（含新增《简单爱》SPORT与同艺人《东风破》NON_SPORT配对），全部为调参/回归样本，不是可分发音频或生产手工覆盖表。生产分类不得读取这个文件，也不能把这些样本报告为独立准确率。
+
+`workout-representation-protocol.json` 是推理前冻结的研究协议，不是分类用例或产品规则；中间表示稳定性、邻域/身份偏差、新配对与停止条件见[表征评估](../../docs/workout-representation-evaluation.md)。新增录音沿用相同协议，不能据结果回改它后宣称预注册成功。
 
 `pinyin.json`、`chinese-text.json` 的期望值由 `shared/pinyin/generate.sh expect` 用 ICU4J 生成。
 更大的对比语料（真实曲库的文件名、标签和随机混排串，约 12 万条）不进仓库，桌面端通过环境变量 `JEEK_PINYIN_CORPUS` 指定后由 `PinyinCorpusTests` 对比。

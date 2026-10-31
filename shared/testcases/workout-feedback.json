@@ -1,5 +1,5 @@
 {
-  "provenance": "Explicit user feedback recordings, verified by production MCP 2026-10-31; tuning/regression only, not independent accuracy. No manual overrides written.",
+  "provenance": "Explicit user feedback recordings, verified by production MCP 2026-10-31; tuning/regression only, not independent accuracy. Includes Simple Love as a newly supplied same-artist contrast with East Wind Breaks. No manual overrides written.",
   "records": [
     {
       "trackId": 1210,
@@ -274,6 +274,45 @@
       "verified": {
         "analyzerVersion": 5,
         "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1115,
+      "title": "简单爱",
+      "artist": "周杰伦",
+      "album": "范特西",
+      "durationMs": 271046,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "7a8414a45dfa6d67d6f2d3e739c212cd7b8b01a348c87d6de69164ae4cc5e40c",
+      "label": "SPORT",
+      "reason": "简单爱适合运动",
+      "reason_details_provided": false,
+      "label_source": "explicit_user_feedback",
+      "feedback_context": "2026-10-31 response to request for cross-artist paired examples; title/artist resolved through production MCP, one matching recording. No studio/Live version inferred.",
+      "paired_control_track_id": 1105,
+      "used_for_tuning": true,
+      "independent": false,
+      "evaluation_role": "Additional calibration contrast evaluated with the already frozen representation protocol; not independent generalization accuracy.",
+      "verified": {
+        "analyzerVersion": 6,
+        "rulesVersion": 8,
         "signatureMatches": true,
         "complete": true,
         "pendingReanalysis": false,

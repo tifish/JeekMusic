@@ -1,0 +1,28 @@
+{
+  "contract": "workout_representation_protocol_v1",
+  "purpose": "Falsifiable local representation audit, never a production classifier or independent accuracy estimate.",
+  "model": "MTT_musicnn",
+  "sourceCommit": "516acb2a0ff5ef73f64547898e018e793152c506",
+  "checkpointSha256": "041f3935e981a65cea739842d30c188d3a7d2adf4410955c8668eb3de4a5acab",
+  "sampleRate": 16000,
+  "contextMs": 30000,
+  "contextCount": 3,
+  "sampling": "First three existing production segment centres, continuous non-overlapping contexts; no label-dependent selection.",
+  "normalizeRms": 0.1,
+  "gainBeforeNormalizationDb": [-6, 6],
+  "offsetMs": [-2000, 2000],
+  "representations": {
+    "penultimate": {"dimension": 200, "role": "primary", "pooling": "L2 each 3s window, mean ten windows, L2 again"},
+    "temporal": {"dimension": 153, "role": "predeclared architecture diagnostic", "pooling": "Mean time axis of frontend temporal channels, same window/segment L2 pooling"},
+    "tags": {"dimension": 50, "role": "fixed-head geometric baseline under identical normalization", "pooling": "Sigmoid logits, same window/segment L2 pooling"}
+  },
+  "comparison": "Cosine distances, never learned coordinates, PCA selection, supervised head, centroid classifier or scalar threshold search.",
+  "stabilityGate": "For every recording and representation, each segment's gain/offset cosine displacement must be less than half its nearest OTHER recording's base-segment distance. Gain invariance after RMS normalization is a preprocessing property, not learned robustness.",
+  "neighborhoodGate": "Each of three base contexts must have an unambiguous nearest OTHER recording base context with the same feedback label. Perturbations must preserve the neighbor label. This is a calibration geometry diagnostic, NOT held-out classification accuracy; no same-recording segments are candidates.",
+  "identityGate": "Audit same-artist attraction, opposite-label same-artist neighbors and availability of both labels outside the positive artist. Five SPORT recordings from one artist cannot establish artist-independent generalization. Passing stability or label neighborhoods alone never clears this gate.",
+  "stop": "One checkpoint, one normalization, three predeclared representations, five conditions. No new checkpoint, feature/prompt/level search after observing these eight calibration recordings. Failure rejects a direct similarity deployment, not the possibility of information recoverable with independently labelled data.",
+  "budgetSeconds": 300,
+  "maxRecordings": 16,
+  "privacy": "Explicit local non-CUE manifest only; no implicit download, audio output file, upload, production cache or manual tag writes. Full vectors and private manifest stay in ignored artifacts.",
+  "labelProvenance": "shared/testcases/workout-feedback.json: all eight are calibration, non-independent; no old coarse labels, calmness feedback or proxy danceability/arousal substituted as workout truth."
+}

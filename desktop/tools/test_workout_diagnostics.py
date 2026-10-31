@@ -19,15 +19,23 @@ class DiagnosticEvaluationTests(unittest.TestCase):
             root = Path(temp)
             subprocess.run([sys.executable, str(TOOL), str(root), "--output", str(root/"report.json")], check=True, capture_output=True)
             report = json.loads((root/"report.json").read_text(encoding="utf-8"))
-            self.assertEqual(6, len(report["rows"]))
+            labels = json.loads((TOOL.parents[2]/"shared/testcases/workout-feedback.json").read_text(encoding="utf-8"))["records"]
+            self.assertEqual({r["trackId"] for r in labels}, {r["trackId"] for r in report["rows"]})
+            self.assertEqual(len(labels), len(report["rows"]))
             self.assertTrue(all(r["missingDiagnosticEvidence"] and r["used_for_tuning"] and not r["independent"] for r in report["rows"]))
             self.assertFalse(report["independentEvaluation"])
 
     def test_recording_feedback_keeps_corrected_positive_and_explicit_sources(self):
         labels = json.loads((TOOL.parents[2]/"shared/testcases/workout-feedback.json").read_text(encoding="utf-8"))["records"]
-        self.assertEqual(5, sum(r["label"] == "SPORT" for r in labels))
+        self.assertEqual(6, sum(r["label"] == "SPORT" for r in labels))
         self.assertEqual("SPORT", next(r for r in labels if r["trackId"] == 1155)["label"])
         self.assertEqual("NON_SPORT", next(r for r in labels if r["trackId"] == 1212)["label"])
+        simple_love = next(r for r in labels if r["trackId"] == 1115)
+        paired = next(r for r in labels if r["trackId"] == simple_love["paired_control_track_id"])
+        self.assertEqual(("SPORT", "NON_SPORT"), (simple_love["label"], paired["label"]))
+        self.assertEqual(simple_love["artist"], paired["artist"])
+        self.assertEqual("简单爱适合运动", simple_love["reason"])
+        self.assertFalse(simple_love["reason_details_provided"])
         self.assertTrue(all(r["label_source"] == "explicit_user_feedback" and not r["independent"] and r["used_for_tuning"] for r in labels))
 
     def test_cache_impact_ignores_stale_versions_and_keeps_first_pass_on_extra_failure(self):

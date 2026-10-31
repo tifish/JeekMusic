@@ -124,7 +124,8 @@ public sealed record TrackFeatures(
 
 /// <summary>
 /// 根据模型得分分类（移动端 TagClassifier.kt，移动端设计 §6.4）。阈值用 109 首真实歌曲的人工标注校准
-/// （mobile/tools/calibration/）。规则只依赖单首歌自己的得分，新增歌曲不会改变已有歌曲的标签。
+/// （mobile/tools/calibration/）；v8 音乐周期分支为未校准的保守支持条件。
+/// 规则只依赖单首歌自己的证据，新增歌曲不会改变已有歌曲的标签。
 /// </summary>
 public static class TagClassifier
 {
@@ -150,13 +151,13 @@ public static class TagClassifier
             if (classicalTitle) legacy[TagDimension.GENRE] = Tag.CLASSICAL;
             return legacy;
         }
-        var evidence = f.AnalyzerVersion == 5 ? global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(f.AnalysisEvidence) : null;
+        var evidence = f.AnalyzerVersion is 5 or 6 ? global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(f.AnalysisEvidence) : null;
         var a = evidence?.Complete == true ? evidence.Aggregate() : null;
         var genre = a is not null ? (a.Classical >= ClassicalThreshold ? Tag.CLASSICAL : Tag.NON_CLASSICAL) :
             f.AnalyzerVersion >= GenreOnlyVersion ? Genre(m) : LegacyGenre(m);
         return new Dictionary<TagDimension, Tag?>
         {
-            [TagDimension.MOOD] = a is null ? Mood(m, sensitivity) : a.Sport >= sensitivity.Sport() ? Tag.SPORT : Tag.NON_SPORT,
+            [TagDimension.MOOD] = a is null ? Mood(m, sensitivity) : WorkoutEvidence.Classify(evidence!, sensitivity),
             [TagDimension.VOICE] = a is null ? Voice(m) : a.Vocal >= VocalThreshold ? Tag.VOCAL : Tag.INSTRUMENTAL,
             [TagDimension.GENRE] = classicalTitle ? Tag.CLASSICAL : genre,
             [TagDimension.CALMNESS] = CalmnessEvidence.From(evidence)?.Tag,
@@ -203,11 +204,11 @@ public static class LegacyMoodClassifier
 /// <summary>分析算法和分类规则的版本（移动端 TagRepository.kt）。</summary>
 public static class AnalysisVersions
 {
-    /// <summary>分析算法的版本：升级后所有歌曲重新分析（需求 M-5）。</summary>
-    public const int AnalyzerVersion = 5;
+    /// <summary>分析算法版本：旧结果渐进升级，完整匹配的 v5 基础证据可复用。</summary>
+    public const int AnalyzerVersion = 6;
 
     /// <summary>分类规则的版本：规则变了但不需要重新分析时提高，启动时按保存的版本判断是否全部重算一次。</summary>
-    public const int RulesVersion = 7;
+    public const int RulesVersion = 8;
 
     public const string SourceAuto = "AUTO";
     public const string SourceManual = "MANUAL";

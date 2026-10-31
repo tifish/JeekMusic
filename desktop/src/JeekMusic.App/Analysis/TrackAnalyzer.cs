@@ -72,6 +72,7 @@ public static class TrackAnalyzer
         if (segments.Any(s => s.Additional && !s.Complete)) reasons = [.. reasons, "additional_failure_first_pass_retained"];
         var evidence = new AnalysisEvidence(5, segments.ToArray(), reasons, features is not null,
             features is null ? featureError ?? "features:no_pcm" : null, timer.ElapsedMilliseconds);
-        return FeaturesData.Of(features, scores) with { AnalysisEvidence = evidence.ToJson(), AnalysisAttempts = evidence.Complete ? 1 : 3 };
+        var data = FeaturesData.Of(features, scores) with { AnalysisEvidence = evidence.ToJson(), AnalysisAttempts = evidence.Complete ? 1 : 3 };
+        return await WorkoutAnalysis.Complete(path, track, data, ct, decode);
     }
 }

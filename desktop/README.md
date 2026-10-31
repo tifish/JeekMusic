@@ -65,7 +65,7 @@ build 和 publish 的缓存也相互隔离，发布请使用完整 `dotnet publi
 python desktop/tools/test-build-isolation.py
 ```
 
-它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、27 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
+它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、28 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
 
 `--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
 
@@ -91,7 +91,7 @@ pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -G
 
 ## MCP 接口
 
-开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 27 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
+开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 28 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。
 
 仓库提供只依赖 Python 标准库的调试客户端：
 
@@ -107,3 +107,5 @@ python desktop/tools/mcp_client.py search_tracks '{"query":"周杰伦"}'
 共享模式可开启“自动匹配歌曲格式”，将歌曲采样率、合理有效精度及可靠声道布局作为完整组合匹配到真实设备；关闭时不立即改格式。显式暂停/结束/退出时，关闭流并在确认未被外部改动后恢复自动匹配前的完整设备配置；续播先重新匹配，再从原位置播放，内部切歌不恢复。独占仅一个选项，继续自动协商，保留共享开关偏好。播放栏保留文件格式、共享/独占、重采样与警告信息，有输出流时采样率部分显示“歌曲采样率 → 实际设备采样率”；暂停释放输出后只显示源采样率和“输出空闲”，不把恢复后的设备默认格式当作播放输出或重采样，tooltip/格式菜单另列设备默认格式，左键、右键及键盘激活均打开同一格式菜单，查看源/设备位深和声道、选择模式及共享自动开关，无设备选择或手动格式列表；切换设备使用独立输出设备按钮，其完整菜单保持原有顺序。失败和必要转换明确显示，不用客户端 float 冒充设备位深。详见 [自动匹配音频格式](docs/mcp.md#自动匹配音频格式)。
 
 许可证收集使用与 publish 配置一致的 `ProjectAssetsFile`，不再读取旧的 `obj/project.assets.json`。自定义 RID / AOT / SelfContained 时，查询 assets 路径须传入与 publish 相同的开关；未传 `--assets` 时只接受唯一的隔离 publish graph，多个配置时明确报错，不猜测旧缓存。
+
+运动分析采用 Analyzer 6 / Rules 8，保留原运动阈值并增加有条件的持续节奏证据；旧缓存渐进升级。实际修复范围、许可和验证见 [运动 v8](../docs/workout-music-v8.md)。

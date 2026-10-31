@@ -28,7 +28,18 @@ try {
     }
     var result = await TrackAnalyzer.Analyze(args[0], track, cancel.Token, (pcm, ct) => (model ??= new AudioTagger()).AnalyzeWindows(pcm, ct));
     var output = JsonNode.Parse(result.ToJson())!.AsObject();
-    output["provenance"] = "desktop_production_v5_onnx";
+    output["provenance"] = "desktop_production_v6_onnx";
+    output["analyzerVersion"] = AnalysisVersions.AnalyzerVersion;
+    output["rulesVersion"] = AnalysisVersions.RulesVersion;
+    var classifications = new JsonObject();
+    foreach (var sensitivity in Enum.GetValues<Sensitivity>())
+    {
+        var tags = new JsonObject();
+        foreach (var (dimension, tag) in TagClassifier.Classify(result.ToFeatures(AnalysisVersions.AnalyzerVersion), sensitivity))
+            tags[dimension.ToString()] = tag?.ToString();
+        classifications[sensitivity.ToString()] = tags;
+    }
+    output["classifications"] = classifications;
     output["model_sha256"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Models", "yamnet.onnx")))).ToLowerInvariant();
     Console.WriteLine(output.ToJsonString());
     return result.Complete ? 0 : 1;

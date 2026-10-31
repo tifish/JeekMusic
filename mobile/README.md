@@ -57,3 +57,5 @@ keyPassword=...
 ## 许可证
 
 [MIT](../LICENSE)
+
+运动分析采用 Analyzer 6 / Rules 8，保留原运动阈值并增加有条件的持续节奏证据；旧缓存渐进升级。实际修复范围、许可和验证见 [运动 v8](../docs/workout-music-v8.md)。

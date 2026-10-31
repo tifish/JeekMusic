@@ -49,12 +49,18 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
         val deps = EntryPointAccessors.fromApplication(applicationContext, Dependencies::class.java)
         val deadline = SystemClock.elapsedRealtime() + MAX_RUN_MS
+        deps.tags().recomputeAll() // promote only verified v5 bases that need no new audio before querying pending work
         val batch = deps.tagDao().pending(TagRepository.ANALYZER_VERSION, MAX_TRACKS)
         var done = 0
         try {
             for (track in batch) {
                 if (isStopped || SystemClock.elapsedRealtime() > deadline) break
-                deps.tagDao().saveFeatures(analyze(deps.decoder(), deps.tagger(), track))
+                val retained = deps.tagDao().currentFeatures(track.trackKey)?.takeIf { it.analyzerVersion == 5 && it.complete() }
+                val result = if (retained != null) {
+                    val uri = MediaStoreSource.contentUri(track.volumeName,track.mediaStoreId)
+                    WorkoutAnalysis.complete(track,retained,{ w,check -> deps.decoder().decode(uri,listOf(w),checkCancelled=check) },reuseBase=true)
+                } else analyze(deps.decoder(),deps.tagger(),track)
+                deps.tagDao().saveFeatures(result)
                 done++
                 if (done % 25 == 0) deps.tags().recomputeAll()
             }

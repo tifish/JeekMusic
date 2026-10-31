@@ -15,6 +15,43 @@ import kotlin.math.sin
 /** Actual Android MediaCodec + TFLite, controlled PCM; no music-accuracy claims. */
 @RunWith(AndroidJUnit4::class)
 class AnalysisNativeTest {
+    @Test fun longVorbisSeeksReturnCompleteTimestampBoundedIntervals() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val file = File(context.cacheDir,"analysis-long-tone.ogg")
+        instrumentation.context.assets.open(file.name).use { source ->
+            file.outputStream().use { source.copyTo(it) }
+        }
+        try {
+            repeat(2) {
+                val pcm = PcmDecoder(context).decode(Uri.fromFile(file),
+                    listOf(11023L until 21023L,27019L until 37019L))!!
+                assertTrue("attempt=$it size=${pcm.size}",pcm.size in 319990..320002)
+                assertTrue(pcm.all { it.isFinite() })
+                assertTrue(pcm.map { it.toDouble()*it }.average() > .001)
+            }
+        } finally { file.delete() }
+    }
+
+    @Test fun vorbisFreshCodecKeepsConfigurationAndLaterSeeksFlush() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val file = File(context.cacheDir,"analysis-controlled-vorbis.ogg")
+        instrumentation.context.assets.open("native-unicode.ogg").use { source ->
+            file.outputStream().use { source.copyTo(it) }
+        }
+        try {
+            repeat(5) {
+                // Exercise a fresh compressed decoder and a second seek on that codec.
+                val pcm = PcmDecoder(context).decode(Uri.fromFile(file),
+                    listOf(25L until 125L,125L until 225L))!!
+                assertTrue("attempt=$it size=${pcm.size}",pcm.size in 3190..3202)
+                assertTrue(pcm.all { it.isFinite() })
+                assertTrue(pcm.map { it.toDouble()*it }.average() > .001)
+            }
+        } finally { file.delete() }
+    }
+
     @Test fun lowRateMultichannelCueAndRealModel() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         for ((rate, channels) in listOf(8000 to 1, 11025 to 2, 48000 to 6)) {

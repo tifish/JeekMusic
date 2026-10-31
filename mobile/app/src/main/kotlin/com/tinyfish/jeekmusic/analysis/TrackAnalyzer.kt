@@ -67,9 +67,10 @@ object TrackAnalyzer {
         val finalReasons = if (segments.any { it.additional && !it.complete }) reasons + "additional_failure_first_pass_retained" else reasons
         val evidence = AnalysisEvidence(segments, finalReasons, f != null, if (f == null) featureError ?: "features:no_pcm" else null,
             (System.nanoTime() - started) / 1_000_000)
-        return TrackFeaturesEntity(track.trackKey, "${track.dateModified}:${track.size}", TagRepository.ANALYZER_VERSION,
+        val base = TrackFeaturesEntity(track.trackKey, "${track.dateModified}:${track.size}", 5,
             f?.bpm, f?.bpmConfidence ?: 0.0, f?.loudness ?: -70.0, f?.loudnessRange ?: 0.0, f?.onsetRate ?: 0.0,
             f?.centroidHz ?: 0.0, f?.lowRatio ?: 0.0, System.currentTimeMillis(), !evidence.complete,
             m?.vocal, m?.classical, m?.calm, m?.energy, m?.orchestra, evidence.toJson(), if (evidence.complete) 1 else 3)
+        return WorkoutAnalysis.complete(track,base,decode)
     }
 }

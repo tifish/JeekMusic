@@ -17,10 +17,10 @@ public sealed class AnalysisPipelineTests
             calls++; if (calls < 3) throw new IOException(); return (Score, Enumerable.Repeat(Score, 10).ToArray());
         }, Decode);
         Assert.True(data.Complete); Assert.Equal(1, decodes); Assert.Equal(3, calls);
-        Assert.False(FeaturesData.NeedsAnalysis(new("synthetic", AnalysisFeature.Signature(track), 5, data.ToJson(), false), AnalysisFeature.Signature(track)));
+        Assert.False(FeaturesData.NeedsAnalysis(new("synthetic", AnalysisFeature.Signature(track), AnalysisVersions.AnalyzerVersion, data.ToJson(), false), AnalysisFeature.Signature(track)));
         data = await TrackAnalyzer.Analyze("synthetic", track, default, (pcm, ct) => throw new IOException(), Decode);
         Assert.False(data.Complete); Assert.Equal(3, data.AnalysisAttempts);
-        var failed = new FeaturesRow("synthetic", "s", 5, data.ToJson(), true);
+        var failed = new FeaturesRow("synthetic", "s", AnalysisVersions.AnalyzerVersion, data.ToJson(), true);
         Assert.False(FeaturesData.NeedsAnalysis(failed, "s")); Assert.True(FeaturesData.NeedsAnalysis(failed, "changed"));
         Assert.True(FeaturesData.NeedsAnalysis(failed with { AnalyzerVersion = 4 }, "s"));
         Assert.True(FeaturesData.NeedsAnalysis(failed with { Data = FeaturesData.Of(null, null).ToJson() }, "s"));

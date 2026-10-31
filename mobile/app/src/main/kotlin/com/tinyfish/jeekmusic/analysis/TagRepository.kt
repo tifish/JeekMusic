@@ -47,7 +47,10 @@ class TagRepository @Inject constructor(
         val sensitivity = settings.current().sensitivity
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
         val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
-        val auto = dao.allFeatures().filter { it.usable() }.flatMap { f ->
+        val features = dao.allFeatures().map { original ->
+            WorkoutAnalysis.upgradeWithoutAudio(original)?.also { dao.saveFeatures(it) } ?: original
+        }
+        val auto = features.filter { it.usable() }.flatMap { f ->
             val manual = overrides[f.trackKey].orEmpty()
             TagClassifier.classify(f, sensitivity, f.trackKey in classicalTitles).mapNotNull { (dimension, tag) ->
                 if (dimension.name in manual || tag == null) null else TrackTagEntity(f.trackKey, dimension.name, tag.name, SOURCE_AUTO)
@@ -116,7 +119,7 @@ class TagRepository @Inject constructor(
     private suspend fun reviewSnapshot(key: String): JSONObject {
         val info = info(key)
         val evidence = AnalysisEvidence.parse(info.features?.analysisEvidence)
-        val calm = info.features?.takeIf { it.usable() && it.analyzerVersion == 5 }?.let { CalmnessEvidence.from(evidence) }
+        val calm = info.features?.takeIf { it.usable() && it.analyzerVersion in 5..6 }?.let { CalmnessEvidence.from(evidence) }
         fun values(map: Map<TagDimension, Tag?>) = JSONObject().also { o -> map.forEach { (d, v) -> o.put(d.name, v?.name ?: JSONObject.NULL) } }
         return JSONObject().put("automatic", values(info.auto)).put("final", values(info.tags))
             .put("manual", org.json.JSONArray(info.manual.map { it.name })).put("analyzerVersion", info.features?.analyzerVersion)
@@ -143,9 +146,9 @@ class TagRepository @Inject constructor(
          * 3：加入 YAMNet 模型，识别人声 / 纯音乐、古典 / 流行，运动 / 安静改用模型得分。
          * 4：classical_score 只比较曲风类（Classical music、Opera 对其他曲风），不再把钢琴、弦乐等乐器算作古典。
          */
-        const val ANALYZER_VERSION = 5
+        const val ANALYZER_VERSION = 6
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 7
+        const val RULES_VERSION = 8
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

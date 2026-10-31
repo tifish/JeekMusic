@@ -60,7 +60,9 @@ def run(exe, root):
                 time.sleep(.1)
             assert quiet["tags"]["calmness"] == "CALM" and quiet["tags"]["mood"] == "NON_SPORT"
             explanation = startup.call(c, "explain_analysis", trackId=ids["Quiet"])
-            assert explanation["rulesVersion"] == 7 and explanation["analyzerVersion"] == 5 and not explanation["pendingReanalysis"]
+            assert explanation["rulesVersion"] == 8 and explanation["analyzerVersion"] == 6 and not explanation["pendingReanalysis"]
+            assert explanation["workout"]["baseEvidenceReused"] is True
+            assert explanation["evidence"]["rhythm_state"] == "not_needed"
             assert explanation["calmness"]["support"] == 1
             assert explanation["calmness"]["strictSupport"] == 0
             assert explanation["calmness"]["relativeSupport"] == 1
@@ -78,7 +80,7 @@ def run(exe, root):
             assert startup.call(c, "search_tracks", tags=[])["total"] == 3
             assert c.call("search_tracks", {"tags": ["CALM", "NON_CALM"]}).get("isError")
             failed = startup.call(c, "explain_analysis", trackId=ids["Failed"])
-            assert failed["automatic"]["CALMNESS"] is None and not failed["pendingReanalysis"]
+            assert failed["automatic"]["CALMNESS"] is None and failed["pendingReanalysis"]
             result = startup.call(c, "set_smart_tags", trackIds=[ids["Quiet"]], calmness="NON_CALM", reason="synthetic contract")
             assert result["items"][0]["tagSources"]["calmness"] == "MANUAL"
             assert c.call("set_smart_tags", {"trackIds": [ids["Quiet"]], "calmness": "QUIET"}).get("isError")
@@ -94,7 +96,17 @@ def run(exe, root):
             result = startup.call(c, "set_smart_tags", trackIds=[ids["Quiet"]], calmness="AUTO")
             assert result["items"][0]["tags"]["calmness"] == "CALM"
             with closing(sqlite3.connect(data / "library.db")) as db:
-                assert before == db.execute("SELECT * FROM track_features ORDER BY track_key").fetchall()
+                after = db.execute("SELECT * FROM track_features ORDER BY track_key").fetchall()
+                for old,new in zip(before,after):
+                    if old[4]:
+                        assert old == new  # terminal old failure remains available for an explicit v6 retry
+                        continue
+                    assert old[:2] == new[:2] and new[2] == 6
+                    a,b = json.loads(old[3]),json.loads(new[3])
+                    assert all(b[k] == v for k,v in a.items() if k != "analysis_evidence")
+                    e0,e1 = json.loads(a["analysis_evidence"]),json.loads(b["analysis_evidence"])
+                    assert e1["base_evidence_reused"] and e1["rhythm_state"] == "not_needed"
+                    assert all(all(s1[k] == v for k,v in s0.items()) for s0,s1 in zip(e0["segments"],e1["segments"]))
                 assert db.execute("SELECT value,updated_at FROM tag_override WHERE dimension='MOOD'").fetchall() == [("QUIET", 123)]
             assert not startup.call(c, "get_status")["playing"]
             (root / "catalog.json").write_text(json.dumps(c.request("tools/list"), ensure_ascii=False, indent=2), encoding="utf-8")

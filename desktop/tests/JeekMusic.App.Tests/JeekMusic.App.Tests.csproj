@@ -12,6 +12,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <None Update="Fixtures\tag-writer-silence.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\shared\testcases\workout-v8.json" Link="testcases\workout-v8.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\..\testdata\tag-writing\*" Link="TagWritingFixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Exclude="..\..\..\testdata\tag-writing\*.py" />
   </ItemGroup>
   <ItemGroup>

@@ -81,12 +81,12 @@ object TagClassifier {
             // 还没用模型分析的歌：只凭曲名判断得出古典，判断不出非古典
             if (classicalTitle) put(TagDimension.GENRE, Tag.CLASSICAL)
         }
-        val evidence = if (f.analyzerVersion == 5) AnalysisEvidence.parse(f.analysisEvidence) else null
+        val evidence = if (f.analyzerVersion in 5..6) AnalysisEvidence.parse(f.analysisEvidence) else null
         val a = evidence?.takeIf { it.complete }?.aggregate()
         val genre = if (a != null) { if (a.classical >= CLASSICAL_THRESHOLD) Tag.CLASSICAL else Tag.NON_CLASSICAL }
             else if (f.analyzerVersion >= GENRE_ONLY_VERSION) genre(m) else legacyGenre(m)
         return mapOf(
-            TagDimension.MOOD to if (a == null) mood(m, sensitivity) else if (a.sport >= sensitivity.sport) Tag.SPORT else Tag.NON_SPORT,
+            TagDimension.MOOD to if (a == null) mood(m, sensitivity) else WorkoutEvidence.classify(evidence,sensitivity),
             TagDimension.VOICE to if (a == null) voice(m) else if (a.vocal >= VOCAL_THRESHOLD) Tag.VOCAL else Tag.INSTRUMENTAL,
             TagDimension.GENRE to if (classicalTitle) Tag.CLASSICAL else genre,
             TagDimension.CALMNESS to if (f.failed) null else CalmnessEvidence.from(evidence)?.tag,
@@ -143,6 +143,6 @@ object LegacyMoodClassifier {
     private fun norm(value: Double, low: Double, high: Double) = ((value - low) / (high - low)).coerceIn(0.0, 1.0)
 }
 
-fun TrackFeaturesEntity.complete() = !failed && modelScores() != null && AnalysisEvidence.parse(analysisEvidence)?.complete == true
+fun TrackFeaturesEntity.complete() = !failed && modelScores() != null && AnalysisEvidence.parse(analysisEvidence)?.let { it.complete && it.contract == analyzerVersion } == true
 fun TrackFeaturesEntity.usable() = !failed && analyzerVersion <= TagRepository.ANALYZER_VERSION &&
     (analyzerVersion < 5 || complete())

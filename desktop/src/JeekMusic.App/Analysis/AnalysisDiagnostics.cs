@@ -71,8 +71,11 @@ public static class AnalysisDiagnostics
         });
         ct.ThrowIfCancellationRequested();
         var evidence = AnalysisEvidence.Parse(features.AnalysisEvidence)!;
+        var evidenceJson = JsonNode.Parse(evidence.ToJson())!;
+        for (int i = 0; i < segments.Count; i++)
+            segments[i]!["productionPulse"] = evidenceJson["segments"]![i]!["pulse"]?.DeepClone();
         return new JsonObject {
-            ["contract"] = "analysis_diagnostics_v1", ["analyzerVersion"] = 5, ["rulesVersion"] = 7,
+            ["contract"] = "analysis_diagnostics_v1", ["analyzerVersion"] = AnalysisVersions.AnalyzerVersion, ["rulesVersion"] = AnalysisVersions.RulesVersion,
             ["cacheCompatible"] = false, ["writesAudio"] = false, ["writesFeaturesOrTags"] = false,
             ["modelSha256"] = Hash(Path.Combine(AppContext.BaseDirectory, "Models", "yamnet.onnx")),
             ["classMapSha256"] = "b03d48f9ebe23f69ea825193de7e736934086a12410f0af47babe897b78bc0d3",
@@ -81,7 +84,7 @@ public static class AnalysisDiagnostics
             ["calmIds"] = Numbers(YamnetScores.CalmIds.ToArray().Select(x => (double)x)),
             ["logicalStartMs"] = track.StartMs ?? 0, ["durationMs"] = track.DurationMs,
             ["sampleRate"] = 16000, ["modelFrameSamples"] = YamnetScores.Frame,
-            ["complete"] = features.Complete, ["productionEvidence"] = JsonNode.Parse(evidence.ToJson()),
+            ["complete"] = features.Complete, ["productionEvidence"] = evidenceJson,
             ["sportMedian"] = evidence.Aggregate()?.Sport, ["segments"] = segments,
             ["modelLoadMs"] = modelLoadMs, ["rhythmExtraMs"] = rhythmMs, ["observerExtraMs"] = observerMs, ["elapsedMs"] = timer.ElapsedMilliseconds,
             ["interpretation"] = "Independent intervals; no seam-crossing. 521 sigmoid responses are not exclusive probabilities. Tempo candidates include half/double alternatives; quarter correlations are fixed-lag persistence, not beat tracking. Production BPM peak ratio is not probability. No diagnostic result is imported into cache."

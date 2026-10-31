@@ -1,0 +1,2020 @@
+{
+  "provenance": "Synthetic contract regressions; not audio accuracy or user feedback.",
+  "cases": [
+    {
+      "name": "two_independent_model_and_pulse_witnesses",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "fast_percussion_alone_is_not_workout",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "slow_pulse_with_no_empty_interbeat_doubling",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 80,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 80,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 80,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 80,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "one_pulse_witness_is_not_enough",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "overlapping_continuous_contexts_count_once",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 50000,
+            "end_ms": 60000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 40000,
+              "end_ms": 70000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "required_feature_failure_is_no_result",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "failed",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [],
+              "broadband": [],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 3,
+              "elapsed_ms": 0,
+              "error": "IOException"
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [],
+              "broadband": [],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 3,
+              "elapsed_ms": 0,
+              "error": "IOException"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": null,
+        "NORMAL": null,
+        "STRICT": null
+      }
+    },
+    {
+      "name": "valid_v5_retained_without_inventing_new_features",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    },
+    {
+      "name": "three_sensitivity_levels_use_original_thresholds",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.21903278512926252,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.21903278512926252,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "SPORT",
+        "NORMAL": "SPORT",
+        "STRICT": "SPORT"
+      }
+    },
+    {
+      "name": "failed_additional_round_cannot_supply_a_witness",
+      "evidence": {
+        "contract": 6,
+        "feature_complete": true,
+        "elapsed_ms": 0,
+        "additional_reasons": [],
+        "rhythm_contract": 1,
+        "rhythm_state": "complete",
+        "segments": [
+          {
+            "start_ms": 30000,
+            "end_ms": 40000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 20000,
+              "end_ms": 50000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 80000,
+            "end_ms": 90000,
+            "additional": true,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": 0.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.09267200999762239,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.2855733666587413,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ],
+            "pulse": {
+              "bass": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.5,
+                  "coherence": 0.2
+                }
+              ],
+              "broadband": [
+                {
+                  "bpm": 150,
+                  "correlation": 0.6,
+                  "coherence": 0.3
+                }
+              ],
+              "start_ms": 70000,
+              "end_ms": 100000,
+              "attempts": 1,
+              "elapsed_ms": 0
+            }
+          },
+          {
+            "start_ms": 110000,
+            "end_ms": 120000,
+            "additional": true,
+            "sample_count": 0,
+            "decode_attempts": 3,
+            "model_attempts": 0,
+            "mean": null,
+            "frames": [],
+            "error": "decode:IOException"
+          }
+        ]
+      },
+      "expected": {
+        "LOOSE": "NON_SPORT",
+        "NORMAL": "NON_SPORT",
+        "STRICT": "NON_SPORT"
+      }
+    }
+  ]
+}

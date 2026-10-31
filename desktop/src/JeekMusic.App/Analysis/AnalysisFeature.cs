@@ -83,8 +83,13 @@ public sealed class AnalysisFeature : IFeature, IDisposable
                         SetStatus(L.F($"正在分析 {++done}/{pending.Count}：{t.Title}"));
                         try
                         {
-                            var data = TrackAnalyzer.Analyze(_app.Library.PathOf(t)!, t, _stop.Token,
-                                (pcm, ct) => (model ??= new AudioTagger()).AnalyzeWindows(pcm, ct)).GetAwaiter().GetResult();
+                            var cached = _app.Db.Features(t.TrackKey);
+                            var retained = cached is { AnalyzerVersion: 5, Failed: false } && cached.Signature == Signature(t)
+                                ? FeaturesData.Parse(cached.Data) : null;
+                            var data = (retained?.Complete == true
+                                ? WorkoutAnalysis.Complete(_app.Library.PathOf(t)!, t, retained, _stop.Token, reuseBase: true)
+                                : TrackAnalyzer.Analyze(_app.Library.PathOf(t)!, t, _stop.Token,
+                                    (pcm, ct) => (model ??= new AudioTagger()).AnalyzeWindows(pcm, ct))).GetAwaiter().GetResult();
                             if (_app.Library.ByKey(t.TrackKey) is not { } current || Signature(current) != Signature(t)) continue;
                             _stop.Token.ThrowIfCancellationRequested();
                             _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, data.ToJson(), !data.Complete));
@@ -93,7 +98,7 @@ public sealed class AnalysisFeature : IFeature, IDisposable
                         catch (Exception e)
                         {
                             Log.Warn("analysis", $"分析失败：{t.FileName}", e);
-                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, (FeaturesData.Of(null, null) with { AnalysisAttempts = 3, AnalysisEvidence = new AnalysisEvidence(5, [], [], false, "pipeline:" + e.GetType().Name, 0).ToJson() }).ToJson(), true));
+                            _app.Db.SaveFeatures(new FeaturesRow(t.TrackKey, Signature(t), AnalyzerVersion, (FeaturesData.Of(null, null) with { AnalysisAttempts = 3, AnalysisEvidence = new AnalysisEvidence(6, [], [], false, "pipeline:" + e.GetType().Name, 0, 1, "failed").ToJson() }).ToJson(), true));
                         }
                         if (done % 25 == 0) Recompute();
                     }

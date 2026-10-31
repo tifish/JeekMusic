@@ -52,7 +52,17 @@ public sealed class SmartTagTests
         db.SetTagOverride(track.TrackKey, "MOOD", "QUIET", 123);
         var before = db.AllFeatures().ToArray();
         h.App.SmartTags.Recompute();
-        Assert.Equal(before, db.AllFeatures());
+        var migrated = db.Features(track.TrackKey)!;
+        Assert.Equal(6, migrated.AnalyzerVersion);
+        Assert.Equal(before.Single(r => r.TrackKey == track.TrackKey).Signature, migrated.Signature);
+        var migratedData = FeaturesData.Parse(migrated.Data)!;
+        Assert.Equal(data with { AnalysisEvidence = migratedData.AnalysisEvidence }, migratedData);
+        var migratedEvidence = AnalysisEvidence.Parse(migratedData.AnalysisEvidence)!;
+        Assert.True(migratedEvidence.BaseEvidenceReused);
+        Assert.Equal("not_needed", migratedEvidence.RhythmState);
+        Assert.Equal(e.Aggregate(), migratedEvidence.Aggregate());
+        Assert.All(migratedEvidence.Segments, s => Assert.Null(s.Pulse));
+        var afterMigration = db.AllFeatures().ToArray();
         Assert.False(FeaturesData.NeedsAnalysis(db.Features(track.TrackKey), AnalysisFeature.Signature(track)));
         var tags = h.App.SmartTags.Read()[track.TrackKey];
         Assert.Equal("NON_SPORT", tags.Mood); Assert.True(tags.MoodManual);
@@ -74,7 +84,7 @@ public sealed class SmartTagTests
         Assert.Equal(123, db.TagOverrides().Single(o => o.Dimension == "MOOD").UpdatedAt);
         Assert.Equal("QUIET", db.TagOverrides().Single(o => o.Dimension == "MOOD").Value);
         Assert.Null(db.TagOverrides().Single(o => o.Dimension == "CALMNESS").Value);
-        Assert.Equal(before, db.AllFeatures());
+        Assert.Equal(afterMigration, db.AllFeatures());
         var snapshot = new LibrarySnapshot([], h.Tracks, h.App.SmartTags.Read());
         Assert.True(ListBuilder.FilterOf(snapshot, ["NON_SPORT", "CALM"])!(track));
         Assert.False(ListBuilder.FilterOf(snapshot, ["SPORT", "CALM"])!(track));

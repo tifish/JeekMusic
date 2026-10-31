@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,9 +115,15 @@ class LibraryDaoTest {
         try {
             settings.setTagRulesVersion(6)
             repository.recomputeIfRulesChanged()
-            assertEquals(7, settings.current().tagRulesVersion)
-            assertEquals(f, dao.currentFeatures(track.trackKey))
-            assertEquals(0, dao.pending(5, 10).size)
+            assertEquals(8, settings.current().tagRulesVersion)
+            val migrated = dao.currentFeatures(track.trackKey)!!
+            assertEquals(6,migrated.analyzerVersion)
+            assertEquals(f.copy(analyzerVersion=6,analysisEvidence=migrated.analysisEvidence),migrated)
+            val migratedEvidence = com.tinyfish.jeekmusic.analysis.AnalysisEvidence.parse(migrated.analysisEvidence)!!
+            assertTrue(migratedEvidence.baseEvidenceReused)
+            assertEquals("not_needed",migratedEvidence.rhythmState)
+            assertEquals(e.aggregate(),migratedEvidence.aggregate())
+            assertEquals(0, dao.pending(6, 10).size)
             assertEquals(calm, repository.info(track.trackKey).tags[dim])
             assertEquals(com.tinyfish.jeekmusic.analysis.Tag.NON_SPORT, repository.info(track.trackKey).tags[com.tinyfish.jeekmusic.analysis.TagDimension.MOOD])
             repository.setManual(track.trackKey, dim, com.tinyfish.jeekmusic.analysis.Tag.NON_CALM)
@@ -133,16 +140,16 @@ class LibraryDaoTest {
             assertEquals(calm, repository.info(track.trackKey).tags[dim])
             assertEquals(false, dim in repository.info(track.trackKey).manual)
             assertEquals("QUIET", dao.overrides(track.trackKey).single().value)
-            assertEquals(f, dao.currentFeatures(track.trackKey))
+            assertEquals(migrated, dao.currentFeatures(track.trackKey))
             val filter = com.tinyfish.jeekmusic.data.settings.TagFilter(mood = com.tinyfish.jeekmusic.analysis.Tag.NON_SPORT, calmness = calm)
             settings.setTagFilter(filter)
             assertEquals(filter, com.tinyfish.jeekmusic.data.settings.SettingsRepository(context).current().tagFilter)
             settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter())
             assertEquals(false, settings.current().tagFilter.isActive)
-            dao.saveFeatures(f.copy(failed = true, analysisAttempts = 3))
+            dao.saveFeatures(migrated.copy(failed = true, analysisAttempts = 3))
             repository.recomputeAll()
             assertEquals(null, repository.info(track.trackKey).tags[dim])
-            assertEquals(0, dao.pending(5, 10).size)
+            assertEquals(0, dao.pending(6, 10).size)
         } finally {
             settings.setTagFilter(previous.tagFilter)
             settings.setTagRulesVersion(previous.tagRulesVersion)

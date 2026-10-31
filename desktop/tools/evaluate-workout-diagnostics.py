@@ -36,11 +36,11 @@ def cache_impact(path):
             "select f.analyzer_version,f.data,f.signature,t.mtime,t.size from track_features f "
             "join track t on t.track_key=f.track_key where f.failed=0"
         ):
-            if version != 5 or signature != f"{mtime}:{size}":
+            if version not in (5, 6) or signature != f"{mtime}:{size}":
                 continue
             e = json.loads(data).get("analysis_evidence")
             e = json.loads(e) if e else None
-            if not e or e.get("contract") != 5 or not e["feature_complete"]:
+            if not e or e.get("contract") not in (5, 6) or not e["feature_complete"]:
                 continue
             good = lambda s: s.get("mean") is not None and s["frames"] and s.get("error") is None
             segments = e["segments"]
@@ -141,7 +141,7 @@ def main():
             row["missingDiagnosticEvidence"] = True
         rows.append(row)
     report = dict(contract="workout_diagnostic_evaluation_v1", independentEvaluation=False,
-        note="Tuning/regression only, all one artist. Experiment flags are not deployed tags. No missing features inferred from cache. Quarter/segment support does not assert continuity across gaps.",
+        note="Explicit feedback, tuning/regression only. Experiment flags describe the old median and candidate rules, not deployed v6 tags. No missing features inferred from cache. Quarter/segment support does not assert continuity across gaps.",
         scriptSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), rows=rows)
     if args.cache_db:
         report["cacheImpact"] = cache_impact(args.cache_db)

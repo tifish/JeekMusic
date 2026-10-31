@@ -1,5 +1,5 @@
 {
-  "provenance": "Six explicit user feedback recordings, identity verified by production MCP 2026-10-31; regression/tuning only, all same artist. No manual overrides written. Not an accuracy set.",
+  "provenance": "Explicit user feedback recordings, verified by production MCP 2026-10-31; tuning/regression only, not independent accuracy. No manual overrides written.",
   "records": [
     {
       "trackId": 1210,
@@ -210,6 +210,77 @@
           "CALMNESS": "AUTO"
         }
       }
+    },
+    {
+      "trackId": 1105,
+      "title": "东风破",
+      "artist": "周杰伦",
+      "album": null,
+      "durationMs": 315481,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "56e7fe1633d8cd46e7b96eefae77e20cbcb6b68a0d509b03ec0efc048ce03f58",
+      "label": "NON_SPORT",
+      "reason": "这首歌节奏不慢，但曲风悠扬慵懒，不适合运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1970,
+      "title": "Lucky",
+      "artist": "Jason Mraz&Colbie Caillat",
+      "album": "2010 格莱美大赢家",
+      "durationMs": 191713,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "f743e1d0b7acdecb8e349ab0f959a547d4d5d919bf958c85d3e89303b567ec47",
+      "label": "NON_SPORT",
+      "reason": "主鼓点的节奏比较慢，不适合运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
     }
-  ]
+  ],
+  "criteria_clarification": "主要是有明显节奏感，但节奏不能过慢；东风破曲风悠扬慵懒可排除；Lucky主鼓点慢，不以装饰/细分拍当主拍。和光同尘仍是SPORT。"
 }

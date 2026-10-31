@@ -37,7 +37,8 @@ class PcmDecoder @Inject constructor(
                 codec.configure(format, null, null, 0)
                 codec.start()
                 val out = FloatList()
-                for (window in windowsMs) decodeWindow(extractor, codec, window, rate, out, checkCancelled)
+                for ((index, window) in windowsMs.withIndex())
+                    decodeWindow(extractor, codec, window, rate, out, checkCancelled, flush = index > 0)
                 return out.toArray().takeIf { it.isNotEmpty() }
             } finally {
                 codec.release()
@@ -47,11 +48,17 @@ class PcmDecoder @Inject constructor(
         }
     }
 
-    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, rate: Int, out: FloatList, checkCancelled: () -> Unit) {
+    private fun decodeWindow(extractor: MediaExtractor, codec: MediaCodec, window: LongRange, rate: Int, out: FloatList, checkCancelled: () -> Unit, flush: Boolean) {
         val startUs = window.first * 1000
         val endUs = (window.last + 1) * 1000
-        extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-        codec.flush()
+        // Compressed extractors can land after the requested time despite
+        // PREVIOUS_SYNC (observed with long Vorbis recordings). Decode a short
+        // preroll, then retain only timestamp-bounded PCM below; never pad gaps.
+        extractor.seekTo((startUs - 1_000_000).coerceAtLeast(0), MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+        // A fresh codec has no queued media to discard. Flushing before its first
+        // output can discard codec-specific data (notably Vorbis) before delivery.
+        // Later seeks follow a drained EOS and must flush the previous stream.
+        if (flush) codec.flush()
 
         var outputFormat = codec.outputFormat
         val mono = FloatList()

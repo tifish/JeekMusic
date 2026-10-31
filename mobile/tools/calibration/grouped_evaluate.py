@@ -59,7 +59,7 @@ def evaluate(records, seed="jeek-v5-frozen-1", group_by=("song", "album", "artis
         eligible = all(records[i]["provenance"].get("independent") is True and
             records[i]["provenance"].get("used_for_tuning") is not True and
             records[i]["provenance"].get("labels") == "human_reviewed" and
-            "production_v5" in records[i]["provenance"].get("scores", "") and
+            any(v in records[i]["provenance"].get("scores", "") for v in ("production_v5", "production_v6")) and
             ("album" not in group_by or records[i].get("album_id")) and
             ("artist" not in group_by or records[i].get("artist_ids")) for i in indices)
         split = ("test" if int(digest[:8], 16) / 2**32 < .25 else "calibration") if eligible else "regression"

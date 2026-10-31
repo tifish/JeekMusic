@@ -12,3 +12,5 @@ No personal music or downloaded lyrics are included.
 The literal question marks are intentional. Writers must retain them. Lyrics are short original test strings, including bilingual synthetic lines, empty lines, offsets, CRLF and millisecond timestamps. Tests never read user songs or contact online lyrics/cover services.
 
 See `mobile/docs/tag-writing-validation.md` for the actual native/production/permission/host test layers and device limitations.
+
+- `analysis-long-tone.ogg`: 40s synthetic 440Hz/44100Hz stereo Vorbis, generated with FFmpeg `-f lavfi -i sine=frequency=440:sample_rate=44100:duration=40 -ac 2 -c:a libvorbis -q:a 2 -map_metadata -1`. Long fractional seek regression for analysis preroll; SHA256 `63a409f932103d4a125395b8718f2d88109474fff25eddb178bbe664d3d6cd6a`. No copyrighted recording.

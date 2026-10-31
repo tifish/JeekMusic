@@ -4,7 +4,8 @@ using System.Text.Json.Serialization;
 namespace JeekMusic.Core.Analysis;
 
 public sealed record SegmentEvidence(long StartMs, long EndMs, bool Additional, int SampleCount,
-    int DecodeAttempts, int ModelAttempts, ModelScores? Mean, ModelScores[] Frames, string? Error)
+    int DecodeAttempts, int ModelAttempts, ModelScores? Mean, ModelScores[] Frames, string? Error,
+    PercussivePulse? Pulse = null)
 {
     public int ValidWindows => Frames.Length;
     public bool Complete => Mean is not null && Frames.Length > 0 && Error is null;
@@ -13,11 +14,12 @@ public sealed record SegmentEvidence(long StartMs, long EndMs, bool Additional, 
 public sealed record DimensionEvidence(double Vocal, double Sport, double Classical,
     double VocalSupport, double SportSupport, double ClassicalSupport);
 
-/// <summary>v5 evidence. Margins/support describe sampled evidence, never calibrated probabilities.</summary>
+/// <summary>Versioned v5/v6 evidence. Margins/support describe sampled evidence, never calibrated probabilities.</summary>
 public sealed record AnalysisEvidence(int Contract, SegmentEvidence[] Segments, string[] AdditionalReasons,
-    bool FeatureComplete, string? FeatureError, long ElapsedMs)
+    bool FeatureComplete, string? FeatureError, long ElapsedMs, int RhythmContract = 0, string? RhythmState = null,
+    bool BaseEvidenceReused = false)
 {
-    public bool Complete => Contract == 5 && FeatureComplete && Segments.Any(s => !s.Additional) &&
+    public bool Complete => Contract is 5 or 6 && FeatureComplete && Segments.Any(s => !s.Additional) &&
         Segments.Where(s => !s.Additional).All(s => s.Complete);
     public SegmentEvidence[] ScoredSegments() => Segments.Where(s => s.Complete &&
         (!s.Additional || !Segments.Any(x => x.Additional && !x.Complete))).ToArray();
@@ -68,9 +70,15 @@ public sealed record AnalysisEvidence(int Contract, SegmentEvidence[] Segments, 
         try
         {
             var e = JsonSerializer.Deserialize(json, EvidenceJson.Default.AnalysisEvidence);
-            if (e is null || e.Contract != 5 || e.Segments is null || e.AdditionalReasons is null || e.Segments.Length > 5 ||
+            if (e is null || e.Contract is not (5 or 6) || e.Segments is null || e.AdditionalReasons is null || e.Segments.Length > 5 ||
+                e.Contract == 5 && (e.RhythmContract != 0 || e.RhythmState is not null || e.BaseEvidenceReused || e.Segments.Any(s => s?.Pulse is not null)) ||
+                e.Contract == 6 && (e.RhythmContract != 1 || e.RhythmState is not ("not_needed" or "complete" or "failed")) ||
                 e.Segments.Any(s => s is null || s.Frames is null || s.Frames.Length > 62 || s.EndMs <= s.StartMs ||
-                    s.Frames.Any(f => f is null || !Finite(f)) || s.Mean is { } m && !Finite(m))) return null;
+                    s.Frames.Any(f => f is null || !Finite(f)) || s.Mean is { } m && !Finite(m) ||
+                    s.Pulse is { } p && (p.Bass is null || p.Broadband is null || p.Bass.Length > 8 || p.Broadband.Length > 8 ||
+                        p.StartMs < 0 || p.StartMs > s.StartMs || p.EndMs < s.EndMs || p.EndMs-p.StartMs > 30000 || p.Attempts is < 1 or > 3 ||
+                        p.Bass.Concat(p.Broadband).Any(x => x is null || x.Bpm is < 40 or > 240 || !double.IsFinite(x.Correlation) ||
+                            !double.IsFinite(x.Coherence) || x.Correlation is < -1 or > 1 || x.Coherence is < 0 or > 1)))) return null;
             return e;
         }
         catch (JsonException) { return null; }

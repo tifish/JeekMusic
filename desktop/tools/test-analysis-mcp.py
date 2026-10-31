@@ -71,7 +71,7 @@ def main():
                 summary = diagnostic["summary"]
                 if evidence is None:
                     evidence = summary["productionEvidence"]
-                assert evidence["contract"] == 5 and summary["complete"]
+                assert evidence["contract"] == 6 and evidence["rhythm_contract"] == 1 and summary["complete"]
                 assert len(evidence["segments"]) in (3, 4, 5)
                 assert all(s["sample_count"] == 160000 and len(s["frames"]) == 10 for s in evidence["segments"])
                 assert summary["segmentCount"] == len(evidence["segments"])

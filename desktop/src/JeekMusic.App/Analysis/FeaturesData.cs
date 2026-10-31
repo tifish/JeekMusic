@@ -33,7 +33,7 @@ public sealed record FeaturesData(
         f?.Bpm, f?.BpmConfidence ?? 0, f?.Loudness ?? -70, f?.LoudnessRange ?? 0, f?.OnsetRate ?? 0, f?.CentroidHz ?? 0, f?.LowRatio ?? 0,
         m?.Vocal, m?.Classical, m?.Calm, m?.Energy, m?.Orchestra);
 
-    public bool Complete => ToFeatures(5).ModelScores() is not null &&
+    public bool Complete => ToFeatures(AnalysisVersions.AnalyzerVersion).ModelScores() is not null &&
         global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(AnalysisEvidence)?.Complete == true;
 
     public static bool NeedsAnalysis(FeaturesRow? row, string signature) => row is null || row.Signature != signature ||
@@ -50,7 +50,8 @@ public sealed record FeaturesData(
     }
 
     /// <summary>数据库行 → 分类用的特征；失败的、解析不了的返回 null。</summary>
-    public static TrackFeatures? FromRow(FeaturesRow row) => row.Failed ? null : Parse(row.Data) is { } data && (row.AnalyzerVersion < 5 || data.Complete) ? data.ToFeatures(row.AnalyzerVersion) : null;
+    public static TrackFeatures? FromRow(FeaturesRow row) => row.Failed ? null : Parse(row.Data) is { } data &&
+        (row.AnalyzerVersion < 5 || data.Complete && global::JeekMusic.Core.Analysis.AnalysisEvidence.Parse(data.AnalysisEvidence)?.Contract == row.AnalyzerVersion) ? data.ToFeatures(row.AnalyzerVersion) : null;
 }
 
 /// <summary>导出给同步用的一首歌的分析结果（需求 SY-8）：带文件大小和时长作为校验。</summary>

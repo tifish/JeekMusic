@@ -416,3 +416,5 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 不写音频、metadata、手工覆盖、审核反馈、队列或偏好，不上传。新节奏失败不伪造 NON_SPORT；已足够的旧 SPORT 仍可用，其余 MOOD 无结果。完整性 complete 仍表示原模型/声学阶段完整，节奏阶段另看 rhythmState。原 v5 候选在渐进升级前保留旧结果，非候选无需解码即可显式晋升为 v6（baseEvidenceReused=true）。
 
 `explain_analysis.workout` 新增节奏版本、状态、复用标志、持续强窗与独立支持片段数；`diagnose_analysis` 增加 productionPulse 及其实际源区间，仍不写缓存或标签。三档原阈值、手工优先、标题强制古典、独立 CALMNESS/旧 QUIET 兼容保留。算法、研究来源、限制与验证见 [运动 v8](../../docs/workout-music-v8.md)。
+
+后续[重音/音乐标签受控评估](../../docs/workout-accent-evaluation.md)已记录和光慢主拍正例及未通过的候选。该研究未新增生产特征或模型：MCP仍为Analyzer6/Rules8及相同28工具，没有研究特征导入接口，`analyze_tracks`不会执行musicnn或改写人工反馈。

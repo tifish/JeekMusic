@@ -153,6 +153,16 @@
       "recording_key_sha256": "fb55c7321379f0ac45c3fea7018bdcb142aaeec409071432ac6c66ae796e7ece",
       "label": "SPORT",
       "reason": "也适合运动；撤销早期研究负例假设",
+      "perceived_pulse_feedback": {
+        "source": "explicit_user_feedback_2026-10-31",
+        "segment_start_ms": 124000,
+        "segment_end_ms": 134000,
+        "approximate_steps": 13,
+        "chosen_level": "slower_main_pulse",
+        "approximate_bpm_for_this_segment_only": 78,
+        "precision": "rough_count_not_exact_beat_annotation",
+        "interpretation": "SPORT remains positive at the slower main pulse. Do not double tempo to meet workout speed; not a global minimum BPM and not permission to accept all slow songs."
+      },
       "label_source": "explicit_user_feedback",
       "used_for_tuning": true,
       "independent": false,
@@ -282,5 +292,5 @@
       }
     }
   ],
-  "criteria_clarification": "主要是有明显节奏感，但节奏不能过慢；东风破曲风悠扬慵懒可排除；Lucky主鼓点慢，不以装饰/细分拍当主拍。和光同尘仍是SPORT。"
+  "criteria_clarification": "主要是有明显节奏感，但节奏不能过慢；东风破曲风悠扬慵懒可排除；Lucky主鼓点慢，不以装饰/细分拍当主拍。和光同尘仍是SPORT，2:04–2:14约13下，跟较慢主拍；不是约25下伴奏细分，不据此指定全局最低BPM或接受全部慢歌。"
 }

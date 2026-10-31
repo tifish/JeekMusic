@@ -76,3 +76,5 @@ dotnet build desktop/tools/AnalysisProbe -p:_IsPublishing=true -p:SelfContained=
 后续规则 v6 新增独立安静维度，分析器及 evidence contract 继续为 v5，无条件重解码不适用；见 [安静标签契约及验证](calmness-v6.md)。
 
 规则 v7 的低代理分数改进和单录音扩采对照见 [calmness-v7](calmness-v7.md)。`AnalysisProbe` 可追加 `--sampling-comparison`，对至少 100 秒录音比较现有首轮/有界追加、3×20s 和 6×10s；复用生产解码/模型，但输出明确不可写入缓存的诊断计划，生产采样与 v5 契约不变。分组评估把 `provenance.used_for_tuning=true` 的整个关联组强制留在 regression，即便误填 independent=true 也不能进入独立成绩。
+
+按需逐段起音、自相关竞争及同窗原始 521 类解释已实现为独立诊断 contract，不改变 v5 缓存与 v7 分类；见 [运动诊断 v1 实验与验证](workout-diagnostics-v1.md)。

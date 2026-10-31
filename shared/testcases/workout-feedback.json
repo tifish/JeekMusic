@@ -1,0 +1,215 @@
+{
+  "provenance": "Six explicit user feedback recordings, identity verified by production MCP 2026-10-31; regression/tuning only, all same artist. No manual overrides written. Not an accuracy set.",
+  "records": [
+    {
+      "trackId": 1210,
+      "title": "漫漫",
+      "artist": "周深",
+      "album": "小深情",
+      "durationMs": 233090,
+      "codec": "ogg",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "e417e21411d6fcb984550e9a77bb82cb894025589bb49340ee64e63fad829d83",
+      "label": "SPORT",
+      "reason": "漫漫这首歌合适运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1148,
+      "title": "初醒",
+      "artist": "周深",
+      "album": "白日提灯 影视原声带",
+      "durationMs": 216192,
+      "codec": "mp3",
+      "sampleRate": 48000,
+      "channels": 2,
+      "recording_key_sha256": "3bea2f1909b14f85d19cd08f03a43f9fc9f9031274b38bde3e8c354d821ad2cb",
+      "label": "SPORT",
+      "reason": "初醒也合适运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1206,
+      "title": "江湖觅知音",
+      "artist": "周深",
+      "album": "江湖觅知音",
+      "durationMs": 183118,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "5c4ce978732158ec63edef61d3e86a0bf4d3fb5217522c6e4e156d5dc56fe2f7",
+      "label": "SPORT",
+      "reason": "江湖觅知音很合适运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1127,
+      "title": "Zoobi Doobi (Live)",
+      "artist": "周深",
+      "album": "聚划算55青春选择之夜晚会Live",
+      "durationMs": 217486,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "1315eb772b6b02ec7a48637884b6f1693f2b6e6e9d9ccea6a4a1541043c73396",
+      "label": "SPORT",
+      "reason": "zoobi doobi 也合适",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1155,
+      "title": "和光同尘",
+      "artist": "周深",
+      "album": "大江大河2 电视剧原声带",
+      "durationMs": 248660,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "recording_key_sha256": "fb55c7321379f0ac45c3fea7018bdcb142aaeec409071432ac6c66ae796e7ece",
+      "label": "SPORT",
+      "reason": "也适合运动；撤销早期研究负例假设",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "trackId": 1212,
+      "title": "浮光",
+      "artist": "周深",
+      "album": "浮光",
+      "durationMs": 274608,
+      "codec": "mp3",
+      "sampleRate": 48000,
+      "channels": 2,
+      "recording_key_sha256": "38596585c21d27c40bc0684a43a746cd5089cf8ba9eb92adcef91d49dfd30e2c",
+      "label": "NON_SPORT",
+      "reason": "浮光虽然有节奏，但偏慢，不合适运动",
+      "label_source": "explicit_user_feedback",
+      "used_for_tuning": true,
+      "independent": false,
+      "verified": {
+        "analyzerVersion": 5,
+        "rulesVersion": 7,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    }
+  ]
+}

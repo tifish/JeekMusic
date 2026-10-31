@@ -61,7 +61,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(26, tools.Count);
+        Assert.Equal(27, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }

@@ -1,4 +1,5 @@
 using JeekMusic.Sync;
+using JeekMusic.Analysis;
 using System.Text;
 using System.Text.Json.Nodes;
 using JeekMusic.Core.Queue;
@@ -14,10 +15,12 @@ namespace JeekMusic.Automation;
 public sealed class McpTools
 {
     readonly AppServices app;
+    readonly AnalysisDiagnosticJob diagnostic = new();
 
     public McpTools(AppServices services)
     {
         app = services;
+        app.OnExit += diagnostic.Dispose;
         app.Player.Error += OnError;
     }
 
@@ -33,7 +36,9 @@ public sealed class McpTools
         Tool("search_tracks", "Search using the UI library matching and sorting services. Empty query lists all tracks. Uses saved sorting, or file modification time newest first without a preference; sort/reverse override this query only. Invalid dates stay last; equal dates keep file/CUE order. Filters combine with AND; optional tags (up to four, one per dimension) use the UI tag filter; omitted/empty tags means no tag filtering and never changes saved UI preferences. Sorting precedes pagination. Returns mtimeUtcTicks, modifiedUtc (ISO UTC or null) and modifiedLocal (local display or em dash). Pages default to 50, max 200.",
             "\"tags\":{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"string\",\"enum\":[\"SPORT\",\"NON_SPORT\",\"VOCAL\",\"INSTRUMENTAL\",\"CLASSICAL\",\"NON_CLASSICAL\",\"CALM\",\"NON_CALM\"]}},\"query\":{\"type\":\"string\",\"maxLength\":1000},\"folderId\":{\"type\":\"integer\"},\"artistKey\":{\"type\":\"string\"},\"albumKey\":{\"type\":\"string\"},\"sort\":{\"type\":\"string\",\"enum\":[\"FileName\",\"Modified\",\"Title\",\"Artist\",\"Album\",\"Duration\",\"Format\"],\"description\":\"Optional per-query sort, same values as UI settings. Modified is file mtime newest first.\"},\"reverse\":{\"type\":\"boolean\",\"description\":\"Reverse base order; Modified becomes oldest first, unknown dates still last. Defaults to saved direction, or false when sort is supplied. Does not save a preference.\"}," + Page, [], true),
         Tool("get_track", "Read metadata, stable key, path, committed smart tags and tagSources (AUTO/MANUAL, null without a result), and cached file mtime: mtimeUtcTicks (.NET UTC ticks), modifiedUtc (ISO UTC or null), modifiedLocal (local date/time or em dash). No file metadata read or rescan.", "\"trackId\":{\"type\":\"integer\"}", ["trackId"], true),
-        Tool("explain_analysis", "Read committed automatic versus final tags, manual/title rule priority, versions, completeness, per-segment/window evidence, threshold margins (not probabilities), extra sampling reasons and bounded retry budget. CALMNESS v7 reports strict/relative window support (overlapping, union used for decisions), per-segment support and thresholds; it is an uncalibrated heuristic. Existing acousticFeatures are single-segment diagnostics, not calmness inputs. Optional includeReviews returns at most the latest 100 local correction audit records; snapshots are review evidence, not independent ground truth. Never decodes audio or changes state.",
+        Tool("diagnose_analysis", "Opt-in local production-equivalent diagnostics, no audio output, audio files, cache/tag writes or network. start requires exactly one explicit trackId and optional budgetSeconds (15-180, default 60). At most one job, 3 initial plus at most 2 additional independent intervals, at most 50 selected audio seconds (150 with bounded retries); per-module max 3 attempts. Reentry rejected. Returns immediately. status reads metadata and production evidence/class map, not raw arrays; result requires segmentIndex and returns that interval's production onset envelope, spectral onset strengths/intervals, all 40-240 BPM lag candidates with quarter persistence, and actual same-window 521 responses. energyIds/calmIds are production group membership. Half/double tempo alternatives are exposed without choosing one. Correlations/peak ratios are not probabilities or annotated beats. cancel cooperatively stops at frame/decode boundaries, discards partial results. Deadline yields budget_exhausted. Offline/stale recording changes are rejected. Only one in-memory result retained until next start/exit, no library scan. status/cancel accept only action; result only action/segmentIndex. Does not change playback, filters or analysis preferences. Shared in daily/NativeAOT builds.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"status\",\"result\",\"cancel\"]},\"trackId\":{\"type\":\"integer\"},\"budgetSeconds\":{\"type\":\"integer\",\"minimum\":15,\"maximum\":180},\"segmentIndex\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", ["action"]),
+        Tool("explain_analysis", "Read committed automatic versus final tags, manual/title rule priority, versions, completeness, per-segment/window evidence, threshold margins (not probabilities), extra sampling reasons and bounded retry budget. CALMNESS v7 reports strict/relative window support (overlapping, union used for decisions), per-segment support and thresholds; it is an uncalibrated heuristic. Existing acousticFeatures are single-segment diagnostics, not calmness inputs. Optional includeReviews returns at most the latest 100 local correction audit records; snapshots are review evidence, not independent ground truth. Never decodes audio or changes state. Use diagnose_analysis for explicit bounded fresh per-segment rhythm/521-class diagnostics; these are not cached features.",
             "\"trackId\":{\"type\":\"integer\"},\"includeReviews\":{\"type\":\"boolean\"}", ["trackId"], true),
         Tool("set_smart_tags", "Correct smart tags for 1–1000 library trackIds, including offline songs, using the same atomic batch service as the UI. Provide at least one of mood/voice/genre/calmness; CALMNESS is independent of workout; CALM means quiet listening character and NON_CALM means not quiet, not system volume; omitted dimensions remain unchanged (including sync timestamps). A concrete value sets a manual override even when equal to automatic; AUTO restores automatic using a timestamped null sync record. Validates all songs/values before writing; failures roll back the entire batch and computed tags. Saves an atomic local before/after review snapshot with optional reason (not independent truth). Awaits one recomputation and sync notification; returns committed tags/tagSources for distinct tracks. Does not analyze audio, change file metadata or start playback.",
             "\"trackIds\":" + Ids + ",\"mood\":{\"type\":\"string\",\"enum\":[\"SPORT\",\"NON_SPORT\",\"AUTO\"]},\"voice\":{\"type\":\"string\",\"enum\":[\"VOCAL\",\"INSTRUMENTAL\",\"AUTO\"]},\"genre\":{\"type\":\"string\",\"enum\":[\"CLASSICAL\",\"NON_CLASSICAL\",\"AUTO\"]},\"calmness\":{\"type\":\"string\",\"enum\":[\"CALM\",\"NON_CALM\",\"AUTO\"]},\"reason\":{\"type\":\"string\",\"maxLength\":500}", ["trackIds"], minProperties: 2),
@@ -154,6 +159,39 @@ public sealed class McpTools
                     if (ListBuilder.FilterOf(app.Library.Snapshot, selectedTags) is { } predicate) tracks = tracks.Where(predicate);
                 }
                 return Paginate(SortSearch(tracks, a, app.Settings.Current), a, TrackJson);
+            case "diagnose_analysis":
+                var action = Required(a, "action").GetValue<string>();
+                if (action == "start")
+                {
+                    if (a.ContainsKey("segmentIndex")) throw new ArgumentException("start rejects segmentIndex");
+                    var target = Track(Required(a, "trackId").GetValue<long>());
+                    var diagnosticPath = app.Library.PathOf(target) ?? throw new ArgumentException("Recording offline");
+                    var signature = AnalysisFeature.Signature(target);
+                    var diagnosticFile = new FileInfo(diagnosticPath);
+                    if (!diagnosticFile.Exists || diagnosticFile.Length != target.Size || diagnosticFile.LastWriteTimeUtc.Ticks != target.Mtime)
+                        throw new InvalidOperationException("Recording signature stale; rescan before diagnostics");
+                    diagnostic.Start(target.Id, a["budgetSeconds"]?.GetValue<int>() ?? 60, async token =>
+                    {
+                        var output = await AnalysisDiagnostics.Run(diagnosticPath, target, token);
+                        var current = app.Library.ByKey(target.TrackKey);
+                        var file = new FileInfo(diagnosticPath);
+                        if (current is null || AnalysisFeature.Signature(current) != signature ||
+                            !file.Exists || file.Length != target.Size || file.LastWriteTimeUtc.Ticks != target.Mtime)
+                            throw new InvalidOperationException("Recording changed during diagnostics");
+                        return output;
+                    });
+                }
+                else if (action == "result")
+                {
+                    if (a.Count != 2) throw new ArgumentException("result requires only action/segmentIndex");
+                    return diagnostic.Read(Required(a, "segmentIndex").GetValue<int>());
+                }
+                else
+                {
+                    if (a.Count != 1) throw new ArgumentException("status/cancel accept only action");
+                    if (action == "cancel") diagnostic.Cancel();
+                }
+                return diagnostic.Read();
             case "explain_analysis":
                 var explained = Track(Required(a, "trackId").GetValue<long>());
                 var explanation = app.SmartTags.Explain(explained);

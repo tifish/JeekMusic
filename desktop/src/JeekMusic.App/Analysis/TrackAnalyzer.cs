@@ -9,7 +9,8 @@ public static class TrackAnalyzer
 {
     public static async Task<FeaturesData> Analyze(string path, Track track, CancellationToken ct,
         Func<float[], CancellationToken, (ModelScores? Mean, ModelScores[] Frames)> infer,
-        Func<string, long, long, CancellationToken, Task<float[]>>? decode = null)
+        Func<string, long, long, CancellationToken, Task<float[]>>? decode = null,
+        Action<SegmentEvidence, float[]>? observe = null)
     {
         decode ??= PcmDecoder.Window;
         var timer = Stopwatch.StartNew();
@@ -42,7 +43,9 @@ public static class TrackAnalyzer
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (Exception e) { error = (pcm is null ? "decode:" : "model:") + e.GetType().Name; }
             }
-            segments.Add(new(w.StartMs, w.EndMs, additional, pcm?.Length ?? 0, decodes, models, mean, frames, error));
+            var segment = new SegmentEvidence(w.StartMs, w.EndMs, additional, pcm?.Length ?? 0, decodes, models, mean, frames, error);
+            segments.Add(segment);
+            if (pcm is not null) observe?.Invoke(segment, pcm);
         }
         var start = track.StartMs ?? 0;
         var duration = track.EndMs is { } end ? Math.Min(track.DurationMs, end - start) : track.DurationMs;

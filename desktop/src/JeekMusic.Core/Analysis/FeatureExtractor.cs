@@ -25,11 +25,11 @@ public static class FeatureExtractor
     private const int Hop = 256;
     private const double Fps = (double)SampleRate / Hop;
 
-    public static AudioFeatures Extract(float[] samples, int sampleRate = SampleRate)
+    public static AudioFeatures Extract(float[] samples, int sampleRate = SampleRate, Action<double[]>? observeEnvelope = null)
     {
         if (sampleRate != SampleRate) throw new ArgumentException($"resample to {SampleRate} Hz first", nameof(sampleRate));
         var frames = samples.Length < Frame ? 0 : (samples.Length - Frame) / Hop + 1;
-        if (frames < 8) return new AudioFeatures(null, 0.0, -70.0, 0.0, 0.0, 0.0, 0.0);
+        if (frames < 8) { observeEnvelope?.Invoke([]); return new AudioFeatures(null, 0.0, -70.0, 0.0, 0.0, 0.0, 0.0); }
 
         var fft = new Fft(Frame);
         var window = new double[Frame];
@@ -85,6 +85,7 @@ public static class FeatureExtractor
         flux[0] = 0.0;
 
         var envelope = OnsetEnvelope(flux);
+        observeEnvelope?.Invoke(envelope);
         var (bpm, confidence) = Tempo(envelope);
         var (loudness, range) = Loudness(samples);
         return new AudioFeatures(

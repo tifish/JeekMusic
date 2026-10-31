@@ -120,6 +120,9 @@ public static class YamnetScores
     /// <summary>Exciting, Happy, Dance, Electronic, Hip hop, Rock, Drum kit, Drum, Rapping, Disco, Pop, Electronic dance music</summary>
     private static readonly int[] Energy = [274, 271, 269, 234, 212, 214, 157, 159, 31, 231, 211, 240];
 
+    public static ReadOnlySpan<int> EnergyIds => Energy;
+    public static ReadOnlySpan<int> CalmIds => Calm;
+
     private const int Orchestra = 179;
 
     /// <summary>各类别在所有帧上的平均分 → 分类用的几组得分。</summary>

@@ -587,6 +587,306 @@
       },
       "vocal": false,
       "sport": false
+    },
+    {
+      "name": "four_strong_windows_still_below_median",
+      "evidence": {
+        "contract": 5,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 10000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -5.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.28871038017235,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "feature_complete": true,
+        "elapsed_ms": 0
+      },
+      "vocal": false,
+      "sport": false
+    },
+    {
+      "name": "six_strong_windows_sustained_majority",
+      "evidence": {
+        "contract": 5,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 10000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -5.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.428065570258525,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "feature_complete": true,
+        "elapsed_ms": 0
+      },
+      "vocal": false,
+      "sport": true
+    },
+    {
+      "name": "exact_half_strong_windows_median_between",
+      "evidence": {
+        "contract": 5,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 10000,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -5.0,
+              "classical": -2.0,
+              "calm": 0.01,
+              "energy": 0.3583879752154375,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.706775950430875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5,
+                "classical": -2,
+                "calm": 0.01,
+                "energy": 0.009999999999999998,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "feature_complete": true,
+        "elapsed_ms": 0
+      },
+      "vocal": false,
+      "sport": false
     }
   ]
 }

@@ -25,6 +25,7 @@
     <TrimmerRootAssembly Include="JeekMusic" />
     <TrimmerRootAssembly Include="Avalonia.Controls.DataGrid" />
     <AvaloniaResource Include="Assets\**" />
+    <EmbeddedResource Include="Models\yamnet_class_map.csv" LogicalName="JeekMusic.YamnetClassMap" />
     <EmbeddedResource Include="Strings\en.json" LogicalName="JeekMusic.Strings.en.json" />
   </ItemGroup>
 

@@ -156,7 +156,7 @@ English: `playback` with `action: "toggle"` shares the main/mini player's unmodi
 - `alignment` 为 `none`、`awaiting-layout`、`keep` 或 `center`；`initiallyFullyVisible` 在可靠布局前为 null，之后记录本次请求的原始判断，虚拟化实现行后也不改写；`centerErrorY` 为当前行中心相对实际数据视口中心的纵向差（逻辑像素），无行布局时为 null。首尾无法居中时可以非零，判断是否完整可见仍以 `currentFullyVisible` 为准。
 - `result`：`no-request`、`pending`、`already-visible`、`centered`、`clamped`，或边界/取消原因 `not-in-current-view`、`view-hidden`、`view-changed`、`track-changed`、`user-input`、`queue-changed`、`closed`、`layout-limit`、`row-taller-than-viewport`。原 `revealed` 结果随居中规则改为 `centered` 或 `clamped`。超过有限布局校正或单行高于视口时不保证完整显示，不会无限重试。`result` 是最近请求的结果，`currentFullyVisible` 是查询时的实际状态；用户随后滚走时两者可以不同。
 
-现共 26 个工具（包含智能标签修正与资源批量获取）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
+现共 27 个工具（包含智能标签修正与资源批量获取）；播放工具的参数与范围保持兼容；`get_diagnostics` 输入 Schema 仍为空对象并拒绝额外参数，不新增 UI 专用控制工具。Headless 回归在 `PlayingVisibilityTests`，使用真实 DataGrid/队列弹层、跨屏虚拟化、内存曲库和 fake 引擎/端点（含真实发出 `FileStarted` 的模拟自然换歌），不连接 MCP 桥接、不启动客户端、不解码音频。
 
 ### 歌曲修改时间与排序
 
@@ -219,7 +219,7 @@ English: The visible six-DIP navigation splitter resizes both ways. Expanding a 
 
 ### 文件夹展开诊断
 
-`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 26 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
+`get_diagnostics.folderNavigation` 是兼容性新增，开发/正式版本同一实现，无额外开关、无新增工具；当前共 27 个工具；该诊断的空对象输入 Schema 不变。查询只读取当前内存导航状态，不创建窗口、恢复选中、展开目录或启动音频。窗口尚未创建/已关闭时 `created: false`，策略和已载入的偏好统计仍可读取，树节点计数为 0。
 
 - `defaultExpanded: true`、`persistence: "device-local-ui-snapshot"`、`keyVersion: 1`。
 - `automaticNavigation: "preserve-collapsed"`：恢复选中项、普通导航/历史、刷新/扫描不打开已主动收起的文件夹祖先。
@@ -326,7 +326,7 @@ python desktop/tools/test-build-isolation.py --build-only
 
 声道布局来自已加载解码器的明确 `audio-params/channels`，mono/stereo 可安全识别；5.1 与 5.1(side) 区分。首次加载保持静音/暂停，拿到可靠布局后若有必要，再切换设备并重开流；确认完成才继续播放。只知道“6 声道”等数量时不推断通用掩码，保留当前扬声器布局，标明布局未知和必要声道转换。已知源布局直接输出不可行时，使用设备当前布局并报告转换；原采样率不可行时保留可用率并明确报告重采样/精度降低。独占仍交给播放内核自动协商，多声道未知布局不强套固定掩码。
 
-关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正与资源批量获取共 26 个工具。
+关闭开关仅停止后续自动匹配，不立即改变设备格式；本客户端已持有的临时格式仍在随后显式暂停/结束/释放时按所有权保护恢复。暂停时开启仅保存偏好，续播才匹配；进出独占不改写保存的共享开关。旧版无偏好默认为关闭；本轮未发布预览配置中的 auto 迁移为开启，manual/system 迁移为关闭，丢弃旧手动率，绝不据旧手动值写端点。本轮早先的 Desktop 工作流均未发布成功，因此新增的 sampleRateMode/sampleRate 手动控制参数未对外正式发行，最终 Schema 删除这些预览参数并拒绝它们；此前正式版 device/exclusive 调用保持兼容，这些输出参数变更不增加工具；当前随智能标签修正与资源批量获取共 27 个工具。
 
 共享自动格式是临时配置：每个物理端点首次实际写入前，保存当时真实 Windows 设备默认格式与混音格式的完整原始结构，不使用 factory default、硬编码 48k/16/2 或其他端点快照。显式暂停（界面、媒体键、快捷键与 MCP 共用业务）先静音并关闭流，恢复基线，保留歌曲/队列/CUE 精确位置；暂停 seek 只更新保存位置。续播重新读取当前基线并匹配，确认真实输出后继续。切歌和内部重建不恢复；自然队列结束、清空、正常退出、释放旧设备和进入独占恢复。独占本身不改共享格式，暂停仅释放其流。
 
@@ -391,3 +391,10 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 `search_tracks` 新增可选 `tags` 字符串数组（最多四个，每维最多一个）：如 `{"tags":["CALM","NON_SPORT","INSTRUMENTAL"]}`。复用 UI 的 AND 筛选，返回筛选后 total，分页前筛选；省略或空数组不筛标签。不更改用户筛选偏好；同维重复或互斥标签报错。未分析/失败歌曲不匹配安静或非安静。原调用仍可用。
 
 审核导出提供第四维的 `?` 待人工标注；分组评估支持四维，旧三维输入的安静维度计为 unknown，绝不从旧 QUIET 或非运动推导人工标签。两种构建共享同一 Schema 和业务实现。
+
+
+## 按需运动诊断（diagnose_analysis）
+
+第 27 个工具 `diagnose_analysis` 复用正式 `AnalysisDiagnostics` 服务，在开发版和 NativeAOT 完整提供相同能力。`start` 必须指定单个 `trackId`，可选 `budgetSeconds` 为 15–180（默认 60）；无全库范围。单任务防重入、立即返回，生产最多 5 个独立片段/50 秒选段，模块重试最多三次。`status` 只接受 action，返回状态、完整性、耗时、类表及生产证据。`result` 只接受 action 与必需的 `segmentIndex`（0–4），返回该片段包络、起音强弱/间隔、自相关所有候选和实际同窗 521 类响应。`cancel` 只接受 action，协作取消，丢弃部分结果；总预算到达报 `budget_exhausted`。取消不写失败缓存，可显式重试；MCP 断开后任务仍受预算约束，可由另一连接控制。
+
+不播放、不写音频临时文件、不上传、不写缓存/标签、不改筛选或用户分析设置；离线/过期录音拒绝。结果仅保留内存中一首，下一次开始或退出时清除。原 `explain_analysis` 保持纯缓存只读；新诊断不会把旧缓存伪装为新增特征。起音间隔不等于音乐拍间隔，自相关峰/生产 BPM 峰比不是概率。使用、字段来源、半倍拍限制与六录音实验见 [运动诊断 v1](../../docs/workout-diagnostics-v1.md)。

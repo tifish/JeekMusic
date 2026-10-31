@@ -386,7 +386,7 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 `CALMNESS` 是第四维，`CALM` / `NON_CALM` 显示为安静 / 非安静。`set_smart_tags` 的可选 `calmness` 接受这两个值或 `AUTO`。旧参数、原三维、整批校验及回滚不变。`get_track` 与列表的 `tags.calmness` / `tagSources.calmness` 无结果时为 null；`explain_analysis` 的 automatic/final/sources 使用大写 `CALMNESS`。
 
-`explain_analysis.calmness` 给出有效窗数、全局支持比例、最弱片段支持比例、强动感窗比例、全部阈值和无结果原因。它是未校准的听感启发式，独立于系统音量和运动三档偏好。规则和兼容语义见 [安静标签契约](../../docs/calmness-v6.md)。
+`explain_analysis.calmness` 给出有效窗数、全局支持比例、最弱片段支持比例、强动感窗比例、全部阈值和无结果原因。Rules v7 的 `supportDefinition=strict_or_relative_per_window` 表示逐窗对严格分支与相对优势分支取并集；`strictSupport` / `relativeSupport` 可重叠，不能相加。新增 `segments[]` 含 startMs/endMs/windows 和三个支持率，阈值新增 relativeCalmFloor/relativeEnergyCeiling/relativeEnergyToCalmCeiling；已有字段保留，support 表示当前版本的实际决策支持。`acousticFeatures` 暴露已有 BPM、起音率、谱质心和响度代理等诊断（`usedForCalmness=false`），v5 的范围为最长解码片段，非标准整曲响度。所有数值均非校准概率。输入 Schema 不变，无新必填参数；开发和正式版使用同一实现。规则见 [v7 改进与验证](../../docs/calmness-v7.md)，维度和同步兼容见 [v6 契约](../../docs/calmness-v6.md)。
 
 `search_tracks` 新增可选 `tags` 字符串数组（最多四个，每维最多一个）：如 `{"tags":["CALM","NON_SPORT","INSTRUMENTAL"]}`。复用 UI 的 AND 筛选，返回筛选后 total，分页前筛选；省略或空数组不筛标签。不更改用户筛选偏好；同维重复或互斥标签报错。未分析/失败歌曲不匹配安静或非安静。原调用仍可用。
 

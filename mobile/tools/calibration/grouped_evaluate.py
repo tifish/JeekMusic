@@ -1,6 +1,6 @@
 """Frozen-prediction grouped evaluation. No label inference or threshold fitting.
 
-Input JSONL: song_id, album_id, artist_ids, labels {VOICE/MOOD/GENRE: enum or ?},
+Input JSONL: song_id, album_id, artist_ids, labels {VOICE/MOOD/GENRE/CALMNESS: enum or ?},
 automatic {dimension: enum}, provenance {labels, scores, independent: bool}.
 Only independently reviewed human labels with production_v5 score provenance may enter
 calibration/test. Existing calibration labels and title-generated labels stay regression.
@@ -57,6 +57,7 @@ def evaluate(records, seed="jeek-v5-frozen-1", group_by=("song", "album", "artis
         digest = hashlib.sha256((seed + json.dumps(tokens, ensure_ascii=False)).encode()).hexdigest()
         # A component touching reused/weak labels is entirely regression.
         eligible = all(records[i]["provenance"].get("independent") is True and
+            records[i]["provenance"].get("used_for_tuning") is not True and
             records[i]["provenance"].get("labels") == "human_reviewed" and
             "production_v5" in records[i]["provenance"].get("scores", "") and
             ("album" not in group_by or records[i].get("album_id")) and

@@ -1,4 +1,4 @@
-"""Rules v6 real-client contract with isolated synthetic files and cached v5 evidence.
+"""Rules v7 real-client contract with isolated synthetic files and cached v5 evidence.
 No inference, playback, network or user-library writes. --data retains fixtures for native UI QA.
 """
 import argparse
@@ -42,7 +42,7 @@ def run(exe, root):
             ids = {r[2].split()[0]: r[0] for r in records}
             for tid, key, title, mtime, size in records:
                 quiet, failed = title.startswith("Quiet"), title.startswith("Failed")
-                m = dict(vocal=-3, classical=-1, calm=.04 if quiet else .02, energy=.01 if quiet else .12, orchestra=0)
+                m = dict(vocal=-3, classical=-1, calm=.015 if quiet else .02, energy=.005 if quiet else .12, orchestra=0)
                 evidence = dict(contract=5, feature_complete=not failed, segments=[dict(start_ms=0, end_ms=2925,
                     additional=False, sample_count=46800, decode_attempts=1, model_attempts=1, mean=m, frames=[m]*3)],
                     additional_reasons=[], elapsed_ms=1)
@@ -60,8 +60,14 @@ def run(exe, root):
                 time.sleep(.1)
             assert quiet["tags"]["calmness"] == "CALM" and quiet["tags"]["mood"] == "NON_SPORT"
             explanation = startup.call(c, "explain_analysis", trackId=ids["Quiet"])
-            assert explanation["rulesVersion"] == 6 and explanation["analyzerVersion"] == 5 and not explanation["pendingReanalysis"]
+            assert explanation["rulesVersion"] == 7 and explanation["analyzerVersion"] == 5 and not explanation["pendingReanalysis"]
             assert explanation["calmness"]["support"] == 1
+            assert explanation["calmness"]["strictSupport"] == 0
+            assert explanation["calmness"]["relativeSupport"] == 1
+            assert explanation["calmness"]["supportDefinition"] == "strict_or_relative_per_window"
+            assert explanation["calmness"]["segments"][0]["support"] == 1
+            assert explanation["calmness"]["thresholds"]["relativeEnergyToCalmCeiling"] == .5
+            assert explanation["acousticFeatures"]["usedForCalmness"] is False
             for _ in range(100):
                 filtered = startup.call(c, "search_tracks", tags=["CALM", "NON_SPORT"])
                 if filtered["total"] == 1: break

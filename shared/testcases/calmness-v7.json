@@ -1,0 +1,3269 @@
+{
+  "description": "v7 controlled behavioral regression plus one reused user calibration label; no independent accuracy claim",
+  "cases": [
+    {
+      "name": "sustained low proxy with two-to-one calm dominance",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "low proxy with comparable energy is not positive",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.01,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.01,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.01,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.01,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "no calm despite low energy",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0,
+              "energy": 0.012,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0.012,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "all tiny scores remain unavailable",
+      "expected": null,
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.003,
+              "energy": 0.001,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.003,
+                "energy": 0.001,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "isolated relative evidence amid no signal",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0015,
+              "energy": 0.0005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "strong rhythm throughout",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.3,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.3,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.3,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "local crescendo cannot hide in global support",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.012,
+              "energy": 0.182,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "limited local rise remains tolerated",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.013999999999999999,
+              "energy": 0.064,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.013999999999999999,
+              "energy": 0.064,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.013999999999999999,
+              "energy": 0.064,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "relative floor and dominance inclusive",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "below relative floor",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.009999,
+              "energy": 0.001,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.009999,
+                "energy": 0.001,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "above relative ratio",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.005001,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.005001,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "union counts overlap once",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0205,
+              "energy": 0.12449999999999999,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "union exact seventy percent",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.018,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "below union seventy percent",
+      "expected": "NON_CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0165,
+              "energy": 0.0045,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.04,
+                "energy": 0.01,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "exact weakest segment half",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.013500000000000002,
+              "energy": 0.0045,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0075,
+              "energy": 0.0025,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "negative score unavailable",
+      "expected": null,
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.0034999999999999988,
+              "energy": 0.014500000000000002,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": -0.1,
+                "energy": 0.1,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "short relative signal unavailable",
+      "expected": null,
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 1950,
+            "additional": false,
+            "sample_count": 31200,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "failed additional pass ignored as a whole",
+      "expected": "CALM",
+      "evidence": {
+        "contract": 5,
+        "feature_complete": true,
+        "segments": [
+          {
+            "start_ms": 0,
+            "end_ms": 9750,
+            "additional": false,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.015,
+              "energy": 0.005,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.015,
+                "energy": 0.005,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 20000,
+            "end_ms": 29750,
+            "additional": true,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -3.0,
+              "classical": -1.0,
+              "calm": 0.01,
+              "energy": 0.3,
+              "orchestra": 0.0
+            },
+            "frames": [
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3,
+                "classical": -1,
+                "calm": 0.01,
+                "energy": 0.3,
+                "orchestra": 0
+              }
+            ]
+          },
+          {
+            "start_ms": 40000,
+            "end_ms": 49750,
+            "additional": true,
+            "sample_count": 156000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": null,
+            "frames": [],
+            "error": "controlled_failure"
+          }
+        ],
+        "additional_reasons": [],
+        "elapsed_ms": 0
+      }
+    },
+    {
+      "name": "user calibration recording blue parachute",
+      "expected": "CALM",
+      "expected_support": 0.78,
+      "expected_minimum_segment_support": 0.5,
+      "expected_strict_support": 0.7,
+      "provenance": {
+        "labels": "user_feedback",
+        "label_quote": "蓝色降落伞应该算安静",
+        "date": "2026-10-31",
+        "independent": false,
+        "used_for_tuning": true,
+        "scores": "desktop_production_v5_onnx",
+        "recording": {
+          "title": "蓝色降落伞",
+          "artist": "周深",
+          "album": "深的深",
+          "duration_ms": 236434,
+          "codec": "mp3",
+          "sample_rate": 44100,
+          "channels": 2,
+          "disc": 1,
+          "track": 5
+        },
+        "scope": "Only the sole matching local recording; not other artists/live/edits"
+      },
+      "evidence": {
+        "contract": 5,
+        "segments": [
+          {
+            "start_ms": 70930,
+            "end_ms": 80930,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -2.965909389859575,
+              "classical": -3.3314333966352345,
+              "calm": 0.028906250052386895,
+              "energy": 0.0027343750407453626,
+              "orchestra": 0
+            },
+            "frames": [
+              {
+                "vocal": -0.9948236884505399,
+                "classical": -2.176171168138387,
+                "calm": 0.01953125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.6299598003024567,
+                "classical": -4.21073774358943,
+                "calm": 0.0625,
+                "energy": 0.015625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.2497409051497284,
+                "classical": -1.5905099025485814,
+                "calm": 0.02734375,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.822260450544921,
+                "classical": -3.58784982439395,
+                "calm": 0.04296875,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3.4951395721970555,
+                "classical": -1.5905099025485814,
+                "calm": 0.03125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.446778067824533,
+                "classical": -2.5430772826428685,
+                "calm": 0.015625,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.804177657716793,
+                "classical": -3.438552380183549,
+                "calm": 0.04296875,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.138874660933353,
+                "classical": -3.7834791543146626,
+                "calm": 0.0234375,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.4748728665688455,
+                "classical": -4.21073774358943,
+                "calm": 0.015625,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5.414882392508043,
+                "classical": -2.87467956713508,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ],
+            "valid_windows": 10,
+            "complete": true
+          },
+          {
+            "start_ms": 118217,
+            "end_ms": 128217,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -0.6880878371959483,
+              "classical": -4.419217040506471,
+              "calm": 0.04609375086147338,
+              "energy": 0.011718749825377017,
+              "orchestra": 0
+            },
+            "frames": [
+              {
+                "vocal": 1.247235038442855,
+                "classical": -3.4735180432417816,
+                "calm": 0.125,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -0.03737914601093039,
+                "classical": -3.9470281146268364,
+                "calm": 0.0625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": 1.0146189058438453,
+                "classical": -4.5091409977591494,
+                "calm": 0.05078125,
+                "energy": 0.01953125,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.6091886084065492,
+                "classical": -4.21073774358943,
+                "calm": 0.0625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": 1.4314382131363026,
+                "classical": -5.279707777298865,
+                "calm": 0.01171875,
+                "energy": 0.03515625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.7364453545453886,
+                "classical": -2.810907586541918,
+                "calm": 0.02734375,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 2.676561725073713,
+                "classical": -5.05783689558055,
+                "calm": 0.02734375,
+                "energy": 0.01953125,
+                "orchestra": 0
+              },
+              {
+                "vocal": -2.9978185478579853,
+                "classical": -4.0875507028006925,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.19098203835840175,
+                "classical": -4.21073774358943,
+                "calm": 0.0390625,
+                "energy": 0.01171875,
+                "orchestra": 0
+              },
+              {
+                "vocal": -0.3591782902328863,
+                "classical": -4.5091409977591494,
+                "calm": 0.046875,
+                "energy": 0.01953125,
+                "orchestra": 0
+              }
+            ],
+            "valid_windows": 10,
+            "complete": true
+          },
+          {
+            "start_ms": 165503,
+            "end_ms": 175503,
+            "additional": false,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -4.479699609591783,
+              "classical": -3.469326552076943,
+              "calm": 0.03281249990686774,
+              "energy": 0.001953125,
+              "orchestra": 0
+            },
+            "frames": [
+              {
+                "vocal": -2.762549917153249,
+                "classical": -4.738662515349655,
+                "calm": 0.14453125,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.447286432253253,
+                "classical": -3.021948115684884,
+                "calm": 0.0234375,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3.794770843870763,
+                "classical": -2.6202278410408484,
+                "calm": 0.05859375,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5.004544596561597,
+                "classical": -4.267071627622294,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5.669924849096799,
+                "classical": -3.4735180432417816,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -3.8138861392721135,
+                "classical": -3.30592966380132,
+                "calm": 0.046875,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -5.562810671182495,
+                "classical": -2.5605300033500646,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.771008441188231,
+                "classical": -3.6904407346808887,
+                "calm": 0.0078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -4.2631792029617115,
+                "classical": -3.6904407346808887,
+                "calm": 0.01953125,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -6.334167333479831,
+                "classical": -4.738662515349655,
+                "calm": 0.00390625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              }
+            ],
+            "valid_windows": 10,
+            "complete": true
+          },
+          {
+            "start_ms": 23643,
+            "end_ms": 33643,
+            "additional": true,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -0.5526077358068111,
+              "classical": -3.7834791649053954,
+              "calm": 0.03867187621654011,
+              "energy": 0.008203125093132257,
+              "orchestra": 0
+            },
+            "frames": [
+              {
+                "vocal": -1.8494095031896371,
+                "classical": -2.5430772826428685,
+                "calm": 0.00390625,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.5876612022584565,
+                "classical": -3.86859344750081,
+                "calm": 0.15625,
+                "energy": 0.01171875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.7747487350027727,
+                "classical": -3.58784982439395,
+                "calm": 0.02734375,
+                "energy": 0.0078125,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.19811784206136726,
+                "classical": -3.1961188377455847,
+                "calm": 0.02734375,
+                "energy": 0.0078125,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.289950105501762,
+                "classical": -3.021948115684884,
+                "calm": 0.0078125,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -0.39507540425902854,
+                "classical": -3.7834791543146626,
+                "calm": 0.03515625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.5369213806686829,
+                "classical": -4.151039905898646,
+                "calm": 0.015625,
+                "energy": 0.01171875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 1.6676604609465613,
+                "classical": -4.772272346418676,
+                "calm": 0.03125,
+                "energy": 0.02734375,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.7986895038927246,
+                "classical": -3.021948115684884,
+                "calm": 0.0390625,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.39173098664836553,
+                "classical": -3.9470281146268364,
+                "calm": 0.04296875,
+                "energy": 0.0078125,
+                "orchestra": 0
+              }
+            ],
+            "valid_windows": 10,
+            "complete": true
+          },
+          {
+            "start_ms": 200968,
+            "end_ms": 210968,
+            "additional": true,
+            "sample_count": 160000,
+            "decode_attempts": 1,
+            "model_attempts": 1,
+            "mean": {
+              "vocal": -0.9383119128437183,
+              "classical": -3.9739264594912087,
+              "calm": 0.10390624945284799,
+              "energy": 0.0031250000465661287,
+              "orchestra": 0.0003906250058207661
+            },
+            "frames": [
+              {
+                "vocal": -2.279864014591467,
+                "classical": -4.738662515349655,
+                "calm": 0.0390625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -0.20811849376397443,
+                "classical": -4.3710288804643405,
+                "calm": 0.0234375,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.07272759060419168,
+                "classical": -4.3710288804643405,
+                "calm": 0.02734375,
+                "energy": 0.01171875,
+                "orchestra": 0
+              },
+              {
+                "vocal": 1.0833338821382483,
+                "classical": -4.0875507028006925,
+                "calm": 0.10546875,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": 0.658141934419966,
+                "classical": -3.6904407346808887,
+                "calm": 0.0234375,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": 1.608309456418169,
+                "classical": -4.465189469683661,
+                "calm": 0.1640625,
+                "energy": 0.0078125,
+                "orchestra": 0
+              },
+              {
+                "vocal": -2.107765670897394,
+                "classical": -3.648588104339484,
+                "calm": 0.2734375,
+                "energy": 0,
+                "orchestra": 0.00390625
+              },
+              {
+                "vocal": -3.4364096862899784,
+                "classical": -4.267071627622294,
+                "calm": 0.05078125,
+                "energy": 0,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.6819355432392402,
+                "classical": -4.21073774358943,
+                "calm": 0.09765625,
+                "energy": 0.00390625,
+                "orchestra": 0
+              },
+              {
+                "vocal": -1.814333791266594,
+                "classical": -3.491864488702651,
+                "calm": 0.234375,
+                "energy": 0,
+                "orchestra": 0
+              }
+            ],
+            "valid_windows": 10,
+            "complete": true
+          }
+        ],
+        "additional_reasons": [
+          "voice_segment_conflict"
+        ],
+        "feature_complete": true,
+        "elapsed_ms": 440,
+        "complete": true
+      }
+    }
+  ]
+}

@@ -100,7 +100,7 @@ class LibraryDaoTest {
         val folder = addFolder("Calmness/")
         val track = track(folder, "Calmness/", "Sonata Op. 1.mp3")
         tracks.insert(listOf(track))
-        val m = com.tinyfish.jeekmusic.analysis.ModelScores(-3.0, -1.0, .04, .01, 0.0)
+        val m = com.tinyfish.jeekmusic.analysis.ModelScores(-3.0, -1.0, .015, .005, 0.0)
         val e = com.tinyfish.jeekmusic.analysis.AnalysisEvidence(listOf(
             com.tinyfish.jeekmusic.analysis.SegmentEvidence(0, 9750, false, 156000, 1, 1, m, List(10) { m }, null)), emptyList(), true, null, 1)
         val f = TrackFeaturesEntity(track.trackKey, "0:0", 5, null, 0.0, -20.0, 0.0, 0.0, 0.0, 0.0, 0,
@@ -112,9 +112,9 @@ class LibraryDaoTest {
         val dim = com.tinyfish.jeekmusic.analysis.TagDimension.CALMNESS
         val calm = com.tinyfish.jeekmusic.analysis.Tag.CALM
         try {
-            settings.setTagRulesVersion(5)
+            settings.setTagRulesVersion(6)
             repository.recomputeIfRulesChanged()
-            assertEquals(6, settings.current().tagRulesVersion)
+            assertEquals(7, settings.current().tagRulesVersion)
             assertEquals(f, dao.currentFeatures(track.trackKey))
             assertEquals(0, dao.pending(5, 10).size)
             assertEquals(calm, repository.info(track.trackKey).tags[dim])

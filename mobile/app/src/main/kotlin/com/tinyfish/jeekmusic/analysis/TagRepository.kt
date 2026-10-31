@@ -115,10 +115,13 @@ class TagRepository @Inject constructor(
 
     private suspend fun reviewSnapshot(key: String): JSONObject {
         val info = info(key)
+        val evidence = AnalysisEvidence.parse(info.features?.analysisEvidence)
+        val calm = info.features?.takeIf { it.usable() && it.analyzerVersion == 5 }?.let { CalmnessEvidence.from(evidence) }
         fun values(map: Map<TagDimension, Tag?>) = JSONObject().also { o -> map.forEach { (d, v) -> o.put(d.name, v?.name ?: JSONObject.NULL) } }
         return JSONObject().put("automatic", values(info.auto)).put("final", values(info.tags))
             .put("manual", org.json.JSONArray(info.manual.map { it.name })).put("analyzerVersion", info.features?.analyzerVersion)
-            .put("rulesVersion", RULES_VERSION).put("evidence", AnalysisEvidence.parse(info.features?.analysisEvidence)?.toJson()?.let(::JSONObject))
+            .put("rulesVersion", RULES_VERSION).put("evidence", evidence?.toJson()?.let(::JSONObject))
+            .put("calmness", calm?.toJson() ?: JSONObject.NULL)
             .put("classicalTitleMatched", dao.title(key)?.let { ClassicalTitles.matches(it.title, it.album) } == true)
     }
 
@@ -142,7 +145,7 @@ class TagRepository @Inject constructor(
          */
         const val ANALYZER_VERSION = 5
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 6
+        const val RULES_VERSION = 7
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

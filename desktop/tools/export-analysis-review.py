@@ -35,7 +35,9 @@ def main():
                 album_id=identity("album", track.get("albumKey")),
                 artist_ids=[identity("artist", a) for a in track.get("artistKeys", [])],
                 labels={d: "?" for d in ("MOOD", "VOICE", "GENRE", "CALMNESS")}, automatic=review["automatic"],
-                provenance=dict(labels="unreviewed", scores="desktop_production_v5_onnx" if review["complete"] else "legacy_or_incomplete", independent=False),
+                recording=dict(duration_ms=track.get("durationMs"), codec=track.get("codec"), sample_rate=track.get("sampleRate"),
+                    channels=track.get("channels"), track_no=track.get("trackNo"), disc_no=track.get("discNo")),
+                provenance=dict(labels="unreviewed", scores="desktop_production_v5_onnx" if review["complete"] else "legacy_or_incomplete", independent=False, used_for_tuning=False),
                 review=review))
     # Exclusive creation avoids clobbering an already reviewed export.
     with args.output.open("x", encoding="utf-8") as output:

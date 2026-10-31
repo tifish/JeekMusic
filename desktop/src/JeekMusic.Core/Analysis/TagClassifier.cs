@@ -207,7 +207,7 @@ public static class AnalysisVersions
     public const int AnalyzerVersion = 5;
 
     /// <summary>分类规则的版本：规则变了但不需要重新分析时提高，启动时按保存的版本判断是否全部重算一次。</summary>
-    public const int RulesVersion = 6;
+    public const int RulesVersion = 7;
 
     public const string SourceAuto = "AUTO";
     public const string SourceManual = "MANUAL";

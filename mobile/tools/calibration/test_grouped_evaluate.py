@@ -9,6 +9,16 @@ def row(song, album, artists, independent=True):
         provenance=dict(labels="human_reviewed", scores="desktop_production_v5_onnx", independent=independent))
 
 class GroupedEvaluationTest(unittest.TestCase):
+    def test_reused_calmness_label_never_counts_as_independent_test(self):
+        reused = row("user-recording", "album", ["artist"])
+        reused["labels"]["CALMNESS"] = "CALM"
+        reused["automatic"]["CALMNESS"] = "CALM"
+        reused["provenance"]["used_for_tuning"] = True
+        result = evaluate([reused, row("related-recording", "album", ["artist"])])
+        self.assertEqual(2, result["results"]["regression"]["songs"])
+        self.assertEqual(0, result["results"]["test"]["songs"])
+        self.assertEqual(0, result["results"]["calibration"]["songs"])
+
     def test_calmness_is_independent_and_old_inputs_remain_unknown(self):
         old = row("old", "x", ["one"], False)
         new = row("new", "y", ["two"], False)

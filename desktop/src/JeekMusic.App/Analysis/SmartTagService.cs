@@ -66,11 +66,24 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             ["calmness"] = new JsonObject {
                 ["heuristicNotCalibrated"] = true, ["unavailableReason"] = calm is null ? "requires_complete_v5_at_least_3_windows_and_mood_signal" : null,
                 ["windows"] = calm?.Windows, ["support"] = calm?.Support, ["minimumSegmentSupport"] = calm?.MinimumSegmentSupport,
+                ["supportDefinition"] = "strict_or_relative_per_window",
+                ["strictSupport"] = calm?.StrictSupport, ["relativeSupport"] = calm?.RelativeSupport,
+                ["segments"] = calm is null ? null : new JsonArray(calm.Segments.Select(s => (JsonNode)new JsonObject {
+                    ["startMs"] = s.StartMs, ["endMs"] = s.EndMs, ["windows"] = s.Windows,
+                    ["support"] = s.Support, ["strictSupport"] = s.StrictSupport, ["relativeSupport"] = s.RelativeSupport }).ToArray()),
                 ["energeticShare"] = calm?.EnergeticShare,
                 ["thresholds"] = new JsonObject { ["calmFloor"] = CalmnessEvidence.CalmFloor, ["energyCeiling"] = CalmnessEvidence.EnergyCeiling,
+                    ["relativeCalmFloor"] = CalmnessEvidence.RelativeCalmFloor, ["relativeEnergyCeiling"] = CalmnessEvidence.RelativeEnergyCeiling,
+                    ["relativeEnergyToCalmCeiling"] = CalmnessEvidence.RelativeEnergyToCalmCeiling,
                     ["energyToCalmCeiling"] = CalmnessEvidence.EnergyToCalmCeiling, ["supportAtLeast"] = CalmnessEvidence.SupportThreshold,
                     ["eachSegmentSupportAtLeast"] = CalmnessEvidence.SegmentSupportThreshold, ["energeticAbove"] = CalmnessEvidence.EnergeticThreshold,
                     ["energeticShareAtMost"] = CalmnessEvidence.EnergeticShareCeiling } },
+            // Existing single-segment acoustic proxies, diagnostic only; not calmness inputs.
+            ["acousticFeatures"] = data is null ? null : new JsonObject {
+                ["usedForCalmness"] = false, ["scope"] = row?.AnalyzerVersion == 5 ? "longest_decoded_segment" : "legacy_unspecified",
+                ["bpm"] = data.Bpm, ["bpmConfidence"] = data.BpmConfidence, ["loudnessProxy"] = data.Loudness,
+                ["loudnessRangeProxy"] = data.LoudnessRange, ["onsetRate"] = data.OnsetRate,
+                ["centroidHz"] = data.CentroidHz, ["lowRatio"] = data.LowRatio },
             ["evidence"] = evidence is null ? null : JsonNode.Parse(evidence.ToJson()),
             ["budget"] = new JsonObject { ["additionalSegments"] = 2, ["additionalSeconds"] = 20, ["attemptsPerModulePerSegment"] = 3,
                 ["retryBackoffMs"] = new JsonArray(200, 800), ["terminalUntilSignatureVersionChangeOrExplicitReset"] = true }

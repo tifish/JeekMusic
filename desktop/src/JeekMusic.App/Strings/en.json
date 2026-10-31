@@ -500,6 +500,7 @@
   "正在取消…": "Cancelling…",
   "已取消": "Cancelled",
   "批量获取失败": "Resource batch failed",
+  "无法复制歌名，请重试": "Could not copy song titles. Please try again.",
   "批量获取完成": "Resource batch complete",
   "已处理 {0} 项，保存 {1} 项，失败 {2} 项": "Processed {0} units, saved {1}, failed {2}"
 }

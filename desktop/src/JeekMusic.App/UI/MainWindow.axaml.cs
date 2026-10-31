@@ -35,6 +35,7 @@ public partial class MainWindow : Window
 
         Table.DoubleTapped += (_, e) => { if (e.Source is not DataGridColumnHeader) PlaySelected(); };
         Table.KeyDown += OnTableKeyDown;
+        Table.AddHandler(KeyDownEvent, OnSongCopyKeyDown, RoutingStrategies.Tunnel);
         Table.Sorting += OnSorting;
         Table.LoadingRow += OnLoadingRow;
         Table.UnloadingRow += OnUnloadingRow;

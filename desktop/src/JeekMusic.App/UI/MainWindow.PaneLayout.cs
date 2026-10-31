@@ -226,6 +226,7 @@ public partial class MainWindow
         ["lastMeasuredContentWidth"] = _lastNavContentWidth, ["lastMeasuredFolderCount"] = _lastNavMeasuredNodes,
         ["automaticWidthResult"] = _autoNavResult,
         ["navigationOverflow"] = _navigationOverflow?.Diagnostics(),
-        ["songOverflow"] = _songOverflow?.Diagnostics()
+        ["songOverflow"] = _songOverflow?.Diagnostics(),
+        ["songCopy"] = SongCopyDiagnostics()
     };
 }

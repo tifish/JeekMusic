@@ -33,6 +33,12 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 ## 工具
 
+### 歌名复制快捷键诊断
+
+歌曲列表 Ctrl+C 将选中行的完整显示歌名写入系统剪贴板，多选按当前列表顺序以换行分隔，包含虚拟化行，保留重复条目；不可用播放列表行沿用界面显示名称。无选择不修改剪贴板，输入框保留原生文字复制。
+
+`get_diagnostics.mainLayout.songCopy` 提供 `shortcut`、`order`（current-list）、`selectedCount`、`state`（idle/copying/copied/failed）和 `lastCopiedCount`（最近成功复制数量，初始为 0）。该诊断不读写系统剪贴板、不返回其内容、不创建窗口；窗口尚未创建时沿用 `mainLayout.created=false`。工具输入 Schema 和数量不变，开发版与 NativeAOT 共用代码。MCP 获取歌名仍使用 `get_track.title` / `search_tracks.items[].title`；不新增任意剪贴板读写能力。
+
 ### 当前列表全部封面 / 歌词
 
 `fetch_resources` 与歌曲列表标题栏“更多 → 获取全部封面 / 获取全部歌词”、右键选中项获取、设置页全库获取共用同一个批量任务入口和 `OnlineFeature.Fetch`。Debug、Release、NativeAOT 完整共用，无额外开关；工具总数为 26，其余工具参数保持兼容。该工具可能联网和按保存选项写入音频，标记 `openWorldHint` / `destructiveHint` 为 true；status 是同一工具内的只读操作。

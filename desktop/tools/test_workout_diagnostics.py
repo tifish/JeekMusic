@@ -27,7 +27,7 @@ class DiagnosticEvaluationTests(unittest.TestCase):
 
     def test_recording_feedback_keeps_corrected_positive_and_explicit_sources(self):
         labels = json.loads((TOOL.parents[2]/"shared/testcases/workout-feedback.json").read_text(encoding="utf-8"))["records"]
-        self.assertEqual(6, sum(r["label"] == "SPORT" for r in labels))
+        self.assertEqual(7, sum(r["label"] == "SPORT" for r in labels))
         self.assertEqual("SPORT", next(r for r in labels if r["trackId"] == 1155)["label"])
         self.assertEqual("NON_SPORT", next(r for r in labels if r["trackId"] == 1212)["label"])
         simple_love = next(r for r in labels if r["trackId"] == 1115)
@@ -36,6 +36,17 @@ class DiagnosticEvaluationTests(unittest.TestCase):
         self.assertEqual(simple_love["artist"], paired["artist"])
         self.assertEqual("简单爱适合运动", simple_love["reason"])
         self.assertFalse(simple_love["reason_details_provided"])
+        pair = {r["trackId"]: r for r in labels if r["trackId"] in (353, 354)}
+        self.assertEqual({353, 354}, set(pair))
+        self.assertEqual(("NON_SPORT", "SPORT"), (pair[353]["label"], pair[354]["label"]))
+        self.assertEqual(pair[353]["artist"], pair[354]["artist"])
+        self.assertEqual("G.E.M.邓紫棋", pair[353]["artist"])
+        for tid, other in [(353, 354), (354, 353)]:
+            self.assertEqual(other, pair[tid]["paired_control_track_id"])
+            self.assertEqual("末日不适合运动，来自天堂的魔鬼适合运动", pair[tid]["reason"])
+            self.assertFalse(pair[tid]["reason_details_provided"])
+            self.assertTrue(pair[tid]["verified"]["signatureMatches"])
+            self.assertTrue(all(v == "AUTO" for v in pair[tid]["verified"]["sources"].values()))
         self.assertTrue(all(r["label_source"] == "explicit_user_feedback" and not r["independent"] and r["used_for_tuning"] for r in labels))
 
     def test_cache_impact_ignores_stale_versions_and_keeps_first_pass_on_extra_failure(self):

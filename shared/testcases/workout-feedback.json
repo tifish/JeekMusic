@@ -1,5 +1,5 @@
 {
-  "provenance": "Explicit user feedback recordings, verified by production MCP 2026-10-31; tuning/regression only, not independent accuracy. Includes Simple Love as a newly supplied same-artist contrast with East Wind Breaks. No manual overrides written.",
+  "provenance": "Explicit user feedback recordings, verified by production MCP 2026-10-31; eleven calibration/regression recordings, not independent accuracy. Includes same-artist positive/negative pairs for Jay Chou and G.E.M. No manual overrides written.",
   "records": [
     {
       "trackId": 1210,
@@ -318,6 +318,84 @@
         "pendingReanalysis": false,
         "automatic": {
           "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "title": "末日",
+      "artist": "G.E.M.邓紫棋",
+      "album": "A.I.N.Y. 爱你",
+      "durationMs": 283193,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "trackId": 353,
+      "recording_key_sha256": "8466f0f7b09e57660a2018d1ff15e8f71bcf0e4d6b3d430a7315755c3cfa91a1",
+      "label": "NON_SPORT",
+      "reason": "末日不适合运动，来自天堂的魔鬼适合运动",
+      "reason_details_provided": false,
+      "label_source": "explicit_user_feedback",
+      "feedback_context": "2026-10-31 response to the requested non-Zhou-Shen/non-Jay-Chou same-artist positive/negative pair. Unique exact-title recordings resolved using production MCP search_tracks/get_track/explain_analysis; no studio/Live version inferred.",
+      "paired_control_track_id": 354,
+      "used_for_tuning": true,
+      "independent": false,
+      "evaluation_role": "First query of this new feedback pair under previously frozen representation and predeclared low-capacity preference protocols; calibration/regression after review, not independent generalization accuracy.",
+      "verified": {
+        "analyzerVersion": 6,
+        "rulesVersion": 8,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "NON_SPORT",
+          "VOICE": "VOCAL",
+          "GENRE": "NON_CLASSICAL",
+          "CALMNESS": "NON_CALM"
+        },
+        "sources": {
+          "MOOD": "AUTO",
+          "VOICE": "AUTO",
+          "GENRE": "AUTO",
+          "CALMNESS": "AUTO"
+        }
+      }
+    },
+    {
+      "title": "来自天堂的魔鬼",
+      "artist": "G.E.M.邓紫棋",
+      "album": "新的心跳",
+      "durationMs": 245551,
+      "codec": "mp3",
+      "sampleRate": 44100,
+      "channels": 2,
+      "trackId": 354,
+      "recording_key_sha256": "1bec42473d16cdb6b301351825e03beeab7495f05a56ea3d02a47c97bd34cb83",
+      "label": "SPORT",
+      "reason": "末日不适合运动，来自天堂的魔鬼适合运动",
+      "reason_details_provided": false,
+      "label_source": "explicit_user_feedback",
+      "feedback_context": "2026-10-31 response to the requested non-Zhou-Shen/non-Jay-Chou same-artist positive/negative pair. Unique exact-title recordings resolved using production MCP search_tracks/get_track/explain_analysis; no studio/Live version inferred.",
+      "paired_control_track_id": 353,
+      "used_for_tuning": true,
+      "independent": false,
+      "evaluation_role": "First query of this new feedback pair under previously frozen representation and predeclared low-capacity preference protocols; calibration/regression after review, not independent generalization accuracy.",
+      "verified": {
+        "analyzerVersion": 6,
+        "rulesVersion": 8,
+        "signatureMatches": true,
+        "complete": true,
+        "pendingReanalysis": false,
+        "automatic": {
+          "MOOD": "SPORT",
           "VOICE": "VOCAL",
           "GENRE": "NON_CLASSICAL",
           "CALMNESS": "NON_CALM"

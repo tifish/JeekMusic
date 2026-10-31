@@ -1,0 +1,18 @@
+{
+  "contract": "workout_preference_protocol_v1",
+  "declaredBeforeNewPairInference": true,
+  "scope": "One falsifiable personal-preference feasibility probe, not a production classifier, probability or independent generalization estimate.",
+  "representation": "Frozen MTT_musicnn penultimate only; no alternative layer/model search.",
+  "recordingPooling": "L2 of mean of three base-context unit vectors. Perturbations are held-out queries only, never additional training rows.",
+  "model": "Training-only centered PCA, exactly two leading components; training-only population standard deviation scaling (floor 1e-6). Class-balanced ridge least squares of -1/+1, with unpenalized intercept and mean weighted squared error + 1.0 * squared coefficient norm. Strict score > 0 predicts SPORT; score is not a probability.",
+  "parameters": {"components": 2, "scaleFloor": 0.000001, "ridgeAlpha": 1.0, "threshold": 0.0},
+  "splits": ["First test: fit prior nine recordings, query both new recordings together (IDs 353,354), never fit or choose parameters on either.", "Leave whole recording out", "Leave artist+album group out; missing album is singleton recording, never silently inferred", "Leave entire artist out"],
+  "baseline": "Training-only majority label, ties NON_SPORT; report confusion counts and class recalls, not just accuracy.",
+  "checks": "All preprocessing refit within each training fold. Require both training labels and PCA rank >=2 or mark incomplete. Query each held-out recording at all five frozen conditions after pooling its three contexts; report sign flips and margins. Same-artist pair ordering and existing negative errors must be explicit.",
+  "forbidden": "No hyperparameter search, selected PCA axis, resubstitution result, per-song segment split, identity/title/language/recording key/ID feature, unknown automatic label, all-11 high-dimensional supervised fit, manual tag write or deployment.",
+  "decision": "Any failed first pair separation, held-out negative regression or perturbation sign flip rejects this candidate for deployment. Even all passes only justify a separately planned prospective personal-preference validation, not public-model improvement. Do not keep changing models or requesting more pairs after failure.",
+  "provenance": "Prior nine used for scheme selection. New pair is first queried under the frozen scheme, but user supplied after prior research; once reviewed it is calibration/regression too, never an independent sample count of 30 contexts.",
+  "budgetSeconds": 30,
+  "maxRecordings": 16,
+  "privacy": "Local explicit completed representation reports only; no audio, download, production cache or exported fitted model. Full margins remain ignored research artifacts."
+}

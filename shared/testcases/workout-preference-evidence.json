@@ -1,0 +1,419 @@
+{
+  "contract": "workout_preference_evidence_index_v1",
+  "state": "completed",
+  "cacheCompatible": false,
+  "independentAccuracy": false,
+  "preferenceProtocolSha256": "67ce90b8888facc9273f990f9d16faa024f9508bc4f15ca0ebd6fec186223a43",
+  "representationProtocolSha256": "9225a88bd2904a3d3910ecf1ea82d4cd372481bd95adec6d3e21c3d763a3712d",
+  "scriptSha256": "4ff42b809811bd8124beb5d3301e7b8649fe1e5dd998a613f5d9124806b7849e",
+  "feedbackSha256": "8a94663e6229ef46071b6ae5aa8887987bf52b0a5e40307bee99ccd6d8f871e4",
+  "inputReportSha256": [
+    "383c2596099170597a65aa87ee067c4123dcdfefa94a1d96db3f4d6efe9b1e82",
+    "b8fc84ca6904ef752fb4d0eed05bc65c0da7256eb687b21aaa666e244c06b8f6"
+  ],
+  "budgetSeconds": 30,
+  "elapsedSeconds": 0.11944620000031136,
+  "representationScriptSha256": "ca0fb1345c893384ab02c3f7f200296dd722e17ee718ed2e118eb6046a74308d",
+  "authorSourceHashes": {
+    "configuration.py": "00fd595eb16bad3a605e10bb6eaf0152cb8125bed6e2c884a636f679ae100419",
+    "models.py": "ca0a4e64b33fa79ef716d56188202cfdb31c123fa5721addb1e295405b671cf8",
+    "extractor.py": "a634059ade166c3b7379c4243bc0728c060d564ca498676af755a1e37523288e"
+  },
+  "checkpointSha256": "041f3935e981a65cea739842d30c188d3a7d2adf4410955c8668eb3de4a5acab",
+  "extractionRuns": [
+    {
+      "recordings": 9,
+      "contexts": 135,
+      "elapsedSeconds": 117.52076550000038,
+      "peakWorkingSetBytes": 541523968,
+      "inferenceSeconds": 77.4781079000104
+    },
+    {
+      "recordings": 2,
+      "contexts": 30,
+      "elapsedSeconds": 24.992115300000478,
+      "peakWorkingSetBytes": 536879104,
+      "inferenceSeconds": 11.67472109999835
+    }
+  ],
+  "evaluations": {
+    "first_pair": {
+      "confusion": {
+        "tp": 1,
+        "fn": 0,
+        "tn": 0,
+        "fp": 1,
+        "sportRecall": 1.0,
+        "nonSportRecall": 0.0
+      },
+      "majorityBaseline": {
+        "tp": 1,
+        "fn": 0,
+        "tn": 0,
+        "fp": 1,
+        "sportRecall": 1.0,
+        "nonSportRecall": 0.0
+      },
+      "signStable": true,
+      "foldCount": 1,
+      "falsePositiveIds": [
+        353
+      ],
+      "falseNegativeIds": [],
+      "predictions": [
+        {
+          "trackId": 353,
+          "baseScore": 0.20797575767596044,
+          "scoreRange": [
+            0.17085680235004885,
+            0.20797575767596044
+          ]
+        },
+        {
+          "trackId": 354,
+          "baseScore": 0.10558742648851868,
+          "scoreRange": [
+            0.0909440519363523,
+            0.10558742648851868
+          ]
+        }
+      ]
+    },
+    "recording": {
+      "confusion": {
+        "tp": 4,
+        "fn": 3,
+        "tn": 2,
+        "fp": 2,
+        "sportRecall": 0.5714285714285714,
+        "nonSportRecall": 0.5
+      },
+      "majorityBaseline": {
+        "tp": 7,
+        "fn": 0,
+        "tn": 0,
+        "fp": 4,
+        "sportRecall": 1.0,
+        "nonSportRecall": 0.0
+      },
+      "signStable": true,
+      "foldCount": 11,
+      "falsePositiveIds": [
+        353,
+        1212
+      ],
+      "falseNegativeIds": [
+        1115,
+        1155,
+        1210
+      ]
+    },
+    "album": {
+      "confusion": {
+        "tp": 4,
+        "fn": 3,
+        "tn": 2,
+        "fp": 2,
+        "sportRecall": 0.5714285714285714,
+        "nonSportRecall": 0.5
+      },
+      "majorityBaseline": {
+        "tp": 7,
+        "fn": 0,
+        "tn": 0,
+        "fp": 4,
+        "sportRecall": 1.0,
+        "nonSportRecall": 0.0
+      },
+      "signStable": true,
+      "foldCount": 11,
+      "falsePositiveIds": [
+        353,
+        1212
+      ],
+      "falseNegativeIds": [
+        1115,
+        1155,
+        1210
+      ]
+    },
+    "artist": {
+      "confusion": {
+        "tp": 5,
+        "fn": 2,
+        "tn": 3,
+        "fp": 1,
+        "sportRecall": 0.7142857142857143,
+        "nonSportRecall": 0.75
+      },
+      "majorityBaseline": {
+        "tp": 2,
+        "fn": 5,
+        "tn": 1,
+        "fp": 3,
+        "sportRecall": 0.2857142857142857,
+        "nonSportRecall": 0.25
+      },
+      "signStable": true,
+      "foldCount": 4,
+      "falsePositiveIds": [
+        353
+      ],
+      "falseNegativeIds": [
+        1115,
+        1210
+      ]
+    }
+  },
+  "representations": {
+    "penultimate": {
+      "stabilityGate": true,
+      "neighborhoodGate": false,
+      "baseContextLabelAgreement": 19,
+      "baseContextCount": 33,
+      "baseContextSameArtistCount": 15,
+      "interpretation": "Calibration neighborhood agreement, not accuracy; no learned classifier and no same-recording neighbors.",
+      "newPair": [
+        {
+          "trackId": 353,
+          "baseContextMaxDistance": 0.2445286057673386,
+          "baseContextLabelAgreement": 1,
+          "allContextLabelAgreement": 5,
+          "perturbationStable": true,
+          "gainMaxDistance": 1.1102230246251565e-16,
+          "shiftMaxDistance": 0.015146129749520454,
+          "priorNineBaseNeighbors": [
+            1210,
+            1212,
+            1148
+          ],
+          "priorNineAllContextAgreement": 5,
+          "augmentedBaseNeighbors": [
+            354,
+            1212,
+            1148
+          ]
+        },
+        {
+          "trackId": 354,
+          "baseContextMaxDistance": 0.13041658999213157,
+          "baseContextLabelAgreement": 3,
+          "allContextLabelAgreement": 15,
+          "perturbationStable": true,
+          "gainMaxDistance": 0.0,
+          "shiftMaxDistance": 0.007800190132012164,
+          "priorNineBaseNeighbors": [
+            1115,
+            1206,
+            1148
+          ],
+          "priorNineAllContextAgreement": 15,
+          "augmentedBaseNeighbors": [
+            1115,
+            1206,
+            1148
+          ]
+        }
+      ],
+      "identityByArtist": [
+        {
+          "artist": "G.E.M.邓紫棋",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 1,
+          "baseContexts": 6
+        },
+        {
+          "artist": "Jason Mraz&Colbie Caillat",
+          "recordings": 1,
+          "sportRecordings": 0,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 3
+        },
+        {
+          "artist": "周杰伦",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 1,
+          "baseContexts": 6
+        },
+        {
+          "artist": "周深",
+          "recordings": 6,
+          "sportRecordings": 5,
+          "sameArtistBaseNeighbors": 13,
+          "baseContexts": 18
+        }
+      ]
+    },
+    "temporal": {
+      "stabilityGate": true,
+      "neighborhoodGate": false,
+      "baseContextLabelAgreement": 15,
+      "baseContextCount": 33,
+      "baseContextSameArtistCount": 16,
+      "interpretation": "Calibration neighborhood agreement, not accuracy; no learned classifier and no same-recording neighbors.",
+      "newPair": [
+        {
+          "trackId": 353,
+          "baseContextMaxDistance": 0.017922816352121673,
+          "baseContextLabelAgreement": 1,
+          "allContextLabelAgreement": 6,
+          "perturbationStable": true,
+          "gainMaxDistance": 0.0,
+          "shiftMaxDistance": 0.0041004596889830935,
+          "priorNineBaseNeighbors": [
+            1970,
+            1155,
+            1155
+          ],
+          "priorNineAllContextAgreement": 6,
+          "augmentedBaseNeighbors": [
+            1970,
+            1155,
+            1155
+          ]
+        },
+        {
+          "trackId": 354,
+          "baseContextMaxDistance": 0.03329903547096558,
+          "baseContextLabelAgreement": 1,
+          "allContextLabelAgreement": 5,
+          "perturbationStable": true,
+          "gainMaxDistance": 2.220446049250313e-16,
+          "shiftMaxDistance": 0.0005747600687562304,
+          "priorNineBaseNeighbors": [
+            1970,
+            1148,
+            1212
+          ],
+          "priorNineAllContextAgreement": 5,
+          "augmentedBaseNeighbors": [
+            1970,
+            1148,
+            1212
+          ]
+        }
+      ],
+      "identityByArtist": [
+        {
+          "artist": "G.E.M.邓紫棋",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 6
+        },
+        {
+          "artist": "Jason Mraz&Colbie Caillat",
+          "recordings": 1,
+          "sportRecordings": 0,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 3
+        },
+        {
+          "artist": "周杰伦",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 4,
+          "baseContexts": 6
+        },
+        {
+          "artist": "周深",
+          "recordings": 6,
+          "sportRecordings": 5,
+          "sameArtistBaseNeighbors": 12,
+          "baseContexts": 18
+        }
+      ]
+    },
+    "tags": {
+      "stabilityGate": false,
+      "neighborhoodGate": false,
+      "baseContextLabelAgreement": 22,
+      "baseContextCount": 33,
+      "baseContextSameArtistCount": 9,
+      "interpretation": "Calibration neighborhood agreement, not accuracy; no learned classifier and no same-recording neighbors.",
+      "newPair": [
+        {
+          "trackId": 353,
+          "baseContextMaxDistance": 0.17905186461534572,
+          "baseContextLabelAgreement": 2,
+          "allContextLabelAgreement": 10,
+          "perturbationStable": true,
+          "gainMaxDistance": 2.220446049250313e-16,
+          "shiftMaxDistance": 0.010108145541151248,
+          "priorNineBaseNeighbors": [
+            1210,
+            1212,
+            1212
+          ],
+          "priorNineAllContextAgreement": 10,
+          "augmentedBaseNeighbors": [
+            1210,
+            1212,
+            1212
+          ]
+        },
+        {
+          "trackId": 354,
+          "baseContextMaxDistance": 0.04813756586605111,
+          "baseContextLabelAgreement": 3,
+          "allContextLabelAgreement": 15,
+          "perturbationStable": true,
+          "gainMaxDistance": 1.1102230246251565e-16,
+          "shiftMaxDistance": 0.006229148236540971,
+          "priorNineBaseNeighbors": [
+            1206,
+            1127,
+            1206
+          ],
+          "priorNineAllContextAgreement": 15,
+          "augmentedBaseNeighbors": [
+            1206,
+            1127,
+            1206
+          ]
+        }
+      ],
+      "identityByArtist": [
+        {
+          "artist": "G.E.M.邓紫棋",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 6
+        },
+        {
+          "artist": "Jason Mraz&Colbie Caillat",
+          "recordings": 1,
+          "sportRecordings": 0,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 3
+        },
+        {
+          "artist": "周杰伦",
+          "recordings": 2,
+          "sportRecordings": 1,
+          "sameArtistBaseNeighbors": 0,
+          "baseContexts": 6
+        },
+        {
+          "artist": "周深",
+          "recordings": 6,
+          "sportRecordings": 5,
+          "sameArtistBaseNeighbors": 9,
+          "baseContexts": 18
+        }
+      ]
+    }
+  },
+  "decision": {
+    "candidateRejected": true,
+    "reasons": [
+      "first_pair_not_separated",
+      "held_out_negative_regression"
+    ],
+    "productionDeploymentSupported": false,
+    "next": "Stop this candidate if rejected. Even all passes justify only separately planned prospective personal-preference validation; never a public-model claim."
+  }
+}

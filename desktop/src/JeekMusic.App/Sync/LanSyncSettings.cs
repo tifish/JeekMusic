@@ -13,31 +13,48 @@ internal static class LanSyncSettings
     {
         var service = c.App.LanSync;
         panel.Children.Add(SubHeading(L.T("局域网音乐同步")));
-        panel.Children.Add(Note(L.T("PC 是音乐源。手机选择根或子文件夹与保存位置。仅共享下面启用的曲库根；取消同步不删除音乐。请勿让 Syncthing 同时管理手机的同一目标；无法自动识别全部 Syncthing 配置。")));
+        panel.Children.Add(Note(L.T("电脑提供音乐，手机选择音乐文件夹或子文件夹及保存位置。开启局域网服务后，所有已添加的曲库音乐文件夹都会自动共享；取消同步不删除音乐。")));
         var problem = Note(service.Problem); panel.Children.Add(problem);
         var activity = Note(""); panel.Children.Add(activity);
+        var sharing = Note("");
+        var guidance = Note("");
+        var folders = new StackPanel { Spacing = 4 };
+        var addFolders = Action(L.T("前往曲库添加音乐文件夹"), () => c.Window.Select(L.T("曲库")));
+        CheckBox? enabledSwitch = null;
+        Button? inviteButton = null;
+        bool refreshing = false;
         void Refresh()
         {
             var status = service.Diagnostics();
             activity.Text = L.T("已传输") + " " + status["bytesServed"] + " bytes · " + status["lastOperation"] + " · " + status["devices"]!.AsArray().Count + " " + L.T("已配对设备");
             problem.Text = service.Problem;
+            sharing.Text = L.T("已共享音乐文件夹") + ": " + status["sharedFolderCount"]!.GetValue<int>();
+            guidance.Text = service.Port == 0 ? L.T("局域网服务已关闭。开启后会自动共享所有已添加的音乐文件夹。")
+                : status["libraryFolderCount"]!.GetValue<int>() == 0 ? L.T("尚未添加音乐文件夹。请前往曲库添加，手机再点击“刷新共享文件夹”，无需重新扫码。")
+                : L.T("已添加的音乐文件夹会自动共享，新增文件夹也会自动纳入。手机点击“刷新共享文件夹”即可看到更改，无需重新配对。");
+            folders.Children.Clear();
+            foreach (var folder in c.App.Db.Folders())
+                folders.Children.Add(Note(folder.DisplayName + " — " + folder.Root + (folder.Available && Directory.Exists(folder.Root) ? "" : " · " + L.T("离线"))));
+            addFolders.IsVisible = status["libraryFolderCount"]!.GetValue<int>() == 0;
+            if (inviteButton is not null) inviteButton.IsEnabled = service.Port != 0;
+            refreshing = true;
+            try { if (enabledSwitch is not null) enabledSwitch.IsChecked = service.Port != 0; }
+            finally { refreshing = false; }
         }
-        service.Changed += Refresh; activity.DetachedFromVisualTree += (_, _) => service.Changed -= Refresh; Refresh();
-        panel.Children.Add(Toggle(L.T("启用局域网服务"), service.Port != 0, enabled =>
+        service.Changed += Refresh;
+        c.App.Library.SnapshotChanged += Refresh;
+        panel.DetachedFromVisualTree += (_, _) => { service.Changed -= Refresh; c.App.Library.SnapshotChanged -= Refresh; };
+        enabledSwitch = Toggle(L.T("启用局域网服务"), service.Port != 0, enabled =>
         {
+            if (refreshing) return;
             try { if (enabled) service.Start(); else service.Stop(); c.Window.Build(); }
-            catch (Exception) { problem.Text = L.T("无法监听端口。检查端口占用、网络权限和防火墙；程序不会修改系统防火墙。" ); }
-        }));
+            catch (Exception) { Refresh(); problem.Text = L.T("无法监听端口。检查端口占用、网络权限和防火墙；程序不会修改系统防火墙。"); }
+        });
+        panel.Children.Add(enabledSwitch);
+        Refresh();
         var diagnostics = service.Diagnostics();
-        foreach (var folder in c.App.Library.Snapshot.Folders)
-        {
-            var id = folder.Id;
-            var shared = diagnostics["roots"]!.AsArray().Any(r => r!["folderId"]!.GetValue<long>() == id && r["enabled"]!.GetValue<bool>());
-            panel.Children.Add(Toggle(folder.DisplayName + " — " + folder.Root, shared, value =>
-            {
-                try { service.EnableRoot(id, value); } catch (Exception) { problem.Text = L.T("无法共享此根：路径不可用、权限不足或包含链接。" ); }
-            }));
-        }
+        panel.Children.Add(SubHeading(L.T("共享音乐文件夹")));
+        panel.Children.Add(sharing); panel.Children.Add(guidance); panel.Children.Add(folders); panel.Children.Add(addFolders);
         panel.Children.Add(Note(L.T("手机扫码配对，或手动输入邀请。两端须在同一局域网。邀请 5 分钟有效且只能使用一次；请勿截图或公开。")));
         var addresses = diagnostics["addresses"]!.AsArray().Select(n => n!.GetValue<string>()).Distinct().ToArray();
         var host = new TextBox { Text = addresses.FirstOrDefault() ?? "", PlaceholderText = L.T("PC 局域网 IP 地址"), Width = 300 };
@@ -83,6 +100,7 @@ internal static class LanSyncSettings
             catch (Exception) { ClearInvitation(); problem.Text = L.T("请输入手机可达的局域网地址；不能使用 localhost、回环、广播或未指定地址。检查服务和网络。"); }
             finally { generating = false; }
         });
+        inviteButton = generate; generate.IsEnabled = service.Port != 0;
         panel.Children.Add(generate); panel.Children.Add(qr); panel.Children.Add(lifetime); panel.Children.Add(invitation);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => CheckInvitation();

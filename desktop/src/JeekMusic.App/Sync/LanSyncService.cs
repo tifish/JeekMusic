@@ -10,6 +10,7 @@ using System.Text.Json.Nodes;
 using Avalonia.Threading;
 using JeekMusic.Core.Sync;
 using JeekMusic.Infrastructure;
+using JeekMusic.Library;
 
 namespace JeekMusic.Sync;
 
@@ -82,7 +83,7 @@ public sealed class LanSyncService : IDisposable
 
     void Save() => SyncFeature.AtomicWrite(_configPath, _config.ToJsonString());
     void Notify() => Dispatcher.UIThread.Post(() => Changed?.Invoke());
-    public void Start(int port = 39843)
+    public void Start(int? port = null)
     {
         lock (_gate)
         {
@@ -90,7 +91,8 @@ public sealed class LanSyncService : IDisposable
             try
             {
                 Certificate(); // Only provision a private key when the user enables LAN sharing.
-                _listener = new TcpListener(IPAddress.Any, port); _listener.Start(8);
+                ReconcileRoots(shareAll: true);
+                _listener = new TcpListener(IPAddress.Any, port ?? _config["port"]?.GetValue<int>() ?? 39843); _listener.Start(8);
                 _stop = new CancellationTokenSource();
                 _config["enabled"] = true; _config["port"] = Port; Save(); Problem = "";
                 _ = Accept(_listener, _stop.Token);
@@ -108,17 +110,15 @@ public sealed class LanSyncService : IDisposable
     }
     public JsonObject EnableRoot(long folderId, bool enabled)
     {
-        var folder = _app.Library.Snapshot.Folder(folderId) ?? throw new ArgumentException("Unknown library folder");
-        if (string.IsNullOrEmpty(folder.Identity)) throw new InvalidOperationException("Library root identity is unavailable");
+        if (!enabled) throw new InvalidOperationException("Per-folder unshare is no longer supported. All registered library folders are shared while LAN service is enabled. Stop the LAN service to disable sharing.");
+        var folder = _app.Db.Folders().FirstOrDefault(f => f.Id == folderId) ?? throw new ArgumentException("Unknown library folder");
+        if (Port == 0) throw new InvalidOperationException("LAN service is disabled. Start it to share all registered library folders; per-folder sharing is no longer supported.");
         ReconcileRoots();
-        if (enabled) LanFiles.Resolve(folder.Root, "", true);
         lock (_gate)
         {
             var root = Roots.FirstOrDefault(p => p.Value?["folderIdentity"]?.GetValue<string>() == folder.Identity && p.Value?["revoked"]?.GetValue<bool>() != true);
-            var id = root.Key ?? Guid.NewGuid().ToString("N");
-            Roots[id] = new JsonObject { ["folderId"] = folderId, ["folderIdentity"] = folder.Identity, ["name"] = folder.DisplayName, ["enabled"] = enabled };
-            RootRevision++;
-            _plans.Clear(); Save(); Notify(); return new JsonObject { ["rootId"] = id, ["enabled"] = enabled };
+            if (root.Key is null) throw new InvalidOperationException("Library root identity is unavailable");
+            return new JsonObject { ["rootId"] = root.Key, ["enabled"] = true, ["sharingMode"] = "library", ["deprecated"] = true };
         }
     }
     public string? Reference(long folderId, string relative)
@@ -132,7 +132,7 @@ public sealed class LanSyncService : IDisposable
     }
     public string Invite(string host)
     {
-        if (Port == 0) Start();
+        if (Port == 0) throw new InvalidOperationException("LAN service is disabled. Enable it to pair and automatically share registered music folders.");
         if (host.Length > 253 || !Uri.CheckHostName(host).Equals(UriHostNameType.IPv4) && !Uri.CheckHostName(host).Equals(UriHostNameType.Dns)) throw new ArgumentException("Enter LAN IPv4 address or hostname");
         lock (_gate)
         {
@@ -150,16 +150,19 @@ public sealed class LanSyncService : IDisposable
     public JsonObject Diagnostics()
     {
         ReconcileRoots();
+        var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
             ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 1, ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
+            ["sharingMode"] = "library", ["libraryFolderCount"] = folders.Count,
+            ["sharedFolderCount"] = Port == 0 ? 0 : Roots.Count(p => p.Value?["enabled"]?.GetValue<bool>() == true && p.Value?["revoked"]?.GetValue<bool>() != true),
             ["addresses"] = new JsonArray(NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
                 .OrderByDescending(n => n.GetIPProperties().GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any)))
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a.Address))
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
-            ["roots"] = new JsonArray(Roots.Select(p => { var f = _app.Library.Snapshot.Folder(p.Value!["folderId"]!.GetValue<long>()); if (f?.Identity != p.Value["folderIdentity"]?.GetValue<string>()) f = null; return (JsonNode)new JsonObject
-                { ["rootId"] = p.Key, ["folderId"] = p.Value["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f?.Available ?? false }; }).ToArray()),
+            ["roots"] = new JsonArray(Roots.Select(p => { var f = folders.FirstOrDefault(f => f.Id == p.Value!["folderId"]!.GetValue<long>() && f.Identity == p.Value["folderIdentity"]?.GetValue<string>()); return (JsonNode)new JsonObject
+                { ["rootId"] = p.Key, ["folderId"] = p.Value!["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f is { Available: true } && Directory.Exists(f.Root) }; }).ToArray()),
             ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone() }).ToArray())
         };
     }
@@ -169,24 +172,51 @@ public sealed class LanSyncService : IDisposable
         lock (_gate)
         {
             if (Roots[id] is not JsonObject root || root["enabled"]?.GetValue<bool>() != true) throw new IOException("Root is not shared");
-            var folder = _app.Library.Snapshot.Folder(root["folderId"]!.GetValue<long>());
+            var folder = _app.Db.Folders().FirstOrDefault(f => f.Id == root["folderId"]!.GetValue<long>());
             if (folder is not { Available: true } || folder.Identity != root["folderIdentity"]?.GetValue<string>() || !Directory.Exists(folder.Root)) throw new IOException("Root is offline or authorization expired; no deletions inferred");
             return LanFiles.Resolve(folder.Root, "", true);
         }
     }
-    void ReconcileRoots()
+    void ReconcileRoots() => ReconcileRoots(Port != 0);
+    void ReconcileRoots(bool shareAll)
     {
         // Use persisted records, not an initially empty/loading UI snapshot. Removal is permanent
         // revocation, while an unavailable disk leaves its record/identity intact.
-        var identities = _app.Db.Folders().Select(f => f.Identity).ToHashSet();
+        var folders = _app.Db.Folders();
         lock (_gate)
         {
-            var changed = false;
-            foreach (var root in Roots.Select(p => p.Value).OfType<JsonObject>())
-                if (root["folderIdentity"]?.GetValue<string>() is { } identity && !identities.Contains(identity) && root["revoked"]?.GetValue<bool>() != true)
-                { root["enabled"] = false; root["revoked"] = true; changed = true; }
-            if (changed) { _plans.Clear(); RootRevision++; Save(); }
+            if (ReconcileRegisteredRoots(Roots, folders, shareAll))
+            { _plans.Clear(); RootRevision++; Save(); Notify(); }
         }
+    }
+    // Identity, never a reusable row ID, owns the network namespace. Legacy ID-only and
+    // revoked grants remain tombstones; migration must allocate a fresh namespace for them.
+    internal static bool ReconcileRegisteredRoots(JsonObject roots, IReadOnlyList<LibraryFolder> folders, bool shareAll)
+    {
+        var identities = folders.Select(f => f.Identity).Where(i => !string.IsNullOrEmpty(i)).ToHashSet();
+        bool changed = false;
+        foreach (var root in roots.Select(p => p.Value).OfType<JsonObject>())
+            if (root["folderIdentity"]?.GetValue<string>() is not { Length: > 0 } identity || !identities.Contains(identity) || root["revoked"]?.GetValue<bool>() == true)
+            {
+                if (root["enabled"]?.GetValue<bool>() != false || root["revoked"]?.GetValue<bool>() != true)
+                { root["enabled"] = false; root["revoked"] = true; changed = true; }
+            }
+        if (!shareAll) return changed;
+        foreach (var folder in folders.Where(f => !string.IsNullOrEmpty(f.Identity)))
+        {
+            var existing = roots.FirstOrDefault(p => p.Value?["folderIdentity"]?.GetValue<string>() == folder.Identity && p.Value?["revoked"]?.GetValue<bool>() != true);
+            if (existing.Value is JsonObject root)
+            {
+                if (root["enabled"]?.GetValue<bool>() != true || root["folderId"]?.GetValue<long>() != folder.Id || root["name"]?.GetValue<string>() != folder.DisplayName)
+                { root["enabled"] = true; root["folderId"] = folder.Id; root["name"] = folder.DisplayName; changed = true; }
+            }
+            else
+            {
+                roots[Guid.NewGuid().ToString("N")] = new JsonObject { ["folderId"] = folder.Id, ["folderIdentity"] = folder.Identity, ["name"] = folder.DisplayName, ["enabled"] = true };
+                changed = true;
+            }
+        }
+        return changed;
     }
     async Task Accept(TcpListener listener, CancellationToken cancel)
     {

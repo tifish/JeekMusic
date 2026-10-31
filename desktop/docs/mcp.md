@@ -383,13 +383,13 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 ## 局域网同步（生产与开发版同套服务）
 
-- `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/invitationActive/lastOperation/bytesServed/addresses/roots/devices`。根带稳定 `rootId`、当前 `folderId`、显示名、启用与可用状态；设备仅返回 ID 和名称。不会返回邀请、令牌、令牌 hash 或私钥。
-- `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TCP 39843 的 TLS 服务。默认不启动，停用中断连接与计划；不修改防火墙。
-- `lan_sync_control {"action":"share","folderId":1}` / `unshare`：仅能启用/停用已在曲库登记的根。返回稳定 rootId；目录位置由当前曲库服务解析，调用不能指定磁盘路径。停用不删除源或手机下载。
+- `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/invitationActive/lastOperation/bytesServed/sharingMode/libraryFolderCount/sharedFolderCount/addresses/roots/devices`。`sharingMode=library`，全局服务开启后自动共享所有登记曲库目录及后续新增目录；离线目录保留并标 available=false。sharedFolderCount 含离线目录，服务关闭时为 0；roots 保留永久撤销记录，enabled 是有效身份绑定，不再是单独开关。不会返回邀请、令牌、令牌 hash 或私钥。
+- `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TLS 服务。start 可选 `port`（整数 0–65535，0 由系统选择空闲端口）；省略时使用保存的端口，首次为 39843。只有 start 接受 port；修改监听端口前先 stop。默认不启动，停用中断连接与计划；不修改防火墙。
+- 兼容旧 `lan_sync_control {"action":"share","folderId":1}`：服务开启时只查询登记目录的自动 rootId，返回 enabled=true、sharingMode=library、deprecated=true；不会启动已关闭的服务。旧 `unshare` 仍在 Schema 中接受，但总是返回明确错误，提示使用 stop 全局关闭；不能用它排除单个目录。未登记目录、父目录或任意磁盘路径不能共享。
 - `lan_sync_control {"action":"invite","host":"192.168.1.7"}`：生成 5 分钟、单次有效邀请，含地址、证书指纹和随机授权值。可选 `includeQr:true` 同时返回内存 `qrPngBase64`，使用设置界面同一编码器，并异步校验地址不是 loopback/未指定/广播/组播（DNS 解析必须为可用 IPv4）。不传时保持旧文本邀请兼容。文本和二维码均是敏感凭证，只向要配对的手机私下传递，不写日志、截图或报告；`invitationActive` 只报告是否仍有效。
 - `lan_sync_control {"action":"revoke","deviceId":"..."}`：撤销设备。既有 TLS 连接每个请求重新检查授权，后续读取被拒绝；已下载的文件不删除。
 
-所有工具 Schema 禁止额外参数，action 为枚举；share/unshare 要求 folderId，invite 要求 host，revoke 要求 deviceId。沿用正常业务服务，不存在开发专用传输入口。完整产品契约、限制及隔离验证见 [局域网同步](../../docs/lan-sync.md)。
+所有工具 Schema 禁止额外参数，action 为枚举；share/unshare 要求 folderId，invite 要求 host 且服务已经开启，revoke 要求 deviceId。沿用正常业务服务，不存在开发专用传输入口。完整产品契约、限制及隔离验证见 [局域网同步](../../docs/lan-sync.md)。
 
 
 智能分类 v5 的采样/重试契约、渐进迁移、生产等价校准提取及防泄漏评估见 [analysis-v5](../../docs/analysis-v5.md)。`explain_analysis` 和本地审核导出复用 `SmartTagService`，标题强制古典和手工优先保持不变；该工具及新增可选 reason 在开发版与正式版完全共用。

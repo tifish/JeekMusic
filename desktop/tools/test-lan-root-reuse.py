@@ -26,6 +26,7 @@ def main():
         raise AssertionError("library operation timed out")
     with McpClient(args.exe,data=data) as c:
         diagnostics=call(c,"get_diagnostics");assert Path(diagnostics["processPath"]).resolve()==args.exe.resolve()
+        call(c,"lan_sync_control",action="start",port=0)
         call(c,"add_folder",path=str(a));folder=wait(c,lambda fs:len(fs)==1)[0];old_id=folder["id"]
         old_root=call(c,"lan_sync_control",action="share",folderId=old_id)["rootId"]
         invitation=urlsplit(call(c,"lan_sync_control",action="invite",host="127.0.0.1")["invitation"])
@@ -34,17 +35,18 @@ def main():
         plan=wire(connection,"plan",rootId=old_root,selection=[""])["plan"]
         assert "data" in wire(connection,"read",rootId=old_root,plan=plan,path="Same.wav",offset=0)
         call(c,"remove_folder",folderId=old_id);wait(c,lambda fs:not fs)
+        assert wire(connection,"roots")["roots"]==[]
         call(c,"add_folder",path=str(b));new_folder=wait(c,lambda fs:len(fs)==1)[0];assert new_folder["id"]==old_id
         assert "error" in wire(connection,"tree",rootId=old_root,path="")
         assert "error" in wire(connection,"read",rootId=old_root,plan=plan,path="Same.wav",offset=0)
-        assert wire(connection,"roots")["roots"]==[]
+        auto_roots=wire(connection,"roots")["roots"];assert len(auto_roots)==1 and auto_roots[0]["rootId"]!=old_root
         status=call(c,"lan_sync_status");assert status["roots"][0]["revoked"] is True
-        new_root=call(c,"lan_sync_control",action="share",folderId=old_id)["rootId"];assert new_root!=old_root
+        new_root=call(c,"lan_sync_control",action="share",folderId=old_id)["rootId"];assert new_root!=old_root and new_root==auto_roots[0]["rootId"]
         assert "error" in wire(connection,"manifest",rootId=new_root,plan=plan,offset=0)
         new_plan=wire(connection,"plan",rootId=new_root,selection=[""])["plan"]
         assert "data" in wire(connection,"read",rootId=new_root,plan=new_plan,path="Same.wav",offset=0)
         assert "error" in wire(connection,"read",rootId=old_root,plan=plan,path="Same.wav",offset=0)
-        proof={"oldFolderId":old_id,"newFolderId":new_folder["id"],"oldRoot":old_root,"newRoot":new_root,"oldRootAndPlanRejected":True,"newRootUnsharedUntilExplicitGrant":True,"sameRelativePath":"Same.wav","diagnostics":status}
+        proof={"oldFolderId":old_id,"newFolderId":new_folder["id"],"oldRoot":old_root,"newRoot":new_root,"oldRootAndPlanRejected":True,"replacementAutomaticallySharedWithFreshIdentity":True,"sameRelativePath":"Same.wav","diagnostics":status}
         (base/"proof.json").write_text(json.dumps(proof,indent=2));print(json.dumps(proof))
         call(c,"lan_sync_control",action="stop")
         pid=diagnostics["processId"]

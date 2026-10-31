@@ -4,19 +4,31 @@ PC 是文件主库；Android 选择根或子文件夹及本机目标。文件不
 
 ## 操作与目录契约
 
-1. Windows「设置 → 同步 → 局域网音乐同步」启用服务，并明确勾选需要共享的**已登记曲库根**。未启用的根不能列目录或读取。稳定 rootId 保存在应用数据目录，绑定曲库记录的不可复用随机身份，由该记录解析当前位置；移除根会永久撤销其共享和计划，整数 folderId 复用不会继承授权或歌曲引用。旧候选的 folderId-only 共享需用户重新明确启用，不把绝对磁盘路径作为网络 API。
+1. Windows「设置 → 同步 → 局域网音乐同步」使用全局开关。开启后自动共享所有**已登记曲库音乐文件夹**，后续新增也自动纳入，无需逐个选择；不会共享父目录或未登记路径。原本关闭的服务不会因迁移、添加曲库或请求邀请而自动开启。稳定 rootId 绑定不可复用 folderIdentity；移除目录永久撤销旧命名空间和计划。有效身份的旧禁用配置迁移为自动共享，原 rootId 保留；旧 folderId-only 和已撤销命名空间永不复活，当前目录需分配新的 rootId，整数 ID 复用不会重定向旧引用。
 2. 选择或填写手机可达的 PC 局域网 IPv4 地址/主机名，生成一次性二维码；Android「设置 → 设备同步」可选「扫码配对」或「手动输入配对」。扫码只请求正常相机权限，摄像头为可选硬件；拒绝权限时仍可手动输入。识别后关闭相机，核对地址并连接，成功后显示经绑定 TLS 验证的 PC 名称。邀请只用一次，5 分钟过期；包含证书绑定信息，请勿截图、公开或记录。Windows 可撤销单个设备。
 3. 手机打开根列表；同名根显示简短编号以区分，完整 ID、精确路径/URI 放在展开详情。选择整个根或任意子目录（包含子文件夹），可深入浏览、估算所选文件数量和大小。勾选父目录取代其子目录选择。
 4. 通过系统 SAF 选择目标并持久授权，同时申请正常曲库读取音频权限。首版支持本地 ExternalStorageProvider（内部存储/SD 卡），不支持网盘 DocumentsProvider。
 5. 实际位置固定为 `所选目标/JeekMusic-<完整rootId>/根下相对路径`。例如选择 Music 根的 Karajan、Celtic 后，保存为 `目标/JeekMusic-ID/Karajan/...`、`目标/JeekMusic-ID/Celtic/...`。不同根即使同名并选择同一目标也使用独立命名空间；拒绝互相嵌套的不同根目标。
 6. 映射、选择、启用状态可保存和编辑。编辑目标默认保留原目标文件。停用/取消/移除映射不删除文件；「清理下载」需要明确确认，只删本任务仍匹配已保存 hash 和实际 mtime 的文件，冲突、播放及预加载文件保留。清理从不删除 PC 文件。
 
-不得让 Syncthing 或其他引擎同时管理同一目标命名空间。保存映射前必须明确确认这个约束；程序不能完整检测 Syncthing，也不修改或关闭其配置。现有普通 Syncthing 曲库及 format 2/旧 backup 文件继续支持。新 `root:<id>/相对路径[#NN]` 引用只做精确身份匹配，不会按后缀匹配另一根或未下载的歌曲；旧文件能准确映射的引用继续合并，歧义项保留为不可用，不能猜测归属。
+保存合法映射不需要声明其他同步软件的状态，也没有强制勾选项或替代确认弹窗。应用不会检测或声称已排除 Syncthing/其他同步软件，不写入虚构的“用户已确认”记录，不修改或关闭它们的配置。实际映射目标重叠、文件所有权、hash/mtime 冲突、播放文件避让和事务检查仍然执行。现有普通 Syncthing 曲库及 format 2/旧 backup 文件继续支持。新 `root:<id>/相对路径[#NN]` 引用只做精确身份匹配，不会按后缀匹配另一根或未下载的歌曲；旧文件能准确映射的引用继续合并，歧义项保留为不可用，不能猜测归属。
+
+### 已配对但没有音乐文件夹
+
+Windows 邀请区域显示只读共享清单和数量，说明“已添加的音乐文件夹会自动共享”。没有登记目录时提供前往“曲库”添加的入口。服务开关、曲库新增/移除后立即刷新显示。服务关闭时显示关闭状态、共享数为 0，且不能生成邀请；仅开启全局服务会使全部登记目录可供已配对设备访问。
+
+Android 只有在目录请求成功且返回空列表时才说明电脑曲库尚未添加音乐文件夹，并引导“电脑设置 → 曲库”。电脑添加后，在原弹窗点击“刷新共享文件夹”即可看到，无需解除配对或重新扫码。暂时离线的登记目录保留原 rootId，列表标“离线”；不会当作移除、推断删除。网络/鉴权/服务错误另行显示，保留上次列表但禁用过期结果，不清除任务或下载。配对成功后的目录请求失败不会误报为配对失败。
+
+`lan_sync_status` 返回 `sharingMode=library`、`libraryFolderCount`（所有登记目录）和 `sharedFolderCount`（服务开启时自动共享的目录，包含离线目录；关闭时为 0）。roots 保留撤销记录，enabled 表示有效身份绑定而不是独立开关；全局服务关闭时不能访问。MCP `start` 支持可选 port（0 选空闲端口），后续默认保存的端口，首次 39843。开发版和 NativeAOT 契约相同。
+
+兼容行为：旧 `lan_sync_control share` 需要 folderId，服务开启时仅作为已登记目录的幂等查询，返回原 rootId、sharingMode 和 deprecated=true；不会开启关闭的服务。旧 `unshare` 总是明确失败，提示用 stop 关闭全局服务，绝不成功返回后忽略关闭要求。移除曲库目录会同时撤销其共享，但从不删除音乐文件。
+
+`python desktop/tools/test-lan-empty.py --exe <exe>` 验证空曲库配对、添加目录后同凭证自动可见、全局开关、旧调用兼容拒绝、未登记邻近目录不可访问和移除撤销；`--legacy-grant` 额外核验 folderId-only 旧授权不重绑定。`--interactive` 使用新数据和合成文件供真实 UI 验收，add/remove 仅登记/移除隔离目录。邀请不输出或保存。
 
 ## 安全与传输
 
 - 使用平台 .NET SslStream 和 Android SSLSocket，TLS 1.2/1.3。Android 通过邀请中的 SHA-256 指纹验证 PC 证书及有效期；授权值使用系统随机数，配对后换成每设备令牌。PC 仅保存令牌 hash，私钥保存在当前 Windows 用户证书存储；Android 凭证只保存在私有目录并排除换机迁移/云备份。
-- 不提供 HTTP 或任意磁盘写入 API。每个请求重新校验设备授权；文件读取还必须属于该设备当前、限时的选择计划及已启用根。用户数据上传只能写该配对设备自己的私有 inbox，再交给正常合并服务。诊断不返回凭证。
+- 不提供 HTTP 或任意磁盘写入 API。每个请求重新校验设备授权；文件读取还必须属于该设备当前、限时的选择计划及当前有效的登记曲库根。用户数据上传只能写该配对设备自己的私有 inbox，再交给正常合并服务。诊断不返回凭证。
 - 默认 TCP 39843，服务默认关闭，不创建全局防火墙规则。连接失败时检查两端局域网、PC 地址、端口占用、授权及 Windows 防火墙。首版明确依赖手动邀请，不假称发现所有设备。
 - 长连接复用平台 TLS；每个消息使用 4 字节大端长度和 UTF-8 JSON，最多 32,000,000 字节（与既有用户数据读取上限一致）。文件按最多 256 KiB 的连续范围读取，只有当前范围被 Base64 编码，不把完整音频放入内存。不实现通用块差分算法。
 - 每次计划都重新计算**全部所选内容** SHA-256，不依赖 size/mtime 缓存。因此正常写标签或外部修改即使保持同 size/mtime，下一次「同步 / 内容核验 / 重试」也能看到内容版本变化。mtime 独立于内容 hash，仅时间变化无需重传音频。
@@ -51,7 +63,7 @@ ARM64/OEM、物理 SD 卡、真实目标满盘、未覆盖的进程崩溃提交�
 
 ## 审查回归工具
 
-`desktop/tools/test-lan-root-reuse.py --exe <隔离候选exe>` 使用新建合成 A/B 根及真实生产 TLS 服务，验证根移除、SQLite ID 复用、旧授权/计划拒绝和重新显式共享。`lan_sync_status.roots[].revoked` 说明授权是否已永久失效，保留原名称，不展示复用 ID 对应的新根名称；现有工具输入兼容。
+`desktop/tools/test-lan-root-reuse.py --exe <隔离候选exe>` 使用新建合成 A/B 根及真实生产 TLS 服务，验证根移除、SQLite ID 复用、旧授权/计划拒绝及新身份自动纳入且使用新 rootId。`lan_sync_status.roots[].revoked` 说明授权是否已永久失效，保留原名称，不展示复用 ID 对应的新根名称；现有工具输入兼容。
 
 本轮签名 Release 原版运行及四项定向回归见 [lan-sync-review-fixes.md](lan-sync-review-fixes.md)。Windows 原生 UI 工具阻断仍保留，不重复失败通道。
 
@@ -62,3 +74,5 @@ ARM64/OEM、物理 SD 卡、真实目标满盘、未覆盖的进程崩溃提交�
 PC 使用 MIT 的 Net.Codecrete.QrCodeGenerator 3.2.1，仅内存 PNG；发布许可证收集器收集 NuGet 许可。Android 使用 CameraX 1.6.2（Apache-2.0）及 ML Kit barcode-scanning 17.3.0 内置 QR 模型（[ML Kit Terms of Service](https://developers.google.com/ml-kit/terms) 和依赖内第三方许可）。扫描无模型下载等待。参考 [CameraX](https://developer.android.com/jetpack/androidx/releases/camera)、[ML Kit](https://developers.google.com/ml-kit/vision/barcode-scanning/android)、[QR encoder](https://github.com/manuelbl/QrCodeGenerator)。相机帧不保存、不写日志，权限拒绝、取消、识别失败、邀请失效/重放、网络及证书失败均有中英文反馈。
 
 实际扫描验收使用隔离 AVD 的官方 `-camera-back imagefile:<private PNG>`，通过 CameraX 帧与 ML Kit 识别后调用相同配对服务；测试码是凭证，私有临时文件消费后删除，不显示有效码截图。详见本轮验收记录。未测 ARM64/OEM 不由 API35/x86_64 结果推断。
+
+当前共享与映射设置流程及本轮验证见 [空状态和全曲库共享验收](lan-sync-empty-state-acceptance.md)。较早逐根授权/Syncthing 人工确认的候选记录仅描述历史版本，已由当前规则替代。

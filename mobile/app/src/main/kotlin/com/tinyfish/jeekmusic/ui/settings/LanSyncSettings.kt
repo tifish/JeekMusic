@@ -31,6 +31,7 @@ import com.tinyfish.jeekmusic.data.sync.LanSyncService
 import com.tinyfish.jeekmusic.data.sync.LanInvitation
 import com.tinyfish.jeekmusic.data.sync.LanRemoteException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -56,12 +57,21 @@ fun LanSyncSettings(lan: LanSyncService) {
     var pairing by remember { mutableStateOf(false) }
     var invitation by remember { mutableStateOf("") }
     var roots by remember { mutableStateOf<List<JSONObject>?>(null) }
+    var choosingRoots by remember { mutableStateOf(false) }
+    var rootsError by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<JSONObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var clean by remember { mutableStateOf<JSONObject?>(null) }
     var forget by remember { mutableStateOf<JSONObject?>(null) }
     var details by remember { mutableStateOf(false) }
+    suspend fun refreshRoots() {
+        busy = true; rootsError = null
+        try { roots = lan.roots() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { rootsError = resources.getString(R.string.lan_roots_failed, e.message.orEmpty()) }
+        finally { busy = false }
+    }
     Column(Modifier.fillMaxWidth()) {
         com.tinyfish.jeekmusic.ui.components.SectionHeader(stringResource(R.string.lan_title))
         SettingSummary(stringResource(R.string.lan_intro), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -76,7 +86,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             enabled = !busy && !status.running, onClick = { pairing = true })
         notice?.let { SettingSummary(it, Modifier.padding(horizontal = 16.dp)) }
         if (paired) SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(R.string.lan_manual), enabled = !busy && !status.running, onClick = {
-            if (!busy && !status.running) scope.launch { busy = true; try { roots = lan.roots() } catch (e: Exception) { error = e.message } finally { busy = false } }
+            if (!busy && !status.running) { choosingRoots = true; scope.launch { refreshRoots() } }
         })
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
         for (m in mappings) {
@@ -128,19 +138,27 @@ fun LanSyncSettings(lan: LanSyncService) {
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } }, confirmButton = { TextButton(enabled = !busy, onClick = { scope.launch {
             busy = true
-            try { lan.pair(invitation); invitation = ""; candidate = null; notice = null; roots = lan.roots() }
+            var connected = false
+            try { lan.pair(invitation); invitation = ""; candidate = null; notice = null; connected = true }
+            catch (e: CancellationException) { throw e }
             catch (e: Exception) { invitation = ""; candidate = null; error = resources.getString(pairingError(e)) }
             finally { busy = false }
+            if (connected) { roots = null; choosingRoots = true; refreshRoots() }
         } }) { Text(stringResource(R.string.lan_connect)) } },
         dismissButton = { TextButton(enabled = !busy, onClick = { candidate = null; invitation = "" }) { Text(stringResource(R.string.cancel)) } }) }
-    roots?.let { list -> AlertDialog(onDismissRequest = { roots = null }, title = { Text(stringResource(R.string.lan_choose_roots)) },
+    if (choosingRoots) AlertDialog(onDismissRequest = { if (!busy) choosingRoots = false }, title = { Text(stringResource(R.string.lan_choose_roots)) },
         text = { Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
-            if (list.isEmpty()) Text(stringResource(R.string.lan_no_roots))
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("lan_roots_loading"))
+            rootsError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("lan_roots_error")) }
+            if (!busy && rootsError == null && roots?.isEmpty() == true) Text(stringResource(R.string.lan_no_roots), Modifier.testTag("lan_no_roots"))
+            val list = roots.orEmpty()
             for (root in list) SettingItem(
                 title = root.optString("name") + if (list.count { it.optString("name") == root.optString("name") } > 1) " · " + root.getString("rootId").take(8) else "",
                 summary = if (!root.optBoolean("available")) stringResource(R.string.lan_offline) else null,
-                onClick = { editing = mappings.firstOrNull { it.getString("rootId") == root.getString("rootId") } ?: root; roots = null })
-        } }, confirmButton = { TextButton(onClick = { roots = null }) { Text(stringResource(R.string.cancel)) } }) }
+                enabled = !busy && rootsError == null,
+                onClick = { editing = mappings.firstOrNull { it.getString("rootId") == root.getString("rootId") } ?: root; choosingRoots = false })
+        } }, confirmButton = { TextButton(enabled = !busy && !status.running, onClick = { scope.launch { refreshRoots() } }, modifier = Modifier.testTag("lan_refresh_roots")) { Text(stringResource(R.string.lan_refresh_roots)) } },
+        dismissButton = { TextButton(enabled = !busy, onClick = { choosingRoots = false }) { Text(stringResource(R.string.cancel)) } })
     editing?.let { root -> LanMappingDialog(lan, root, onDismiss = { editing = null }, onError = { error = it }) }
     clean?.let { m -> AlertDialog(onDismissRequest = { clean = null }, title = { Text(stringResource(R.string.lan_clean)) }, text = { Text(stringResource(R.string.lan_clean_confirm)) },
         confirmButton = { TextButton(onClick = { clean = null; scope.launch { try { lan.clean(m.getString("rootId")) } catch (e: Exception) { error = e.message } } }) { Text(stringResource(R.string.confirm)) } },
@@ -161,7 +179,6 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
     var children by remember { mutableStateOf<List<String>>(emptyList()) }
     var selection by remember { mutableStateOf(root.optJSONArray("selection")?.let { a -> List(a.length()) { a.getString(it) }.toSet() } ?: emptySet()) }
     var target by remember { mutableStateOf(root.optString("treeUri").takeIf { it.isNotEmpty() }?.let(Uri::parse)) }
-    var exclusive by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) target = it }
@@ -195,11 +212,10 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
                 if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) picker.launch(target) else permission.launch(audioPermission)
             }, modifier = Modifier.testTag("lan_pick_target"))
             target?.let { SettingSummary(stringResource(R.string.lan_target_child, "JeekMusic-${root.getString("rootId").take(8)}…")) }
-            SettingCheckbox(title = stringResource(R.string.lan_exclusive), checked = exclusive, onChange = { exclusive = it })
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } },
-        confirmButton = { TextButton(enabled = !busy && selection.isNotEmpty() && target != null && exclusive, onClick = { scope.launch {
-            busy = true; try { lan.saveMapping(root, selection, target!!, exclusive); onDismiss() } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
+        confirmButton = { TextButton(enabled = !busy && selection.isNotEmpty() && target != null, onClick = { scope.launch {
+            busy = true; try { lan.saveMapping(root, selection, target!!); onDismiss() } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
         } }) { Text(stringResource(R.string.save)) } }, dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 

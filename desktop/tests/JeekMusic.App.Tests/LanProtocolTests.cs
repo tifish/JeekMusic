@@ -37,9 +37,15 @@ public sealed class LanProtocolTests
         var status = catalog.Single(t => t!["name"]!.GetValue<string>() == "lan_sync_status")!;
         Assert.True(status["annotations"]!["readOnlyHint"]!.GetValue<bool>());
         Assert.Empty(status["inputSchema"]!["properties"]!.AsObject());
+        Assert.Contains("sharedFolderCount", status["description"]!.GetValue<string>());
         var control = catalog.Single(t => t!["name"]!.GetValue<string>() == "lan_sync_control")!;
         Assert.False(control["inputSchema"]!["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("boolean", control["inputSchema"]!["properties"]!["includeQr"]!["type"]!.GetValue<string>());
+        Assert.Equal(0, control["inputSchema"]!["properties"]!["port"]!["minimum"]!.GetValue<int>());
+        Assert.Equal(65535, control["inputSchema"]!["properties"]!["port"]!["maximum"]!.GetValue<int>());
+        Assert.Contains("zero shared folders", control["description"]!.GetValue<string>());
+        Assert.Contains("unshare is always rejected", control["description"]!.GetValue<string>());
+        Assert.Contains("automatically shares all registered", control["description"]!.GetValue<string>());
         Assert.Contains("sensitive", control["description"]!.GetValue<string>());
         Assert.Equal("action", Assert.Single(control["inputSchema"]!["required"]!.AsArray())!.GetValue<string>());
     }

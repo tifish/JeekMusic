@@ -506,5 +506,12 @@
   "手动修正": "Manual correction",
   "无法复制歌名，请重试": "Could not copy song titles. Please try again.",
   "批量获取完成": "Resource batch complete",
-  "已处理 {0} 项，保存 {1} 项，失败 {2} 项": "Processed {0} units, saved {1}, failed {2}"
+  "已处理 {0} 项，保存 {1} 项，失败 {2} 项": "Processed {0} units, saved {1}, failed {2}",
+  "共享音乐文件夹": "Shared music folders",
+  "已共享音乐文件夹": "Shared music folders",
+  "前往曲库添加音乐文件夹": "Add music folders in Library",
+  "电脑提供音乐，手机选择音乐文件夹或子文件夹及保存位置。开启局域网服务后，所有已添加的曲库音乐文件夹都会自动共享；取消同步不删除音乐。": "The PC provides music. On your phone, choose music folders or subfolders and a destination. Enabling LAN service automatically shares all registered library music folders. Cancelling keeps music.",
+  "局域网服务已关闭。开启后会自动共享所有已添加的音乐文件夹。": "LAN service is off. Turning it on automatically shares all registered music folders.",
+  "尚未添加音乐文件夹。请前往曲库添加，手机再点击“刷新共享文件夹”，无需重新扫码。": "No music folders have been added. Add them in Library, then tap Refresh shared folders on your phone. No need to scan again.",
+  "已添加的音乐文件夹会自动共享，新增文件夹也会自动纳入。手机点击“刷新共享文件夹”即可看到更改，无需重新配对。": "All registered music folders are shared automatically, including folders added later. Tap Refresh shared folders on your phone to see changes without pairing again."
 }

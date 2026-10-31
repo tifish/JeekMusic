@@ -404,15 +404,15 @@
     <string name="sync_failed">同步失败：%1$s</string>
     <string name="sync_changes">已同步来自「%1$s」的 %2$d 项改动</string>
     <string name="lan_title">局域网音乐同步</string>
-    <string name="lan_intro">下载所选 PC 文件夹。PC 曲库为源，本地冲突保留。每个根下载到独立文件夹。停用或移除任务保留已下载文件。</string>
+    <string name="lan_intro">下载所选电脑音乐文件夹。电脑曲库为源，本地冲突保留。每个共享文件夹下载到独立文件夹。停用或移除任务保留已下载文件。</string>
     <string name="lan_pair">与 PC 配对</string>
     <string name="lan_pair_again">重新配对（需先移除映射）</string>
     <string name="lan_paired">安全配对成功</string>
-    <string name="lan_choose_roots">选择 PC 根 / 编辑下载</string>
-    <string name="lan_manual">同一局域网，使用 PC 的一次性邀请手动连接。</string>
+    <string name="lan_choose_roots">电脑共享文件夹 / 编辑下载</string>
+    <string name="lan_manual">刷新已配对电脑共享的音乐文件夹，无需重新配对。</string>
     <string name="lan_invite_hint">填入 PC「设置 → 同步」生成的完整邀请，绑定 PC 证书，5 分钟有效。请保密。</string>
     <string name="lan_connect">连接</string>
-    <string name="lan_no_roots">没有共享根，请在 PC 启用曲库根。</string>
+    <string name="lan_no_roots">已连接电脑，但电脑曲库尚未添加音乐文件夹。请在电脑打开“设置 → 曲库”添加音乐文件夹；局域网服务开启时会自动共享，再点击下方“刷新共享文件夹”，无需重新扫码。</string>
     <string name="lan_pause_keep">停用 / 保留文件</string>
     <string name="lan_enable">启用</string>
     <string name="lan_clean">清理下载</string>
@@ -427,10 +427,9 @@
     <string name="lan_failed">连接或同步失败。检查 PC 授权、局域网、端口与防火墙后重试。断点和已有文件保留。</string>
     <string name="lan_cleaned">清理结束，任务已停用。保留的冲突见下方。</string>
     <string name="lan_folders_hint">选择的文件夹包含子文件夹，点 › 浏览。选择整个根会下载根内全部内容。仅传输选择内容和 CUE 依赖。</string>
-    <string name="lan_whole_root">整个根</string>
+    <string name="lan_whole_root">整个共享文件夹</string>
     <string name="lan_estimate">核验选择 / 估算大小</string>
     <string name="lan_target">选择下载目录</string>
-    <string name="lan_exclusive">此下载目录不由 Syncthing 或其他同步工具管理。请自行确认，程序无法完整自动检测。</string>
     <string name="lan_mtime_title">保留文件修改时间</string>
     <string name="lan_mtime_permission">Android 保留精确修改时间需要可选的“所有文件访问权限”。下载仍仅使用你授权的目录。未授权时可下载文件，但会显示时间错误；授权后重试即可补正。</string>
     <string name="lan_mtime_allowed">已具备时间写入权限，下载目录仍需单独选择并授权。</string>
@@ -473,4 +472,6 @@
     <string name="tag_calm">安静</string>
     <string name="tag_non_calm">非安静</string>
     <string name="dim_calmness">平静程度</string>
+    <string name="lan_refresh_roots">刷新共享文件夹</string>
+    <string name="lan_roots_failed">无法刷新共享文件夹。请检查电脑服务、网络和设备授权后重试，已有下载和任务会保留。详情：%1$s</string>
 </resources>

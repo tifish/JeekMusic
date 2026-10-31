@@ -413,15 +413,15 @@
     <string name="sync_failed">Sync failed: %1$s</string>
     <string name="sync_changes">Synced %2$d changes from “%1$s”</string>
     <string name="lan_title">LAN music sync</string>
-    <string name="lan_intro">Download selected PC folders. The PC library is the source; local conflicts are kept. Each root downloads into a separate folder. Pausing or forgetting keeps downloaded files.</string>
+    <string name="lan_intro">Download selected PC music folders. The PC library is the source; local conflicts are kept. Each shared folder downloads into a separate folder. Pausing or forgetting keeps downloaded files.</string>
     <string name="lan_pair">Pair with PC</string>
     <string name="lan_pair_again">Pair again (remove mappings first)</string>
     <string name="lan_paired">Paired securely</string>
-    <string name="lan_choose_roots">Choose PC roots / edit downloads</string>
-    <string name="lan_manual">Same LAN. Manual connection using a one-use PC invitation.</string>
+    <string name="lan_choose_roots">Shared PC folders / edit downloads</string>
+    <string name="lan_manual">Refresh the folders shared by your paired PC. No need to pair again.</string>
     <string name="lan_invite_hint">Paste the complete invitation generated in PC Settings → Sync. It pins the PC certificate and expires in five minutes. Keep it private.</string>
     <string name="lan_connect">Connect</string>
-    <string name="lan_no_roots">No shared roots. Enable a library root on the PC.</string>
+    <string name="lan_no_roots">Connected to the PC, but no music folders have been added to its library. On the PC, open Settings → Library and add a music folder. Registered folders are shared automatically while LAN service is on. Then tap Refresh shared folders here; no need to scan again.</string>
     <string name="lan_pause_keep">Pause / keep files</string>
     <string name="lan_enable">Enable</string>
     <string name="lan_clean">Clean downloads</string>
@@ -436,10 +436,9 @@
     <string name="lan_failed">Connection/sync failed. Check PC authorization, LAN, port and firewall; then retry. Partial downloads and existing files are preserved.</string>
     <string name="lan_cleaned">Clean finished; task paused. See any retained conflicts below.</string>
     <string name="lan_folders_hint">Selected folders include subfolders. Browse with ›. Select the root to download everything in it. Only selected files and CUE dependencies are transferred.</string>
-    <string name="lan_whole_root">Entire root</string>
+    <string name="lan_whole_root">Entire shared folder</string>
     <string name="lan_estimate">Verify selection / estimate size</string>
     <string name="lan_target">Choose download folder</string>
-    <string name="lan_exclusive">This download folder is not managed by Syncthing or another sync tool. Check this yourself; automatic detection is incomplete.</string>
     <string name="lan_mtime_title">Preserve modification times</string>
     <string name="lan_mtime_permission">Android requires optional All files access to preserve exact modification times. Downloads still use only the folder you authorize. Without this permission files download with a visible timestamp error; retry after granting.</string>
     <string name="lan_mtime_allowed">Timestamp access granted. Choose and authorize a download folder separately.</string>
@@ -482,4 +481,6 @@
     <string name="tag_calm">Quiet</string>
     <string name="tag_non_calm">Not quiet</string>
     <string name="dim_calmness">Calmness</string>
+    <string name="lan_refresh_roots">Refresh shared folders</string>
+    <string name="lan_roots_failed">Could not refresh shared folders. Check the PC service, network and device authorization, then retry. Existing downloads and tasks are kept. Details: %1$s</string>
 </resources>

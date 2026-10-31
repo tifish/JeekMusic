@@ -99,10 +99,9 @@ class LanSyncService @Inject constructor(
         protocol().call("plan", JSONObject().put("rootId", root).put("selection", JSONArray(selected.toList())))
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
-    suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri, confirmedExclusive: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
         gate.withLock {
             check(job?.isActive != true) { "Cancel sync before editing mappings" }
-            require(confirmedExclusive) { "Confirm this destination is not managed by Syncthing" }
             require(target.authority == "com.android.externalstorage.documents") { "Only local storage / SD card SAF folders are supported" }
             require(selected.isNotEmpty()) { "Choose at least one folder" }
             selected.forEach { LanProtocol.relative(it, true) }
@@ -114,12 +113,7 @@ class LanSyncService @Inject constructor(
                 displayName = root.getString("name"), addedAt = System.currentTimeMillis())
             val namespace = "JeekMusic-$rootId"
             // Never nest managed roots or put a namespace inside another managed namespace.
-            for (other in store.mappings().filter { it.getString("rootId") != rootId }) {
-                if (other.getString("volume") == path.volumeName) {
-                    val a = (path.relativePath + namespace + "/").lowercase(); val b = other.getString("relative").lowercase()
-                    require(!a.startsWith(b) && !b.startsWith(a)) { "Overlapping managed destinations" }
-                }
-            }
+            LanMappingTargets.requireSeparate(store.mappings(), rootId, path.volumeName, path.relativePath)
             val child = child(parent, id, namespace) ?: tree.create(parent, id, DocumentsContract.Document.MIME_TYPE_DIR, namespace) ?: error("Cannot create destination")
             require(child.isDirectory && child.name == namespace) { "Destination name collision" }
             val actual = DocumentsContract.buildDocumentUriUsingTree(target, child.documentId)

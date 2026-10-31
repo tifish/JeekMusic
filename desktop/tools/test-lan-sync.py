@@ -66,6 +66,7 @@ def main():
     with McpClient(a.exe,data=data) as client:
         diagnostics = call(client, "get_diagnostics")
         assert Path(diagnostics["processPath"]).resolve() == a.exe.resolve(), "A different client answered the fixture"
+        call(client,"lan_sync_control",action="start",port=0)
         for folder in [library,second]:call(client,"add_folder",path=str(folder))
         deadline=time.monotonic()+30
         while time.monotonic()<deadline:

@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.tinyfish.jeekmusic.data.preference.personalResults
 
 /**
  * 一首歌的智能标签：[tags] 是最终结果（手动修正优先），[auto] 是自动识别的结果，
@@ -39,6 +40,7 @@ class TagRepository @Inject constructor(
     private val feedback: com.tinyfish.jeekmusic.data.preference.DailyLearningFeedback,
 ) {
     private val mutex = Mutex()
+    init { feedback.resultsChanged={ recomputeAll() } }
 
     fun pendingCount(): Flow<Int> = dao.observePendingCount(ANALYZER_VERSION)
 
@@ -57,16 +59,29 @@ class TagRepository @Inject constructor(
                 if (dimension.name in manual || tag == null) null else TrackTagEntity(f.trackKey, dimension.name, tag.name, SOURCE_AUTO)
             }
         }
+        val signatures=db.trackDao().all().associate { it.trackKey to "${it.dateModified}:${it.size}" }
+        val personal=feedback.personalResults().flatMap { (key,saved) ->
+            if(saved.optString("signature")!=signatures[key]) emptyList() else {
+                val result=saved.getJSONObject("heads")
+                TagDimension.entries.mapNotNull { d ->
+                    val value=result.optJSONObject(d.name)?.optString("value")
+                    if(d.name in overrides[key].orEmpty() || d==TagDimension.GENRE && key in classicalTitles) null
+                    else Tag.of(d,value)?.let { TrackTagEntity(key,d.name,it.name,"PERSONAL") }
+                }
+            }
+        }
+        val learned=personal.map { it.trackKey to it.dimension }.toSet()
+        val combined=auto.filter { (it.trackKey to it.dimension) !in learned }+personal
         val manual = dao.overrides().mapNotNull { o ->
             val dimension = TagDimension.entries.firstOrNull { it.name == o.dimension } ?: return@mapNotNull null
             overrideTag(dimension, o.value)?.let { TrackTagEntity(o.trackKey, o.dimension, it.name, SOURCE_MANUAL) }
         }
         db.withTransaction {
             dao.clearTags()
-            val covered = (auto + manual).filter { it.dimension == TagDimension.GENRE.name }.map { it.trackKey }.toSet()
+            val covered = (combined + manual).filter { it.dimension == TagDimension.GENRE.name }.map { it.trackKey }.toSet()
             val titleOnly = classicalTitles.filter { it !in covered && TagDimension.GENRE.name !in overrides[it].orEmpty() }
                 .map { TrackTagEntity(it, TagDimension.GENRE.name, Tag.CLASSICAL.name, SOURCE_AUTO) }
-            dao.insertTags(auto + manual + titleOnly)
+            dao.insertTags(combined + manual + titleOnly)
         }
     }
 
@@ -75,7 +90,7 @@ class TagRepository @Inject constructor(
      */
     suspend fun recomputeIfRulesChanged() {
         val saved = settings.current().tagRulesVersion
-        if (saved >= RULES_VERSION) return
+        if (saved >= RULES_VERSION) { if(feedback.store.local("desktop-heads")!=null) recomputeAll(); return }
         recomputeAll()
         settings.setTagRulesVersion(RULES_VERSION)
         Log.i(TAG, "tag rules $saved -> $RULES_VERSION: recomputed ${dao.countTags()} tags")
@@ -140,6 +155,9 @@ class TagRepository @Inject constructor(
         val features = dao.currentFeatures(trackKey)
         val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
         val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, Sensitivity.LOOSE, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
+        feedback.personalResults()[trackKey]?.takeIf { it.optString("signature")==libraryTrackSignature(trackKey) }?.getJSONObject("heads")?.let { result ->
+            for(d in TagDimension.entries) if(!(classicalTitle && d==TagDimension.GENRE)) Tag.of(d,result.optJSONObject(d.name)?.optString("value"))?.let { auto[d]=it }
+        }
         val overrides = dao.overrides(trackKey).mapNotNull { o -> TagDimension.entries.firstOrNull { it.name == o.dimension }?.let { it to o } }.toMap()
         val tags = TagDimension.entries.associateWith { d ->
             if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]

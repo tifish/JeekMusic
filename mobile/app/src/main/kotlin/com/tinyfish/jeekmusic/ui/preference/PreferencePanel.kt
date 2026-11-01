@@ -21,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 
@@ -30,96 +29,78 @@ class PreferenceViewModel @Inject constructor(val service: PreferenceService): V
     val snapshot=MutableStateFlow(JSONObject())
     val error=MutableStateFlow("")
     val busy=MutableStateFlow(false)
-    val training=MutableStateFlow("")
-    init { viewModelScope.launch { service.revision.collect { try { refresh() } catch(e: Exception) { error.value=e.message.orEmpty() } } } }
-    suspend fun refresh()=withContext(Dispatchers.IO) {
-        snapshot.value=JSONObject().put("status",service.status()).put("batch",if(service.activeProfile.isNotEmpty() && !service.deleted(service.activeProfile)) service.batch() else JSONObject().put("items",JSONArray()))
+    init {
+        viewModelScope.launch { service.revision.collect { refresh() } }
+        viewModelScope.launch { while(true) { try { withContext(Dispatchers.IO) { service.trainingStatus() }; refresh() } catch(_: Exception) { }; kotlinx.coroutines.delay(5000) } }
     }
-    fun run(block: suspend () -> Unit) { if(busy.value) return; viewModelScope.launch { busy.value=true; try { withContext(Dispatchers.IO) { block() }; refresh(); error.value="" } catch(e: Exception) { error.value=e.message.orEmpty() } finally { busy.value=false } } }
+    suspend fun refresh()=withContext(Dispatchers.IO) { snapshot.value=service.status() }
+    fun run(block: suspend () -> Unit) {
+        if(busy.value) return
+        viewModelScope.launch { busy.value=true; try { withContext(Dispatchers.IO) { block() }; refresh(); error.value="" } catch(e: Exception) { error.value=e.message.orEmpty() } finally { busy.value=false } }
+    }
 }
 
-/** Predictions and scores deliberately absent. This panel never sends playback commands. */
 @Composable
 fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
     val data by vm.snapshot.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
-    val training by vm.training.collectAsStateWithLifecycle()
     val syncState by vm.service.syncState.collectAsStateWithLifecycle()
     val context=LocalContext.current
-    val matchResultFormat=stringResource(R.string.preference_match_result)
     var delete by remember { mutableStateOf(false) }
-    var supplement by remember { mutableStateOf(false) }
+    var download by remember { mutableStateOf(false) }
+    val desktop=data.optJSONObject("desktop") ?: JSONObject()
+    val running=desktop.optBoolean("running")
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if(uri!=null) vm.run { context.contentResolver.openOutputStream(uri)?.use { it.write(vm.service.export().toByteArray(Charsets.UTF_8)) } } }
-    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+    fun action(confirmed: Boolean=false) { vm.run { vm.service.learningAction("learn",confirmed) } }
+    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.preference_title),style=MaterialTheme.typography.titleLarge)
-        val dimension=data.optJSONObject("status")?.optString("dimension") ?: "MOOD"
-        Row { for(d in PreferenceStore.dimensions) TextButton(onClick={vm.run { vm.service.selectDimension(d) }},enabled=!busy) { Text((if(d==dimension) "✓ " else "")+stringResource(when(d) { "MOOD"->R.string.preference_mood; "VOICE"->R.string.preference_voice; "GENRE"->R.string.preference_genre; else->R.string.preference_calmness })) } }
-        Text(stringResource(R.string.preference_intro),style=MaterialTheme.typography.bodySmall)
-        Text(stringResource(R.string.preference_progress,data.optJSONObject("status")?.optInt("answered") ?: 0,data.optJSONObject("status")?.optInt("conflicts") ?: 0))
-        Text(stringResource(R.string.preference_pending,data.optJSONObject("status")?.optJSONObject("dailyFeedback")?.optInt("pending") ?: 0))
+        Text(stringResource(R.string.preference_learning_intro))
+        Text(stringResource(R.string.preference_on_computer),style=MaterialTheme.typography.bodySmall)
+        Text(learningState(desktop.optString("state")))
+        if(desktop.optInt("total")>0) Text(stringResource(R.string.preference_library_progress,desktop.optInt("processed"),desktop.optInt("total"),desktop.optInt("uncovered")))
+        Button(onClick={if(desktop.optString("state")=="download_required") download=true else action()},enabled=!busy && !running) { Text(stringResource(if(desktop.optString("state") in listOf("cancelled","interrupted","incomplete")) R.string.preference_learning_resume else R.string.preference_learning_start)) }
+        if(running) OutlinedButton(onClick={vm.run { vm.service.learningAction("cancel") }},enabled=!busy) { Text(stringResource(R.string.preference_learning_cancel)) }
+        if(error.isNotEmpty()) Text(stringResource(if(listOf("version","protocol","upgrade").any { error.contains(it,ignoreCase=true) }) R.string.preference_upgrade_required else R.string.preference_computer_unavailable),color=MaterialTheme.colorScheme.error)
+        for(head in PreferenceStore.objects(data.optJSONArray("heads") ?: org.json.JSONArray())) {
+            val d=head.getString("dimension")
+            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(when(d) { "MOOD"->R.string.preference_mood; "VOICE"->R.string.preference_voice; "GENRE"->R.string.preference_genre; else->R.string.preference_calmness }),style=MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.preference_learning_counts,head.optInt("available"),head.optInt("positive"),head.optInt("negative"),head.optInt("annotated")))
+                Text(learningState(head.optString("state")))
+                if(head.optInt("missingTotal")>0) Text(stringResource(R.string.preference_learning_missing,head.optInt("missingPositive"),head.optInt("missingNegative"),head.optInt("missingTotal")),style=MaterialTheme.typography.bodySmall)
+                val material=head.optJSONObject("computerMaterial")
+                if((material?.optInt("missingLocal") ?: 0)>0) Text(stringResource(R.string.preference_learning_missing_files,material!!.optInt("missingLocal")),style=MaterialTheme.typography.bodySmall)
+                if((material?.optInt("missingComponents") ?: 0)>0 && head.optInt("available")>0) Text(stringResource(R.string.preference_learning_variety),style=MaterialTheme.typography.bodySmall)
+            } }
+        }
+        Text(stringResource(R.string.preference_result_coverage),style=MaterialTheme.typography.bodySmall)
+        Text(stringResource(when(syncState) { "syncing"->R.string.preference_syncing; "synced"->R.string.preference_synced; else->R.string.preference_offline }))
         TextButton(onClick={vm.run { vm.service.synchronize() }},enabled=!busy) { Text(stringResource(R.string.preference_sync)) }
-        Text(stringResource(when(syncState) { "idle"->R.string.preference_idle; "syncing"->R.string.preference_syncing; "synced"->R.string.preference_synced; else->R.string.preference_offline }))
-        TextButton(onClick={supplement=!supplement}) { Text(stringResource(R.string.preference_supplement)) }
-        if(supplement) {
-        TextButton(onClick={vm.run { vm.service.prepare() }},enabled=!busy) { Text(stringResource(R.string.preference_prepare)) }
-        TextButton(onClick={vm.run { val result=vm.service.matchLocalBatch(); vm.training.value=String.format(matchResultFormat,result.getInt("checkedFiles"),result.getInt("matched")) }},enabled=!busy) { Text(stringResource(R.string.preference_match)) }
-
-        Text(stringResource(R.string.preference_identity_warning),style=MaterialTheme.typography.bodySmall)
-        val rows=PreferenceStore.objects(data.optJSONObject("batch")?.optJSONArray("items") ?: JSONArray())
-        var currentIndex by remember(data.optJSONObject("batch")?.optString("manifestId")) { mutableIntStateOf(0) }
-        if(rows.isNotEmpty()) {
-            currentIndex=currentIndex.coerceIn(0,rows.lastIndex)
-            Row(horizontalArrangement=Arrangement.SpaceBetween,modifier=Modifier.fillMaxWidth()) {
-                TextButton(onClick={currentIndex--},enabled=currentIndex>0) { Text(stringResource(R.string.preference_previous)) }
-                Text("${currentIndex+1} / ${rows.size}")
-                TextButton(onClick={currentIndex++},enabled=currentIndex<rows.lastIndex) { Text(stringResource(R.string.preference_next)) }
-            }
-        }
-        for(item in rows.drop(currentIndex).take(1)) key(data.optJSONObject("status")?.optString("profileId")+":"+dimension+":"+data.optJSONObject("batch")?.optString("manifestId")+":"+item.getString("recordingId")) {
-            var basis by remember(item.optString("answer"),item.optString("basis")) { mutableIntStateOf(PreferenceStore.bases.indexOf(item.optString("basis")).takeIf { it>=0 } ?: 3) }
-            var reason by remember(item.optString("answer"),item.optString("reason")) { mutableStateOf(item.optString("reason")) }
-            var chooseBasis by remember { mutableStateOf(false) }
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Text(item.optString("title")+" — "+item.optString("artist"),style=MaterialTheme.typography.titleMedium)
-                    Text(item.optString("album")+" · "+item.optLong("durationMs")+" ms")
-                    Text(stringResource(when(dimension) { "MOOD"->R.string.preference_question; "VOICE"->R.string.preference_question_voice; "GENRE"->R.string.preference_question_genre; else->R.string.preference_question_calmness }))
-                    if(item.optString("answer").isNotEmpty()) Text(stringResource(R.string.preference_saved,item.optString("answer")))
-                    val labels=listOf(R.string.preference_familiar,R.string.preference_full,R.string.preference_excerpts,R.string.preference_unclear)
-                    TextButton(onClick={chooseBasis=true}) { Text(stringResource(labels[basis])) }
-                    if(chooseBasis) AlertDialog(onDismissRequest={chooseBasis=false},title={Text(stringResource(R.string.preference_basis))},text={Column { for(i in labels.indices) Row { RadioButton(basis==i,{basis=i;chooseBasis=false}); TextButton(onClick={basis=i;chooseBasis=false}) { Text(stringResource(labels[i])) } } }},confirmButton={TextButton(onClick={chooseBasis=false}) {Text(stringResource(android.R.string.cancel))}})
-                    OutlinedTextField(reason,{reason=it.take(500)},label={Text(stringResource(R.string.preference_reason))},modifier=Modifier.fillMaxWidth())
-                    val conflict=item.optBoolean("conflict")
-                    if(conflict) { Text(stringResource(R.string.preference_conflict)); for(r in vm.service.conflicts(item.getString("recordingId"))) Text(r) }
-                    val pair=PreferenceStore.labels(dimension)
-                    val choices=listOf(pair.first to when(dimension) { "MOOD"->R.string.preference_yes; "VOICE"->R.string.preference_vocal; "GENRE"->R.string.preference_classical; else->R.string.preference_calm },pair.second to when(dimension) { "MOOD"->R.string.preference_no; "VOICE"->R.string.preference_instrumental; "GENRE"->R.string.preference_non_classical; else->R.string.preference_non_calm },"UNCERTAIN" to R.string.preference_uncertain,"UNRESOLVED" to R.string.preference_wrong,"SKIP" to R.string.preference_skip,"WITHDRAWN" to R.string.preference_withdraw)
-                    for(pair in choices.chunked(3)) Row { for((answer,label) in pair) TextButton(onClick={vm.run { vm.service.answer(item.getString("recordingId"),answer,PreferenceStore.bases[basis],reason,conflict) }},enabled=!busy) { Text(stringResource(label)) } }
-                }
-            }
-        }
-        }
-        Text(stringResource(R.string.preference_training_note),style=MaterialTheme.typography.bodySmall)
-        TextButton(onClick={vm.run { vm.training.value=vm.service.trainingStatus().optString("state") }},enabled=!busy) { Text(stringResource(R.string.preference_training_status)) }
-        if(training.isNotEmpty()) Text(when(training) {
-            "insufficient_material"->stringResource(R.string.preference_insufficient)
-            "identity_incomplete"->stringResource(R.string.preference_identity_incomplete)
-            "components_required"->stringResource(R.string.preference_components_required)
-            "running","checking_material","preparing_components"->stringResource(R.string.preference_running)
-            "cancelled","interrupted"->stringResource(R.string.preference_cancelled)
-            "failed","incomplete","validation_failed","inconclusive"->stringResource(R.string.preference_failed)
-            "synthetic_validation_complete"->stringResource(R.string.preference_synthetic_complete)
-            "self_selected_candidate","development_required","regression_required","independent_test_required","training_gate_passed","pass_research_gate"->stringResource(R.string.preference_candidate)
-            "invalidated"->stringResource(R.string.preference_invalidated)
-            "idle"->stringResource(R.string.preference_idle)
-            else->training
-        })
         Row {
             TextButton(onClick={export.launch("personal-preference.json")},enabled=!busy) { Text(stringResource(R.string.preference_export)) }
             TextButton(onClick={delete=true},enabled=!busy) { Text(stringResource(R.string.preference_delete)) }
         }
         if(busy) CircularProgressIndicator()
-        if(error.isNotEmpty()) Text(if(error.contains("profile",ignoreCase=true) || error.contains("upgrade",ignoreCase=true) || error.contains("protocol",ignoreCase=true)) stringResource(R.string.preference_upgrade_required) else error,color=MaterialTheme.colorScheme.error)
     }
+    if(download) AlertDialog(onDismissRequest={download=false},title={Text(stringResource(R.string.preference_download_title))},text={Text(stringResource(R.string.preference_download_explanation))},confirmButton={TextButton(onClick={download=false;action(true)}) {Text(stringResource(R.string.preference_download_start))}},dismissButton={TextButton(onClick={download=false}) {Text(stringResource(android.R.string.cancel))}})
     if(delete) AlertDialog(onDismissRequest={delete=false},title={Text(stringResource(R.string.preference_delete))},text={Text(stringResource(R.string.preference_delete_confirmation))},confirmButton={TextButton(onClick={delete=false;vm.run { vm.service.delete() }}) { Text(stringResource(R.string.preference_delete)) }},dismissButton={TextButton(onClick={delete=false}) {Text(stringResource(android.R.string.cancel))}})
 }
+
+@Composable
+private fun learningState(state: String)=stringResource(when(state) {
+    "active"->R.string.preference_learning_active
+    "updated"->R.string.preference_learning_updated
+    "updated_with_uncovered"->R.string.preference_learning_partial
+    "updating_library"->R.string.preference_learning_updating
+    "learning","running","checking_material","preparing_components"->R.string.preference_running
+    "waiting_playback"->R.string.preference_learning_playback
+    "insufficient_material"->R.string.preference_insufficient
+    "waiting_checks","check_material_required","self_selected_candidate","development_required","regression_required","independent_test_required","training_gate_passed"->R.string.preference_learning_checks
+    "validation_failed"->R.string.preference_learning_failed_check
+    "cancelled","interrupted"->R.string.preference_cancelled
+    "failed","incomplete"->R.string.preference_failed
+    "download_required"->R.string.preference_download_title
+    "invalidated"->R.string.preference_invalidated
+    else->R.string.preference_idle
+})

@@ -11,6 +11,7 @@ public sealed class SmartTagService(LibraryService library)
     readonly Lock _recompute = new();
     public Func<string>? LearningGeneration { get; set; }
     public Func<string>? LearningDevice { get; set; }
+    public Func<Track,JsonObject>? PersonalResults { get; set; }
     LibraryDb Db => library.Db;
     public event Action? ResultsChanged;
 
@@ -21,7 +22,7 @@ public sealed class SmartTagService(LibraryService library)
             kv.Value.GetValueOrDefault("MOOD").value, kv.Value.GetValueOrDefault("VOICE").value,
             kv.Value.GetValueOrDefault("GENRE").value, kv.Value.GetValueOrDefault("MOOD").source == "MANUAL",
             kv.Value.GetValueOrDefault("VOICE").source == "MANUAL", kv.Value.GetValueOrDefault("GENRE").source == "MANUAL",
-            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL"));
+            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL") { Origins=kv.Value.ToDictionary(d=>d.Key,d=>d.Value.source) });
     }
 
     /// <summary>Read-only committed analysis explanation, shared by MCP and review snapshots.</summary>
@@ -37,6 +38,9 @@ public sealed class SmartTagService(LibraryService library)
         var automatic = usable ? TagClassifier.Classify(FeaturesData.FromRow(row!)!, sensitivity, title).ToDictionary()
             : new Dictionary<TagDimension, Tag?>();
         if (title) automatic[TagDimension.GENRE] = Tag.CLASSICAL;
+        var publicAutomatic=new JsonObject(automatic.Select(kv=>new KeyValuePair<string,JsonNode?>(kv.Key.ToString(),JsonValue.Create(kv.Value?.ToString()))));
+        var personal=PersonalResults?.Invoke(track)??new JsonObject();
+        foreach(var (d,result) in personal) if(Enum.TryParse<TagDimension>(d,out var dimension) && !(title && dimension==TagDimension.GENRE) && Tags.Of(dimension,result?["value"]?.GetValue<string>()) is { } value) automatic[dimension]=value;
         var overrides = Db.TagOverrides().Where(o => o.TrackKey == track.TrackKey).ToDictionary(o => o.Dimension);
         var final = new JsonObject();
         var auto = new JsonObject();
@@ -47,12 +51,12 @@ public sealed class SmartTagService(LibraryService library)
             auto[name] = automatic.GetValueOrDefault(d)?.ToString();
             var manual = Tags.Of(d, overrides.GetValueOrDefault(name)?.Value)?.ToString();
             final[name] = manual ?? automatic.GetValueOrDefault(d)?.ToString();
-            sources[name] = manual is not null ? "MANUAL" : automatic.GetValueOrDefault(d) is not null ? "AUTO" : null;
+            sources[name] = manual is not null ? "MANUAL" : personal[name] is not null && !(title && d==TagDimension.GENRE) ? "PERSONAL" : automatic.GetValueOrDefault(d) is not null ? "AUTO" : null;
         }
         var a = evidence?.Aggregate();
         var calm = usable && row!.AnalyzerVersion is 5 or 6 ? CalmnessEvidence.From(evidence) : null;
         return new JsonObject {
-            ["trackId"] = track.Id, ["automatic"] = auto, ["final"] = final, ["sources"] = sources,
+            ["trackId"] = track.Id, ["automatic"] = auto, ["publicAutomatic"]=publicAutomatic,["personal"]=personal,["final"] = final, ["sources"] = sources,
             ["classicalTitleMatched"] = title, ["genreEvidenceSource"] = title ? "ClassicalTitles (forced before manual override)" : "model",
             ["analyzerVersion"] = row?.AnalyzerVersion, ["currentAnalyzerVersion"] = AnalysisFeature.AnalyzerVersion,
             ["rulesVersion"] = AnalysisVersions.RulesVersion, ["workoutPolicy"]="fixed_loose", ["sensitivity"]="LOOSE", ["signatureMatches"] = current, ["usable"] = usable,
@@ -150,6 +154,7 @@ public sealed class SmartTagService(LibraryService library)
         foreach (var t in tracks)
         {
             var classical = ClassicalTitles.Matches(t.Title, t.Album);
+            var personal=PersonalResults?.Invoke(t)??new JsonObject();
             var auto = features.TryGetValue(t.TrackKey, out var row) && row.Signature == AnalysisFeature.Signature(t) &&
                 row.AnalyzerVersion <= AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is { } f
                 ? TagClassifier.Classify(f, sensitivity, classical) : new Dictionary<TagDimension, Tag?>();
@@ -157,9 +162,11 @@ public sealed class SmartTagService(LibraryService library)
             {
                 var name = dimension.ToString();
                 var manual = Tags.Of(dimension, overrides.GetValueOrDefault((t.TrackKey, name))?.Value)?.ToString();
-                var value = manual ?? auto.GetValueOrDefault(dimension)?.ToString();
+                var learned=Tags.Of(dimension,personal[name]?["value"]?.GetValue<string>())?.ToString();
+                if(classical && dimension==TagDimension.GENRE) learned=null;
+                var value = manual ?? learned ?? auto.GetValueOrDefault(dimension)?.ToString();
                 if (value is null && classical && dimension == TagDimension.GENRE) value = Tag.CLASSICAL.ToString();
-                if (value is not null) tags.Add((t.TrackKey, name, value, manual is null ? "AUTO" : "MANUAL"));
+                if (value is not null) tags.Add((t.TrackKey, name, value, manual is not null ? "MANUAL" : learned is not null ? "PERSONAL" : "AUTO"));
             }
         }
         var old = Db.AllTags();

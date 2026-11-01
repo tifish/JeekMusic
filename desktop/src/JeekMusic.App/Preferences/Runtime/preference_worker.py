@@ -101,7 +101,8 @@ def evaluate(rows, attempted, dimension="MOOD"):
     import numpy as np
     h=HEADS[dimension]; positive=h["positive"]; negative=h["negative"]
     # This input is a dedicated training snapshot, not the sync ledger or evaluation database.
-    if any(r.get("role") != "training" or (r.get("exposed") and not r.get("selfSelectedTraining")) or not r.get("identityReviewed") for r in rows): raise ValueError("Training isolation violation")
+    if any(r.get("role") != "training" or (r.get("exposed") and not r.get("selfSelectedTraining")) or
+           (not r.get("identityReviewed") and not (r.get("selfSelectedTraining") and r.get("identityBasis")=="metadata_training_only_nonindependent")) for r in rows): raise ValueError("Training isolation violation")
     if len({r["recordingId"] for r in rows}) != len(rows): raise ValueError("Duplicate recording")
     if any(r["label"] not in (positive,negative) or r.get("dimension",dimension)!=dimension for r in rows): raise ValueError("Missing or cross-dimension label cannot become a negative")
     groups = sorted({r["componentId"] for r in rows})
@@ -183,7 +184,7 @@ def evaluate_frozen(data):
         else: passed = fp/len(n)<=(.15 if dimension=="CALMNESS" else .1) and miss/len(p)<=h["miss"] and coverage>=h["coverage"] and min(class_coverage)>=h["coverage"] and binomial_upper(fp,len(n))<=(.4 if dimension=="CALMNESS" else .35) and binomial_upper(miss,len(p))<=(.4 if dimension=="CALMNESS" else .35)
         passed &= stable_complete and not direct_flip
         metrics.update(falseAcceptanceUpper=binomial_upper(fp,len(n)),effectiveMissUpper=binomial_upper(miss,len(p)),netCorrectSport=net_sport,stabilityComplete=stable_complete,directFlip=direct_flip)
-    return {"state":("development_passed" if stage=="development" else "pass_research_gate") if passed else "validation_failed","metrics":metrics,"predictions":predictions,"activation":"disabled_deployment_equivalence_and_ARM_budget_unverified"}
+    return {"state":("development_passed" if stage=="development" else "pass_research_gate") if passed else "validation_failed","metrics":metrics,"predictions":predictions,"activation":"requires_local_integrity_equivalence_and_scope_checks"}
 
 
 def extract(root, rows, deadline):
@@ -253,6 +254,8 @@ def main():
                 if any(r.get("labelSource")!="explicit_human_blind_batch" and not (data.get("selfSelectedPilot",False) and r.get("selfSelectedTraining") and r.get("labelSource")=="explicit_daily_tag_correction") and not (data.get("syntheticFixture",False) and r.get("labelSource")=="synthetic_fixture") for r in data["rows"]): raise ValueError("Only explicit human truth or a declared isolated synthetic validation archive may train")
                 result = evaluate(data["rows"], data["attempted"],data.get("dimension","MOOD"))
                 result["syntheticFixture"]=data.get("syntheticFixture",False)
+                if result.get("model") is not None:
+                    result["deploymentProbes"]=[{"vector":r["vector"],"score":score(result["model"],r["vector"]),"decision":decision(score(result["model"],r["vector"]),data.get("dimension","MOOD"))} for r in data["rows"]]
             else: result = evaluate_frozen(data)
         result["elapsedSeconds"] = time.monotonic()-start; atomic(args.output,result)
     except Exception as error:

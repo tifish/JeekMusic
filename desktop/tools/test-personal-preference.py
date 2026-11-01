@@ -90,6 +90,20 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(result["margin"],head["margin"])
             rows[0]["label"]=""
             with self.assertRaisesRegex(ValueError,"cannot become a negative"): worker.evaluate(rows,24,dimension)
+    def test_fixed_independent_gate_positive_failed_and_insufficient_fixtures(self):
+        for dimension in ("VOICE","GENRE","CALMNESS"):
+            h=worker.HEADS[dimension]
+            training=self.rows()
+            model=worker.fit([r["vector"] for r in training],[1 if i%2 else -1 for i in range(24)])
+            rows=[]
+            for i,r in enumerate(training):
+                rows.append({**r,"recordingId":"independent-fixture-"+str(i),"role":"sealed_test","label":h["positive"] if i%2 else h["negative"],"perturbations":{k:r["vector"] for k in ("base","minus6","plus6","minus2","plus2")}})
+            data=dict(dimension=dimension,stage="sealed_test",model=model,rows=rows)
+            self.assertEqual(worker.evaluate_frozen(data)["state"],"pass_research_gate")
+            for row in rows: row["label"]=h["negative"] if row["label"]==h["positive"] else h["positive"]
+            self.assertEqual(worker.evaluate_frozen(data)["state"],"validation_failed")
+            for r in rows:r["label"]=""
+            self.assertEqual(worker.evaluate_frozen(data)["state"],"inconclusive")
 
 
 if __name__=="__main__": unittest.main()

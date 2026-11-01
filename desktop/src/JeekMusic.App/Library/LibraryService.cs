@@ -93,7 +93,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
             kv.Value.GetValueOrDefault("MOOD").value, kv.Value.GetValueOrDefault("VOICE").value, kv.Value.GetValueOrDefault("GENRE").value,
             kv.Value.GetValueOrDefault("MOOD").source == "MANUAL", kv.Value.GetValueOrDefault("VOICE").source == "MANUAL",
             kv.Value.GetValueOrDefault("GENRE").source == "MANUAL",
-            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL"));
+            kv.Value.GetValueOrDefault("CALMNESS").value, kv.Value.GetValueOrDefault("CALMNESS").source == "MANUAL") { Origins=kv.Value.ToDictionary(d=>d.Key,d=>d.Value.source) });
         var snapshot = new LibrarySnapshot(folders, tracks, tags);
         Dispatcher.UIThread.Post(() =>
         {

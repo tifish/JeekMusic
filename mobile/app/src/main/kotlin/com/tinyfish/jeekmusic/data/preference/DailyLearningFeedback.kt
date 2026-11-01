@@ -23,6 +23,7 @@ import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.labels
 class DailyLearningFeedback @Inject constructor(@param:ApplicationContext private val context: Context,private val library: JeekDatabase) {
     val store by lazy { PreferenceStore(context) }
     val revision=kotlinx.coroutines.flow.MutableStateFlow(0)
+    var resultsChanged: (suspend () -> Unit)?=null
     private val gate=Mutex()
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private var timer: Job?=null
@@ -73,7 +74,7 @@ class DailyLearningFeedback @Inject constructor(@param:ApplicationContext privat
                 if(records.size>1) { set("daily-problem:$key","recording_identity_conflict"); continue }
                 val r=records.singleOrNull()?.getJSONObject("payload")?.let { JSONObject(it.toString()) } ?: JSONObject().put("recordingId",id).put("contentSignature",content).put("title",t.title).put("artist",t.artistDisplay).put("album",t.album)
                     .put("artists",JSONArray(listOf(t.artistDisplay.uppercase()))).put("workGroup",t.title.uppercase()).put("albumGroup",((t.albumArtist ?: "")+":"+(t.album ?: "")).uppercase()).put("durationMs",t.durationMs).put("identityReviewed",false).put("supported",t.cueTrackNo==null && t.durationMs>=150000)
-                if(!r.optBoolean("selfSelected")) { r.put("selfSelected",true).put("exposed",true).put("exposureSource","self_selected_visible_auto"); store.append(DATASET,id,"recording",r,expectedGeneration=generation); invalidate(null) }
+                if(!r.optBoolean("selfSelected")) { r.put("selfSelected",true).put("exposed",true).put("exposureSource","self_selected_visible_auto"); store.append(DATASET,id,"recording",r,expectedGeneration=generation) }
                 set("binding:$id",t.trackKey)
             }
             var blocked=false
@@ -96,12 +97,12 @@ class DailyLearningFeedback @Inject constructor(@param:ApplicationContext privat
             }
             if(!blocked) { store.removeLocal(key); store.removeLocal("daily-problem:$key"); completed++ }
         }
-        if(completed>0) revision.value++
+        if(completed>0) { revision.value++; resultsChanged?.invoke() }
         status().put("completed",completed).put("hashedFiles",hashed)
     }
     suspend fun close() { scope.coroutineContext[Job]?.cancelAndJoin(); store.close() }
     private fun invalidate(d: String?) {
-        for(e in store.current(DATASET,"model").filter { (d==null || dimension(it.getJSONObject("payload"))==d) && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate","self_selected_candidate") }) {
+        for(e in store.current(DATASET,"model").filter { (d==null || dimension(it.getJSONObject("payload"))==d) && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate","self_selected_candidate","active") }) {
             store.append(DATASET,e.getString("entityId"),"model",JSONObject(e.getJSONObject("payload").toString()).put("state","invalidated").put("enabled",false),true)
         }
     }

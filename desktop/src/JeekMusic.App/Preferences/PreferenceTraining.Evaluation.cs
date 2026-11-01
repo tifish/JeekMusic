@@ -11,7 +11,7 @@ public sealed partial class PreferenceTraining
         var study=service.Store.Current(profile,"manifest").SingleOrDefault(e=>S(e["entityId"])=="study-v1")?["payload"]?.AsObject() ?? throw new InvalidOperationException("Freeze the complete identity study first");
         var identities=service.Store.Current(profile,"recording").Select(e=> { var r=e["payload"]!; return new Identity(S(e["entityId"]),S(r["contentSignature"]),S(r["workGroup"]),S(r["albumGroup"]),ReadStrings(r["artists"]),r["identityReviewed"]?.GetValue<bool>()==true,r["exposed"]?.GetValue<bool>()==true,true); }).ToArray();
         if(PreferenceStudy.Contaminated(study,identities)) throw new InvalidOperationException("Identity contamination: evaluation permanently stopped");
-        var candidates=service.Store.Current(profile,"model").Where(e=>Dimension(e["payload"])==dimension && S(e["payload"]?["state"]) is "development_required" or "regression_required" or "independent_test_required").ToArray();
+        var candidates=service.Store.Current(profile,"model").Where(e=>S(e["payload"]?["category"])!="job" && Dimension(e["payload"])==dimension && S(e["payload"]?["state"]) is "development_required" or "regression_required" or "independent_test_required").ToArray();
         if(candidates.Length!=1) throw new InvalidOperationException("One frozen candidate with a passed training gate required");
         var candidate=candidates[0]; var candidateData=candidate["payload"]!;
         var trainingHash=S(candidateData["trainingSetHash"]);
@@ -25,7 +25,7 @@ public sealed partial class PreferenceTraining
         {
             var regression=RegressionSnapshot(false,profile);
             if(regression["rows"]!.AsArray().Count!=11 || regression["rows"]!.AsArray().Any(n=>n?["vector"] is null)) throw new InvalidOperationException("Old-feedback regression requires all 11 exact recordings and bounded explicit extraction; no inferred or missing negative answers");
-            regression["stage"]=role; regression["candidateId"]=S(candidate["entityId"]); regression["model"]=artifact["model"]!.DeepClone(); regression["trainingSetHash"]=trainingHash;
+            regression["stage"]=role; regression["candidateId"]=S(candidate["entityId"]); regression["model"]=artifact["model"]!.DeepClone(); regression["trainingSetHash"]=trainingHash; regression["dimension"]=dimension; regression["receiptDependencies"]=ReceiptDependencies(dimension,role); regression["artifactHash"]=Hash(artifact.ToJsonString());
             return regression;
         }
         var expected=ReadStrings(study[role]).Take(dimension=="MOOD"?int.MaxValue:role=="development"?8:24).ToArray();
@@ -50,6 +50,7 @@ public sealed partial class PreferenceTraining
         foreach(var id in expected)
         {
             var a=answers[id][0]["payload"]!;
+            if(S(a["source"])!="explicit_human_blind_batch" || S(a["exposure"])!="blind_ui_no_predictions" || service.Synthetic(profile)) throw new InvalidOperationException("Independent checks require genuine unexposed human whole-recording truth");
             string label=S(a["answer"]);
             if(!Binary(label,dimension) || S(a["basis"]) is not ("whole_recording_familiar" or "listened_full")) label="";
             var cached=service.Store.Local("vector:"+id) is { } value ? JsonNode.Parse(value):null;
@@ -59,9 +60,11 @@ public sealed partial class PreferenceTraining
                 ["rules"]=track is null ? "ABSTAIN" : S(app.SmartTags.Explain(track)["automatic"]?[dimension]) });
         }
         var result=new JsonObject { ["dimension"]=dimension,["profileId"]=profile,["stage"]=role,["studyHash"]=S(study["hash"]),["candidateId"]=S(candidate["entityId"]),["model"]=artifact["model"]!.DeepClone(),["trainingSetHash"]=trainingHash,["annotationStabilityPassed"]=AnnotationStabilityPassed(profile),["regressionPassed"]=candidateData["regressionPassed"]?.GetValue<bool>()==true,["rows"]=rows };
+        result["receiptDependencies"]=ReceiptDependencies(dimension,role); result["artifactHash"]=Hash(artifact.ToJsonString());
         var audit="evaluation:"+profile+":"+dimension+":"+role;
-        if(service.Store.Local(audit)!=null) throw new InvalidOperationException("This frozen stage was already opened; no retuning or repeated independent evaluation");
-        service.Store.SetLocal(audit,Hash(result.ToJsonString()));
+        var hash=Hash(result.ToJsonString());
+        if(service.Store.Local(audit) is { } previous && previous!=hash) throw new InvalidOperationException("This frozen stage was already opened; no retuning or changed independent evaluation");
+        service.Store.SetLocal(audit,hash);
         return result;
     }
     bool AnnotationStabilityPassed(string profile)
@@ -106,12 +109,17 @@ public sealed partial class PreferenceTraining
     void CommitEvaluation(JsonObject snapshot,JsonObject result)
     {
         var profile=S(snapshot["profileId"]); var id=S(snapshot["candidateId"]);
+        var dimension=Dimension(snapshot); var stage=S(snapshot["stage"]);
+        if(jobGeneration!=service.Store.Generation || S(snapshot["receiptDependencies"])!=ReceiptDependencies(dimension,stage)) throw new InvalidOperationException("Evidence changed during effect check");
         var current=service.Store.Current(profile,"model").Single(e=>S(e["entityId"])==id)["payload"]!.DeepClone().AsObject();
         if(S(current["state"])=="invalidated" || service.Deleted(profile)) throw new InvalidOperationException("Candidate invalidated while evaluation ran");
         current["state"]=S(result["state"]) switch { "development_passed"=>Dimension(snapshot)=="MOOD"?"regression_required":"independent_test_required", "regression_passed"=>"independent_test_required", "pass_research_gate"=>"pass_research_gate", "inconclusive" or "incomplete"=>"inconclusive", _=>"validation_failed" };
         current["enabled"]=false;
         current["evaluationHash"]=Hash(result.ToJsonString());
         if(S(result["state"])=="regression_passed") current["regressionPassed"]=true;
-        service.Store.Append(profile,id,"model",current);
+        var local=new Dictionary<string,string>();
+        if(S(result["state"]) is "development_passed" or "regression_passed" or "pass_research_gate")
+            local["passed:"+dimension+":"+stage]=new JsonObject { ["trainingHash"]=S(snapshot["trainingSetHash"]),["artifactHash"]=S(snapshot["artifactHash"]),["dependencies"]=S(snapshot["receiptDependencies"]),["resultHash"]=Hash(result.ToJsonString()) }.ToJsonString();
+        service.Store.AppendAndSetLocal(profile,id,"model",current,local,jobGeneration,()=>S(snapshot["receiptDependencies"])==ReceiptDependencies(dimension,stage) && S(current["trainingSetHash"])==S(snapshot["trainingSetHash"]));
     }
 }

@@ -96,7 +96,16 @@ public sealed class PreferenceStore : IDisposable
         lock(gate) { if(expectedGeneration!=null && expectedGeneration!=Generation) throw new InvalidOperationException("Learning data cleared; start labeling again"); Import(all.Select(i=>Revision(i.Profile,i.Entity,i.Kind,i.Payload)).ToArray()); }
     }
     static bool Sealed(JsonObject e) => S(e["kind"]) == "answer" && S(e["payload"]?["role"]) is "development" or "sealed_test";
-    public int Import(IEnumerable<JsonObject> incoming)
+    internal void AppendAndSetLocal(string profile,string entity,string kind,JsonObject payload,IReadOnlyDictionary<string,string> localValues,string expectedGeneration,Func<bool> guard)
+    {
+        lock(gate)
+        {
+            if(Generation!=expectedGeneration || !guard()) throw new InvalidOperationException("Learning evidence changed before atomic commit");
+            ImportCore([Revision(profile,entity,kind,payload)],localValues);
+        }
+    }
+    public int Import(IEnumerable<JsonObject> incoming)=>ImportCore(incoming,null);
+    int ImportCore(IEnumerable<JsonObject> incoming,IReadOnlyDictionary<string,string>? localValues)
     {
         var rows = incoming.ToArray();
         if(rows.Length > 100) throw new ArgumentException("At most 100 revisions per page");
@@ -130,6 +139,7 @@ public sealed class PreferenceStore : IDisposable
 
             }
             if(added>0) Run("DELETE FROM local WHERE key='validatedModel'");
+            if(localValues!=null) foreach(var (key,value) in localValues) SetLocal(key,value);
             tx.Commit(); transaction=null; return added;
         }
     }

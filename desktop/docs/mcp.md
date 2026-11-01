@@ -448,13 +448,13 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 | preference_batch | status/prepare，可选 dimension | 六首盲标、续接；不显示预测/分数；MCP 不返回封存答案 |
 | preference_answer | recordingId、answer、basis、reason≤500、resolve，可选 dimension | 明确人工答案；单维冲突需复核全部头；撤回只失效受影响头 |
 | preference_identity | recordingId、work、album、artists、exposed | 跨维共用作品/艺人/专辑分组；身份污染停止评估 |
-| preference_training | status/prepare/extract/train/evaluate/regression_extract/cancel，可选 dimension | 独立CPU worker；单次最多6录音、2 CPU、240秒、总2GiB job；按需公共组件；旧11仅运动回归 |
+| preference_training | status/learn/resume/cancel/diagnostics/activate，兼容 prepare/extract/train/evaluate/regression_extract；可选 dimension、downloadConfirmed | 独立CPU worker；单次最多6录音、2 CPU、240秒、总2GiB job；按需公共组件；旧11仅运动回归 |
 | preference_conflicts | 可选 dimension | 只读该维训练冲突；不返回封存标签、原话、路径、向量或凭证 |
 | checkpoint_client | 无参数 | 使用 QueuePersistence 保存实时队列/手动项、源与锚点、模式、进度并刷新设备本地设置；不暂停、不改音量、不解析待交接源，不写媒体 |
 
 四个 dimension：MOOD SPORT/NON_SPORT，VOICE VOCAL/INSTRUMENTAL，GENRE CLASSICAL/NON_CLASSICAL，CALMNESS CALM/NON_CALM。省略 dimension 使用当前界面维度；旧学习数据仅在schema升级时重置一次，旧协议事件明确拒绝。答题另支持 UNCERTAIN/UNRESOLVED/SKIP/WITHDRAWN，未答不补自动值，AUTO 不属于个人人工答案。basis=whole_recording_familiar/listened_full/excerpts_only/unclear；仅前两种明确二元答案拟合。
 
-四维共享表示缓存和全局隔离角色，监督头、样本计数、分数边界、验证、失效各自独立。个人分数是未校准 margin。MOOD ±.25，VOICE/CALMNESS ±.35，GENRE ±.4；阈值等号弃权。详细材料及各维验收门槛见 [当前协议](../../docs/personal-tag-learning.md)。真实用户独立验收和部署未完成前 candidate only，不能把 synthetic_validation 的链路成绩作为用户准确率。
+四维共享表示缓存和全局隔离角色，监督头、样本计数、分数边界、验证、失效各自独立。个人分数是未校准 margin。MOOD ±.25，VOICE/CALMNESS ±.35，GENRE ±.4；阈值等号弃权。详细材料及各维验收门槛见 [当前协议](../../docs/personal-tag-learning.md)。工程支持每维通过真实独立检查与本机可信部署校验后自动启用；无独立真值时保留公共规则。不能把合成夹具的链路成绩作为用户准确率。
 
 preference_data status 返回每头正负/不确定/冲突、阈值契约、模型元数据和有界同步游标/本地提交时间，不默认给原话/向量。explain_analysis 增加 personalLearning，明确 PUBLIC_AUTO、未启用个人层、手工最终优先及 ClassicalTitles 的 GENRE 自动优先级；旧 QUIET 只为 NON_SPORT，不推导 CALM。
 
@@ -479,3 +479,16 @@ Windows / Android 均移除灵敏度选项。生产路径、追加采样、节�
 `song_columns`（第38项）使用当前主窗口列服务，不激活或导航。`status`只读；`set`指定tag与visible/width/order之一，width64–3000 DIPs、order0–10；`save`保存当前布局。tag为Title/Artist/Album/Duration/FileName/Modified/Format/Mood/Voice/Genre/Calmness；Title不可隐藏，旧Tags拒绝。返回实际列、持久化状态、原生表头菜单开闭和勾选诊断。`checkpoint_client`同时保存当前列布局，便于保全重启。开发版和NativeAOT目录均38项、描述/Schema相同。
 
 `get_diagnostics.mainLayout.smartTagColumns.quickCorrection` 增加`menuOpen/currentValueLines/keepsOpenAfterSave/currentValues`；第一列只显示一行当前值，不暴露学习私有答案。当前右键菜单保持打开，事务成功才刷新值和手工勾选，失败可重试，固定原目标快照；业务写入仍经`set_smart_tags`。菜单连续点击、外部/Esc关闭和视觉排版需要最小真实UI验收，不能由诊断字段代替。
+
+
+### 标签学习编排与可信启用
+
+`preference_training` 保留旧的 `status/prepare/extract/regression_extract/train/evaluate/cancel`；新增 `learn/resume/activate/diagnostics`。`learn/resume` 运行与两端设置相同的四维编排，不要求传维度。首次缺运行材料时返回 `learning.state=download_required`，不会开始网络下载；`downloadConfirmed=true` 表示确认约615 MB公共权重、数GB CPU依赖及至少6 GB磁盘的具体下载。既有已确认版本在中断后保留确认。
+
+`status` 仍保留旧单维 `state/runningDimension`，新增 `learning` 的整次任务状态、running、processed/total/uncovered、部署版本。`preference_data status` 的 `heads` 含 annotatedCount、trainingLabels、正反计数、material 缺项和单维状态，顶层 learning 是普通用户任务。`diagnostics` 返回各维 enabled/version、范围和本地结果计数；不会返回权重/向量/答案理由。`activate` 要求已经由本机正式服务生成的完整检查凭据，随后自动启动全库更新；不能靠同步元数据、传入权重路径或切换合成开关部署。
+
+每工作批次六首/两CPU/240秒/2 GiB Job Object，后台自动续接；整次六小时、全库每轮一万首，崩溃自动恢复最多三次。取消保留完成缓存，失败可重试。学习数据清除移除个人指针、向量与任务产物，普通分析缓存和手工标签保留。`get_track/search_tracks` 的 tagSources 现在也可能为 `PERSONAL`；字段名和 AUTO/MANUAL 语义兼容。`explain_analysis` 增加 publicAutomatic 和个人结果版本，手工/古典标题优先不变。
+
+配对 TLS 协议3提供 `preference_training {action:status|learn|resume|cancel,downloadConfirmed?}` 和只读 `preference_results {offset,version?}`。前者 status 返回同一 PreferenceService 状态；后者每页最多100条，以 generation、激活模型版本、答案头hash、结果快照hash和全文件SHA-256绑定数据型决定。翻页版本变动明确报重试。Android 不执行模型、不接收向量，只有本机准确字节及当前标注/版本匹配时使用 PERSONAL，否则公共规则。后台每次至多六文件/60秒核验，前台自动续接；撤回/清除随修订传播。离线尚未观察到另一端撤回的设备遵循最终同步语义，本机手工修正始终优先。
+
+验证入口：`test-tag-learning-client.py --exe ... --data desktop/artifacts/...fixture --components ... [--real-extract]`，拒绝生产路径和既有夹具目录。它用声明生成的材料模拟独立可信输入，只在隔离库验证训练→固定检查→原子激活→44首全库更新→撤回回退，并与一次真实CLAP提取分开报告。数值夹具和模拟凭据均不是用户模型有效性证据。

@@ -8,6 +8,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +31,7 @@ import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.objects
 import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.strings
 
 @Singleton
-class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService, private val feedback: DailyLearningFeedback) {
+class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService, private val feedback: DailyLearningFeedback, private val tags: com.tinyfish.jeekmusic.analysis.TagRepository) {
     // Lazy: adding the module does not touch storage or change settings-task startup behaviour.
     val store get()=feedback.store
     private var foregroundJob: kotlinx.coroutines.Job?=null
@@ -70,7 +71,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         val p=activeProfile
         val answers=store.current(p,"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension }.groupBy { it.getString("entityId") }
         return JSONObject().put("dimension",activeDimension).put("profileId",p).put("answered",answers.values.count { it.size==1 && it.single().getJSONObject("payload").getString("answer") !in listOf("SKIP","WITHDRAWN") })
-            .put("dailyFeedback",feedback.status()).put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",false)
+            .put("updatedSongs",feedback.personalResults().size).put("dailyFeedback",feedback.status()).put("heads",localHeads()).put("desktop",store.local("desktop-learning")?.let(::JSONObject) ?: JSONObject()).put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",feedback.personalResults().isNotEmpty())
             .put("training",store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==activeDimension }.maxByOrNull { it.getLong("at") }?.getJSONObject("payload")?.optString("state") ?: "windows_cpu_required")
     }
     fun batch(): JSONObject {
@@ -107,12 +108,12 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         notifyChanged()
     }
     private fun invalidateHead(p: String,d: String) {
-        for(e in store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate","self_selected_candidate") }) {
+        for(e in store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate","self_selected_candidate","active") }) {
             val payload=JSONObject(e.getJSONObject("payload").toString()).put("state","invalidated").put("enabled",false); store.append(p,e.getString("entityId"),"model",payload,true)
         }
     }
     fun conflicts(id: String)=store.current(profile(),"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension && it.getJSONObject("payload").getString("recordingId")==id }.map { e -> e.getJSONObject("payload").getString("answer")+" · "+e.getJSONObject("payload").getString("basis")+" · "+e.getString("deviceId").take(8) }
-    suspend fun delete() { store.clearLearning(); notifyChanged() }
+    suspend fun delete() { store.clearLearning(); tags.recomputeAll(); notifyChanged() }
     fun export()=JSONObject().put("protocol",PreferenceStore.VERSION).put("resetBoundary",JSONArray(store.resetBoundary)).put("generation",store.generation).put("events",JSONArray(store.read(profile(),evaluation=true))).toString()
     suspend fun synchronize(includeUserData: Boolean=true)=withContext(Dispatchers.IO) { syncGate.withLock {
         feedback.capture()
@@ -134,9 +135,95 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
             } while((reply.getBoolean("hasMore") || page.getBoolean("hasMore")) && pages<100)
         }
         transport=null; syncState.value="synced"; notifyChanged()
+        // Old paired versions fail explicitly; labels already committed above remain available offline.
+        try { synchronizeResults() } finally { tags.recomputeAll() }
     } }
-    suspend fun trainingStatus()=withContext(Dispatchers.IO) {
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { it.call("preference_training",JSONObject().put("protocol",PreferenceStore.VERSION).put("dimension",activeDimension)) }
+    suspend fun trainingStatus()=learningAction("status")
+    private fun localHeads(): JSONArray {
+        val all=store.current(activeProfile,"answer")
+        return JSONArray(dimensions.map { d ->
+            var usable=all.filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("role")=="training" }
+                .groupBy { it.getJSONObject("payload").optString("recordingId") }.values.filter { group -> group.groupBy { it.getString("entityId") }.values.all { it.size==1 } }
+                .map { group -> group.map { it.getJSONObject("payload") }.filter { it.optString("answer") in listOf(labels(d).first,labels(d).second) && ((it.optString("source")=="explicit_daily_tag_correction" && it.optString("basis")=="track_tag_feedback") || (it.optString("source")=="explicit_human_blind_batch" && it.optString("basis") in listOf("whole_recording_familiar","listened_full"))) } }
+                .filter { rows -> rows.isNotEmpty() && rows.map { it.getString("answer") }.distinct().size==1 }.map { it.first() }
+            val hasStudy=store.current(activeProfile,"manifest").any { it.getString("entityId")=="study-v1" }
+            if(!hasStudy && usable.any { it.optString("source")=="explicit_daily_tag_correction" }) {
+                usable=usable.filter { it.optString("source")=="explicit_daily_tag_correction" }.sortedBy { it.optString("recordingId") }
+                val count=(if(d=="MOOD") listOf(24,36,48) else listOf(12,24,36)).filter { it<=usable.size }.maxOrNull() ?: usable.size
+                usable=usable.take(count)
+            }
+            val positive=usable.count { it.getString("answer")==labels(d).first }; val negative=usable.size-positive
+            val computer=store.local("desktop-head-summaries")?.let { objects(JSONArray(it)).singleOrNull { h -> h.optString("dimension")==d && h.optString("answerRevision")==feedback.answerRevision(d) } }
+            JSONObject().put("dimension",d).put("annotated",all.filter { dimension(it.getJSONObject("payload"))==d }.groupBy { it.getString("entityId") }.values.count { it.size==1 && it.single().getJSONObject("payload").optString("answer") !in listOf("SKIP","WITHDRAWN") }).put("available",usable.size).put("positive",positive).put("negative",negative)
+                .put("computerMaterial",computer?.optJSONObject("material"))
+                .put("missingTotal",maxOf((if(d=="MOOD" && !hasStudy) 24 else if(d=="MOOD") 16 else 12)-usable.size,((if(d=="MOOD") 8 else 6)-positive).coerceAtLeast(0)+((if(d=="MOOD") 8 else 6)-negative).coerceAtLeast(0))).put("missingPositive",((if(d=="MOOD") 8 else 6)-positive).coerceAtLeast(0)).put("missingNegative",((if(d=="MOOD") 8 else 6)-negative).coerceAtLeast(0))
+                .put("state",store.current(activeProfile,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("category")=="job" }.maxByOrNull { it.getLong("at") }?.getJSONObject("payload")?.optString("state") ?: "idle")
+        })
+    }
+    private suspend fun synchronizeResults() {
+        val generation=store.generation
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { client ->
+            var offset=0; var version=""; var pages=0
+            do {
+                currentCoroutineContext().ensureActive()
+                val reply=client.call("preference_results",JSONObject().put("protocol",3).put("offset",offset).put("version",version))
+                val compatible=reply.getInt("resultProtocol")==1 && reply.getString("scope")=="sha256_whole_recording" && reply.getInt("analyzerVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.ANALYZER_VERSION && reply.getInt("rulesVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.RULES_VERSION
+                if(!compatible) { store.removeLocal("desktop-heads"); error("Recognition versions differ; update both devices") }
+                require(reply.getString("generation")==generation && store.generation==generation) { "Learning changed during sync; retry" }
+                version=reply.getString("version")
+                for(row in objects(reply.getJSONArray("rows"))) {
+                    val content=row.getString("contentSignature"); require(content.matches(Regex("[0-9a-f]{64}")))
+                    store.setLocalForGeneration("desktop-content:$content",row.toString(),generation)
+                }
+                store.setLocalForGeneration("desktop-heads",JSONObject().put("generation",generation).put("resultProtocol",1).put("analyzerVersion",reply.getInt("analyzerVersion")).put("rulesVersion",reply.getInt("rulesVersion")).put("heads",reply.getJSONArray("heads")).toString(),generation)
+                offset=reply.getInt("next"); pages++
+            } while(reply.getBoolean("hasMore") && pages<100)
+            val status=client.call("preference_training",JSONObject().put("protocol",3).put("action","status"))
+            store.setLocalForGeneration("desktop-learning",(status.optJSONObject("learning") ?: JSONObject()).toString(),generation)
+            status.optJSONArray("heads")?.let { store.setLocalForGeneration("desktop-head-summaries",it.toString(),generation) }
+        }
+        // At most six exact byte hashes per foreground exchange; already matched signatures resume.
+        kotlinx.coroutines.withTimeout(60000) {
+            val contents=store.localRows("desktop-content:",100000)
+            if(contents.isEmpty()) return@withTimeout
+            val tracks=library.trackDao().all().filter { it.cueTrackNo==null }
+            var offset=store.local("desktop-match-cursor")?.toIntOrNull() ?: 0
+            if(offset>=tracks.size) offset=0
+            var checked=0
+            for(t in tracks.drop(offset)) {
+                currentCoroutineContext().ensureActive()
+                val signature="${t.dateModified}:${t.size}"
+                val saved=store.local("desktop-binding:"+t.trackKey)?.let(::JSONObject) ?: store.local("daily-content:"+t.trackKey)?.let(::JSONObject)
+                val content=if(saved?.optString("signature")==signature) saved.optString("content") else {
+                    if(checked>=6) break
+                    checked++
+                    val digest=MessageDigest.getInstance("SHA-256")
+                    val input=runCatching { context.contentResolver.openInputStream(MediaStore.Audio.Media.getContentUri(t.volumeName,t.mediaStoreId)) }.getOrNull()
+                    if(input==null) { offset++; continue }
+                    input.use { stream -> val buffer=ByteArray(1024*1024); while(true) { currentCoroutineContext().ensureActive(); val n=stream.read(buffer); if(n<0) break; digest.update(buffer,0,n) } }
+                    digest.digest().joinToString("") { "%02x".format(it) }
+                }
+                val fresh=library.trackDao().byTrackKeys(listOf(t.trackKey)).singleOrNull()
+                if(fresh==null || "${fresh.dateModified}:${fresh.size}"!=signature) { offset++; continue }
+                store.setLocalForGeneration("desktop-binding:"+t.trackKey,JSONObject().put("signature",signature).put("content",content).toString(),generation)
+                contents["desktop-content:$content"]?.let { raw ->
+                    val row=JSONObject(raw)
+                    if(kotlin.math.abs(row.getLong("durationMs")-t.durationMs)<=1000) store.setLocalForGeneration("desktop-result:"+t.trackKey,JSONObject().put("signature",signature).put("heads",row.getJSONObject("heads")).toString(),generation)
+                }
+                offset++
+            }
+            store.setLocalForGeneration("desktop-match-cursor",offset.toString(),generation)
+        }
+    }
+    suspend fun learningAction(action: String,downloadConfirmed: Boolean=false)=withContext(Dispatchers.IO) {
+        require(action in listOf("status","learn","resume","cancel"))
+        if(action!="status") synchronize()
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use {
+            val response=it.call("preference_training",JSONObject().put("protocol",PreferenceStore.VERSION).put("action",action).put("downloadConfirmed",downloadConfirmed))
+            val state=if(action=="status") response.optJSONObject("learning") ?: response else response
+            response.optJSONArray("heads")?.let { store.setLocal("desktop-head-summaries",it.toString()) }
+            store.setLocal("desktop-learning",state.toString()); notifyChanged(); state
+        }
     }
     private fun frozenBatch(p: String,study: JSONObject): JSONObject {
         val d=activeDimension

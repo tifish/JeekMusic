@@ -19,6 +19,7 @@ internal sealed class WorkerBudget : IDisposable
         var allowed=(ulong)process.ProcessorAffinity.ToInt64(); ulong selected=0; int count=0;
         for(int i=0;i<64 && count<2;i++) if((allowed&(1UL<<i))!=0) { selected|=1UL<<i; count++; }
         if(selected!=0) process.ProcessorAffinity=(nint)selected;
+        process.PriorityClass=ProcessPriorityClass.BelowNormal;
     }
     [StructLayout(LayoutKind.Sequential)] struct BasicLimit { public long ProcessTime,JobTime; public uint Flags; public nuint MinWorking,MaxWorking; public uint ActiveProcesses; public nuint Affinity; public uint Priority,Scheduling; }
     [StructLayout(LayoutKind.Sequential)] struct Io { public ulong ReadOps,WriteOps,OtherOps,ReadBytes,WriteBytes,OtherBytes; }

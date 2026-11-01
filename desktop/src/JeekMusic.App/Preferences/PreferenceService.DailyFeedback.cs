@@ -21,7 +21,7 @@ public sealed partial class PreferenceService
         app.SmartTags.LearningDevice=()=>Store.DeviceId;
         app.SmartTags.ResultsChanged+=ScheduleDailyFeedback;
         app.Library.SnapshotChanged+=ScheduleDailyFeedback;
-        dailyTimer=new(_=>ScheduleDailyFeedback(),null,1000,30000);
+        dailyTimer=new(_=> { ScheduleDailyFeedback(); Training.Maintain(); },null,1000,30000);
     }
     void ScheduleDailyFeedback()
     {
@@ -37,9 +37,10 @@ public sealed partial class PreferenceService
             ["source"]="explicit_daily_tag_correction",["basis"]="track_tag_feedback",["selectionBias"]="self_selected_and_predictions_visible_not_independent",
             ["pendingReasons"]=new JsonArray(Store.LocalRows("daily-problem:",10000).Values.GroupBy(v=>v).Select(g=>(JsonNode)new JsonObject { ["reason"]=g.Key,["count"]=g.Count() }).ToArray()) };
     }
-    public async Task<JsonObject> CaptureDailyFeedback()
+    public async Task<JsonObject> CaptureDailyFeedback(CancellationToken requestToken=default)
     {
-        if(!await dailyGate.WaitAsync(0,dailyStop.Token)) return DailyFeedbackStatus();
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(dailyStop.Token,requestToken); deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        if(!await dailyGate.WaitAsync(0,deadline.Token)) return DailyFeedbackStatus();
         try
         {
             var generation=Store.Generation;
@@ -59,7 +60,7 @@ public sealed partial class PreferenceService
             int completed=0,hashed=0;
             foreach(var (key,json) in Store.LocalRows("daily-pending:",100))
             {
-                dailyStop.Token.ThrowIfCancellationRequested();
+                deadline.Token.ThrowIfCancellationRequested();
                 if(Store.Generation!=generation) break;
                 var review=JsonNode.Parse(json)!.AsObject(); var trackKey=S(review["trackKey"]); var edits=review["explicitCorrections"]!.AsObject();
                 var id=""; var content=""; var t=app.Library.ByKey(trackKey);
@@ -75,7 +76,7 @@ public sealed partial class PreferenceService
                     else
                     {
                         if(hashed>=6) break; hashed++;
-                        using var input=File.OpenRead(path); content=Convert.ToHexStringLower(await SHA256.HashDataAsync(input,dailyStop.Token));
+                        using var input=File.OpenRead(path); content=Convert.ToHexStringLower(await SHA256.HashDataAsync(input,deadline.Token));
                         stat.Refresh(); if(stat.Length!=t.Size || stat.LastWriteTimeUtc.Ticks!=t.Mtime) { Set("daily-problem:"+key,"recording_changed_review_needed"); continue; }
                         id=Hash("sha256:"+content+(t.IsCue?$":cue:{t.StartMs??0}:{t.EndMs??((t.StartMs??0)+t.DurationMs)}":":whole"));
                     }
@@ -85,7 +86,7 @@ public sealed partial class PreferenceService
                     if(records.Length>1) { Set("daily-problem:"+key,"recording_identity_conflict"); continue; }
                     var r=records.FirstOrDefault()?["payload"]?.DeepClone().AsObject()??new JsonObject { ["recordingId"]=id,["contentSignature"]=content,["title"]=t.Title,["artist"]=t.ArtistDisplay,["album"]=t.Album,
                         ["artists"]=Strings(t.Artists.Select(a=>a.Normalize().ToUpperInvariant())),["workGroup"]=t.Title.Normalize().ToUpperInvariant(),["albumGroup"]=(t.AlbumArtist+":"+t.Album).Normalize().ToUpperInvariant(),["durationMs"]=t.DurationMs,["identityReviewed"]=false,["supported"]=!t.IsCue && t.DurationMs>=150000 };
-                    if(r["selfSelected"]?.GetValue<bool>()!=true) { r["selfSelected"]=true; r["exposed"]=true; r["exposureSource"]="self_selected_visible_auto"; Store.Append(Dataset,id,"recording",r,expectedGeneration:generation); Training.Invalidate(); }
+                    if(r["selfSelected"]?.GetValue<bool>()!=true) { r["selfSelected"]=true; r["exposed"]=true; r["exposureSource"]="self_selected_visible_auto"; Store.Append(Dataset,id,"recording",r,expectedGeneration:generation); } // New unrelated recordings do not invalidate other dimensions.
                     Set("binding:"+id,t.TrackKey); Set("signature:"+id,AnalysisFeature.Signature(t));
                 }
                 var blocked=false;

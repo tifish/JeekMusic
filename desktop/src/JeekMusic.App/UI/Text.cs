@@ -47,7 +47,7 @@ public static class Text
 
     public static string TagCell(SongTags? tags, TagDimension dimension) => TagValue(tags, dimension) is { } value ? TagName(value.ToString()) : "—";
     public static string TagSource(SongTags? tags, TagDimension dimension) => TagValue(tags, dimension) is null
-        ? L.T("无分析结果") : TagManual(tags, dimension) ? L.T("手工标注") : L.T("自动");
+        ? L.T("无分析结果") : TagManual(tags, dimension) ? L.T("手工标注") : tags?.Source(dimension.ToString())=="PERSONAL"?L.T("标签学习"):L.T("自动");
 
     public static string Tags(SongTags? tags)
     {

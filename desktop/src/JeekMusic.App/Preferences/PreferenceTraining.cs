@@ -17,6 +17,12 @@ public sealed partial class PreferenceTraining : IDisposable
     readonly string root=Path.Combine(AppPaths.DataDir,"preference-components");
     readonly string artifactRoot;
     CancellationTokenSource? cancel;
+    bool quiescing;
+    internal void WithStoppedJobs(Action action)
+    {
+        lock(gate) { if(quiescing) throw new InvalidOperationException("Learning clear already in progress"); quiescing=true; }
+        try { action(); } finally { lock(gate) quiescing=false; }
+    }
     JsonObject state=new() { ["state"]="idle" };
     string Worker=>Path.Combine(AppPaths.AppDir,"Preferences","Runtime","preference_worker.py");
     string Python=>Path.Combine(root,"venv","Scripts","python.exe");
@@ -31,7 +37,22 @@ public sealed partial class PreferenceTraining : IDisposable
                 service.Store.Append(profile,S(e["entityId"]),"model",interrupted,true);
             }
     }
-    public JsonObject Status(string? dimension=null) { lock(gate) { var d=dimension??service.ActiveDimension; var s=(JsonObject)(headStates.GetValueOrDefault(service.ActiveProfile+":"+d) ?? service.Store.Current(service.ActiveProfile,"model").SingleOrDefault(e=>S(e["entityId"])=="job:"+d)?["payload"]?.AsObject() ?? new JsonObject { ["state"]="idle" }).DeepClone(); s["dimension"]=d; s["runningDimension"]=cancel is null ? null : jobDimension; s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["computePlatform"]="windows_cpu_optional_worker"; s["maxRecordings"]=6; s["maxThreads"]=2; s["budgetSeconds"]=240; s["maxWorkerBytes"]=2L*1024*1024*1024; s["modelEnabled"]=false; s["activationBlocker"]="independent_and_deployment_equivalence_gates_required"; return s; } }
+    public JsonObject Status(string? dimension=null)
+    {
+        lock(gate)
+        {
+            var d=dimension??service.ActiveDimension;
+            var persisted=service.Store.Current(service.ActiveProfile,"model").Where(e=>S(e["entityId"])=="job:"+d).ToArray();
+            var saved=persisted.Length==1?persisted[0]["payload"]?.AsObject():null;
+            var s=(headStates.GetValueOrDefault(service.ActiveProfile+":"+d) ?? saved ?? new JsonObject { ["state"]=persisted.Length>1?"sync_conflict":"idle" }).DeepClone().AsObject();
+            s["dimension"]=d; s["runningDimension"]=cancel is null?null:jobDimension;
+            s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["computePlatform"]="windows_cpu_optional_worker";
+            s["maxRecordings"]=6; s["maxThreads"]=2; s["budgetSeconds"]=240; s["maxWorkerBytes"]=2L*1024*1024*1024;
+            s["modelEnabled"]=Enabled(d); s["activationBlocker"]=Enabled(d)?null:"independent_checks_and_local_deployment_receipts_required";
+            s["learning"]=LearningStatus(); return s;
+        }
+    }
+
     void Set(string status,string? detail=null)
     {
         lock(gate) { state=new JsonObject { ["dimension"]=jobDimension,["state"]=status,["detail"]=detail??"",["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }; headStates[jobProfile+":"+jobDimension]=state; }
@@ -43,14 +64,16 @@ public sealed partial class PreferenceTraining : IDisposable
     {
         var profile=profileId??service.ActiveProfile;
         service.Store.SetLocal("validatedModel","");
-        foreach(var e in service.Store.Current(profile,"model").Where(e=>(dimension==null || Dimension(e["payload"])==dimension) &&S(e["payload"]?["state"]) is "development_required" or "regression_required" or "independent_test_required" or "pass_research_gate" or "self_selected_candidate"))
+        foreach(var d in Dimensions.Where(d=>dimension==null || dimension==d)) service.Store.RemoveLocal("active-head:"+d);
+        foreach(var e in service.Store.Current(profile,"model").Where(e=>(dimension==null || Dimension(e["payload"])==dimension) &&S(e["payload"]?["state"]) is "development_required" or "regression_required" or "independent_test_required" or "pass_research_gate" or "self_selected_candidate" or "active"))
         {
             var p=e["payload"]!.DeepClone().AsObject(); p["state"]="invalidated"; p["enabled"]=false;
             service.Store.Append(profile,S(e["entityId"]),"model",p,true);
         }
         lock(gate) { if(profile==jobProfile && (dimension==null || dimension==jobDimension) && S(state["state"]) is "training_gate_passed" or "completed" or "self_selected_candidate") state["state"]="invalidated"; }
+        RefreshDeployment();
     }
-    public void Cancel(string? dimension=null) { lock(gate) { if(dimension!=null && cancel!=null && dimension!=jobDimension) throw new InvalidOperationException("Another independent head owns the running worker"); cancel?.Cancel(); } }
+    public void Cancel(string? dimension=null) { lock(gate) { if(dimension!=null && cancel!=null && dimension!=jobDimension && !learning) throw new InvalidOperationException("Another independent head owns the running worker"); if(learning) service.Store.SetLocal("learning-user-stopped","1"); cancel?.Cancel(); } }
     public JsonObject Start(string action,string? dimension=null)
     {
         if(action is not ("prepare" or "train" or "extract" or "evaluate" or "regression_extract")) throw new ArgumentException("Invalid training action");
@@ -58,20 +81,21 @@ public sealed partial class PreferenceTraining : IDisposable
         var selectedProfile=service.ActiveProfile;
         lock(gate)
         {
-            if(cancel!=null) throw new InvalidOperationException("Training/component job already running");
+            if(cancel!=null || quiescing) throw new InvalidOperationException("Training/component job already running or stopping");
             cancel=new();
+            jobDimension=selectedDimension; jobProfile=selectedProfile; jobGeneration=service.Store.Generation;
+            Set(action=="prepare" ? "preparing_components" : "checking_material");
+            var token=cancel.Token; jobTask=Task.Run(()=>Run(action,jobDimension,selectedProfile,token)); return Status(jobDimension);
         }
-        jobDimension=selectedDimension; jobProfile=selectedProfile; jobGeneration=service.Store.Generation;
-        Set(action=="prepare" ? "preparing_components" : "checking_material");
-        var token=cancel.Token; jobTask=Task.Run(()=>Run(action,jobDimension,selectedProfile,token)); return Status(jobDimension);
     }
-    async Task Run(string action,string dimension,string profile,CancellationToken ct)
+    async Task Run(string action,string dimension,string profile,CancellationToken ct,JsonObject? supplied=null,bool nested=false)
     {
         try
         {
             Directory.CreateDirectory(root);
             var snapshot=new JsonObject();
-            if(action!="prepare")
+            if(supplied!=null) snapshot=supplied;
+            else if(action!="prepare")
             {
                 if(action=="regression_extract" && dimension!="MOOD") { Set("not_applicable","旧11反馈仅有运动维标签，其他维度不复用其真值。"); return; }
                 if(string.IsNullOrEmpty(profile) || service.Deleted(profile)) { Set("insufficient_material","请先开始标注。旧反馈、自动标签和未标注项不会作为训练答案。"); return; }
@@ -92,7 +116,7 @@ public sealed partial class PreferenceTraining : IDisposable
             var start=new ProcessStartInfo(action=="prepare" ? "python" : Python) { UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true,RedirectStandardOutput=true };
             foreach(var arg in new[] { Worker,action=="regression_extract"?"extract":action,"--root",root,"--input",input,"--output",output }) start.ArgumentList.Add(arg);
             using var process=Process.Start(start) ?? throw new IOException("Unable to start optional training worker");
-            using var budget=action=="prepare" ? null : new WorkerBudget(process);
+            using var budget=new WorkerBudget(process);
             // Drain without retaining private paths/audio/answers in diagnostics.
             var error=process.StandardError.ReadToEndAsync(ct); var stdout=process.StandardOutput.ReadToEndAsync(ct);
             Set(action=="prepare" ? "preparing_components" : "running");
@@ -127,13 +151,15 @@ public sealed partial class PreferenceTraining : IDisposable
             if(action=="evaluate") CommitEvaluation(snapshot,result);
             if(action is "extract" or "regression_extract")
                 foreach(var row in result["rows"]!.AsArray())
-                    service.Store.SetLocal("vector:"+S(row?["recordingId"]),new JsonObject { ["vector"]=row!["vector"]!.DeepClone(),["perturbations"]=row["perturbations"]!.DeepClone(),["extractor"]=Extractor,["workerHash"]=FileHash(Worker),["contentSignature"]=S(row["contentSignature"]) }.ToJsonString());
+                    service.Store.SetLocalForGeneration("vector:"+S(row?["recordingId"]),new JsonObject { ["vector"]=row!["vector"]!.DeepClone(),["perturbations"]=row["perturbations"]!.DeepClone(),["extractor"]=Extractor,["workerHash"]=FileHash(Worker),["contentSignature"]=S(row["contentSignature"]) }.ToJsonString(),jobGeneration);
             if(action=="train")
             {
                 // Recompute snapshot after the worker; withdrawal/sync/conflict while running invalidates this artifact.
                 var fresh=TrainingRows(service.Store.Current(profile,"answer")).Where(e=>Dimension(e["payload"])==dimension).ToList();
                 if(jobGeneration!=service.Store.Generation || service.ActiveProfile!=profile || service.Deleted(profile) || before!=Hash(Snapshot("train",fresh,dimension!,profile).ToJsonString())) { Set("invalidated","标注、身份或录音在训练期间发生变化。"); return; }
                 result["dimension"]=dimension; result["trainingSetHash"]=before; result["extractor"]=Extractor; result["profileId"]=profile;
+                result["workerHash"]=FileHash(Worker); result["headProtocolHash"]=Hash(HeadContract().ToJsonString());
+                result["analyzerVersion"]=JeekMusic.Core.Analysis.AnalysisVersions.AnalyzerVersion; result["publicRulesVersion"]=JeekMusic.Core.Analysis.AnalysisVersions.RulesVersion; result["scope"]="whole_recording";
                 if(S(result["state"])!="training_gate_passed")
                     service.Store.Append(profile,"training-node-"+dimension+"-"+snapshot["attempted"],"model",new JsonObject { ["dimension"]=dimension,["state"]="training_node_failed",["attempted"]=snapshot["attempted"]!.DeepClone(),["trainingSetHash"]=before,["enabled"]=false },true);
                 if(S(result["state"])=="training_gate_passed" && !service.Synthetic(profile))
@@ -150,19 +176,24 @@ public sealed partial class PreferenceTraining : IDisposable
         }
         catch(OperationCanceledException) { Set("cancelled","已完成的单录音缓存保留；部分结果不提交。"); }
         catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException) { Set("failed",e is System.ComponentModel.Win32Exception ? "需要本机 Python 3.13+ 和 FFmpeg；按需准备会创建私有运行时。" : e is IOException ? "local_io_failure; previous candidate retained; inspect private job log" : e.Message); }
-        finally { lock(gate) { cancel?.Dispose(); cancel=null; } service.Notify(); }
+        finally { if(!nested) lock(gate) { cancel?.Dispose(); cancel=null; } service.Notify(); }
     }
-    JsonObject Snapshot(string action,List<JsonObject> answers,string dimension,string profile)
+    JsonObject Snapshot(string action,List<JsonObject> answers,string dimension,string profile,string? extractionRole=null)
     {
         var recordings=service.Store.Current(profile,"recording").GroupBy(e=>S(e["entityId"])).Where(g=>g.Count()==1).Select(g=>g.Single()).ToDictionary(e=>S(e["entityId"]),e=>e["payload"]!.AsObject());
         var identities=recordings.Select(kv=>new JeekMusic.Core.Preferences.PreferenceProtocol.Identity(kv.Key,S(kv.Value["contentSignature"]),S(kv.Value["workGroup"]),S(kv.Value["albumGroup"]),ReadStrings(kv.Value["artists"]),kv.Value["identityReviewed"]?.GetValue<bool>()==true,kv.Value["exposed"]?.GetValue<bool>()==true,true)).ToArray();
         var grouping=Group(identities);
         var selfSelected=service.Store.Current(profile,"answer").Any(e=>Dimension(e["payload"])==dimension && S(e["payload"]?["source"])=="explicit_daily_tag_correction" && UsableAnswer(e));
         var pilot=selfSelected && !service.Store.Current(profile,"manifest").Any(e=>S(e["entityId"])=="study-v1");
-        if(pilot) answers=answers.Where(e=>S(e["payload"]?["source"])=="explicit_daily_tag_correction").OrderBy(e=>S(e["payload"]?["recordingId"]),StringComparer.Ordinal).Take(dimension=="MOOD"?48:36).ToList();
+        if(pilot)
+        {
+            answers=answers.Where(e=>S(e["payload"]?["source"])=="explicit_daily_tag_correction").OrderBy(e=>S(e["payload"]?["recordingId"]),StringComparer.Ordinal).ToList();
+            var nodes=HeadContract()["heads"]![dimension]!["nodes"]!.AsArray().Select(n=>n!.GetValue<int>()).ToArray();
+            answers=answers.Take(nodes.Where(n=>n<=answers.Count).DefaultIfEmpty(answers.Count).Max()).ToList();
+        }
         if(service.Store.Current(profile,"manifest").SingleOrDefault(e=>S(e["entityId"])=="study-v1")?["payload"] is JsonObject frozen && JeekMusic.Core.Preferences.PreferenceStudy.Contaminated(frozen,identities)) throw new InvalidOperationException("Identity or self-selected feedback contaminated the independent study; evaluation locked");
-        var role=action=="extract" && !pilot ? S(service.Store.Current(profile,"manifest").FirstOrDefault(e=>S(e["entityId"])==S(service.Batch(dimension:dimension)["manifestId"]))?["payload"]?["role"]) : "training";
-        var ids=action=="extract" && !pilot ? service.Store.Current(profile,"manifest").Where(e=>Dimension(e["payload"])==dimension && S(e["payload"]?["role"])==role).OrderBy(e=>e["at"]!.GetValue<long>()).SelectMany(e=>ReadStrings(e["payload"]?["items"])).Distinct().ToArray() : answers.Select(e=>S(e["payload"]?["recordingId"])).ToArray();
+        var role=action=="extract" && !pilot ? extractionRole??S(service.Store.Current(profile,"manifest").FirstOrDefault(e=>S(e["entityId"])==S(service.Batch(dimension:dimension)["manifestId"]))?["payload"]?["role"]) : "training";
+        var ids=action=="extract" && !pilot && extractionRole is null ? service.Store.Current(profile,"manifest").Where(e=>Dimension(e["payload"])==dimension && S(e["payload"]?["role"])==role).OrderBy(e=>e["at"]!.GetValue<long>()).SelectMany(e=>ReadStrings(e["payload"]?["items"])).Distinct().ToArray() : answers.Select(e=>S(e["payload"]?["recordingId"])).ToArray();
         var rows=new JsonArray();
         foreach(var id in ids.Order(StringComparer.Ordinal))
         {
@@ -172,7 +203,8 @@ public sealed partial class PreferenceTraining : IDisposable
                 var cached=JsonNode.Parse(saved);
                 if(S(cached?["extractor"])==Extractor && S(cached?["workerHash"])==FileHash(Worker) && S(cached?["contentSignature"])==S(r["contentSignature"])) continue;
             }
-            if(r["identityReviewed"]?.GetValue<bool>()!=true || r["exposed"]?.GetValue<bool>()==true && !pilot) continue;
+            if(!pilot && (r["identityReviewed"]?.GetValue<bool>()!=true || r["exposed"]?.GetValue<bool>()==true)) continue;
+            if(pilot && (ReadStrings(r["artists"]).Length==0 || S(r["workGroup"]).Length==0 || S(r["albumGroup"]).Length==0)) continue;
             // Frozen production model segment centers; no new model scoring or automatic answer inference.
             var centers=new List<long>();
             foreach(var segment in JeekMusic.Core.Analysis.PcmMath.Windows(0,t.DurationMs))
@@ -184,7 +216,7 @@ public sealed partial class PreferenceTraining : IDisposable
             if(centers.Count!=3) continue;
             var answer=answers.SingleOrDefault(e=>S(e["payload"]?["recordingId"])==id);
             var row=new JsonObject { ["recordingId"]=id,["contentSignature"]=S(r["contentSignature"]),["path"]=app.Library.PathOf(t),["cue"]=false,["centersMs"]=new JsonArray(centers.Select(c=>(JsonNode?)JsonValue.Create(c)).ToArray()),
-                ["dimension"]=dimension,["componentId"]=grouping.Components[id],["artists"]=r["artists"]!.DeepClone(),["identityReviewed"]=r["identityReviewed"]?.GetValue<bool>()==true,["exposed"]=r["exposed"]?.GetValue<bool>()==true,["selfSelectedTraining"]=pilot,["role"]=role,
+                ["dimension"]=dimension,["componentId"]=grouping.Components[id],["artists"]=r["artists"]!.DeepClone(),["identityReviewed"]=r["identityReviewed"]?.GetValue<bool>()==true,["identityBasis"]=pilot?"metadata_training_only_nonindependent":"explicit_review",["exposed"]=r["exposed"]?.GetValue<bool>()==true,["selfSelectedTraining"]=pilot,["role"]=role,
                 ["labelSource"]=S(answer?["payload"]?["source"]),["label"]=S(answer?["payload"]?["answer"]),["answerRevision"]=S(answer?["eventId"]),["rules"]=S(app.SmartTags.Explain(t)["automatic"]?[dimension]) };
             if(action=="train")
             {
@@ -200,13 +232,15 @@ public sealed partial class PreferenceTraining : IDisposable
     public void PurgeLearningArtifacts()
     {
         Cancel(); try { jobTask?.Wait(TimeSpan.FromSeconds(5)); } catch(AggregateException) { }
+        foreach(var d in Dimensions) service.Store.RemoveLocal("active-head:"+d);
+        RefreshDeployment();
         if(jobTask is { IsCompleted:false }) throw new IOException("Learning worker is still stopping; retry clear");
         lock(gate) { headStates.Clear(); state=new JsonObject { ["state"]="idle" }; }
         if(!Directory.Exists(root)) return;
         // Exact learning-only paths, never recurse through links or outside the component root.
         var expected=artifactRoot;
         if(Path.GetFullPath(root)!=expected || new DirectoryInfo(root).LinkTarget!=null) throw new IOException("Invalid learning artifact path");
-        foreach(var dir in Directory.GetDirectories(root,"job-*").Concat(new[] { Path.Combine(root,"candidates") }))
+        foreach(var dir in Directory.GetDirectories(root,"job-*").Concat(new[] { Path.Combine(root,"candidates"),Path.Combine(root,"vectors") }))
         {
             if(!Directory.Exists(dir)) continue;
             if(!Path.GetFullPath(dir).StartsWith(expected+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)) throw new IOException("Invalid learning artifact path");

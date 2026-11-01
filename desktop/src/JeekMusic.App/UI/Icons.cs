@@ -7,7 +7,8 @@ namespace JeekMusic.UI;
 public static class Icons
 {
     // Font-independent vector for the small, foreground-inheriting annotation marker.
-    public static Avalonia.Media.Geometry ManualAnnotation { get; } = Avalonia.Media.Geometry.Parse(
+    // Geometry belongs to its Avalonia dispatcher; do not share one across UI sessions.
+    public static Avalonia.Media.Geometry ManualAnnotation => Avalonia.Media.Geometry.Parse(
         "M 1,9 L 8,2 L 10,4 L 3,11 L 0,12 Z M 9,1 L 10,0 Q 10.5,-0.5 11,0 L 12,1 Q 12.5,1.5 12,2 L 11,3 Z");
 
     public const string FontFamily = "Segoe Fluent Icons, Segoe MDL2 Assets";

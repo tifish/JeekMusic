@@ -251,6 +251,10 @@ public sealed partial class MainViewModel : ObservableObject
     public QueueSource? CurrentSource { get; private set; }
     internal int RowsGeneration { get; private set; }
     internal bool ComputingRows { get; private set; }
+    internal long ViewRevision { get; private set; }
+    internal int RowsSnapshotVersion { get; private set; }
+    internal int TagCorrectionDepth { get; set; }
+    internal event Action? RowsReplacing;
     // Rows is the complete displayed result, including virtualized rows and the search page's existing 200-song cap.
     internal Track[] CaptureResourceTracks() => ContentKind == ContentKind.Songs && !ComputingRows
         ? Rows.Select(r => r.Track).OfType<Track>().ToArray() : [];
@@ -284,6 +288,7 @@ public sealed partial class MainViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _includeSubfolders, value)) return;
+            ViewRevision++;
             S.IncludeSubfolders = value;
             _settings.Save("view");
             Recompute(playbackIntent: true);
@@ -296,6 +301,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>切换内容区；<paramref name="history"/> 为 false 时不记入历史（后退、前进、刷新）。</summary>
     public void Navigate(NavTarget target, bool history = true)
     {
+        ViewRevision++;
         var playbackIntent = Current is not null && Current != target;
         if (history && Current is not null && Current != target)
         {
@@ -413,6 +419,7 @@ public sealed partial class MainViewModel : ObservableObject
         ComputingRows = true;
         var snapshot = Snapshot;
         var settings = S;
+        var preserveQueue = TagCorrectionDepth > 0;
         var playlistId = (target as NavTarget.Playlist)?.PlaylistId;
         var isSearch = target is NavTarget.Search;
         // Playlist membership is captured once through the existing repository before either computation.
@@ -438,6 +445,8 @@ public sealed partial class MainViewModel : ObservableObject
             Dispatcher.UIThread.Post(() =>
             {
                 if (cts.IsCancellationRequested) return;
+                RowsSnapshotVersion = snapshot.Version;
+                RowsReplacing?.Invoke();
                 Rows = rows;
                 ComputingRows = false;
                 if (!_firstContentLogged && rows.Count > 0)
@@ -455,7 +464,7 @@ public sealed partial class MainViewModel : ObservableObject
                     _app.Player.CompleteSourceSwitch(r, list.Select(t => t.Id).ToArray());
                     if (_pendingSourceRevision == r) _pendingSourceRevision = null;
                 }
-                else if (_app.Player.Queue.Context?.Source == source) _app.Player.Queue.SourceChanged(list.Select(t => t.Id).ToList());
+                else if (!preserveQueue && _app.Player.Queue.Context?.Source == source) _app.Player.Queue.SourceChanged(list.Select(t => t.Id).ToList());
                 RowsChanged?.Invoke();
             });
         }, cts.Token);
@@ -535,6 +544,7 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnSearchTextChanged(string value)
     {
         if (_navigating) return;
+        ViewRevision++;
         _searchDebounce.Stop();
         _searchDebounce.Tick -= OnSearchTick;
         _searchDebounce.Tick += OnSearchTick;
@@ -581,6 +591,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     void FilterChanged()
     {
+        ViewRevision++;
         OnPropertyChanged(nameof(TagFilter));
         OnPropertyChanged(nameof(FilterActive));
         OnPropertyChanged(nameof(FilterText));
@@ -597,6 +608,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>点表头：换成这一列排序；再点同一列反向。</summary>
     public void SetSort(SongSort sort)
     {
+        ViewRevision++;
         S.SortDescending = Sort == sort && !S.SortDescending;
         S.SongSort = sort;
         _settings.Save("sort");

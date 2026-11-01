@@ -24,6 +24,115 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class SmartTagTests
 {
+    [Theory] [InlineData(0, 1)] [InlineData(125, 126)] [InlineData(259, 258)]
+    public Task CorrectionAdvancesFromOriginalFirstTargetAndPreservesPlayback(int target, int expected) => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        h.Window.PlayFrom(h.Track(50)); h.Ready(); h.Player.Pause(); h.Pump();
+        h.Player.Seek(TimeSpan.FromSeconds(37)); h.Pump();
+        var queue = h.Player.Queue.Items.ToArray(); var current = h.Player.CurrentTrack; var position = h.Player.Position;
+        h.Table.SelectedItem = h.Rows[target]; h.ScrollTo(target);
+        var context = h.Window.CaptureTagSelection([h.Track(target)]);
+        await h.Window.ApplyQuickTag([h.Track(target)], TagDimension.VOICE, Tag.VOCAL, context);
+        await Until(() => !h.Vm.ComputingRows && ((JeekMusic.UI.ViewModels.SongRow?)h.Table.SelectedItem)?.Track?.Id == h.Track(expected).Id); h.Pump();
+        Assert.Equal(queue, h.Player.Queue.Items); Assert.Same(current, h.Player.CurrentTrack); Assert.Equal(position, h.Player.Position); Assert.False(h.Player.IsPlaying);
+        Assert.NotEqual(h.Track(0).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        // Keeping the same open-menu targets does not advance again for another dimension or AUTO.
+        await h.Window.ApplyQuickTag([h.Track(target)], TagDimension.GENRE, Tag.CLASSICAL, context);
+        await h.Window.ApplyQuickTag([h.Track(target)], TagDimension.VOICE, null, context);
+        await Until(() => !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(h.Track(expected).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Assert.Equal(queue, h.Player.Queue.Items);
+    });
+
+    [Fact] public Task BatchUsesDisplayedFirstNotLastOrSelectionInsertionOrderAndSurvivesFilteredRemoval() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        await h.App.SmartTags.Override([h.Track(120), h.Track(121), h.Track(125)], new Dictionary<TagDimension, Tag?> { [TagDimension.VOICE] = Tag.VOCAL });
+        h.Vm.ToggleTag("VOCAL"); await Until(() => !h.Vm.ComputingRows && h.Rows.Count == 3); h.Pump();
+        h.Window.PlayFrom(h.Track(121)); h.Ready(); h.Player.Pause(); h.Pump();
+        var queue = h.Player.Queue.Items.ToArray(); var current = h.Player.CurrentTrack; var position = h.Player.Position;
+        h.Table.SelectedItems.Add(h.Rows[2]); h.Table.SelectedItems.Add(h.Rows[0]);
+        await h.Window.ApplyQuickTag([h.Track(125), h.Track(120)], TagDimension.VOICE, Tag.INSTRUMENTAL);
+        await Until(() => !h.Vm.ComputingRows && h.Rows.Count == 1); h.Pump();
+        Assert.True(h.Table.SelectedItem is not null, h.Tools.Call("get_diagnostics", new())["mainLayout"]!["smartTagColumns"]!["selectionAfterCorrection"]!.ToJsonString());
+        Assert.Equal(h.Track(121).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Assert.Equal(queue, h.Player.Queue.Items); Assert.Same(current, h.Player.CurrentTrack); Assert.Equal(position, h.Player.Position);
+        await h.Window.ApplyQuickTag([h.Track(121)], TagDimension.VOICE, Tag.INSTRUMENTAL);
+        await Until(() => !h.Vm.ComputingRows && h.Rows.Count == 0); h.Pump(); Assert.Null(h.Table.SelectedItem);
+        Assert.Equal(queue, h.Player.Queue.Items); Assert.Same(current, h.Player.CurrentTrack); Assert.Equal(position, h.Player.Position);
+    });
+
+    [Fact] public Task OpenMenuKeepsTargetsAndAnchorAcrossDimensionsAndFullDialogUsesSameContinuation() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        h.Table.SelectedItem = h.Rows[120]; h.ScrollTo(120);
+        var menu = new ContextMenu(); var root = h.Window.QuickTagCorrectionItem([h.Track(120)]); menu.Items.Add(root); menu.Open(h.Table); h.Pump();
+        var panel = Assert.IsType<StackPanel>(root.Header);
+        Find<ToggleButton>(panel, "QuickVOICEVOCAL").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await Until(() => panel.IsEnabled && !h.Vm.ComputingRows); h.Pump();
+        Assert.True(menu.IsOpen); Assert.Equal(h.Track(121).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Find<ToggleButton>(panel, "QuickGENRECLASSICAL").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await Until(() => panel.IsEnabled && !h.Vm.ComputingRows); h.Pump();
+        Assert.True(menu.IsOpen); Assert.Equal(h.Track(121).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Assert.All(h.App.Db.TagOverrides(), o => Assert.Equal(h.Track(120).TrackKey, o.TrackKey));
+        h.Table.SelectedItem = h.Rows[150];
+        Find<ToggleButton>(panel, "QuickCALMNESSCALM").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await Until(() => panel.IsEnabled && !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(h.Track(150).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id); menu.Close();
+        var item = h.Window.TagCorrectionItem([h.Track(150)]); item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); h.Pump();
+        var dialog = Assert.Single(h.Window.OwnedWindows.OfType<SmartTagDialog>());
+        Find<RadioButton>(dialog, "VOICEVOCAL").IsChecked = true; Find<Button>(dialog, "ApplyTags").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await Until(() => !dialog.IsVisible && !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(h.Track(151).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Assert.Empty(h.Player.Queue.Items);
+    });
+
+    [Fact] public Task LateSuccessCannotStealNewSelectionOrSearchAndFailureDoesNotAdvance() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        h.Table.SelectedItem = h.Rows[120]; h.ScrollTo(120);
+        var save = h.Window.ApplyQuickTag([h.Track(120)], TagDimension.VOICE, Tag.VOCAL);
+        h.Table.SelectedItem = h.Rows[150];
+        await save; await Until(() => !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(h.Track(150).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        var old = h.Rows; h.App.Library.RebuildSnapshot(); await Until(() => !h.Vm.ComputingRows && !ReferenceEquals(old, h.Rows)); h.Pump();
+        Assert.Equal(h.Track(150).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        save = h.Window.ApplyQuickTag([h.Track(150)], TagDimension.GENRE, Tag.CLASSICAL);
+        h.Vm.Navigate(new JeekMusic.UI.ViewModels.NavTarget.Search("song 200"));
+        await save; await Until(() => !h.Vm.ComputingRows && h.Rows.Count == 1); h.Pump(); Assert.Null(h.Table.SelectedItem);
+        h.Table.SelectedItem = h.Rows[0];
+        h.App.Db.Exec("CREATE TRIGGER fail_selection BEFORE INSERT ON tag_override BEGIN SELECT RAISE(ABORT, 'failure'); END");
+        await h.Window.ApplyQuickTag([h.Track(200)], TagDimension.VOICE, Tag.VOCAL);
+        h.Pump(); Assert.Equal(h.Track(200).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+    });
+
+    [Fact] public Task McpCorrectionUsesActualDescendingOrderAndSnapshotRefreshRetainsNextSelection() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        var previous = h.Rows; h.Vm.SetSort(SongSort.FileName);
+        await Until(() => !h.Vm.ComputingRows && !ReferenceEquals(previous, h.Rows)); h.Pump();
+        Assert.Equal(h.Track(259).Id, h.Rows[0].Track!.Id);
+        await h.Tools.CallAsync("set_smart_tags", new() { ["trackIds"] = new JsonArray(h.Track(100).Id, h.Track(160).Id), ["voice"] = "VOCAL" });
+        await Until(() => !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(h.Track(159).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        var column = h.Table.Columns.Single(c => c.Tag is "Voice"); column.IsVisible = true; h.Pump();
+        // The same cache/override refresh path used by incoming sync must refresh recycled visuals
+        // while preserving the user's current selection rather than advancing again.
+        h.App.Db.SetTagOverride(h.Track(159).TrackKey, "VOICE", "VOCAL", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        previous = h.Rows; h.App.SmartTags.Recompute(); h.App.Library.RebuildSnapshot();
+        await Until(() => !h.Vm.ComputingRows && !ReferenceEquals(previous, h.Rows)); h.Pump();
+        Assert.Equal(h.Track(159).Id, ((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Button Cell() => h.Table.GetVisualDescendants().OfType<Button>().Single(b => b.Tag as string == "VOICE" &&
+            b.DataContext is JeekMusic.UI.ViewModels.SongRow r && r.Track?.Id == h.Track(159).Id);
+        Assert.True(Cell().GetVisualDescendants().OfType<PathIcon>().Single().IsVisible);
+        h.App.Db.SetTagOverride(h.Track(159).TrackKey, "VOICE", null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1);
+        previous = h.Rows; h.App.SmartTags.Recompute(); h.App.Library.RebuildSnapshot();
+        await Until(() => !h.Vm.ComputingRows && !ReferenceEquals(previous, h.Rows)); h.Pump();
+        Assert.False(Cell().GetVisualDescendants().OfType<PathIcon>().Single().IsVisible);
+        Assert.Empty(h.Player.Queue.Items);
+    });
+
     [Fact] public Task ColumnMenuUsesNativeKeepOpenAndMcpPersistsAllRemainingColumns()=>Run(async()=> {
         using var h=new Harness(); var window=new MainWindow(h.App) { ExitRequested=true }; window.Show(); Pump(window);
         try {
@@ -594,7 +703,7 @@ public sealed class SmartTagTests
             h.Window.MouseDown(point, MouseButton.Left); h.Window.MouseUp(point, MouseButton.Left); h.Pump();
         }
         var mood = Cell("MOOD");
-        var text = Assert.IsType<TextBlock>(mood.Content);
+        var text = mood.GetVisualDescendants().OfType<TextBlock>().First();
         Assert.InRange(Math.Abs(text.TranslatePoint(default, mood)!.Value.Y + text.Bounds.Height / 2 - mood.Bounds.Height / 2), 0, .5);
         Assert.Contains(L.T("运动"), Avalonia.Automation.AutomationProperties.GetName(mood));
         Click(mood); Assert.NotNull(menu); Assert.True(menu.IsOpen); Assert.Empty(h.Player.Queue.Items);
@@ -612,8 +721,8 @@ public sealed class SmartTagTests
         await Until(() => h.App.Db.TagOverrides().Count == 1 && !h.Vm.ComputingRows && h.Rows[0].Tags?.Calmness == "CALM");
         var saved = Assert.Single(h.App.Db.TagOverrides()); Assert.Equal(first.TrackKey, saved.TrackKey); Assert.Equal("CALMNESS", saved.Dimension);
         Assert.Empty(h.App.Db.TagReviews(second.TrackKey)); Assert.Empty(h.Player.Queue.Items); h.Pump();
-        Assert.Equal(L.T("安静"), ((TextBlock)Cell("CALMNESS").Content!).Text);
-        Assert.Equal(L.T("手动修正"), ToolTip.GetTip(Cell("CALMNESS")));
+        Assert.Equal(L.T("安静"), Cell("CALMNESS").GetVisualDescendants().OfType<TextBlock>().First().Text);
+        Assert.Equal(L.T("手工标注"), ToolTip.GetTip(Cell("CALMNESS")));
         menu.Close(); h.Pump(); h.Vm.ToggleTag("CALM");
         await Until(() => !h.Vm.ComputingRows && h.Rows.Count == 1); h.Pump();
         Click(Cell("CALMNESS"));
@@ -635,7 +744,7 @@ public sealed class SmartTagTests
         var row = new JeekMusic.UI.ViewModels.SongRow(null, 0, new("QUIET", null, "NON_CLASSICAL", false, false, true));
         Assert.Equal(L.T("非运动"), row.MoodText); Assert.Equal("—", row.CalmnessText); Assert.Equal("—", row.VoiceText);
         Assert.Equal(L.T("无分析结果"), row.CalmnessSource); Assert.Equal(L.T("自动"), row.MoodSource);
-        Assert.Equal(L.T("手动修正"), row.GenreSource);
+        Assert.Equal(L.T("手工标注"), row.GenreSource);
         Assert.Contains(row.MoodText, row.MoodActionName); Assert.Contains(row.MoodSource, row.MoodActionName);
     }
 

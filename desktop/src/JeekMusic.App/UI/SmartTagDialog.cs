@@ -15,7 +15,8 @@ internal sealed class SmartTagDialog : Window
     readonly Dictionary<TagDimension, Tag?> _changes = [];
     bool _saving;
 
-    public SmartTagDialog(AppServices app, IReadOnlyList<Track> tracks)
+    public SmartTagDialog(AppServices app, IReadOnlyList<Track> tracks,
+        Func<IReadOnlyDictionary<TagDimension, Tag?>, Task>? save = null)
     {
         var targets = tracks.ToArray();
         var current = app.SmartTags.Read();
@@ -89,7 +90,8 @@ internal sealed class SmartTagDialog : Window
             _saving = true; apply.IsEnabled = false; cancel.IsEnabled = false; panel.IsEnabled = false; error.IsVisible = false;
             try
             {
-                await app.SmartTags.Override(targets, _changes);
+                if (save is not null) await save(_changes);
+                else await app.SmartTags.Override(targets, _changes);
                 _saving = false;
                 Close();
             }

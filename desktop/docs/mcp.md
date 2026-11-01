@@ -8,6 +8,10 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 只读 `get_diagnostics.mainLayout.smartTagColumns` 返回 `columns[]` 的 `tag`（Mood/Voice/Genre/Calmness）、`dimension`（MOOD/VOICE/GENRE/CALMNESS）、`visible`、实际 DIP `width` 和 `order`；`missingValue="—"`、`sourceDisplay="cell-tooltip-and-menu"`、`manualCheckPolicy="manual-overrides-only"`、`cellAction="single-track-dimension-menu"`、`cellKeyboard="Enter/Space"`、`batchAction="inline-four-row-panel"` 说明 UI 语义。`quickCorrection` 包含 `state`（idle/saving/saved/failed）、`dimension`、`targetCount`、`busy`，只报最近快捷操作，不含歌曲名称。主窗尚未创建或关闭时沿用 `mainLayout.created=false`；读取不创建窗口、改布局或读取剪贴板。来源详情继续使用 `get_track.tagSources` / `explain_analysis.sources`；不新增参数，原严格对象 Schema 保持一致。
 
+四列 MANUAL 有效值旁的矢量铅笔（同值手工覆盖也显示；AUTO/未识别不显示）继续由现有来源驱动。诊断兼容增加 `manualIndicator="vector-pencil-after-label"`、`manualIndicatorPolicy="effective-value-with-MANUAL-source"` 和 `realizedCells[]` 的 `trackId/dimension/manualIndicatorVisible/helpText`，读取实际已实现单元格，不创建/滚动虚拟化行。中英文来源为“手工标注 / Manually annotated”。
+
+`selectionAfterCorrection` 返回 `policy`（first-target-in-original-list-next-survivor-then-previous-then-anchor）、`result`、`pending`、`selectedTrackIds`、`selectedFullyVisible`、`rowsGeneration`、`computingRows`。保存成功等待新列表后，按修改前实际列表中的第一首目标找下一首仍可见歌曲，尾部回退上一首/原锚点，空列表无选择；不改变播放队列/当前播放/进度。有主窗时 `set_smart_tags` 与四列/右键/完整面板共用该逻辑；无主窗不创建窗口。迟到刷新不会抢走用户主动换选或搜索/来源切换后的选择；保持打开的右键面板复用原目标与锚点，连续改维度不会逐首推进。失败不推进。普通快照/同步刷新保全当前选择与视口。以上均无新增工具或参数，原 Schema、sourceDisplay 及来源读取保持兼容，Debug/Release/NativeAOT 同一实现。
+
 ## 连接
 
 向支持 MCP stdio 的软件添加以下配置，把 `command` 改为本机的实际程序路径：

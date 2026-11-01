@@ -43,6 +43,10 @@ public sealed partial class SongRow : ObservableObject
     public string VoiceText => Text.TagCell(Tags, TagDimension.VOICE);
     public string GenreText => Text.TagCell(Tags, TagDimension.GENRE);
     public string CalmnessText => Text.TagCell(Tags, TagDimension.CALMNESS);
+    public bool MoodManual => Text.TagValue(Tags, TagDimension.MOOD) is not null && Text.TagManual(Tags, TagDimension.MOOD);
+    public bool VoiceManual => Text.TagValue(Tags, TagDimension.VOICE) is not null && Text.TagManual(Tags, TagDimension.VOICE);
+    public bool GenreManual => Text.TagValue(Tags, TagDimension.GENRE) is not null && Text.TagManual(Tags, TagDimension.GENRE);
+    public bool CalmnessManual => Text.TagValue(Tags, TagDimension.CALMNESS) is not null && Text.TagManual(Tags, TagDimension.CALMNESS);
     public string MoodSource => Text.TagSource(Tags, TagDimension.MOOD);
     public string VoiceSource => Text.TagSource(Tags, TagDimension.VOICE);
     public string GenreSource => Text.TagSource(Tags, TagDimension.GENRE);

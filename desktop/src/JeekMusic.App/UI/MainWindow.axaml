@@ -242,7 +242,12 @@
                                         <Button Classes="tag-cell" Tag="MOOD" IsEnabled="{Binding Available}"
                                                 AutomationProperties.Name="{Binding MoodActionName}" AutomationProperties.HelpText="{Binding MoodSource}"
                                                 ToolTip.Tip="{Binding MoodSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
-                                            <TextBlock Text="{Binding MoodText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding MoodText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <PathIcon Grid.Column="1" Name="ManualAnnotation" Data="{x:Static ui:Icons.ManualAnnotation}"
+                                                          Width="11" Height="11" Margin="5,0,0,0" VerticalAlignment="Center"
+                                                          IsVisible="{Binding MoodManual}" IsHitTestVisible="False" Focusable="False" />
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -253,7 +258,12 @@
                                         <Button Classes="tag-cell" Tag="VOICE" IsEnabled="{Binding Available}"
                                                 AutomationProperties.Name="{Binding VoiceActionName}" AutomationProperties.HelpText="{Binding VoiceSource}"
                                                 ToolTip.Tip="{Binding VoiceSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
-                                            <TextBlock Text="{Binding VoiceText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding VoiceText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <PathIcon Grid.Column="1" Name="ManualAnnotation" Data="{x:Static ui:Icons.ManualAnnotation}"
+                                                          Width="11" Height="11" Margin="5,0,0,0" VerticalAlignment="Center"
+                                                          IsVisible="{Binding VoiceManual}" IsHitTestVisible="False" Focusable="False" />
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -264,7 +274,12 @@
                                         <Button Classes="tag-cell" Tag="GENRE" IsEnabled="{Binding Available}"
                                                 AutomationProperties.Name="{Binding GenreActionName}" AutomationProperties.HelpText="{Binding GenreSource}"
                                                 ToolTip.Tip="{Binding GenreSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
-                                            <TextBlock Text="{Binding GenreText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding GenreText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <PathIcon Grid.Column="1" Name="ManualAnnotation" Data="{x:Static ui:Icons.ManualAnnotation}"
+                                                          Width="11" Height="11" Margin="5,0,0,0" VerticalAlignment="Center"
+                                                          IsVisible="{Binding GenreManual}" IsHitTestVisible="False" Focusable="False" />
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -275,7 +290,12 @@
                                         <Button Classes="tag-cell" Tag="CALMNESS" IsEnabled="{Binding Available}"
                                                 AutomationProperties.Name="{Binding CalmnessActionName}" AutomationProperties.HelpText="{Binding CalmnessSource}"
                                                 ToolTip.Tip="{Binding CalmnessSource}" Click="OnTagCellClick" KeyDown="OnTagCellKeyDown" DoubleTapped="OnTagCellDoubleTapped">
-                                            <TextBlock Text="{Binding CalmnessText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding CalmnessText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <PathIcon Grid.Column="1" Name="ManualAnnotation" Data="{x:Static ui:Icons.ManualAnnotation}"
+                                                          Width="11" Height="11" Margin="5,0,0,0" VerticalAlignment="Center"
+                                                          IsVisible="{Binding CalmnessManual}" IsHitTestVisible="False" Focusable="False" />
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>

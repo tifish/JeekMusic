@@ -41,6 +41,7 @@ public partial class MainWindow : Window
         Table.UnloadingRow += OnUnloadingRow;
         Table.ContextRequested += OnTableContextRequested;
         _vm.RowsChanged += UpdateSortHeaders;
+        InitTagSelection();
         InitPlayingVisibility();
         _vm.Navigated += OnSongsNavigated;
 

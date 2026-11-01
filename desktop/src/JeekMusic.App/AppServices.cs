@@ -32,6 +32,7 @@ public sealed class AppServices : IDisposable
     internal Online.OnlineFeature? Online { get; set; }
     internal Func<System.Text.Json.Nodes.JsonObject>? MainLayoutDiagnostics { get; set; }
     internal Func<System.Text.Json.Nodes.JsonObject,System.Text.Json.Nodes.JsonObject>? SongColumnsControl { get; set; }
+    internal Func<IReadOnlyList<Track>, IReadOnlyDictionary<Core.Analysis.TagDimension, Core.Analysis.Tag?>, string?, Task>? CorrectSmartTags { get; set; }
     public Automation.McpServer Mcp { get; }
     public Sync.LanSyncService LanSync { get; }
     public Preferences.PreferenceService Preferences { get; }

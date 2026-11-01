@@ -38,6 +38,7 @@ public partial class MainWindow
     {
         // Keep the original targets even if a correction removes them from the filtered list.
         var targets = tracks.DistinctBy(t => t.Id).ToArray();
+        var selection = CaptureTagSelection(targets);
         var current = _app.SmartTags.Read();
         var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 4) };
         panel.Children.Add(new TextBlock { Text = L.T("快速修正标签") + " · " + L.F($"已选择 {targets.Length} 首歌曲"),
@@ -90,7 +91,7 @@ public partial class MainWindow
                     e.Handled = true;
                     if (_quickTagSaving) return;
                     panel.IsEnabled = false; error.IsVisible = false;
-                    await ApplyQuickTag(targets, dimension, value);
+                    await ApplyQuickTag(targets, dimension, value, selection);
                     panel.IsEnabled = true;
                     RefreshCurrent();
                     if (_quickTagState != "saved") { error.Text = L.T("保存失败，请重试"); error.IsVisible = true; }
@@ -144,7 +145,7 @@ public partial class MainWindow
                     : Text.TagManual(s, dimension) && Text.TagValue(s, dimension) == value));
     }
 
-    IEnumerable<Control> TagOptions(Track[] targets, IReadOnlyDictionary<string, SongTags> current, TagDimension dimension)
+    IEnumerable<Control> TagOptions(Track[] targets, IReadOnlyDictionary<string, SongTags> current, TagDimension dimension, TagSelectionContext selection)
     {
         yield return new MenuItem { Header = SmartTagDialog.Summary(targets, current, dimension), IsEnabled = false };
         yield return new Separator();
@@ -152,7 +153,7 @@ public partial class MainWindow
         {
             var item = new MenuItem { Header = text, Name = "Quick" + dimension + (value?.ToString() ?? "Auto"),
                 ToggleType = MenuItemToggleType.Radio, IsChecked = marked, IsEnabled = !_quickTagSaving };
-            item.Click += async (_, _) => await ApplyQuickTag(targets, dimension, value);
+            item.Click += async (_, _) => await ApplyQuickTag(targets, dimension, value, selection);
             yield return item;
         }
     }
@@ -180,19 +181,19 @@ public partial class MainWindow
         _tagCellMenu?.Close();
         // Capture both before opening: virtualized cells may be rebound while this menu is open.
         var menu = new ContextMenu { Placement = PlacementMode.BottomEdgeAlignedLeft, PlacementTarget = button };
-        foreach (var item in TagOptions([track], _app.SmartTags.Read(), dimension)) menu.Items.Add(item);
+        foreach (var item in TagOptions([track], _app.SmartTags.Read(), dimension, CaptureTagSelection([track]))) menu.Items.Add(item);
         _tagCellMenu = menu;
         menu.Closed += (_, _) => { if (_tagCellMenu == menu) _tagCellMenu = null; };
         menu.Open(button);
     }
 
-    internal async Task ApplyQuickTag(IReadOnlyList<Track> targets, TagDimension dimension, Tag? value)
+    internal async Task ApplyQuickTag(IReadOnlyList<Track> targets, TagDimension dimension, Tag? value, TagSelectionContext? selection = null)
     {
         if (_quickTagSaving || targets.Count == 0) return;
         _quickTagSaving = true; _quickTagState = "saving"; _quickTagDimension = dimension.ToString(); _quickTagCount = targets.Count;
         try
         {
-            await _app.SmartTags.Override(targets, new Dictionary<TagDimension, Tag?> { [dimension] = value });
+            await ApplyTagCorrection(targets, new Dictionary<TagDimension, Tag?> { [dimension] = value }, selection ?? CaptureTagSelection(targets));
             _quickTagState = "saved";
         }
         catch (Exception e)
@@ -207,14 +208,22 @@ public partial class MainWindow
     internal MenuItem TagCorrectionItem(IReadOnlyList<Track> tracks)
     {
         var targets = tracks.ToArray();
+        var selection = CaptureTagSelection(targets);
         var item = new MenuItem { Header = L.T("修正智能标签…"), IsEnabled = targets.Length > 0 };
-        item.Click += async (_, _) => await new SmartTagDialog(_app, targets).ShowDialog(this);
+        item.Click += async (_, _) => await new SmartTagDialog(_app, targets,
+            changes => ApplyTagCorrection(targets, changes, selection)).ShowDialog(this);
         return item;
     }
 
     JsonObject SmartTagColumnDiagnostics() => new()
     {
         ["missingValue"] = "—", ["sourceDisplay"] = "cell-tooltip-and-menu", ["cellAction"] = "single-track-dimension-menu", ["cellKeyboard"] = "Enter/Space", ["batchAction"] = "inline-four-row-panel", ["manualCheckPolicy"] = "manual-overrides-only",
+        ["manualIndicator"] = "vector-pencil-after-label", ["manualIndicatorPolicy"] = "effective-value-with-MANUAL-source",
+        ["selectionAfterCorrection"] = TagSelectionDiagnostics(),
+        ["realizedCells"] = new JsonArray(Table.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("tag-cell") && b.DataContext is SongRow)
+            .Select(b => (JsonNode?)new JsonObject { ["trackId"] = ((SongRow)b.DataContext!).Track?.Id, ["dimension"] = b.Tag as string,
+                ["manualIndicatorVisible"] = b.GetVisualDescendants().OfType<PathIcon>().Any(i => i.Name == "ManualAnnotation" && i.IsVisible),
+                ["helpText"] = AutomationProperties.GetHelpText(b) }).ToArray()),
         ["columns"] = new JsonArray(TagColumns.Select(def =>
         {
             var column = Table.Columns.Single(c => c.Tag as string == def.Column);

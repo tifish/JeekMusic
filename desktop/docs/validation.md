@@ -1,5 +1,15 @@
 # 实现与验证记录
 
+## 2026-11-01：四维手工铅笔与标注后继续选择
+
+- 1.0.208：仅桌面主列表四列（MOOD/VOICE/GENRE/CALMNESS）的有效 MANUAL 值右侧增加 11 DIP 前景继承矢量铅笔，手工与自动同值也显示，AUTO/未识别不显示；整个单元格仍是原按钮。中英文 tooltip/无障碍来源为“手工标注 / Manually annotated”。四列显示、宽度和顺序持久化不变，无新增文字列/字体图标/颜色语义。
+- 修复异步重建 Rows 导致 DataGrid 选择/滚动回到开头的问题：按修改前实际显示顺序的第一首目标找下一首仍在列表内的歌曲，尾部回退上一首/原锚点，空表无选择。保存失败不推进；用户主动换选或搜索/来源/排序/筛选变化使旧回调失效。同步/普通快照刷新保全身份选择及视口。保持打开的右键面板捕获原目标并复用原锚点，连续修正不逐首推进，菜单焦点不被列表抢走。四列、右键、完整面板和有主窗的 MCP 共用保存延续；修正自身刷新不改播放队列、当前播放或进度。
+- 定向 SmartTag/PlayingVisibility/SongCopy 集成回归 **58 项通过，0 失败/跳过**，覆盖首/中/尾、多选插入顺序、筛选移除/空表、倒序、连续菜单与完整面板、失败、迟到回调、新搜索、快照/模拟同步、图标刷新、播放/队列/进度保全。内存曲库、fake 引擎/端点，无真实媒体写入。仅保留既有 LanRootPolicyTests 的两条 xUnit2031 警告。
+- 开发 RID 构建和正式 NativeAOT 发布的真实 stdio/命名管道 MCP 隔离回归均通过，使用新建的 48 首合成静音 WAV 与独立数据目录，不播放、不联网、不训练。验证四维 MANUAL 图标、同值覆盖、AUTO 立即移除、未知行无图标、虚拟化复用、首中尾/批量第一首、失败不推进。两种构建的 38 个工具描述、严格输入 Schema 完全一致；只读 get_diagnostics 兼容增加实际实现单元格和 selectionAfterCorrection，不增加工具/参数或开发开关。NativeAOT 保留已有第三方 DataGrid 的 IL2104/IL3053 警告。
+- 最少真实 Windows 客户端验收：UIAutomation/Win32 在隔离客户端点击标签单元格打开原菜单、恢复 AUTO、右键保持打开后鼠标/键盘连续改两个维度；MCP 证实仍改原歌曲且选择原锚点的下一首，队列为空/无播放。已目检中文四维铅笔与恢复消失、英文 NativeAOT 四维铅笔的实际 PrintWindow 截图（150% 暗色）。未展开多主题/多 DPI、真实跨设备同步回归；后台/远程指针尝试没有捕获到真实悬停弹窗，因此悬停弹窗呈现未验收，绑定来源文字和无障碍名称已由 MCP/控件验证，未把 Headless 当作真实 UI 通过。
+- 真实证据在本地忽略目录 `desktop/artifacts/tag-annotation/`：`four-manual-zh.png`、`cell-menu-zh.png`、`cell-auto-zh.png`、`menu-continuous-next-zh.png`、`four-manual-native-en.png`、`managed-report.json`、`native-report.json`、`catalog-parity.json`、`ui-acceptance.json`；定向日志 `desktop/artifacts/tag-annotation-tests.log`。
+- 重启前动态 MCP checkpoint、完整队列逐项读取、SQLite 在线本地备份、设置/布局快照保全。旧进程 38120 已退出，新 NativeAOT 1.0.208 进程 22276 运行在 `output/JeekMusic.exe`。实际当前 **928** 项队列的顺序/manual 标志、索引、当前曲/进度/播放状态、来源/锚点、音量/静音、筛选/设置/布局，以及原标签/覆盖/审核表哈希均核对一致；未恢复任何历史队列。首次替换遇到相同依赖 DLL 的 WinError32，按文件哈希跳过未变化依赖后完成替换；没有递归删除 output。`restart-report.json` 只含验收摘要，含私有曲库的本地备份留在忽略目录 `restart-private/`，未上传或提交。
+
 ## 2026-10-27：当前歌曲列表获取全部封面 / 歌词
 
 列表标题栏“更多”新增“获取全部封面”“获取全部歌词”，捕获当前来源/筛选后的完整 Rows（含虚拟化未呈现行，搜索沿用前 200 首上限），保留选中项右键操作。共用既有缺失资源获取与保存服务，补齐单任务保护、快照、取消及按去重单位计算的进度；新增生产 MCP `fetch_resources` 与资源任务诊断。开发/NativeAOT 的 25 工具目录、描述、Schema/注解一致。

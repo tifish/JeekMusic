@@ -67,11 +67,13 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     fun notifyChanged() { _revision.value++ }
     fun deleted(p: String)=p!=PreferenceStore.DATASET
     private fun profile()=PreferenceStore.DATASET
-    fun status(): JSONObject {
+    suspend fun status(): JSONObject {
         val p=activeProfile
         val answers=store.current(p,"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension }.groupBy { it.getString("entityId") }
+        val tracks=library.trackDao().all(); val results=feedback.personalResults()
+        val matched=tracks.count { results[it.trackKey]?.optString("signature")=="${it.dateModified}:${it.size}" }
         return JSONObject().put("dimension",activeDimension).put("profileId",p).put("answered",answers.values.count { it.size==1 && it.single().getJSONObject("payload").getString("answer") !in listOf("SKIP","WITHDRAWN") })
-            .put("updatedSongs",feedback.personalResults().size).put("dailyFeedback",feedback.status()).put("heads",localHeads()).put("desktop",store.local("desktop-learning")?.let(::JSONObject) ?: JSONObject()).put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",feedback.personalResults().isNotEmpty())
+            .put("matchedSongs",matched).put("fallbackSongs",tracks.size-matched).put("resultPagesPending",DesktopResultCursor(store).offset>0).put("dailyFeedback",feedback.status()).put("heads",localHeads()).put("desktop",store.local("desktop-learning")?.let(::JSONObject) ?: JSONObject()).put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",false).put("desktopResultsAvailable",matched>0)
             .put("training",store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==activeDimension }.maxByOrNull { it.getLong("at") }?.getJSONObject("payload")?.optString("state") ?: "windows_cpu_required")
     }
     fun batch(): JSONObject {
@@ -163,20 +165,20 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     private suspend fun synchronizeResults() {
         val generation=store.generation
         com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { client ->
-            var offset=0; var version=""; var pages=0
+            val cursor=DesktopResultCursor(store); var pages=0
             do {
                 currentCoroutineContext().ensureActive()
-                val reply=client.call("preference_results",JSONObject().put("protocol",3).put("offset",offset).put("version",version))
+                val reply=try { client.call("preference_results",JSONObject().put("protocol",3).put("offset",cursor.offset).put("version",cursor.version)) }
+                    catch(e: com.tinyfish.jeekmusic.data.sync.LanRemoteException) { cursor.reset(); throw e }
                 val compatible=reply.getInt("resultProtocol")==1 && reply.getString("scope")=="sha256_whole_recording" && reply.getInt("analyzerVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.ANALYZER_VERSION && reply.getInt("rulesVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.RULES_VERSION
                 if(!compatible) { store.removeLocal("desktop-heads"); error("Recognition versions differ; update both devices") }
                 require(reply.getString("generation")==generation && store.generation==generation) { "Learning changed during sync; retry" }
-                version=reply.getString("version")
                 for(row in objects(reply.getJSONArray("rows"))) {
                     val content=row.getString("contentSignature"); require(content.matches(Regex("[0-9a-f]{64}")))
                     store.setLocalForGeneration("desktop-content:$content",row.toString(),generation)
                 }
                 store.setLocalForGeneration("desktop-heads",JSONObject().put("generation",generation).put("resultProtocol",1).put("analyzerVersion",reply.getInt("analyzerVersion")).put("rulesVersion",reply.getInt("rulesVersion")).put("heads",reply.getJSONArray("heads")).toString(),generation)
-                offset=reply.getInt("next"); pages++
+                cursor.commit(reply); pages++
             } while(reply.getBoolean("hasMore") && pages<100)
             val status=client.call("preference_training",JSONObject().put("protocol",3).put("action","status"))
             store.setLocalForGeneration("desktop-learning",(status.optJSONObject("learning") ?: JSONObject()).toString(),generation)

@@ -68,7 +68,9 @@
     <string name="preference_learning_resume">Continue learning</string>
     <string name="preference_learning_cancel">Cancel learning</string>
     <string name="preference_learning_active">Active on PC; matched results update automatically</string>
-    <string name="preference_learning_updated">Library recognition updated</string>
+    <string name="preference_learning_updated">PC library recognition updated</string>
+    <string name="preference_local_coverage">This phone: %1$d songs have matching personal results; %2$d still use original recognition.</string>
+    <string name="preference_result_pages_pending">More PC results are waiting to sync. Sync continues automatically; original recognition remains available.</string>
     <string name="preference_learning_partial">Updated; some recordings remain uncovered</string>
     <string name="preference_learning_updating">Updating library recognition</string>
     <string name="preference_learning_playback">Playback has priority; learning continues when paused</string>

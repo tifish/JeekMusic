@@ -492,3 +492,5 @@ Windows / Android 均移除灵敏度选项。生产路径、追加采样、节�
 配对 TLS 协议3提供 `preference_training {action:status|learn|resume|cancel,downloadConfirmed?}` 和只读 `preference_results {offset,version?}`。前者 status 返回同一 PreferenceService 状态；后者每页最多100条，以 generation、激活模型版本、答案头hash、结果快照hash和全文件SHA-256绑定数据型决定。翻页版本变动明确报重试。Android 不执行模型、不接收向量，只有本机准确字节及当前标注/版本匹配时使用 PERSONAL，否则公共规则。后台每次至多六文件/60秒核验，前台自动续接；撤回/清除随修订传播。离线尚未观察到另一端撤回的设备遵循最终同步语义，本机手工修正始终优先。
 
 验证入口：`test-tag-learning-client.py --exe ... --data desktop/artifacts/...fixture --components ... [--real-extract]`，拒绝生产路径和既有夹具目录。它用声明生成的材料模拟独立可信输入，只在隔离库验证训练→固定检查→原子激活→44首全库更新→撤回回退，并与一次真实CLAP提取分开报告。数值夹具和模拟凭据均不是用户模型有效性证据。
+
+Android结果同步每次最多100页并持久化 offset/version；快照变化后从头重新获取，完成后归零。手机界面分开显示电脑更新进度与本机按准确文件签名核对的匹配/回退数量，不以远端元数据宣称本机运行模型。

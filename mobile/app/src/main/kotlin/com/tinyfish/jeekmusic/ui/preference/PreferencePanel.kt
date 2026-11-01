@@ -62,6 +62,8 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
         Button(onClick={if(desktop.optString("state")=="download_required") download=true else action()},enabled=!busy && !running) { Text(stringResource(if(desktop.optString("state") in listOf("cancelled","interrupted","incomplete")) R.string.preference_learning_resume else R.string.preference_learning_start)) }
         if(running) OutlinedButton(onClick={vm.run { vm.service.learningAction("cancel") }},enabled=!busy) { Text(stringResource(R.string.preference_learning_cancel)) }
         if(error.isNotEmpty()) Text(stringResource(if(listOf("version","protocol","upgrade").any { error.contains(it,ignoreCase=true) }) R.string.preference_upgrade_required else R.string.preference_computer_unavailable),color=MaterialTheme.colorScheme.error)
+        Text(stringResource(R.string.preference_local_coverage,data.optInt("matchedSongs"),data.optInt("fallbackSongs")),style=MaterialTheme.typography.bodySmall)
+        if(data.optBoolean("resultPagesPending")) Text(stringResource(R.string.preference_result_pages_pending),style=MaterialTheme.typography.bodySmall)
         for(head in PreferenceStore.objects(data.optJSONArray("heads") ?: org.json.JSONArray())) {
             val d=head.getString("dimension")
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {

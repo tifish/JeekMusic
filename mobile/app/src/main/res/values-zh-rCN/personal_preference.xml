@@ -68,7 +68,9 @@
     <string name="preference_learning_resume">继续学习</string>
     <string name="preference_learning_cancel">取消学习</string>
     <string name="preference_learning_active">电脑已生效，匹配结果自动更新</string>
-    <string name="preference_learning_updated">歌曲识别已更新</string>
+    <string name="preference_learning_updated">电脑歌曲识别已更新</string>
+    <string name="preference_local_coverage">本机已匹配 %1$d 首个人结果；%2$d 首仍用原有识别。</string>
+    <string name="preference_result_pages_pending">还有电脑结果等待同步，将自动继续；等待期间保留原有识别。</string>
     <string name="preference_learning_partial">已更新，部分录音未覆盖</string>
     <string name="preference_learning_updating">正在更新全库识别</string>
     <string name="preference_learning_playback">播放优先，暂停播放后自动继续学习</string>

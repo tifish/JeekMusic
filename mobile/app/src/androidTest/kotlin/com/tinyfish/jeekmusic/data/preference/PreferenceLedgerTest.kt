@@ -11,6 +11,25 @@ import java.util.UUID
 
 /** Actual Android SQLite, isolated test-owned paths. Never opens the user's preference DB. */
 class PreferenceLedgerTest {
+    @Test fun resultPagesResumeAcrossBatchesAndRejectChangedOrClearedSnapshots() {
+        val app=ApplicationProvider.getApplicationContext<Context>(); val root=File(app.cacheDir,"result-cursor-"+UUID.randomUUID()).apply { mkdirs() }
+        try {
+            var generation=""; val version=PreferenceStore.hash("isolated result frame")
+            PreferenceStore(context(root)).use { store ->
+                generation=store.generation
+                DesktopResultCursor(store).commit(JSONObject().put("generation",generation).put("version",version).put("next",10000).put("hasMore",true))
+            }
+            PreferenceStore(context(root)).use { store ->
+                val cursor=DesktopResultCursor(store); assertEquals(10000,cursor.offset); assertEquals(version,cursor.version)
+                assertThrows(IllegalArgumentException::class.java) { cursor.commit(JSONObject().put("generation",generation).put("version",PreferenceStore.hash("changed")).put("next",10100).put("hasMore",true)) }
+                assertEquals(10000,DesktopResultCursor(store).offset)
+                cursor.commit(JSONObject().put("generation",generation).put("version",version).put("next",10001).put("hasMore",false)); assertEquals(0,DesktopResultCursor(store).offset)
+                cursor.commit(JSONObject().put("generation",generation).put("version",version).put("next",100).put("hasMore",true)); store.clearLearning()
+                assertThrows(IllegalArgumentException::class.java) { cursor.commit(JSONObject().put("generation",generation).put("version",version).put("next",200).put("hasMore",true)) }
+                assertEquals(0,DesktopResultCursor(store).offset)
+            }
+        } finally { assertTrue(root.canonicalPath.startsWith(app.cacheDir.canonicalPath+File.separator)); root.deleteRecursively() }
+    }
     private fun context(root: File)=object: ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) { override fun getNoBackupFilesDir()=root.apply { mkdirs() } }
     private fun answer(d: String,value: String,role: String="training")=JSONObject().put("dimension",d).put("answer",value).put("basis","whole_recording_familiar")
         .put("contextId",PreferenceStore.context(d)).put("recordingId","a".repeat(64)).put("contentSignature","b".repeat(64)).put("manifestId","batch").put("role",role)

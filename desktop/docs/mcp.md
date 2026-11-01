@@ -427,18 +427,19 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 
 不写音频、metadata、手工覆盖、审核反馈、队列或偏好，不上传。新节奏失败不伪造 NON_SPORT；已足够的旧 SPORT 仍可用，其余 MOOD 无结果。完整性 complete 仍表示原模型/声学阶段完整，节奏阶段另看 rhythmState。原 v5 候选在渐进升级前保留旧结果，非候选无需解码即可显式晋升为 v6（baseEvidenceReused=true）。
 
-`explain_analysis.workout` 新增节奏版本、状态、复用标志、持续强窗与独立支持片段数；`diagnose_analysis` 增加 productionPulse 及其实际源区间，仍不写缓存或标签。三档原阈值、手工优先、标题强制古典、独立 CALMNESS/旧 QUIET 兼容保留。算法、研究来源、限制与验证见 [运动 v8](../../docs/workout-music-v8.md)。
+`explain_analysis.workout` 新增节奏版本、状态、复用标志、持续强窗与独立支持片段数；`diagnose_analysis` 增加 productionPulse 及其实际源区间，仍不写缓存或标签。当前Rules9固定宽松阈值；旧三档输入不再改变行为。手工优先、标题强制古典、独立 CALMNESS/旧 QUIET 兼容保留。算法、研究来源、限制与验证见 [运动 v8](../../docs/workout-music-v8.md)。
 
 后续[重音/音乐标签受控评估](../../docs/workout-accent-evaluation.md)已记录和光慢主拍正例及未通过的候选。该研究未新增生产特征或模型：MCP仍为Analyzer6/Rules8及相同28工具，没有研究特征导入接口，`analyze_tracks`不会执行musicnn或改写人工反馈。
 
 
-## 个人标签学习（协议2；开发版与 NativeAOT 同为36工具）
+## 个人标签学习（同步协议3；开发版与 NativeAOT 同为38工具）
 
 新增工具复用客户端服务：
 
 | 工具 | 操作 / 参数 | 边界 |
 |---|---|---|
-| preference_profile | list/create/select/dimension/import_regression/export/delete；name、profileId、dimension、path；create 可选 purpose=personal/synthetic_validation | 档案主动选择，删除传播，私有导出；import_regression 须本机 path 和 ownerConfirmed=true，严格绑定当前档案/当前版本，11条只作该用户运动回归、不拟合且不随包内置；合成档案永不启用模型 |
+| preference_data | status/list/capture/dimension/import_regression/export/clear（兼容delete）；dimension、path、ownerConfirmed | 首次直接可用，已配对设备自动同步唯一学习数据集；clear仅清除学习数据并传播防复活边界，之后可立即重新标注；回归导入仍须本人/版本确认 |
+| preference_profile | 已弃用兼容入口，旧list/dimension/import_regression/export/delete仍工作；create仅接受personal并幂等返回唯一标识，名称忽略；select只接受当前内部标识 | 不创建或切换另一份数据；旧标识和synthetic_validation用途明确拒绝；新调用改用preference_data，无需name/profileId |
 | preference_inventory | status/register/freeze | 每次登记最多6首身份；不生成答案；不足不能伪造冻结 |
 | preference_batch | status/prepare，可选 dimension | 六首盲标、续接；不显示预测/分数；MCP 不返回封存答案 |
 | preference_answer | recordingId、answer、basis、reason≤500、resolve，可选 dimension | 明确人工答案；单维冲突需复核全部头；撤回只失效受影响头 |
@@ -447,12 +448,30 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 | preference_conflicts | 可选 dimension | 只读该维训练冲突；不返回封存标签、原话、路径、向量或凭证 |
 | checkpoint_client | 无参数 | 使用 QueuePersistence 保存实时队列/手动项、源与锚点、模式、进度并刷新设备本地设置；不暂停、不改音量、不解析待交接源，不写媒体 |
 
-四个 dimension：MOOD SPORT/NON_SPORT，VOICE VOCAL/INSTRUMENTAL，GENRE CLASSICAL/NON_CLASSICAL，CALMNESS CALM/NON_CALM。省略 dimension 使用当前界面维度；旧无 dimension 的档案事件仅按 MOOD 迁移。答题另支持 UNCERTAIN/UNRESOLVED/SKIP/WITHDRAWN，未答不补自动值，AUTO 不属于个人人工答案。basis=whole_recording_familiar/listened_full/excerpts_only/unclear；仅前两种明确二元答案拟合。
+四个 dimension：MOOD SPORT/NON_SPORT，VOICE VOCAL/INSTRUMENTAL，GENRE CLASSICAL/NON_CLASSICAL，CALMNESS CALM/NON_CALM。省略 dimension 使用当前界面维度；旧学习数据仅在schema升级时重置一次，旧协议事件明确拒绝。答题另支持 UNCERTAIN/UNRESOLVED/SKIP/WITHDRAWN，未答不补自动值，AUTO 不属于个人人工答案。basis=whole_recording_familiar/listened_full/excerpts_only/unclear；仅前两种明确二元答案拟合。
 
 四维共享表示缓存和全局隔离角色，监督头、样本计数、分数边界、验证、失效各自独立。个人分数是未校准 margin。MOOD ±.25，VOICE/CALMNESS ±.35，GENRE ±.4；阈值等号弃权。详细材料及各维验收门槛见 [当前协议](../../docs/personal-tag-learning.md)。真实用户独立验收和部署未完成前 candidate only，不能把 synthetic_validation 的链路成绩作为用户准确率。
 
-preference_profile list 返回每头正负/不确定/冲突、阈值契约、模型元数据和有界同步游标/本地提交时间，不默认给原话/向量。explain_analysis 增加 personalLearning，明确 PUBLIC_AUTO、未启用个人层、手工最终优先及 ClassicalTitles 的 GENRE 自动优先级；旧 QUIET 只为 NON_SPORT，不推导 CALM。
+preference_data status 返回每头正负/不确定/冲突、阈值契约、模型元数据和有界同步游标/本地提交时间，不默认给原话/向量。explain_analysis 增加 personalLearning，明确 PUBLIC_AUTO、未启用个人层、手工最终优先及 ClassicalTitles 的 GENRE 自动优先级；旧 QUIET 只为 NON_SPORT，不推导 CALM。
 
-LAN preference_delta 使用版本2、最多100事件/页和独立上传/下载游标。旧 state/exchange 继续兼容 format 2，改为直接领域合并，不写每设备 inbox。标签与模型状态分别同步；手机只标注、同步和看训练状态，不执行桌面 Python 产物。
+LAN preference_delta 使用版本3、最多100事件/页和独立上传/下载游标。旧 state/exchange 继续兼容 format 2，改为直接领域合并，不写每设备 inbox。标签与模型状态分别同步；手机只标注、同步和看训练状态，不执行桌面 Python 产物。
 
 `preference_batch(action="match")` 每次最多核验六个本机文件、60秒，只按完整内容 SHA-256 建立跨路径绑定，保留缺文件引用与继续核验游标。
+
+## 固定宽松运动识别（Rules9）
+
+Windows / Android 均移除灵敏度选项。生产路径、追加采样、节奏补采及解释统一采用 LOOSE：模型阈值2.75、旧声学规则阈值.50。旧设置NORMAL/STRICT及旧同步输入不会改变有效行为。既有MCP没有可写灵敏度参数，Schema继续拒绝额外`sensitivity`参数，不能藉诊断工具切回较严档。
+
+`explain_analysis` 返回`sensitivity=LOOSE`、`workoutPolicy=fixed_loose`、`rulesVersion=9`，MOOD阈值与margin按2.75计算。`sampleSupportNotProbabilities.MOOD_LOOSE`为当前支持率；保留`MOOD_NORMAL`作为弃用别名，值同MOOD_LOOSE，不代表标准档。`diagnose_analysis`、`analyze_tracks`复用同一固定规则。只提高规则版本，Analyzer仍为6；升级重算有效缓存，不为此重提取音频或向量。手工覆盖及其他三维、ClassicalTitles不变。详见[固定宽松规则](../../docs/workout-fixed-loose.md)。
+
+学习同步页总携带`resetBoundary`和`generation`；无正文页也传播清除。旧协议1/2要求升级。并发清除的边界取并集；未观察到全部清除的写入被清除优先规则舍弃。普通并发答案保留修订冲突。完整一次性重置、普通业务保全及重新使用语义见[学习数据协议](../../docs/personal-tag-learning.md)。
+
+## 主列表自由标注、人工筛选与列控制
+
+`set_smart_tags` 的新明确操作按实际修改维度排入学习，来源`explicit_daily_tag_correction`、依据`track_tag_feedback`，不伪造完整聆听。AUTO撤回日常来源，独立盲标保留；缺文件/身份/表示不阻塞日常保存。`preference_data {"action":"capture"}`处理新本机审核事务和待处理项，每次最多六个完整内容hash，无模型推理。`status.dailyFeedback`报告真实来源、选择偏差和待处理原因，`trainingLabels`对同录音同维去重、排除来源分歧和并发。历史审核及同步回放不变成人工新答案。原材料门槛、候选部署和封存隔离保持；自选候选不代表独立准确率。设置批次变为可选。详见[自由反馈协议](../../docs/manual-tag-learning.md)。
+
+`search_tracks` 可选`onlyManual:true`，与query/folder/artist/album/tags作AND；任一当前有效MANUAL维度命中，最后一维AUTO后移出，自动结果和审核历史不命中。先筛全量再分页，返回total/nextOffset；不改UI筛选偏好。
+
+`song_columns`（第38项）使用当前主窗口列服务，不激活或导航。`status`只读；`set`指定tag与visible/width/order之一，width64–3000 DIPs、order0–10；`save`保存当前布局。tag为Title/Artist/Album/Duration/FileName/Modified/Format/Mood/Voice/Genre/Calmness；Title不可隐藏，旧Tags拒绝。返回实际列、持久化状态、原生表头菜单开闭和勾选诊断。`checkpoint_client`同时保存当前列布局，便于保全重启。开发版和NativeAOT目录均38项、描述/Schema相同。
+
+`get_diagnostics.mainLayout.smartTagColumns.quickCorrection` 增加`menuOpen/currentValueLines/keepsOpenAfterSave/currentValues`；第一列只显示一行当前值，不暴露学习私有答案。当前右键菜单保持打开，事务成功才刷新值和手工勾选，失败可重试，固定原目标快照；业务写入仍经`set_smart_tags`。菜单连续点击、外部/Esc关闭和视觉排版需要最小真实UI验收，不能由诊断字段代替。

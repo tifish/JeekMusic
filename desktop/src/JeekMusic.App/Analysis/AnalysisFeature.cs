@@ -132,7 +132,6 @@ public sealed class AnalysisFeature : IFeature, IDisposable
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Note(L.T("分析完全在本地进行。接通电源且没有全屏程序时自动分析；完成后释放模型，不再轮询。")));
         panel.Children.Add(Choice([(AnalysisMode.PluggedIn, L.T("仅接通电源")), (AnalysisMode.Always, L.T("随时")), (AnalysisMode.Manual, L.T("手动"))], c.S.AnalysisMode, v => { c.S.AnalysisMode = v; c.Save("analysis"); }));
-        panel.Children.Add(Labeled(L.T("运动识别灵敏度"), Choice([("LOOSE", L.T("宽松")), ("NORMAL", L.T("正常")), ("STRICT", L.T("严格"))], c.S.Sensitivity, v => { c.S.Sensitivity = v; c.Save("analysis"); })));
         var status = Note(Status); panel.Children.Add(status);
         void Refresh() => status.Text = Status;
         Changed += Refresh;

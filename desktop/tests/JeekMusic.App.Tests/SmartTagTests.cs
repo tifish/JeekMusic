@@ -24,6 +24,71 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class SmartTagTests
 {
+    [Fact] public Task ColumnMenuUsesNativeKeepOpenAndMcpPersistsAllRemainingColumns()=>Run(async()=> {
+        using var h=new Harness(); var window=new MainWindow(h.App) { ExitRequested=true }; window.Show(); Pump(window);
+        try {
+            var grid=window.FindControl<DataGrid>("Table")!;
+            window.RestoreLayout(new UiState { SongColumnsVersion=1,Columns=[new() { Tag="Tags",Order=0,Width=999,Visible=true },new() { Tag="Title",Order=1,Width=250,Visible=false },new() { Tag="Artist",Order=2,Width=130,Visible=true }] });
+            Assert.DoesNotContain(grid.Columns,c=>c.Tag is "Tags"); Assert.True(grid.Columns.Single(c=>c.Tag is "Title").IsVisible);
+            var menu=DataGridExtensions.BuildColumnMenu(grid); menu.Open(grid); Pump(window);
+            var mood=menu.Items.OfType<MenuItem>().Single(i=>i.Tag is "Mood"); Assert.True(mood.StaysOpenOnClick); mood.IsChecked=true; mood.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(menu.IsOpen); Assert.True(grid.Columns.Single(c=>c.Tag is "Mood").IsVisible);
+            var tools=new McpTools(h.App); var result=tools.Call("song_columns",new() { ["action"]="set",["tag"]="Calmness",["visible"]=true,["width"]=111,["order"]=2 });
+            Assert.True(result["persisted"]!.GetValue<bool>()); Assert.True(menu.Items.OfType<MenuItem>().Single(i=>i.Tag is "Calmness").IsChecked);
+            Assert.False(menu.Items.OfType<MenuItem>().Single(i=>i.Tag is "Title").IsEnabled);
+            Assert.Throws<ArgumentException>(()=>tools.Call("song_columns",new() { ["action"]="set",["tag"]="Title",["visible"]=false }));
+            var saved=UiState.Load(); Assert.DoesNotContain(saved.Columns,c=>c.Tag=="Tags"); Assert.Equal(111,saved.Columns.Single(c=>c.Tag=="Calmness").Width);
+            menu.Close(); await Task.Yield();
+        } finally { window.Close(); }
+    });
+    [Fact] public Task ManualFilterCoversAllFourDimensionsEqualAutomaticAndRemovesLastAuto()=>Run(async()=> {
+        using var h=new Harness(); var t=h.Tracks[0]; var tools=new McpTools(h.App);
+        h.App.Db.UpdateFolderLocation(t.FolderId,@"Z:\offline-tags\",true); h.App.Library.RebuildSnapshot(); Dispatcher.UIThread.RunJobs();
+        Assert.Equal(0,tools.Call("search_tracks",new() { ["onlyManual"]=true })["total"]!.GetValue<int>());
+        foreach(var dimension in Enum.GetValues<TagDimension>()) {
+            var value=Core.Analysis.Tags.Of(dimension).First();
+            await h.App.SmartTags.Override([t],new Dictionary<TagDimension,Tag?> { [dimension]=value }); Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1,tools.Call("search_tracks",new() { ["onlyManual"]=true,["query"]="Synthetic",["limit"]=1 })["total"]!.GetValue<int>());
+            Assert.True(ListBuilder.FilterOf(h.App.Library.Snapshot,["MANUAL"])!(t));
+            await h.App.SmartTags.Override([t],new Dictionary<TagDimension,Tag?> { [dimension]=null }); Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0,tools.Call("search_tracks",new() { ["onlyManual"]=true })["total"]!.GetValue<int>());
+        }
+        Assert.NotEmpty(h.App.Db.TagReviews(t.TrackKey)); // History alone is not current manual state.
+    });
+    [Theory] [InlineData("NORMAL")] [InlineData("STRICT")] [InlineData("invalid")]
+    public void OldStoredAndIncomingSettingsCannotChangeFixedLoosePolicy(string legacy)
+    {
+        var root=Path.Combine(Path.GetTempPath(),"jeek-fixed-loose-"+Guid.NewGuid()); Directory.CreateDirectory(root);
+        try {
+            var path=Path.Combine(root,"settings.json"); File.WriteAllText(path,new JsonObject { ["sensitivity"]=legacy }.ToJsonString());
+            var settings=new SettingsStore(path); Assert.Equal("LOOSE",settings.Current.Sensitivity);
+            settings.Current.Sensitivity=legacy; Assert.Equal("LOOSE",settings.Current.Sensitivity);
+            settings.WriteNow(); Assert.Equal("LOOSE",JsonNode.Parse(File.ReadAllText(path))!["sensitivity"]!.GetValue<string>());
+        } finally { Directory.Delete(root,true); }
+    }
+    [Fact] public Task FixedLooseReclassifiesCachedEvidenceWithoutDecodingAndPreservesManualAndTitleRules() => Run(async()=>
+    {
+        using var h=new Harness(); var t=h.Tracks[0];
+        h.App.Settings.Current.Sensitivity="STRICT";
+        var m=new ModelScores(-3,-1,0,.003*(Math.Exp(3)-1),0);
+        var evidence=new AnalysisEvidence(6,[new(0,10000,false,160000,1,1,m,Enumerable.Repeat(m,12).ToArray(),null)],[],true,null,1,1,"not_needed");
+        var data=FeaturesData.Of(null,m) with { AnalysisEvidence=evidence.ToJson() };
+        foreach(var track in h.Tracks) h.App.Db.SaveFeatures(new FeaturesRow(track.TrackKey,AnalysisFeature.Signature(track),6,data.ToJson(),false));
+        h.App.Db.SetTagOverride(h.Tracks[1].TrackKey,"MOOD","NON_SPORT",123);
+        h.App.Db.SetTagOverride(h.Tracks[1].TrackKey,"CALMNESS","CALM",124);
+        h.App.Db.Exec("UPDATE track SET title='Sonata Op. 1' WHERE id="+t.Id);
+        var features=h.App.Db.AllFeatures().ToArray(); var overrides=h.App.Db.TagOverrides().ToArray();
+        h.App.SmartTags.Recompute(); t=h.App.Db.AllTracks().Single(x=>x.Id==t.Id);
+        var explanation=h.App.SmartTags.Explain(t);
+        Assert.Equal("SPORT",explanation["automatic"]!["MOOD"]!.GetValue<string>());
+        Assert.Equal("CLASSICAL",explanation["automatic"]!["GENRE"]!.GetValue<string>());
+        Assert.Equal("INSTRUMENTAL",explanation["automatic"]!["VOICE"]!.GetValue<string>());
+        Assert.Equal("LOOSE",explanation["sensitivity"]!.GetValue<string>()); Assert.Equal(2.75,explanation["thresholds"]!["MOOD"]!.GetValue<double>());
+        Assert.Equal("NON_SPORT",h.App.SmartTags.Read()[h.Tracks[1].TrackKey].Mood); Assert.Equal("CALM",h.App.SmartTags.Read()[h.Tracks[1].TrackKey].Calmness);
+        Assert.Equal(features,h.App.Db.AllFeatures()); Assert.Equal(overrides,h.App.Db.TagOverrides());
+        Assert.False(FeaturesData.NeedsAnalysis(h.App.Db.Features(t.TrackKey),AnalysisFeature.Signature(t)));
+        await Task.CompletedTask;
+    });
     [Fact]
     public void SavedLegacyFilterAndNewCalmnessNeverCollide()
     {
@@ -368,7 +433,8 @@ public sealed class SmartTagTests
                 new() { Tag = "Title", Width = 240, Order = 1, Visible = true },
                 new() { Tag = "Modified", Width = 180, Order = 2, Visible = false }] };
             window.RestoreLayout(old);
-            Assert.True(grid.Columns.Single(c => c.Tag is "Tags").IsVisible);
+            Assert.DoesNotContain(grid.Columns,c=>c.Tag is "Tags");
+            Assert.Equal(0,grid.Columns.Single(c=>c.Tag is "Title").DisplayIndex);
             Assert.False(grid.Columns.Single(c => c.Tag is "Modified").IsVisible);
             foreach (var (tag, _, _) in MainWindow.TagColumns)
             {
@@ -467,9 +533,15 @@ public sealed class SmartTagTests
             Assert.Equal("failed", new McpTools(h.App).Call("get_diagnostics", new())["mainLayout"]!["smartTagColumns"]!["quickCorrection"]!["state"]!.GetValue<string>());
             h.App.Db.Exec("DROP TRIGGER fail_quick");
             voice.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            await Until(() => !menu.IsOpen);
-            Assert.All(h.App.Db.TagOverrides(), o => { Assert.Equal("VOICE", o.Dimension); Assert.Equal("INSTRUMENTAL", o.Value); });
-            Assert.Equal(2, h.App.Db.TagOverrides().Count);
+            await Until(() => panel.IsEnabled && h.App.Db.TagOverrides().Count==2);
+            Assert.True(menu.IsOpen); Assert.True(voice.IsChecked);
+            Assert.Equal(Text.TagName("INSTRUMENTAL"),Find<TextBlock>(panel,"QuickCurrentVOICE").Text);
+            Assert.Equal(1,Find<TextBlock>(panel,"QuickCurrentVOICE").MaxLines);
+            Find<ToggleButton>(panel,"QuickGENRECLASSICAL").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Until(()=>panel.IsEnabled && h.App.Db.TagOverrides().Count==4);
+            Assert.True(menu.IsOpen); Assert.True(Find<ToggleButton>(panel,"QuickGENRECLASSICAL").IsChecked);
+            Assert.All(h.App.Db.TagOverrides().Where(o=>o.Dimension=="VOICE"), o => Assert.Equal("INSTRUMENTAL", o.Value));
+            Assert.Equal(4, h.App.Db.TagOverrides().Count);
         }
         finally { menu.Close(); window.Close(); }
     });

@@ -15,7 +15,7 @@ public sealed class PreferenceFeature : IFeature
     static string PositiveText(string d)=>d switch { "MOOD"=>L.T("适合运动"),"VOICE"=>L.T("有人声"),"GENRE"=>L.T("古典"),_=>L.T("安静") };
     static string NegativeText(string d)=>d switch { "MOOD"=>L.T("不适合运动"),"VOICE"=>L.T("纯器乐"),"GENRE"=>L.T("非古典"),_=>L.T("非安静") };
     static string StateText(string state)=>L.T(state switch {
-        "idle"=>"未开始", "insufficient_material"=>"材料不足", "components_required"=>"需要准备组件", "identity_incomplete"=>"身份清单未完整冻结", "preparing_components"=>"正在准备公共组件", "running"=>"运行中", "cancelled"=>"已取消", "failed"=>"失败", "incomplete"=>"未完成（预算或材料）", "interrupted"=>"上次工作进程已中断", "validation_failed"=>"验证未通过", "synthetic_validation_complete"=>"合成链路验证完成（非用户真值）", "extraction_complete"=>"本批表示已提取", "components_ready"=>"公共组件已就绪", "training_gate_passed"=>"训练门槛通过（候选未启用）", _=>state });
+        "self_selected_candidate"=>"自选反馈候选（非独立验证）", "idle"=>"未开始", "insufficient_material"=>"材料不足", "components_required"=>"需要准备组件", "identity_incomplete"=>"身份清单未完整冻结", "preparing_components"=>"正在准备公共组件", "running"=>"运行中", "cancelled"=>"已取消", "failed"=>"失败", "incomplete"=>"未完成（预算或材料）", "interrupted"=>"上次工作进程已中断", "validation_failed"=>"验证未通过", "synthetic_validation_complete"=>"合成链路验证完成（非用户真值）", "extraction_complete"=>"本批表示已提取", "components_ready"=>"公共组件已就绪", "training_gate_passed"=>"训练门槛通过（候选未启用）", _=>state });
     static string AnswerText(string answer)=>answer switch { "SPORT"=>PositiveText("MOOD"),"NON_SPORT"=>NegativeText("MOOD"),"VOCAL"=>PositiveText("VOICE"),"INSTRUMENTAL"=>NegativeText("VOICE"),"CLASSICAL"=>PositiveText("GENRE"),"NON_CLASSICAL"=>NegativeText("GENRE"),"CALM"=>PositiveText("CALMNESS"),"NON_CALM"=>NegativeText("CALMNESS"),"UNCERTAIN"=>L.T("不确定"),"UNRESOLVED"=>L.T("版本不对 / 未听清"),"SKIP"=>L.T("跳过"),"WITHDRAWN"=>L.T("撤回"),_=>answer };
     static WrapPanel Wrap(params Control[] controls)
     {
@@ -25,9 +25,8 @@ public sealed class PreferenceFeature : IFeature
     {
         var service=c.App.Preferences;
         var panel=new StackPanel { Spacing=10 };
-        panel.Children.Add(Note(L.T("独立的人工标注档案，不修改日常四维手工标签。题目隐藏自动结果；不会替换播放队列。当前不提供隔离试听，只有能确认整首及版本时才选整曲依据。")));
+        panel.Children.Add(Note(L.T("在主列表的运动、人声、古典、安静列或右键菜单修正任意歌曲，即可用于学习。这里只管理学习、训练和同步。自选反馈不是独立准确率证据。")));
         var message=new TextBlock { TextWrapping=Avalonia.Media.TextWrapping.Wrap }; panel.Children.Add(message);
-        var profiles=new ComboBox { Name="PreferenceProfiles",HorizontalAlignment=HorizontalAlignment.Stretch,MinWidth=0 };
         ComboBox? dimensionChoice=null;
         var drafts=new Dictionary<string,(int Basis,string Reason)>();
         var status=Note(""); var training=Note(""); var batchPanel=new StackPanel { Spacing=12 }; bool refreshing=false;
@@ -35,42 +34,36 @@ public sealed class PreferenceFeature : IFeature
         {
             try { await action(); Refresh(); } catch(Exception e) { message.Text=e.Message; }
         }
-        var profileName=new TextBox { Name="PreferenceProfileName",PlaceholderText=L.T("档案名称"),Width=200 };
-        panel.Children.Add(Wrap(profileName,Action(L.T("创建档案"),()=>Run(()=> { service.CreateProfile(profileName.Text??""); profileName.Text=""; return Task.CompletedTask; }))));
-        var profileRows=service.Status()["profiles"]!.AsArray();
-        var live=profileRows.Where(n=>n?["deleted"]?.GetValue<bool>()!=true).ToArray();
-        foreach(var p in live) profiles.Items.Add(S(p?["name"])+" · "+S(p?["profileId"])[..8]);
-        profiles.SelectedIndex=Array.FindIndex(live,p=>S(p?["profileId"])==service.ActiveProfile);
-        profiles.SelectionChanged+=(_,_)=> { if(!refreshing && profiles.SelectedIndex>=0) Run(()=> { service.SelectProfile(S(live[profiles.SelectedIndex]?["profileId"])); return Task.CompletedTask; }); };
-        panel.Children.Add(Note(L.T("当前档案（同步不会自动混入）"))); panel.Children.Add(profiles);
         dimensionChoice=Choice(new[] {("MOOD",L.T("运动 / 非运动")),("VOICE",L.T("人声 / 纯器乐")),("GENRE",L.T("古典 / 非古典")),("CALMNESS",L.T("安静 / 非安静"))},service.ActiveDimension,d=> { if(!refreshing) Run(()=> { service.SelectDimension(d); return Task.CompletedTask; }); });
         dimensionChoice.Name="PreferenceDimension"; panel.Children.Add(Note(L.T("独立标注维度"))); panel.Children.Add(dimensionChoice);
         panel.Children.Add(Note(L.T("每首可只标一个维度，其他维度保持未标。GENRE 的 ClassicalTitles 强制自动古典优先于个人预测；手工覆盖最终优先。旧 QUIET 只兼容为非运动，不推导安静。")));
         panel.Children.Add(status);
-        panel.Children.Add(Wrap(Action(L.T("准备 / 继续六首批次"),()=>Run(async()=> { await service.PrepareBatch(); })),Action(L.T("刷新 / 续接"),()=>Refresh())));
-        panel.Children.Add(Action(L.T("核验本批本机录音身份（最多六个文件）"),()=>Run(async()=> { var result=await service.MatchLocalBatch(); message.Text=L.F($"已核验 {result["checkedFiles"]} 个候选文件，匹配 {result["matched"]} 个；缺少本地文件的引用保留。仅按完整内容 SHA-256 绑定。"); })));
-        panel.Children.Add(Wrap(Action(L.T("登记下六首身份（不标注）"),()=>Run(async()=> { await service.PrepareBatch(inventoryOnly:true); })),Action(L.T("冻结完整研究清单"),()=>Run(()=> { service.FreezeStudy(); return Task.CompletedTask; }))));
-        panel.Children.Add(batchPanel);
+        var supplement=new StackPanel { Spacing=10 };
+        panel.Children.Add(new Expander { Header=L.T("补充标注与独立验证（可选）"),Content=supplement });
+        supplement.Children.Add(Wrap(Action(L.T("补充标注 / 继续验证"),()=>Run(async()=> { await service.PrepareBatch(); })),Action(L.T("刷新 / 续接"),()=>Refresh())));
+        supplement.Children.Add(Action(L.T("核验本批本机录音身份（最多六个文件）"),()=>Run(async()=> { var result=await service.MatchLocalBatch(); message.Text=L.F($"已核验 {result["checkedFiles"]} 个候选文件，匹配 {result["matched"]} 个；缺少本地文件的引用保留。仅按完整内容 SHA-256 绑定。"); })));
+        supplement.Children.Add(Wrap(Action(L.T("登记下六首身份（不标注）"),()=>Run(async()=> { await service.PrepareBatch(inventoryOnly:true); })),Action(L.T("冻结完整研究清单"),()=>Run(()=> { service.FreezeStudy(); return Task.CompletedTask; }))));
+        supplement.Children.Add(batchPanel);
         panel.Children.Add(SubHeading(L.T("本地训练（候选不会自动启用）")));
         panel.Children.Add(Note(L.T("运动：24/36/48节点，至少16条、每类8条、8组件及3个双类艺人。其余各维：12/24/36节点，至少12条、每类6条、6组件；开发8题、封存24题，分别验证。共用表示和隔离清单，不要求四维全标。旧11首仅作运动回归。")));
         panel.Children.Add(Note(L.T("按需组件：官方 CLAP 权重约615 MB，另需 CPU PyTorch / Transformers 私有运行时，可能数 GB 磁盘及网络；需本机 Python 3.13+ 和 FFmpeg。CPU每次最多六首、两线程、240秒、监控2 GiB。准备组件只下载公共组件，不上传音频。")));
         panel.Children.Add(training);
         panel.Children.Add(Wrap(Action(L.T("准备官方组件"),()=>Run(()=> { service.Training.Start("prepare"); return Task.CompletedTask; })),Action(L.T("提取 / 续接（最多6首）"),()=>Run(()=> { service.Training.Start("extract"); return Task.CompletedTask; }))));
         panel.Children.Add(Wrap(Action(L.T("训练 / 检查材料"),()=>Run(()=> { service.Training.Start("train"); return Task.CompletedTask; })),Action(L.T("取消工作进程"),()=>service.Training.Cancel())));
-        panel.Children.Add(Action(L.T("导入本档案的既有运动回归反馈"),()=>Run(async()=> {
+        panel.Children.Add(Action(L.T("导入既有运动回归反馈"),()=>Run(async()=> {
             var files=await c.Window.StorageProvider.OpenFilePickerAsync(new() { Title=L.T("选择本机反馈文件（不会作为新训练真值）"),AllowMultiple=false });
             if(files.FirstOrDefault()?.TryGetLocalPath() is not { } path) return;
-            if(await Dialogs.Confirm(c.Main,L.T("确认反馈归属与版本"),L.T("请确认这11首明确运动反馈属于当前档案的同一个人，且当前本机录音版本仍对应原反馈。只导入回归用途，绝不用于训练或其他维度。"),L.T("确认导入回归"))) await service.ImportWorkoutRegression(path,true);
+            if(await Dialogs.Confirm(c.Main,L.T("确认反馈归属与版本"),L.T("请确认这11首明确运动反馈属于你本人，且当前本机录音版本仍对应原反馈。只导入回归用途，绝不用于训练或其他维度。"),L.T("确认导入回归"))) await service.ImportWorkoutRegression(path,true);
         })));
         panel.Children.Add(Action(L.T("提取旧反馈回归（最多六首，不参与拟合）"),()=>Run(()=> { service.Training.Start("regression_extract"); return Task.CompletedTask; })));
         panel.Children.Add(Action(L.T("验收当前冻结阶段（仅完整批次后一次性开启）"),()=>Run(()=> { service.Training.Start("evaluate"); return Task.CompletedTask; })));
-        panel.Children.Add(SubHeading(L.T("同步、导出与删除")));
-        panel.Children.Add(Note(L.T("已配对同一人的设备通过 LAN 主动交换增量修订。其他档案需主动选择；并发答案保留冲突，撤回与删除会传播并使模型失效。手机查看训练状态，不执行 Windows 产物。目录 format 2 兼容仍保留。")));
-        panel.Children.Add(Action(L.T("导出当前档案"),()=>Run(async()=> {
-            var file=await c.Window.StorageProvider.SaveFilePickerAsync(new() { Title=L.T("导出私有标注档案"),SuggestedFileName="personal-preference.json" });
-            if(file?.TryGetLocalPath() is { } path) { service.Store.Export(service.ActiveProfile,path); message.Text=L.T("已导出私有档案（包含个人标签，请妥善保管）。"); }
+        panel.Children.Add(SubHeading(L.T("同步与学习数据")));
+        panel.Children.Add(Note(L.T("已配对同一人的设备通过 LAN 主动交换增量修订。自动同步标注；并发答案保留冲突，撤回与清除会传播并使模型失效。手机查看训练状态，不执行 Windows 产物。目录 format 2 兼容仍保留。")));
+        panel.Children.Add(Action(L.T("导出学习数据"),()=>Run(async()=> {
+            var file=await c.Window.StorageProvider.SaveFilePickerAsync(new() { Title=L.T("导出学习数据"),SuggestedFileName="personal-preference.json" });
+            if(file?.TryGetLocalPath() is { } path) { service.Store.Export(service.ActiveProfile,path); message.Text=L.T("已导出学习数据（包含个人标签，请妥善保管）。"); }
         })));
-        panel.Children.Add(Action(L.T("删除当前档案"),()=>Run(async()=> { if(await Dialogs.Confirm(c.Main,L.T("删除个人档案"),L.T("删除将传播到已配对设备，并使派生候选失效。确认删除？"),L.T("删除"))) service.DeleteProfile(); })));
+        panel.Children.Add(Action(L.T("清除学习数据"),()=>Run(async()=> { if(await Dialogs.Confirm(c.Main,L.T("清除学习数据"),L.T("清除全部学习答案、批次和候选，并同步到已配对设备。离线旧答案不会恢复；之后可重新开始标注。曲库、播放列表、日常标签与配对保持不变。确认清除？"),L.T("清除"))) service.DeleteProfile(); })));
 
         Control IdentityEditor(System.Text.Json.Nodes.JsonNode recording,string id)
         {
@@ -87,15 +80,13 @@ public sealed class PreferenceFeature : IFeature
             {
                 var s=service.Status();
                 if(dimensionChoice!=null) dimensionChoice.SelectedIndex=Array.IndexOf(Dimensions,service.ActiveDimension);
-                live=s["profiles"]!.AsArray().Where(n=>n?["deleted"]?.GetValue<bool>()!=true).ToArray();
-                profiles.Items.Clear(); foreach(var p in live) profiles.Items.Add(S(p?["name"])+" · "+S(p?["profileId"])[..8]);
-                profiles.SelectedIndex=Array.FindIndex(live,p=>S(p?["profileId"])==service.ActiveProfile);
-                status.Text=L.F($"已答 {s["answered"]} · 不确定/版本未定 {s["uncertain"]} · 冲突 {s["conflicts"]} · 可用整曲训练答案 {s["trainingLabels"]}");
+                status.Text=L.F($"已答 {s["answered"]} · 不确定/版本未定 {s["uncertain"]} · 冲突 {s["conflicts"]} · 可用训练反馈 {s["trainingLabels"]}");
+                status.Text+=L.F($" · 待处理 {s["dailyFeedback"]?["pending"]}");
                 var ts=service.Training.Status(); training.Text=L.F($"状态：{StateText(S(ts["state"]))}  {L.T(S(ts["detail"]))}");
                 batchPanel.Children.Clear();
                 if(service.ActiveProfile.Length==0 || service.Deleted(service.ActiveProfile)) return;
                 var inventory=service.Inventory();
-                batchPanel.Children.Add(Note(L.F($"身份档案：已登记 {inventory["registered"]} · 已复核 {inventory["reviewed"]} · 清单 {inventory["studyState"]}")));
+                batchPanel.Children.Add(Note(L.F($"录音身份：已登记 {inventory["registered"]} · 已复核 {inventory["reviewed"]} · 清单 {inventory["studyState"]}")));
                 foreach(var entry in inventory["items"]!.AsArray()) batchPanel.Children.Add(IdentityEditor(entry!["metadata"]!,S(entry["recordingId"])));
                 var batch=service.Batch();
                 batchPanel.Children.Add(Note(L.T("批次：")+(S(batch["state"]).StartsWith("frozen_")?L.T("已冻结"):S(batch["state"]))+L.T("。未核验完整身份图时仅为训练侧非独立试行，开发/测试保持锁定。")));

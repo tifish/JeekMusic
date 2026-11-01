@@ -487,6 +487,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                FilterChip(selected=filter.onlyManual,onClick=viewModel::toggleManualFilter,label={Text(stringResource(R.string.filter_manual))},colors=selectedChipColors())
                 TagDimension.entries.forEach { dimension ->
                     Text(
                         dimensionLabel(dimension),

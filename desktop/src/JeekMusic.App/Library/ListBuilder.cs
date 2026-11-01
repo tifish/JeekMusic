@@ -17,8 +17,9 @@ public static class ListBuilder
     {
         if (filter.Count == 0) return null;
         var wanted = filter.Select(t => (dimension: DimensionOf(t), tag: t)).Where(x => x.dimension is not null).ToList();
-        if (wanted.Count == 0) return null;
-        return t => snapshot.Tags.TryGetValue(t.TrackKey, out var tags) && wanted.All(w => tags[w.dimension!] == w.tag);
+        var manual=filter.Contains("MANUAL");
+        if (wanted.Count == 0 && !manual) return null;
+        return t => snapshot.Tags.TryGetValue(t.TrackKey, out var tags) && wanted.All(w => tags[w.dimension!] == w.tag) && (!manual || tags.MoodManual && tags.Mood!=null || tags.VoiceManual && tags.Voice!=null || tags.GenreManual && tags.Genre!=null || tags.CalmnessManual && tags.Calmness!=null);
     }
 
     public static string? DimensionOf(string tag) => tag switch

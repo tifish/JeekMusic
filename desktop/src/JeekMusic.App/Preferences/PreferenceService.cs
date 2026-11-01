@@ -33,7 +33,7 @@ public sealed partial class PreferenceService : IDisposable
         Notify();
     }
     static string BatchKey(string p,string d)=>"batch:"+p+(d=="MOOD"?"":":"+d);
-    public string ActiveProfile => Store.Local("activeProfile") ?? "";
+    public string ActiveProfile => Dataset;
     public PreferenceService(AppServices app,string? databasePath=null)
     {
         this.app=app;
@@ -41,28 +41,24 @@ public sealed partial class PreferenceService : IDisposable
         if(string.IsNullOrEmpty(device)) app.Db.SetValue("preference_device",device=Guid.NewGuid().ToString("N"));
         Store=new(databasePath??Path.Combine(AppPaths.DataDir,"preferences.db"),device);
         Training=new(this,app,databasePath==":memory:");
+        CleanupLearningArtifacts();
+        InitializeDailyFeedback();
     }
     public void Notify() => Changed?.Invoke();
+    // Deprecated compatibility entry points never create or switch datasets.
     public string CreateProfile(string name,string purpose="personal")
     {
-        if(purpose is not ("personal" or "synthetic_validation")) throw new ArgumentException("Unknown archive purpose");
-        if(name.Trim().Length is <1 or >80) throw new ArgumentException("Profile name requires 1-80 characters");
-        var id=Guid.NewGuid().ToString("N");
-        Store.Append(id,id,"profile",new JsonObject { ["purpose"]=purpose,["name"]=name.Trim(),["contextId"]=Context,["deleted"]=false });
-        Store.SetLocal("activeProfile",id); Notify(); return id;
+        if(purpose!="personal") throw new ArgumentException("Synthetic validation requires an isolated fixture database, configured directly by the test harness");
+        Notify(); return Dataset;
     }
-    public void SelectProfile(string id)
+    public void SelectProfile(string id) { if(id!=Dataset) throw new ArgumentException("Learning data changed; upgrade the caller and omit selection"); Notify(); }
+    public bool Deleted(string profile) => profile!=Dataset;
+    string RequireProfile() => Dataset;
+    void CleanupLearningArtifacts()
     {
-        if(!Store.Profiles().Contains(id) || Deleted(id)) throw new ArgumentException("Unknown/deleted profile");
-        Store.SetLocal("activeProfile",id); Notify();
-    }
-    public bool Deleted(string profile) => Store.Current(profile,"profile").Any(e => e["payload"]?["deleted"]?.GetValue<bool>()==true);
-    string RequireProfile()
-    {
-        var id=ActiveProfile;
-        if(id.Length==0 || Deleted(id)) throw new InvalidOperationException("Create or select a live personal profile first");
-        if(Store.Current(id,"profile").Count!=1) throw new InvalidOperationException("Profile revisions conflict");
-        return id;
+        if(Store.Local("artifactResetPending")!="1") return;
+        Training.PurgeLearningArtifacts(); Store.SetLocal("artifactResetPending","0");
+        if(Store.Local("dailyCursor") is null) ResetDailyCursor();
     }
     public JsonObject Status()
     {
@@ -71,12 +67,12 @@ public sealed partial class PreferenceService : IDisposable
         var grouped=answers.GroupBy(e=>S(e["entityId"])).ToList();
         var manifests=Store.Current(profile,"manifest");
         return new JsonObject { ["protocol"]=JeekMusic.Core.Preferences.PreferenceProtocol.Version,["contextId"]=ContextFor(ActiveDimension),["dimension"]=ActiveDimension,["profileId"]=profile,["deleted"]=profile.Length>0 && Deleted(profile),
-            ["profiles"]=new JsonArray(Store.Profiles().Select(id=>(JsonNode)new JsonObject { ["profileId"]=id,["active"]=id==profile,["deleted"]=Deleted(id),["name"]=S(Store.Current(id,"profile").FirstOrDefault()?["payload"]?["name"]) }).ToArray()),
+            ["profiles"]=new JsonArray(),
             ["answered"]=grouped.Count(g=>g.Count()==1 && S(g.First()["payload"]?["answer"]) is not ("SKIP" or "WITHDRAWN")),
             ["uncertain"]=grouped.Count(g=>g.Count()==1 && S(g.First()["payload"]?["answer"]) is "UNCERTAIN" or "UNRESOLVED"),
-            ["conflicts"]=grouped.Count(g=>g.Count()>1),["trainingLabels"]=grouped.Count(g=>g.Count()==1 && UsableAnswer(g.First())),
+            ["conflicts"]=grouped.Count(g=>g.Count()>1)+SourceDisagreements(answers),["trainingLabels"]=TrainingRows(answers).Count(),
             ["manifestCount"]=manifests.Count,["personalModelEnabled"]=false,["modelState"]="candidate_only",
-            ["heads"]=HeadStatus(profile),["sync"]=Store.SyncStatus(),["training"]=Training.Status() };
+            ["dailyFeedback"]=DailyFeedbackStatus(),["heads"]=HeadStatus(profile),["sync"]=Store.SyncStatus(),["training"]=Training.Status() };
     }
     public JsonObject Batch(bool revealEvaluationAnswers=true,string? dimension=null)
     {
@@ -103,18 +99,18 @@ public sealed partial class PreferenceService : IDisposable
     static string AnswerId(string p,string id,string d)=>Hash(p+":"+ContextFor(d)+":"+id);
     static string AnswerEntity(string p,string id,JsonObject manifest,string d)=>ReadStrings(manifest["payload"]?["repeatIds"]).Contains(id)?Hash(p+":"+ContextFor(d)+":"+id+":repeat:"+S(manifest["entityId"])):AnswerId(p,id,d);
     public static string Question(string d)=>d switch { "MOOD"=>"按你平时运动选歌的标准，这个录音的整首歌适合放进运动歌单吗？","VOICE"=>"按你的标签标准，这个完整录音有明显人声（演唱或说话）吗？","GENRE"=>"按你的标签标准，这个完整录音属于古典音乐吗？",_=>"按你的安静聆听标准，这个完整录音适合安静聆听吗？（与运动标签独立）" };
-    internal bool Synthetic(string profile)=>Store.Current(profile,"profile").Any(e=>S(e["payload"]?["purpose"])=="synthetic_validation");
+    internal bool Synthetic(string profile)=>Store.Local("syntheticFixture")=="1";
     JsonArray HeadStatus(string profile)
     {
         var result=new JsonArray(); var contract=HeadContract();
         foreach(var d in Dimensions)
         {
             var answers=Store.Current(profile,"answer").Where(e=>Dimension(e["payload"])==d).GroupBy(e=>S(e["entityId"])).ToArray();
-            var usable=answers.Where(g=>g.Count()==1).Select(g=>g.Single()).Where(UsableAnswer).ToArray();
+            var usable=TrainingRows(Store.Current(profile,"answer")).Where(e=>Dimension(e["payload"])==d).ToArray();
             var models=Store.Current(profile,"model").Where(e=>Dimension(e["payload"])==d).TakeLast(20).ToArray();
             result.Add((JsonNode)new JsonObject { ["dimension"]=d,["contextId"]=ContextFor(d),["positive"]=Labels(d).Positive,["negative"]=Labels(d).Negative,["trainingLabels"]=usable.Length,
                 ["positiveCount"]=usable.Count(e=>S(e["payload"]?["answer"])==Labels(d).Positive),["negativeCount"]=usable.Count(e=>S(e["payload"]?["answer"])==Labels(d).Negative),
-                ["uncertainCount"]=answers.Count(g=>g.Count()==1 && S(g.First()["payload"]?["answer"]) is "UNCERTAIN" or "UNRESOLVED"),["conflictCount"]=answers.Count(g=>g.Count()>1),
+                ["sourceDisagreements"]=SourceDisagreements(answers.SelectMany(g=>g)),["uncertainCount"]=answers.Count(g=>g.Count()==1 && S(g.First()["payload"]?["answer"]) is "UNCERTAIN" or "UNRESOLVED"),["conflictCount"]=answers.Count(g=>g.Count()>1),
                 ["protocol"]=contract["heads"]![d]!.DeepClone(),["availability"]="candidate_only_until_all_gates",["enabled"]=false,
                 ["models"]=new JsonArray(models.Select(e=>(JsonNode)new JsonObject { ["modelId"]=S(e["entityId"]),["state"]=S(e["payload"]?["state"]),["trainingSetHash"]=S(e["payload"]?["trainingSetHash"]),["extractor"]=S(e["payload"]?["extractor"]),["enabled"]=false }).ToArray()) });
         }
@@ -130,7 +126,7 @@ public sealed partial class PreferenceService : IDisposable
         if(!await preparation.WaitAsync(0,token)) throw new InvalidOperationException("Batch preparation already running");
         try
         {
-            var p=RequireProfile();
+            var p=RequireProfile(); var generation=Store.Generation;
             var existing=Batch();
             if(!inventoryOnly && existing["items"] is JsonArray old && old.Count>0 && old.Any(n=>S(n?["answer"])=="" || n?["conflict"]?.GetValue<bool>()==true)) return existing;
             var attempted=Store.Current(p,"manifest").Where(e=>Dimension(e["payload"])==ActiveDimension).SelectMany(e=>ReadStrings(e["payload"]?["items"])).ToHashSet();
@@ -152,13 +148,14 @@ public sealed partial class PreferenceService : IDisposable
                 var path=app.Library.PathOf(t)!;
                 var info=new FileInfo(path); if(!info.Exists || info.Length!=t.Size || info.LastWriteTimeUtc.Ticks!=t.Mtime) continue;
                 var content=await Task.Run(async ()=> { using var stream=File.OpenRead(path); return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream,token)); },token);
+                if(Store.Generation!=generation) throw new InvalidOperationException("Learning data cleared; start labeling again");
                 info.Refresh(); if(info.Length!=t.Size || info.LastWriteTimeUtc.Ticks!=t.Mtime) continue;
                 var id=Hash("sha256:"+content+":whole");
                 if(attempted.Contains(id) || selected.Contains(id) || knownExposed.Contains(id)) continue;
                 if(Store.Current(p,"recording").All(e=>S(e["entityId"])!=id))
                     Store.Append(p,id,"recording",new JsonObject { ["recordingId"]=id,["contentSignature"]=content,["title"]=t.Title,["artist"]=t.ArtistDisplay,["album"]=t.Album,
                         ["artists"]=Strings(t.Artists.Select(a=>a.Normalize().ToUpperInvariant())),["workGroup"]=t.Title.Normalize().ToUpperInvariant(),["albumGroup"]=(t.AlbumArtist+":"+t.Album).Normalize().ToUpperInvariant(),
-                        ["durationMs"]=t.DurationMs,["identityReviewed"]=false,["exposed"]=app.Db.TagReviews(t.TrackKey,1).Count>0,["supported"]=true });
+                        ["durationMs"]=t.DurationMs,["identityReviewed"]=false,["exposed"]=app.Db.TagReviews(t.TrackKey,1).Count>0,["supported"]=true },expectedGeneration:generation);
                 Store.SetLocal("binding:"+id,t.TrackKey); Store.SetLocal("signature:"+id,$"{t.Mtime}:{t.Size}");
                 selected.Add(id); foreach(var a in t.Artists) artists[a]=artists.GetValueOrDefault(a)+1;
                 var album=t.AlbumKey??t.Album!; albums[album]=albums.GetValueOrDefault(album)+1;
@@ -170,7 +167,7 @@ public sealed partial class PreferenceService : IDisposable
             var payload=new JsonObject { ["dimension"]=ActiveDimension,["protocolVersion"]="v2-operational-pilot",["seed"]=seed,["items"]=Strings(selected),["role"]="training",["state"]="identity_incomplete_pilot",
                 ["independent"]=false,["inventoryCount"]=tracks.Length,["eligibleMetadataCount"]=candidates.Count,["exposure"]="blind_ui_no_predictions",
                 ["limitation"]="Unreviewed work/artist aliases and full-library content identity; development and sealed test remain locked. Pilot is training-side only." };
-            payload["hash"]=Hash(payload.ToJsonString()); Store.Append(p,manifest,"manifest",payload);
+            payload["hash"]=Hash(payload.ToJsonString()); Store.Append(p,manifest,"manifest",payload,expectedGeneration:generation);
             Store.SetLocal(BatchKey(p,ActiveDimension),manifest); Notify(); return Batch();
         }
         finally { preparation.Release(); }
@@ -189,17 +186,22 @@ public sealed partial class PreferenceService : IDisposable
             ["manifestId"]=S(m["entityId"]),["manifestHash"]=S(m["payload"]?["hash"]) },resolve);
         if(S(m["payload"]?["role"])=="training" && !ReadStrings(m["payload"]?["repeatIds"]).Contains(recording) || answer=="WITHDRAWN" || revisesExisting) Training.Invalidate(d); Notify(); return new JsonObject { ["eventId"]=S(e["eventId"]),["revision"]=e["revision"]!.DeepClone(),["saved"]=true };
     }
+    static int SourceDisagreements(IEnumerable<JsonObject> rows)=>rows.Where(e=>S(e["payload"]?["role"])=="training" && UsableAnswer(e)).GroupBy(e=>S(e["payload"]?["recordingId"])).Count(g=>g.Select(e=>S(e["entityId"])).Distinct().Count()>1 && g.Select(e=>S(e["payload"]?["answer"])).Distinct().Count()>1);
     public JsonObject Conflicts(string? dimension=null)
     {
         var p=RequireProfile();
         // Sealed answer text never appears in diagnostics; review through the dedicated labeling screen only.
-        return new JsonObject { ["items"]=new JsonArray(Store.Read(p,"answer").Where(e=>Dimension(e["payload"])==(dimension??ActiveDimension)).GroupBy(e=>S(e["entityId"])).Select(Heads).Where(h=>h.Count>1).Select(h=>(JsonNode)new JsonObject {
-            ["recordingId"]=S(h[0]["payload"]?["recordingId"]),["revisions"]=new JsonArray(h.Select(e=>(JsonNode)new JsonObject { ["eventId"]=S(e["eventId"]),["deviceId"]=S(e["deviceId"]),["answer"]=S(e["payload"]?["answer"]),["basis"]=S(e["payload"]?["basis"]) }).ToArray()) }).ToArray()) };
+        var heads=Store.Current(p,"answer").Where(e=>Dimension(e["payload"])==(dimension??ActiveDimension) && S(e["payload"]?["role"])=="training");
+        return new JsonObject { ["items"]=new JsonArray(heads.GroupBy(e=>S(e["payload"]?["recordingId"])).Where(g=>g.GroupBy(e=>S(e["entityId"])).Any(entity=>entity.Count()>1) || SourceDisagreements(g)>0).Select(g=>(JsonNode)new JsonObject {
+            ["recordingId"]=g.Key,["revisions"]=new JsonArray(g.Select(e=>(JsonNode)new JsonObject { ["eventId"]=S(e["eventId"]),["deviceId"]=S(e["deviceId"]),["source"]=S(e["payload"]?["source"]),["answer"]=S(e["payload"]?["answer"]),["basis"]=S(e["payload"]?["basis"]) }).ToArray()) }).ToArray()) };
+
     }
     public JsonObject Delta(JsonObject request)
     {
-        if(request["protocol"]?.GetValue<int>()!=JeekMusic.Core.Preferences.PreferenceProtocol.Version) throw new ArgumentException("Unsupported preference delta protocol");
+        if(request["protocol"]?.GetValue<int>()!=JeekMusic.Core.Preferences.PreferenceProtocol.Version) throw new ArgumentException("Learning sync requires both devices to upgrade");
         if(S(request["sender"]).Length is <1 or >160) throw new ArgumentException("Invalid sender identity");
+        PreferenceStore.ValidatePage(request["page"]!.AsObject());
+        if(ReadStrings(request["page"]?["resetBoundary"]).Except(Store.ResetBoundary).Any()) Training.PurgeLearningArtifacts();
         var added=Store.AcceptPage(S(request["sender"]),request["page"]!.AsObject());
         if(added>0)
         {
@@ -209,19 +211,19 @@ public sealed partial class PreferenceService : IDisposable
                 if(Store.Current(profile,"manifest").Count(e=>S(e["entityId"])=="global-seal-exposure")>1) Training.Invalidate(profileId:profile);
             foreach(var item in events.Where(n=>S(n?["kind"])=="answer" && ((S(n?["payload"]?["role"])=="training" && n?["payload"]?["repeat"]?.GetValue<bool>()!=true) || S(n?["payload"]?["answer"])=="WITHDRAWN" || ReadStrings(n?["parents"]).Length>0 || Store.Current(S(n?["profileId"]),"answer",true).Count(e=>S(e["entityId"])==S(n?["entityId"]))>1)).Select(n=>(Profile:S(n?["profileId"]),Dim:Dimension(n?["payload"]))).Distinct()) Training.Invalidate(item.Dim,item.Profile);
         }
-        foreach(var profile in Store.Profiles().Where(Deleted)) Training.PurgeProfile(profile);
+        CleanupLearningArtifacts();
         if(added>0) Notify();
         var page=Store.Page(request["after"]?.GetValue<long>()??0); page["acceptedCursor"]=request["page"]!["nextCursor"]!.DeepClone(); return page;
     }
-    public void DeleteProfile() { var p=RequireProfile(); Training.PurgeProfile(p); Store.DeleteProfile(p); Training.Invalidate(); Notify(); }
+    public void DeleteProfile() { Training.PurgeLearningArtifacts(); Store.ClearLearning(); CleanupLearningArtifacts(); Notify(); }
     HashSet<string> ReadExposure(string profile)=>Store.Current(profile,"answer").Where(e=>S(e["payload"]?["role"])=="calibration_regression").Select(e=>S(e["payload"]?["legacyRecordingKeyHash"])).Where(s=>s.Length==64).ToHashSet();
     public void ReviewIdentity(string id,string work,string album,string[] artists,bool exposed)
     {
         if(work.Trim().Length is <1 or >200 || album.Trim().Length is <1 or >200 || artists.Length is <1 or >20 || artists.Any(a=>a.Trim().Length is <1 or >100)) throw new ArgumentException("Explicit reviewed work, release album and artist identities required");
         var p=RequireProfile();
         var r=Store.Current(p,"recording").Single(e=>S(e["entityId"])==id)["payload"]!.DeepClone().AsObject();
-        r["workGroup"]=work.Trim().Normalize().ToUpperInvariant(); r["albumGroup"]=album.Trim().Normalize().ToUpperInvariant(); r["artists"]=Strings(artists.Select(a=>a.Trim().Normalize().ToUpperInvariant())); r["identityReviewed"]=true; r["exposed"]=exposed;
+        r["workGroup"]=work.Trim().Normalize().ToUpperInvariant(); r["albumGroup"]=album.Trim().Normalize().ToUpperInvariant(); r["artists"]=Strings(artists.Select(a=>a.Trim().Normalize().ToUpperInvariant())); r["identityReviewed"]=true; r["exposed"]=exposed || r["selfSelected"]?.GetValue<bool>()==true;
         Store.Append(p,id,"recording",r); Training.Invalidate(); Notify();
     }
-    public void Dispose() { Training.Dispose(); Store.Dispose(); preparation.Dispose(); }
+    public void Dispose() { DisposeDailyFeedback(); Training.Dispose(); Store.Dispose(); preparation.Dispose(); }
 }

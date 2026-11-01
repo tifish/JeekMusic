@@ -101,7 +101,7 @@ def evaluate(rows, attempted, dimension="MOOD"):
     import numpy as np
     h=HEADS[dimension]; positive=h["positive"]; negative=h["negative"]
     # This input is a dedicated training snapshot, not the sync ledger or evaluation database.
-    if any(r.get("role") != "training" or r.get("exposed") or not r.get("identityReviewed") for r in rows): raise ValueError("Training isolation violation")
+    if any(r.get("role") != "training" or (r.get("exposed") and not r.get("selfSelectedTraining")) or not r.get("identityReviewed") for r in rows): raise ValueError("Training isolation violation")
     if len({r["recordingId"] for r in rows}) != len(rows): raise ValueError("Duplicate recording")
     if any(r["label"] not in (positive,negative) or r.get("dimension",dimension)!=dimension for r in rows): raise ValueError("Missing or cross-dimension label cannot become a negative")
     groups = sorted({r["componentId"] for r in rows})
@@ -250,7 +250,7 @@ def main():
                 rows = extract(args.root, data["rows"], start+240)
                 result = {"state": "extraction_complete", "rows": [{k:v for k,v in r.items() if k != "path"} for r in rows], "extractor": EXTRACTOR}
             elif args.action == "train":
-                if any(r.get("labelSource")!="explicit_human_blind_batch" and not (data.get("syntheticFixture",False) and r.get("labelSource")=="synthetic_fixture") for r in data["rows"]): raise ValueError("Only explicit human truth or a declared isolated synthetic validation archive may train")
+                if any(r.get("labelSource")!="explicit_human_blind_batch" and not (data.get("selfSelectedPilot",False) and r.get("selfSelectedTraining") and r.get("labelSource")=="explicit_daily_tag_correction") and not (data.get("syntheticFixture",False) and r.get("labelSource")=="synthetic_fixture") for r in data["rows"]): raise ValueError("Only explicit human truth or a declared isolated synthetic validation archive may train")
                 result = evaluate(data["rows"], data["attempted"],data.get("dimension","MOOD"))
                 result["syntheticFixture"]=data.get("syntheticFixture",False)
             else: result = evaluate_frozen(data)

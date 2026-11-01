@@ -11,7 +11,7 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class PreferenceHeadTests
 {
-    [Fact] public async Task LegacyRegressionRequiresOwnerReviewStaysPrivateAndNeverTrainsOrCrossesProfiles()
+    [Fact] public async Task LegacyRegressionRequiresOwnerReviewStaysPrivateAndCannotCreateAnotherDataset()
     {
         using var session=HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
         await session.Dispatch(async()=> {
@@ -33,7 +33,8 @@ public sealed class PreferenceHeadTests
                 Assert.Empty(app.Preferences.Store.Read(p,"answer"));
                 var result=await app.Preferences.ImportWorkoutRegression(pathOfFeedback,true); Assert.Equal(0,result["trainingRowsAdded"]!.GetValue<int>());
                 Assert.Equal(11,app.Preferences.Store.Current(p,"answer").Count); Assert.All(app.Preferences.Store.Current(p,"answer"),e=>Assert.False(UsableAnswer(e)));
-                var other=app.Preferences.CreateProfile("Another synthetic owner"); Assert.Empty(app.Preferences.Store.Read(other,"answer"));
+                var other=app.Preferences.CreateProfile("Another synthetic owner"); Assert.Equal(p,other); Assert.Equal(11,app.Preferences.Store.Current(other,"answer").Count);
+                Assert.Throws<ArgumentException>(()=>app.Preferences.SelectProfile("retired-id"));
                 Assert.DoesNotContain(typeof(JeekMusic.Preferences.PreferenceService).Assembly.GetManifestResourceNames(),n=>n.Contains("PreferenceExposure"));
             }
             finally { Directory.Delete(root,true); }

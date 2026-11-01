@@ -36,6 +36,7 @@ class TagRepository @Inject constructor(
     private val db: JeekDatabase,
     private val dao: TagDao,
     private val settings: SettingsRepository,
+    private val feedback: com.tinyfish.jeekmusic.data.preference.DailyLearningFeedback,
 ) {
     private val mutex = Mutex()
 
@@ -44,7 +45,7 @@ class TagRepository @Inject constructor(
     suspend fun recomputeAll() = mutex.withLock { db.withTransaction { recomputeCore() } }
 
     private suspend fun recomputeCore() {
-        val sensitivity = settings.current().sensitivity
+        val sensitivity = Sensitivity.LOOSE
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
         val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
         val features = dao.allFeatures().map { original ->
@@ -94,28 +95,35 @@ class TagRepository @Inject constructor(
     suspend fun setManual(trackKey: String, dimension: TagDimension, tag: Tag?) = mutex.withLock {
         require(tag == null || tag.dimension == dimension) { "Invalid tag dimension" }
         require(dimension != TagDimension.CALMNESS || tag != null) { "Use clearManual to restore automatic calmness" }
+        val generation=feedback.prepare()
+        val track=libraryTrackSignature(trackKey)
         db.withTransaction {
             val before = reviewSnapshot(trackKey)
             dao.setOverride(TagOverrideEntity(trackKey, dimension.name, tag?.name))
             recomputeCore()
             dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
-                .put("recordedAt", System.currentTimeMillis()).put("provenance", "manual_correction_not_independent_truth")
+                .put("recordedAt", System.currentTimeMillis()).put("provenance", "manual_correction_not_independent_truth").put("learningGeneration",generation).put("learningDevice",feedback.store.deviceId).put("recordingSignature",track).put("explicitCorrections",JSONObject().put(dimension.name,tag?.name ?: JSONObject.NULL))
                 .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
         }
+        feedback.schedule()
     }
 
     /** 恢复自动识别。 */
     suspend fun clearManual(trackKey: String, dimension: TagDimension) = mutex.withLock {
+        val generation=feedback.prepare()
+        val track=libraryTrackSignature(trackKey)
         db.withTransaction {
             val before = reviewSnapshot(trackKey)
             dao.clearOverride(trackKey, dimension.name)
             recomputeCore()
             dao.saveReview(TagReviewEntity(trackKey = trackKey, record = JSONObject()
-                .put("recordedAt", System.currentTimeMillis()).put("provenance", "restore_automatic")
+                .put("recordedAt", System.currentTimeMillis()).put("provenance", "restore_automatic").put("learningGeneration",generation).put("learningDevice",feedback.store.deviceId).put("recordingSignature",track).put("explicitCorrections",JSONObject().put(dimension.name,JSONObject.NULL))
                 .put("before", before).put("after", reviewSnapshot(trackKey)).toString()))
         }
+        feedback.schedule()
     }
 
+    private suspend fun libraryTrackSignature(key: String)=db.trackDao().byTrackKeys(listOf(key)).singleOrNull()?.let { "${it.dateModified}:${it.size}" }.orEmpty()
     private suspend fun reviewSnapshot(key: String): JSONObject {
         val info = info(key)
         val evidence = AnalysisEvidence.parse(info.features?.analysisEvidence)
@@ -123,7 +131,7 @@ class TagRepository @Inject constructor(
         fun values(map: Map<TagDimension, Tag?>) = JSONObject().also { o -> map.forEach { (d, v) -> o.put(d.name, v?.name ?: JSONObject.NULL) } }
         return JSONObject().put("automatic", values(info.auto)).put("final", values(info.tags))
             .put("manual", org.json.JSONArray(info.manual.map { it.name })).put("analyzerVersion", info.features?.analyzerVersion)
-            .put("rulesVersion", RULES_VERSION).put("evidence", evidence?.toJson()?.let(::JSONObject))
+            .put("rulesVersion", RULES_VERSION).put("workoutPolicy","fixed_loose").put("sensitivity","LOOSE").put("evidence", evidence?.toJson()?.let(::JSONObject))
             .put("calmness", calm?.toJson() ?: JSONObject.NULL)
             .put("classicalTitleMatched", dao.title(key)?.let { ClassicalTitles.matches(it.title, it.album) } == true)
     }
@@ -131,7 +139,7 @@ class TagRepository @Inject constructor(
     suspend fun info(trackKey: String): TagInfo {
         val features = dao.currentFeatures(trackKey)
         val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
-        val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, settings.current().sensitivity, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
+        val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, Sensitivity.LOOSE, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
         val overrides = dao.overrides(trackKey).mapNotNull { o -> TagDimension.entries.firstOrNull { it.name == o.dimension }?.let { it to o } }.toMap()
         val tags = TagDimension.entries.associateWith { d ->
             if (d in overrides) overrideTag(d, overrides.getValue(d).value) else auto[d]
@@ -148,7 +156,7 @@ class TagRepository @Inject constructor(
          */
         const val ANALYZER_VERSION = 6
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 8
+        const val RULES_VERSION = 9
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

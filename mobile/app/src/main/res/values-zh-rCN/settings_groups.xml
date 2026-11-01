@@ -14,9 +14,9 @@
     <string name="settings_group_online_summary">来源、下载与保存位置</string>
     <string name="settings_group_online_on">在线获取已开启 · 来源与保存位置</string>
     <string name="settings_group_online_off">在线获取已关闭 · 来源与保存位置</string>
-    <string name="settings_group_analysis_summary">分析时机与分类灵敏度</string>
+    <string name="settings_group_analysis_summary">本地分析与执行时机</string>
     <plurals name="settings_group_pending">
-        <item quantity="other">%1$d 首待分析 · 时机与灵敏度</item>
+        <item quantity="other">%1$d 首待分析 · 本地分析</item>
     </plurals>
     <string name="settings_group_devices">设备同步 / 连接电脑</string>
     <string name="settings_group_device_summary">连接电脑并选择要同步的音乐</string>

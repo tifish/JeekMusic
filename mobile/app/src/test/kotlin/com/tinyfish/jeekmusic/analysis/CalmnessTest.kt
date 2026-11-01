@@ -6,6 +6,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CalmnessTest {
+    @Test fun manualFilterCombinesAndSurvivesDimensionToggles() {
+        val manual=TagFilter(onlyManual=true)
+        assertTrue(manual.isActive); assertTrue(manual.active.isEmpty())
+        val combined=manual.toggle(Tag.VOCAL).toggle(Tag.CALM)
+        assertTrue(combined.onlyManual); assertEquals(2,combined.active.size)
+        assertTrue(combined.toggle(Tag.VOCAL).toggle(Tag.CALM).onlyManual)
+        assertFalse(TagFilter().onlyManual)
+    }
     @Test fun sharedWindowBoundaries() {
         for (file in listOf("calmness-v6.json", "calmness-v7.json")) {
             val cases = SharedCases.load(file).getJSONArray("cases")

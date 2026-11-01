@@ -70,7 +70,6 @@ import java.text.DateFormat
 import java.util.Date
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.analysis.TagRepository
-import com.tinyfish.jeekmusic.analysis.Sensitivity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.AnalysisMode
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
@@ -209,11 +208,7 @@ class SettingsViewModel @Inject constructor(
         analysis.schedule()
     }
 
-    /** 调整灵敏度后立即生效，不需要重新分析音频（需求 M-8）。 */
-    fun setSensitivity(sensitivity: Sensitivity) = viewModelScope.launch {
-        settingsRepository.setSensitivity(sensitivity)
-        tags.recomputeAll()
-    }
+
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 
@@ -607,20 +602,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                             onClick = { viewModel.setAnalysisMode(mode) },
                         )
                     }
-                    item { SettingsSectionHeader(stringResource(R.string.settings_sensitivity)) }
-                    items(Sensitivity.entries) { s ->
-                        RadioRow(
-                            selected = settings.sensitivity == s,
-                            text = stringResource(
-                                when (s) {
-                                    Sensitivity.LOOSE -> R.string.sensitivity_loose
-                                    Sensitivity.NORMAL -> R.string.sensitivity_normal
-                                    Sensitivity.STRICT -> R.string.sensitivity_strict
-                                },
-                            ),
-                            onClick = { viewModel.setSensitivity(s) },
-                        )
-                    }
+
                 }
                 if (page == SettingsPage.PREFERENCE) { item { com.tinyfish.jeekmusic.ui.preference.PreferencePanel() } }
                 if (page == SettingsPage.DEVICES) {

@@ -3,6 +3,11 @@ namespace JeekMusic.Library;
 /// <summary>智能标签的分析结果和物化标签（设计 §10）。</summary>
 public sealed partial class LibraryDb
 {
+    public long LatestTagReviewId() { lock(Gate) { using var c=Command("SELECT COALESCE(MAX(id),0) FROM tag_review"); return Convert.ToInt64(c.ExecuteScalar()); } }
+    public IReadOnlyList<(long Id,string TrackKey,string Record)> TagReviewsAfter(long after,int limit=100)
+    {
+        lock(Gate) { using var c=Command("SELECT id,track_key,record FROM tag_review WHERE id>$id ORDER BY id LIMIT $n"); c.Parameters.AddWithValue("$id",after); c.Parameters.AddWithValue("$n",limit); using var r=c.ExecuteReader(); var rows=new List<(long,string,string)>(); while(r.Read()) rows.Add((r.GetInt64(0),r.GetString(1),r.GetString(2))); return rows; }
+    }
     public void SaveTagReview(string key, string record)
     {
         lock (Gate) Exec("INSERT INTO tag_review(track_key, record) VALUES($k, $r)", null, ("$k", key), ("$r", record));

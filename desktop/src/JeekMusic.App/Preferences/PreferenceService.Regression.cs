@@ -9,8 +9,8 @@ public sealed partial class PreferenceService
     /// <summary>Explicit owner/version review, private profile only. Never bundled global human truth.</summary>
     public async Task<JsonObject> ImportWorkoutRegression(string path,bool ownerConfirmed,CancellationToken token=default)
     {
-        if(!ownerConfirmed) throw new ArgumentException("Confirm this file belongs to the active profile and the current recording versions");
-        var profile=RequireProfile(); var info=new FileInfo(path);
+        if(!ownerConfirmed) throw new ArgumentException("Confirm this file contains your own answers and the current recording versions");
+        var generation=Store.Generation; var profile=RequireProfile(); var info=new FileInfo(path);
         if(!info.Exists || info.Length>1_000_000) throw new ArgumentException("A local feedback file up to 1 MB is required");
         var text=await File.ReadAllTextAsync(path,token); var input=JsonNode.Parse(text)?["records"] as JsonArray ?? throw new ArgumentException("Feedback records required");
         if(input.Count!=11 || input.Any(n=>S(n?["label"]) is not ("SPORT" or "NON_SPORT")) || input.Select(n=>S(n?["recording_key_sha256"])).Distinct().Count()!=11)
@@ -34,9 +34,9 @@ public sealed partial class PreferenceService
             changes.Add((profile,Hash(profile+":"+Context+":"+id+":calibration_regression"),"answer",new JsonObject { ["dimension"]="MOOD",["recordingId"]=id,["contentSignature"]=content,["contextId"]=Context,["answer"]=S(item?["label"]),["basis"]="unclear",
                 ["reason"]=S(item?["reason"])[..Math.Min(500,S(item?["reason"]).Length)],["source"]="legacy_explicit_feedback_reviewed",["role"]="calibration_regression",["manifestId"]="legacy-regression",["manifestHash"]=manifestHash,["legacyRecordingKeyHash"]=keyHash,["baselineAtFeedback"]=S(item?["verified"]?["automatic"]?["MOOD"]),["exposure"]="previously_used_for_tuning_not_independent" }));
         }
-        if(ActiveProfile!=profile || Deleted(profile)) throw new InvalidOperationException("Active profile changed during review; no imported answers committed");
+        if(Store.Generation!=generation) throw new InvalidOperationException("Learning data cleared during review; no imported answers committed");
         changes.Add((profile,"legacy-regression","manifest",new JsonObject { ["dimension"]="MOOD",["role"]="calibration_regression",["recordings"]=Strings(ids),["state"]="owner_and_version_reviewed",["hash"]=manifestHash,["independent"]=false }));
-        Store.AppendBatch(changes);
+        Store.AppendBatch(changes,generation);
         foreach(var b in bindings) { Store.SetLocal("binding:"+b.Id,b.Key); Store.SetLocal("signature:"+b.Id,b.Signature); }
         Training.Invalidate(); Notify(); return new JsonObject { ["imported"]=11,["role"]="calibration_regression",["trainingRowsAdded"]=0,["profileId"]=profile };
     }

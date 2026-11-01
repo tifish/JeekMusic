@@ -236,7 +236,6 @@
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;文件名&apos;}" Binding="{Binding FileName}" Width="2*" Tag="FileName" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;修改时间&apos;}" Binding="{Binding Modified}" Width="154" Tag="Modified" />
                             <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;格式&apos;}" Binding="{Binding Format}" Width="96" Tag="Format" />
-                            <DataGridTextColumn x:DataType="vm:SongRow" Header="{ui:Tr &apos;智能标签&apos;}" Binding="{Binding TagText}" Width="140" Tag="Tags" />
                             <DataGridTemplateColumn Header="{ui:Tr &apos;运动&apos;}" Width="100" MinWidth="64" Tag="Mood" IsVisible="False" CanUserSort="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="vm:SongRow">

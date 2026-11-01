@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using JeekMusic.UI.ViewModels;
 using JeekMusic.Core.Analysis;
 using JeekMusic.Library;
@@ -21,6 +22,7 @@ public partial class MainWindow
         ("Mood", TagDimension.MOOD, "运动"), ("Voice", TagDimension.VOICE, "人声"),
         ("Genre", TagDimension.GENRE, "古典"), ("Calmness", TagDimension.CALMNESS, "安静"),
     ];
+    MenuItem? _quickTagPanelRoot;
     bool _quickTagSaving;
     string _quickTagState = "idle";
     string? _quickTagDimension;
@@ -44,15 +46,34 @@ public partial class MainWindow
             IsEnabled = targets.Length > 0 && !_quickTagSaving };
         AutomationProperties.SetName(root, L.T("快速修正标签"));
         var buttons = new List<ToggleButton>();
+        var summaries=new Dictionary<TagDimension,TextBlock>();
+        var options=new Dictionary<ToggleButton,(TagDimension Dimension,Tag? Value)>();
+        void RefreshCurrent()
+        {
+            var saved=_app.SmartTags.Read();
+            foreach(var (dimension,text) in summaries)
+            {
+                text.Text=QuickCurrentValue(targets,saved,dimension);
+                var help=SmartTagDialog.Summary(targets,saved,dimension); ToolTip.SetTip(text,help); AutomationProperties.SetHelpText(text,help);
+            }
+            foreach(var (button,option) in options)
+            {
+                button.IsChecked=TagChoices(targets,saved,option.Dimension).Single(c=>c.Value==option.Value).Marked;
+                AutomationProperties.SetHelpText(button,SmartTagDialog.Summary(targets,saved,option.Dimension));
+            }
+        }
+        var attached=false;
+        void Changed()=>Dispatcher.UIThread.Post(()=> { if(attached) RefreshCurrent(); });
+        root.AttachedToVisualTree+=(_,_)=> { attached=true; _quickTagPanelRoot=root; _app.SmartTags.ResultsChanged+=Changed; RefreshCurrent(); };
+        root.DetachedFromVisualTree+=(_,_)=> { attached=false; _app.SmartTags.ResultsChanged-=Changed; if(_quickTagPanelRoot==root) _quickTagPanelRoot=null; };
         var error = new TextBlock { Name = "QuickTagError", IsVisible = false, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
         foreach (var (_, dimension, label) in TagColumns)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions(L.IsEnglish ? "156,76,104,80" : "188,72,72,84"), ColumnSpacing = 4, MinHeight = 44 };
-            row.Children.Add(new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = {
-                new TextBlock { Text = L.T(label), FontWeight = FontWeight.SemiBold },
-                new TextBlock { Name = "QuickCurrent" + dimension, Text = SmartTagDialog.Summary(targets, current, dimension),
-                    FontSize = 11, Opacity = .7, TextWrapping = TextWrapping.Wrap,
-                    [ToolTip.TipProperty] = SmartTagDialog.Summary(targets, current, dimension) } } });
+            var currentValue=new TextBlock { Name="QuickCurrent"+dimension,Text=QuickCurrentValue(targets,current,dimension),FontWeight=FontWeight.SemiBold,
+                VerticalAlignment=VerticalAlignment.Center,TextWrapping=TextWrapping.NoWrap,TextTrimming=TextTrimming.CharacterEllipsis,MaxLines=1 };
+            AutomationProperties.SetName(currentValue,L.T(label)+": "+currentValue.Text);
+            summaries[dimension]=currentValue; row.Children.Add(currentValue);
             var column = 1;
             foreach (var (value, text, marked) in TagChoices(targets, current, dimension))
             {
@@ -63,7 +84,7 @@ public partial class MainWindow
                 AutomationProperties.SetName(button, L.T(label) + ": " + text);
                 AutomationProperties.SetHelpText(button, SmartTagDialog.Summary(targets, current, dimension));
                 ToolTip.SetTip(button, text);
-                Grid.SetColumn(button, column++); row.Children.Add(button); buttons.Add(button);
+                Grid.SetColumn(button, column++); row.Children.Add(button); buttons.Add(button); options[button]=(dimension,value);
                 button.Click += async (_, e) =>
                 {
                     e.Handled = true;
@@ -71,9 +92,9 @@ public partial class MainWindow
                     panel.IsEnabled = false; error.IsVisible = false;
                     await ApplyQuickTag(targets, dimension, value);
                     panel.IsEnabled = true;
-                    // Close only after success; a failed transaction stays available for retry or Escape.
-                    if (_quickTagState == "saved") root.FindAncestorOfType<ContextMenu>()?.Close();
-                    else { button.IsChecked = marked; error.Text = L.T("保存失败，请重试"); error.IsVisible = true; button.Focus(); }
+                    RefreshCurrent();
+                    if (_quickTagState != "saved") { error.Text = L.T("保存失败，请重试"); error.IsVisible = true; }
+                    button.Focus();
                 };
             }
             panel.Children.Add(row);
@@ -109,6 +130,11 @@ public partial class MainWindow
         return root;
     }
 
+    internal static string QuickCurrentValue(IReadOnlyList<Track> targets,IReadOnlyDictionary<string,SongTags> current,TagDimension dimension)
+    {
+        var values=targets.Select(t=>Text.TagValue(current.GetValueOrDefault(t.TrackKey),dimension)).Distinct().ToArray();
+        return values.Length>1?L.T("多个值"):values.Length==1 && values[0] is { } value?Text.TagName(value.ToString()):L.T("无分析结果");
+    }
     static IEnumerable<(Tag? Value, string Text, bool Marked)> TagChoices(Track[] targets, IReadOnlyDictionary<string, SongTags> current, TagDimension dimension)
     {
         var states = targets.Select(t => current.GetValueOrDefault(t.TrackKey)).ToArray();
@@ -196,6 +222,8 @@ public partial class MainWindow
                 ["visible"] = column.IsVisible, ["width"] = column.ActualWidth, ["order"] = column.DisplayIndex };
         }).ToArray()),
         ["quickCorrection"] = new JsonObject { ["state"] = _quickTagState, ["dimension"] = _quickTagDimension,
-            ["targetCount"] = _quickTagCount, ["busy"] = _quickTagSaving }
+            ["targetCount"] = _quickTagCount, ["busy"] = _quickTagSaving,
+            ["menuOpen"]=_quickTagPanelRoot?.FindAncestorOfType<ContextMenu>()?.IsOpen==true,["currentValueLines"]=1,["keepsOpenAfterSave"]=true,
+            ["currentValues"]=new JsonObject((_quickTagPanelRoot?.Header as StackPanel)?.GetVisualDescendants().OfType<TextBlock>().Where(t=>t.Name?.StartsWith("QuickCurrent")==true).Select(t=>new KeyValuePair<string,JsonNode?>(t.Name![12..],JsonValue.Create(t.Text)))??[]) }
     };
 }

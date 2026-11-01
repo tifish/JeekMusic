@@ -152,7 +152,7 @@ public partial class MainWindow : Window
     static readonly Dictionary<string, string> ColumnTitles = new()
     {
         ["Title"] = L.T("标题"), ["Artist"] = L.T("艺术家"), ["Album"] = L.T("专辑"), ["Duration"] = L.T("时长"), ["FileName"] = L.T("文件名"),
-        ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"), ["Tags"] = L.T("智能标签"),
+        ["Modified"] = L.T("修改时间"), ["Format"] = L.T("格式"),
         ["Mood"] = L.T("运动"), ["Voice"] = L.T("人声"), ["Genre"] = L.T("古典"), ["Calmness"] = L.T("安静"),
     };
 
@@ -324,6 +324,8 @@ public partial class MainWindow : Window
         Group(L.T("人声"), "VOCAL", "INSTRUMENTAL");
         Group(L.T("曲风"), "CLASSICAL", "NON_CLASSICAL");
         Group(L.T("平静程度"), "CALM", "NON_CALM");
+        var manual=new MenuItem { Header=L.T("已手工标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("MANUAL") };
+        manual.Click+=(_,_)=>_vm.ToggleTag("MANUAL"); menu.Items.Add(manual);
         menu.Items.Add(new Separator());
         var clear = new MenuItem { Header = L.T("清除筛选"), IsEnabled = _vm.FilterActive };
         clear.Click += (_, _) => _vm.ClearFilterCommand.Execute(null);

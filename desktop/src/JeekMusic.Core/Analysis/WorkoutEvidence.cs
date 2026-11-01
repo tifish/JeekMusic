@@ -1,7 +1,7 @@
 namespace JeekMusic.Core.Analysis;
 
 /// <summary>Conservative v8 extension: sustained model evidence AND independent musical pulse evidence.
-/// The legacy thresholds remain unchanged; these are uncalibrated support measures, not probabilities.</summary>
+/// Rules9 uses the fixed loose threshold for decisions and sampling; support is uncalibrated, not probability.</summary>
 public static class WorkoutEvidence
 {
     public static int StrongRun(SegmentEvidence segment, Sensitivity sensitivity)
@@ -16,7 +16,7 @@ public static class WorkoutEvidence
     }
 
     public static bool NeedsPulse(AnalysisEvidence evidence) => evidence.Complete &&
-        evidence.Aggregate() is { Sport: < 3.75 } &&
+        evidence.Aggregate() is { } aggregate && aggregate.Sport < Sensitivity.LOOSE.Sport() &&
         evidence.ScoredSegments().Count(s => StrongRun(s, Sensitivity.LOOSE) >= 3) >= 2;
 
     public static IReadOnlyList<(SegmentEvidence Segment, long StartMs, long EndMs)> Plan(

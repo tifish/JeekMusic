@@ -30,14 +30,15 @@ import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.objects
 import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.strings
 
 @Singleton
-class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService) {
+class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService, private val feedback: DailyLearningFeedback) {
     // Lazy: adding the module does not touch storage or change settings-task startup behaviour.
-    val store by lazy { PreferenceStore(context) }
+    val store get()=feedback.store
     private var foregroundJob: kotlinx.coroutines.Job?=null
     @Volatile private var transport: com.tinyfish.jeekmusic.data.sync.LanProtocol?=null
     private val syncGate=kotlinx.coroutines.sync.Mutex()
     val syncState=MutableStateFlow("idle")
     fun onForeground(scope: kotlinx.coroutines.CoroutineScope) {
+        feedback.start()
         if(foregroundJob?.isActive==true) return
         foregroundJob=scope.launch(Dispatchers.IO) {
             while(kotlinx.coroutines.currentCoroutineContext().isActive) {
@@ -48,7 +49,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     }
     fun onBackground() { foregroundJob?.cancel(); transport?.cancel(); foregroundJob=null }
     private val _revision=MutableStateFlow(0)
-    val revision=_revision.asStateFlow()
+    val revision=kotlinx.coroutines.flow.merge(_revision,feedback.revision)
     val activeDimension get()=store.local("activeDimension") ?: "MOOD"
     private fun batchKey(p: String,d: String)="batch:"+p+(if(d=="MOOD") "" else ":$d")
     fun selectDimension(d: String) {
@@ -61,22 +62,15 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         }
         notifyChanged()
     }
-    val activeProfile get()=store.local("activeProfile").orEmpty()
+    val activeProfile get()=PreferenceStore.DATASET
     fun notifyChanged() { _revision.value++ }
-    fun deleted(p: String)=store.current(p,"profile").any { it.getJSONObject("payload").optBoolean("deleted") }
-    fun profiles()=store.profiles().map { id -> JSONObject().put("profileId",id).put("name",store.current(id,"profile").firstOrNull()?.getJSONObject("payload")?.optString("name").orEmpty()).put("deleted",deleted(id)) }
-    fun create(name: String) {
-        require(name.trim().length in 1..80)
-        val id=UUID.randomUUID().toString().replace("-","")
-        store.append(id,id,"profile",JSONObject().put("name",name.trim()).put("contextId",CONTEXT).put("deleted",false)); select(id)
-    }
-    fun select(id: String) { require(id in store.profiles() && !deleted(id)); store.setLocal("activeProfile",id); notifyChanged() }
-    private fun profile(): String=activeProfile.also { require(it.isNotEmpty() && !deleted(it)) { "Create or select a live profile" }; require(store.current(it,"profile").size==1) { "Profile conflict" } }
+    fun deleted(p: String)=p!=PreferenceStore.DATASET
+    private fun profile()=PreferenceStore.DATASET
     fun status(): JSONObject {
         val p=activeProfile
         val answers=store.current(p,"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension }.groupBy { it.getString("entityId") }
         return JSONObject().put("dimension",activeDimension).put("profileId",p).put("answered",answers.values.count { it.size==1 && it.single().getJSONObject("payload").getString("answer") !in listOf("SKIP","WITHDRAWN") })
-            .put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",false)
+            .put("dailyFeedback",feedback.status()).put("conflicts",answers.values.count { it.size>1 }).put("modelEnabled",false)
             .put("training",store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==activeDimension }.maxByOrNull { it.getLong("at") }?.getJSONObject("payload")?.optString("state") ?: "windows_cpu_required")
     }
     fun batch(): JSONObject {
@@ -99,28 +93,29 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         return JSONObject().put("manifestId",manifest.getString("entityId")).put("state",manifest.getJSONObject("payload").optString("state")).put("items",rows)
     }
     fun answer(id: String, answer: String, basis: String, reason: String, resolve: Boolean=false) {
-        val p=profile(); require(answer in answers && basis in bases && reason.length<=500)
+        val p=profile(); val generation=store.generation; require(answer in answers && basis in bases && reason.length<=500)
         val m=store.current(p,"manifest").first { dimension(it.getJSONObject("payload"))==activeDimension && it.getString("entityId")==batch().getString("manifestId") && id in strings(it.getJSONObject("payload").optJSONArray("items") ?: JSONArray()) }
         val r=store.current(p,"recording").single { it.getString("entityId")==id }.getJSONObject("payload")
         val payload=JSONObject().put("recordingId",id).put("contentSignature",r.getString("contentSignature")).put("contextId",context(activeDimension)).put("dimension",activeDimension).put("answer",answer).put("basis",basis).put("reason",reason)
-            .put("source",if(store.current(p,"profile").any { it.getJSONObject("payload").optString("purpose")=="synthetic_validation" }) "synthetic_fixture" else "explicit_human_blind_batch").put("exposure",m.getJSONObject("payload").optString("exposure")).put("role",m.getJSONObject("payload").getString("role"))
+            .put("source",if(store.local("syntheticFixture")=="1") "synthetic_fixture" else "explicit_human_blind_batch").put("exposure",m.getJSONObject("payload").optString("exposure")).put("role",m.getJSONObject("payload").getString("role"))
             .put("manifestId",m.getString("entityId")).put("manifestHash",m.getJSONObject("payload").optString("hash"))
         val repeat=id in strings(m.getJSONObject("payload").optJSONArray("repeatIds") ?: JSONArray()); payload.put("repeat",repeat)
         val entity=if(repeat) hash("$p:${context(activeDimension)}:$id:repeat:"+m.getString("entityId")) else hash("$p:${context(activeDimension)}:$id")
         val revisesExisting=store.current(p,"answer",true).any { it.getString("entityId")==entity }
-        store.append(p,entity,"answer",payload,resolve)
+        store.append(p,entity,"answer",payload,resolve,expectedGeneration=generation)
         if((m.getJSONObject("payload").getString("role")=="training" && !repeat) || answer=="WITHDRAWN" || revisesExisting) invalidateHead(p,activeDimension)
         notifyChanged()
     }
     private fun invalidateHead(p: String,d: String) {
-        for(e in store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate") }) {
+        for(e in store.current(p,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("state") in listOf("development_required","regression_required","independent_test_required","pass_research_gate","self_selected_candidate") }) {
             val payload=JSONObject(e.getJSONObject("payload").toString()).put("state","invalidated").put("enabled",false); store.append(p,e.getString("entityId"),"model",payload,true)
         }
     }
     fun conflicts(id: String)=store.current(profile(),"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension && it.getJSONObject("payload").getString("recordingId")==id }.map { e -> e.getJSONObject("payload").getString("answer")+" · "+e.getJSONObject("payload").getString("basis")+" · "+e.getString("deviceId").take(8) }
-    fun delete() { val p=profile(); store.append(p,p,"profile",JSONObject().put("deleted",true).put("contextId",CONTEXT),true); notifyChanged() }
-    fun export()=JSONObject().put("protocol",2).put("events",JSONArray(store.read(profile(),evaluation=true))).toString()
+    suspend fun delete() { store.clearLearning(); notifyChanged() }
+    fun export()=JSONObject().put("protocol",PreferenceStore.VERSION).put("resetBoundary",JSONArray(store.resetBoundary)).put("generation",store.generation).put("events",JSONArray(store.read(profile(),evaluation=true))).toString()
     suspend fun synchronize(includeUserData: Boolean=true)=withContext(Dispatchers.IO) { syncGate.withLock {
+        feedback.capture()
         syncState.value="syncing"
         val connection=lan.read().getJSONObject("connection")
         val peer="pc:"+connection.getString("pin")
@@ -132,7 +127,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
             do {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val page=store.page(upload)
-                val reply=client.call("preference_delta",JSONObject().put("protocol",2).put("sender",store.deviceId).put("page",page).put("after",store.cursor(peer)))
+                val reply=client.call("preference_delta",JSONObject().put("protocol",PreferenceStore.VERSION).put("sender",store.deviceId).put("page",page).put("after",store.cursor(peer)))
                 store.accept(peer,reply)
                 upload=reply.getLong("acceptedCursor"); store.setLocal("upload:$peer",upload.toString())
                 pages++
@@ -141,7 +136,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         transport=null; syncState.value="synced"; notifyChanged()
     } }
     suspend fun trainingStatus()=withContext(Dispatchers.IO) {
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { it.call("preference_training",JSONObject().put("profileId",profile()).put("dimension",activeDimension)) }
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { it.call("preference_training",JSONObject().put("protocol",PreferenceStore.VERSION).put("dimension",activeDimension)) }
     }
     private fun frozenBatch(p: String,study: JSONObject): JSONObject {
         val d=activeDimension
@@ -156,6 +151,8 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
             val keys=listOf("content:"+r.optString("contentSignature"),"work:"+r.optString("workGroup"),"album:"+r.optString("albumGroup"))+strings(r.optJSONArray("artists") ?: JSONArray()).map { "artist:$it" }
             for(key in keys.filterNot { it.endsWith(":") }) { val other=seen[key]; if(other==null) seen[key]=id else parent[root(id)]=root(other) }
         }
+        val reserved=(strings(study.getJSONArray("development"))+strings(study.getJSONArray("sealed_test"))).filter { it in parent }.map(::root).toSet()
+        require(records.none { it.getJSONObject("payload").optBoolean("exposed") && root(it.getString("entityId")) in reserved }) { "Self-selected feedback contaminated independent validation; review on PC" }
         val sides=mutableMapOf<String,MutableSet<String>>()
         for(role in listOf("training","development","sealed_test")) for(id in strings(study.getJSONArray(role))) { require(parent.containsKey(id)); sides.getOrPut(root(id)) { mutableSetOf() }+=role }
         require(sides.values.none { it.size>1 }) { "Cross-dimension identity contamination; sealed evaluation invalid" }
@@ -213,7 +210,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         }
     }
     suspend fun prepare()=withContext(Dispatchers.IO) {
-        val p=profile(); val old=batch()
+        val p=profile(); val generation=store.generation; val old=batch()
         if(objects(old.getJSONArray("items")).any { it.optString("answer").isEmpty() || it.optBoolean("conflict") }) return@withContext old
         store.current(p,"manifest").singleOrNull { it.getString("entityId")=="study-v1" }?.let { return@withContext frozenBatch(p,it.getJSONObject("payload")) }
         val attempted=store.current(p,"manifest").filter { dimension(it.getJSONObject("payload"))==activeDimension }.flatMap { strings(it.getJSONObject("payload").optJSONArray("items") ?: JSONArray()) }.toSet()
@@ -225,14 +222,15 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
                 val digest=MessageDigest.getInstance("SHA-256"); val buffer=ByteArray(1024*1024)
                 while(true) { val n=input.read(buffer); if(n<0) break; digest.update(buffer,0,n) }; digest.digest().joinToString("") { "%02x".format(it) }
             } }.getOrNull() ?: continue
+            require(store.generation==generation) { "Learning data cleared; start labeling again" }
             val id=hash("sha256:$content:whole"); if(id in attempted || id in ids) continue
             if(store.current(p,"recording").none { it.getString("entityId")==id }) store.append(p,id,"recording",JSONObject().put("recordingId",id).put("contentSignature",content).put("title",t.title).put("artist",t.artistDisplay).put("album",t.album)
-                .put("artists",JSONArray(listOf(t.artistDisplay))).put("workGroup",t.title).put("albumGroup",t.album).put("durationMs",t.durationMs).put("identityReviewed",false).put("exposed",false).put("supported",true))
+                .put("artists",JSONArray(listOf(t.artistDisplay))).put("workGroup",t.title).put("albumGroup",t.album).put("durationMs",t.durationMs).put("identityReviewed",false).put("exposed",false).put("supported",true),expectedGeneration=generation)
             store.setLocal("binding:$id",t.trackKey); ids+=id; if(ids.size==6) break
         }
         require(ids.isNotEmpty()) { "No supported new recordings" }
         val id=UUID.randomUUID().toString().replace("-","")
         val payload=JSONObject().put("dimension",activeDimension).put("protocolVersion","v2-operational-pilot").put("seed","personal-workout-v1").put("items",JSONArray(ids)).put("role","training").put("state","identity_incomplete_pilot").put("independent",false).put("exposure","blind_ui_no_predictions")
-        payload.put("hash",hash(payload.toString())); store.append(p,id,"manifest",payload); store.setLocal(batchKey(p,activeDimension),id); notifyChanged(); batch()
+        payload.put("hash",hash(payload.toString())); store.append(p,id,"manifest",payload,expectedGeneration=generation); store.setLocal(batchKey(p,activeDimension),id); notifyChanged(); batch()
     }
 }

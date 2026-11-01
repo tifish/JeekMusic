@@ -42,6 +42,8 @@ public static class PreferenceStudy
     {
         var graph=Group(current);
         if(graph.Unresolved.Length>0) return true;
+        var reserved=ReadStrings(frozen["development"]).Concat(ReadStrings(frozen["sealed_test"])).Where(graph.Components.ContainsKey).Select(id=>graph.Components[id]).ToHashSet();
+        if(current.Any(r=>r.Exposed && reserved.Contains(graph.Components[r.Id]))) return true;
         var sides=new Dictionary<string,HashSet<string>>();
         foreach(var role in new[] { "training","development","sealed_test" })
             foreach(var id in ReadStrings(frozen[role]))

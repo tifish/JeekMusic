@@ -10,53 +10,53 @@ public sealed class PreferenceStoreTests
     [Fact] public void OfflineBranchesRetryWithdrawalAndExplicitResolution()
     {
         using var a=new PreferenceStore(":memory:","pc"); using var b=new PreferenceStore(":memory:","phone");
-        var initial=a.Append("person","answer","answer",Answer());
+        var initial=a.Append(Dataset,"answer","answer",Answer());
         b.AcceptPage("pc",a.Page(0)); b.AcceptPage("pc",a.Page(0));
-        Assert.Single(b.Current("person","answer"));
-        a.Append("person","answer","answer",Answer("NON_SPORT"));
-        b.Append("person","answer","answer",Answer("WITHDRAWN"));
+        Assert.Single(b.Current(Dataset,"answer"));
+        a.Append(Dataset,"answer","answer",Answer("NON_SPORT"));
+        b.Append(Dataset,"answer","answer",Answer("WITHDRAWN"));
         a.AcceptPage("phone",b.Page(0)); b.AcceptPage("pc",a.Page(0));
-        Assert.Equal(2,a.Current("person","answer").Count);
-        Assert.Equal(2,b.Current("person","answer").Count);
-        Assert.Throws<InvalidOperationException>(()=>a.Append("person","answer","answer",Answer()));
-        a.Append("person","answer","answer",Answer("UNCERTAIN"),true);
+        Assert.Equal(2,a.Current(Dataset,"answer").Count);
+        Assert.Equal(2,b.Current(Dataset,"answer").Count);
+        Assert.Throws<InvalidOperationException>(()=>a.Append(Dataset,"answer","answer",Answer()));
+        a.Append(Dataset,"answer","answer",Answer("UNCERTAIN"),true);
         b.AcceptPage("pc",a.Page(0));
-        Assert.Equal("UNCERTAIN",S(Assert.Single(b.Current("person","answer"))["payload"]?["answer"]));
-        Assert.False(UsableAnswer(Assert.Single(b.Current("person","answer"))));
+        Assert.Equal("UNCERTAIN",S(Assert.Single(b.Current(Dataset,"answer"))["payload"]?["answer"]));
+        Assert.False(UsableAnswer(Assert.Single(b.Current(Dataset,"answer"))));
     }
     [Fact] public void SealedAnswersAreAbsentFromTrainingStoreButStillSync()
     {
         using var a=new PreferenceStore(":memory:","pc"); using var b=new PreferenceStore(":memory:","phone");
-        a.Append("person","sealed","answer",Answer("SPORT","sealed_test"));
-        a.Append("person","dev","answer",Answer("NON_SPORT","development"));
-        Assert.Empty(a.Read("person","answer"));
-        Assert.Equal(2,a.Read("person","answer",true).Count);
-        b.AcceptPage("pc",a.Page(0)); Assert.Empty(b.Read("person","answer")); Assert.Equal(2,b.Read("person","answer",true).Count);
+        a.Append(Dataset,"sealed","answer",Answer("SPORT","sealed_test"));
+        a.Append(Dataset,"dev","answer",Answer("NON_SPORT","development"));
+        Assert.Empty(a.Read(Dataset,"answer"));
+        Assert.Equal(2,a.Read(Dataset,"answer",true).Count);
+        b.AcceptPage("pc",a.Page(0)); Assert.Empty(b.Read(Dataset,"answer")); Assert.Equal(2,b.Read(Dataset,"answer",true).Count);
     }
     [Fact] public void MutationAndCrossProfileAncestryRollBackTheWholePage()
     {
         using var a=new PreferenceStore(":memory:","pc");
-        var e=a.Append("person","answer","answer",Answer());
+        var e=a.Append(Dataset,"answer","answer",Answer());
         var changed=e.DeepClone().AsObject(); changed["payload"]!["answer"]="NON_SPORT";
         var other=e.DeepClone().AsObject(); other["eventId"]="other";
         Assert.Throws<InvalidDataException>(()=>a.Import([other,changed]));
-        Assert.Single(a.Read("person","answer"));
+        Assert.Single(a.Read(Dataset,"answer"));
         var bad=e.DeepClone().AsObject(); bad["eventId"]="bad"; bad["profileId"]="another"; bad["parents"]=Strings([S(e["eventId"])]); bad["revision"]=2L;
-        Assert.Throws<InvalidDataException>(()=>a.Import([bad]));
-        a.Append("person","answer","answer",Answer("WITHDRAWN")); // connection usable after rollback
-        Assert.False(UsableAnswer(Assert.Single(a.Current("person","answer"))));
+        Assert.Throws<ArgumentException>(()=>a.Import([bad]));
+        a.Append(Dataset,"answer","answer",Answer("WITHDRAWN")); // connection usable after rollback
+        Assert.False(UsableAnswer(Assert.Single(a.Current(Dataset,"answer"))));
     }
     [Fact] public void PagesPersistAcrossRestartAndCannotSkipAfterFailedImport()
     {
         var path=Path.Combine(Path.GetTempPath(),"jeek-preference-"+Guid.NewGuid().ToString("N")+".db");
         try
         {
-            using(var a=new PreferenceStore(path,"pc")) for(int i=0;i<7;i++) a.Append("person","r"+i,"recording",new JsonObject());
+            using(var a=new PreferenceStore(path,"pc")) for(int i=0;i<7;i++) a.Append(Dataset,"r"+i,"recording",new JsonObject());
             using var source=new PreferenceStore(path,"pc"); using var target=new PreferenceStore(":memory:","phone");
             var page=source.Page(0,3); target.AcceptPage("pc",page); Assert.Equal(3,target.Cursor("pc"));
             var malformed=source.Page(3,3); malformed["events"]![0]!["protocol"]=99;
             Assert.Throws<ArgumentException>(()=>target.AcceptPage("pc",malformed)); Assert.Equal(3,target.Cursor("pc"));
-            target.AcceptPage("pc",source.Page(target.Cursor("pc"))); Assert.Equal(7,target.Read("person").Count);
+            target.AcceptPage("pc",source.Page(target.Cursor("pc"))); Assert.Equal(7,target.Read(Dataset).Count);
         }
         finally { foreach(var f in new[] {path,path+".evaluation"}) if(File.Exists(f)) File.Delete(f); }
     }
@@ -70,23 +70,24 @@ public sealed class PreferenceStoreTests
     [Fact] public void DeletionRedactsBodiesPropagatesAndDoesNotResurrectOfflineEdits()
     {
         using var a=new PreferenceStore(":memory:","pc"); using var b=new PreferenceStore(":memory:","phone");
-        a.Append("person","person","profile",new JsonObject { ["name"]="Private name" });
-        a.Append("person","answer","answer",Answer()); b.AcceptPage("pc",a.Page(0));
-        b.Append("person","answer","answer",Answer("NON_SPORT"));
-        a.DeleteProfile("person");
+        a.Append(Dataset,"answer","answer",Answer()); b.AcceptPage("pc",a.Page(0));
+        b.Append(Dataset,"answer","answer",Answer("NON_SPORT"));
+        a.DeleteProfile(Dataset);
         a.AcceptPage("phone",b.Page(0));
-        Assert.Empty(a.Read("person","answer",true));
+        Assert.Empty(a.Read(Dataset,"answer",true));
         b.AcceptPage("pc",a.Page(b.Cursor("pc")));
-        Assert.Empty(b.Read("person","answer",true));
-        Assert.True(Assert.Single(b.Current("person","profile"))["payload"]!["deleted"]!.GetValue<bool>());
+        Assert.Empty(b.Read(Dataset,"answer",true));
+        Assert.Equal(a.Generation,b.Generation);
+        a.Append(Dataset,"new-answer","answer",Answer()); b.AcceptPage("pc",a.Page(b.Cursor("pc")));
+        Assert.Single(b.Current(Dataset,"answer"));
         Assert.False(b.Page(b.Cursor("pc"))["hasMore"]!.GetValue<bool>());
     }
     [Fact] public void SealedPurposeCannotBeChangedToTrainingByARevision()
     {
         using var a=new PreferenceStore(":memory:","pc");
-        var e=a.Append("person","answer","answer",Answer("SPORT","sealed_test"));
+        var e=a.Append(Dataset,"answer","answer",Answer("SPORT","sealed_test"));
         var changed=e.DeepClone().AsObject(); changed["eventId"]="changed"; changed["revision"]=2L; changed["parents"]=Strings([S(e["eventId"])]); changed["payload"]!["role"]="training";
-        Assert.Throws<InvalidDataException>(()=>a.Import([changed])); Assert.Empty(a.Read("person","answer"));
+        Assert.Throws<InvalidDataException>(()=>a.Import([changed])); Assert.Empty(a.Read(Dataset,"answer"));
     }
     [Fact] public void FrozenListsKeepWholeComponentsAndRejectLaterCrossPoolLinks()
     {

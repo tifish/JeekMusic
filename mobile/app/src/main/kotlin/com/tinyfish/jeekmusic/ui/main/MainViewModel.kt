@@ -77,6 +77,8 @@ class MainViewModel @Inject constructor(
 
     fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
 
+    fun toggleManualFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=!tagFilter.value.onlyManual)) }
+
     fun clearFilter() = viewModelScope.launch { tagFilters.set(TagFilter()) }
 
     /** 全局的歌曲排序（需求 U-8）。 */

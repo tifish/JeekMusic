@@ -77,9 +77,9 @@ data class ScanConfig(
 )
 
 /** 全局的智能标签筛选（需求 M-6）：每个维度不选或选一个，多个维度同时满足。 */
-data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null) {
+data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null, val onlyManual: Boolean=false) {
     val active: List<Tag> get() = listOfNotNull(mood, voice, genre, calmness)
-    val isActive: Boolean get() = active.isNotEmpty()
+    val isActive: Boolean get() = active.isNotEmpty() || onlyManual
 
     operator fun get(dimension: TagDimension): Tag? = when (dimension) {
         TagDimension.MOOD -> mood
@@ -129,7 +129,7 @@ data class Settings(
     val unsupportedFileCount: Int = 0,
     val lowPowerMode: LowPowerMode = LowPowerMode.BACKGROUND,
     val analysisMode: AnalysisMode = AnalysisMode.CHARGING,
-    val sensitivity: Sensitivity = Sensitivity.NORMAL,
+    val sensitivity: Sensitivity = Sensitivity.LOOSE,
     /** 在线歌词，默认关闭（需求 LY-8）。 */
     val onlineLyrics: Boolean = false,
     /** 播放到没有歌词的歌时是否自动获取。 */
@@ -176,6 +176,7 @@ class SettingsRepository @Inject constructor(
         val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
         val LOW_POWER = stringPreferencesKey("low_power_mode")
         val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
+        val FILTER_MANUAL=booleanPreferencesKey("filter_manual")
         val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
         /** 旧版本"仅 Wi-Fi 下自动获取"开关，读取时兼容。 */
@@ -216,7 +217,9 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setAnalysisMode(mode: AnalysisMode) = context.dataStore.edit { it[Keys.ANALYSIS_MODE] = mode.name }
 
-    suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = sensitivity.name }
+    /** Deprecated compatibility write; all old values normalize to loose. */
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = Sensitivity.LOOSE.name }
 
     suspend fun setOnlineLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_LYRICS] = enabled }
 
@@ -278,6 +281,7 @@ class SettingsRepository @Inject constructor(
         put(Keys.FILTER_VOICE, filter.voice)
         put(Keys.FILTER_GENRE, filter.genre)
         put(Keys.FILTER_CALMNESS, filter.calmness)
+        prefs[Keys.FILTER_MANUAL]=filter.onlyManual
     }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
@@ -305,7 +309,7 @@ class SettingsRepository @Inject constructor(
         unsupportedFileCount = this[Keys.UNSUPPORTED] ?: 0,
         lowPowerMode = this[Keys.LOW_POWER]?.let { runCatching { LowPowerMode.valueOf(it) }.getOrNull() } ?: LowPowerMode.BACKGROUND,
         analysisMode = this[Keys.ANALYSIS_MODE]?.let { runCatching { AnalysisMode.valueOf(it) }.getOrNull() } ?: AnalysisMode.CHARGING,
-        sensitivity = this[Keys.SENSITIVITY]?.let { runCatching { Sensitivity.valueOf(it) }.getOrNull() } ?: Sensitivity.NORMAL,
+        sensitivity = Sensitivity.LOOSE, // Old stored/synced values cannot change production policy.
         onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
         lyricsFetchMode = this[Keys.LYRICS_FETCH_MODE]?.let { runCatching { FetchMode.valueOf(it) }.getOrNull() }
             ?: if (this[Keys.AUTO_FETCH] == true) FetchMode.WIFI else FetchMode.MANUAL,
@@ -329,6 +333,7 @@ class SettingsRepository @Inject constructor(
             voice = Tag.of(TagDimension.VOICE, this[Keys.FILTER_VOICE]),
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
             calmness = Tag.of(TagDimension.CALMNESS, this[Keys.FILTER_CALMNESS]),
+            onlyManual=this[Keys.FILTER_MANUAL] ?: false,
         ),
         songSort = SongSort.fromSaved(this[Keys.SONG_SORT]),
         hasSongSortPreference = SongSort.hasPreference(this[Keys.SONG_SORT]),

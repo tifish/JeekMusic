@@ -289,7 +289,7 @@ public sealed class LanSyncService : IDisposable
             // Compatibility format-2 transport calls the domain merge directly; no disk inbox or directory writes.
             return await Dispatcher.UIThread.InvokeAsync(() => Merge?.LanExchange(file, a["features"] as JsonObject, a["includeFeatures"]?.GetValue<bool>()??true) ?? throw new IOException("Sync merge not ready"));
         }
-        if (op == "preference_training") { if(a["profileId"]?.GetValue<string>() != _app.Preferences.ActiveProfile) throw new ArgumentException("Active profile differs on PC; select it explicitly"); return _app.Preferences.Training.Status(a["dimension"]?.GetValue<string>()??"MOOD"); }
+        if (op == "preference_training") { if(a["protocol"]?.GetValue<int>()!=3) throw new ArgumentException("Learning sync requires both devices to upgrade"); return _app.Preferences.Training.Status(a["dimension"]?.GetValue<string>()??"MOOD"); }
         if (op == "preference_delta") return _app.Preferences.Delta(a);
         var rootId = a["rootId"]?.GetValue<string>() ?? "";
         var root = RootPath(rootId);

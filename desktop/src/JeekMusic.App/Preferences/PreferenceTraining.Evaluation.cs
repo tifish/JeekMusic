@@ -15,7 +15,7 @@ public sealed partial class PreferenceTraining
         if(candidates.Length!=1) throw new InvalidOperationException("One frozen candidate with a passed training gate required");
         var candidate=candidates[0]; var candidateData=candidate["payload"]!;
         var trainingHash=S(candidateData["trainingSetHash"]);
-        var trainingAnswers=service.Store.Current(profile,"answer").GroupBy(e=>S(e["entityId"])).Where(g=>g.Count()==1).Select(g=>g.Single()).Where(e=>Dimension(e["payload"])==dimension && UsableAnswer(e)).ToList();
+        var trainingAnswers=TrainingRows(service.Store.Current(profile,"answer")).Where(e=>Dimension(e["payload"])==dimension).ToList();
         if(Hash(Snapshot("train",trainingAnswers,dimension,profile).ToJsonString())!=trainingHash) throw new InvalidOperationException("Training data/content/extractor changed; frozen candidate invalid");
         var path=Path.Combine(root,"candidates",trainingHash+".json");
         var artifact=JsonNode.Parse(File.ReadAllText(path))!.AsObject();

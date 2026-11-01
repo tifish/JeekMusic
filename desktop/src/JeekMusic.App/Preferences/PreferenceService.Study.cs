@@ -17,7 +17,7 @@ public sealed partial class PreferenceService
         var records=Store.Current(p,"recording");
         var selected=ReadStrings(Store.Local("inventoryItems:"+p) is { } json ? JsonNode.Parse(json):null);
         return new JsonObject { ["registered"]=records.Count,["reviewed"]=records.Count(e=>e["payload"]?["identityReviewed"]?.GetValue<bool>()==true),
-            ["items"]=new JsonArray(records.Where(e=>selected.Contains(S(e["entityId"]))).Select(e=>(JsonNode)new JsonObject { ["recordingId"]=S(e["entityId"]),["metadata"]=e["payload"]!.DeepClone() }).ToArray()),
+            ["items"]=new JsonArray(records.Where(e=>selected.Contains(S(e["entityId"])) || selected.Length==0 && e["payload"]?["identityReviewed"]?.GetValue<bool>()!=true).Take(6).Select(e=>(JsonNode)new JsonObject { ["recordingId"]=S(e["entityId"]),["metadata"]=e["payload"]!.DeepClone() }).ToArray()),
             ["studyState"]=Study() is { } s ? PreferenceStudy.Contaminated(s,Identities(p)) ? "contaminated" : "frozen" : "not_frozen" };
     }
     public JsonObject FreezeStudy()

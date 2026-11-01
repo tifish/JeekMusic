@@ -22,8 +22,8 @@
     { "description": "大编制管弦乐的快板以前\"都不是\"，现在算非运动", "scores": "hungarianDance", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
     { "description": "管弦乐 → 非运动", "scores": "jupiter", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
     { "description": "动感 / 舒缓之比约 3.0：宽松档算运动", "scores": "upbeat", "sensitivity": "LOOSE", "expected": "SPORT" },
-    { "description": "动感 / 舒缓之比约 3.0：标准档不算", "scores": "upbeat", "sensitivity": "NORMAL", "expected": "NON_SPORT" },
-    { "description": "动感 / 舒缓之比约 3.0：严格档不算", "scores": "upbeat", "sensitivity": "STRICT", "expected": "NON_SPORT" },
+    { "description": "固定宽松：旧 NORMAL 参数仍算运动", "scores": "upbeat", "sensitivity": "NORMAL", "expected": "SPORT" },
+    { "description": "固定宽松：旧 STRICT 参数仍算运动", "scores": "upbeat", "sensitivity": "STRICT", "expected": "SPORT" },
     { "description": "舞曲在严格档也是运动", "scores": "pokerFace", "sensitivity": "STRICT", "expected": "SPORT" }
   ],
   "voice": [

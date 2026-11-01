@@ -239,10 +239,6 @@
     <string name="settings_analysis_mode">分析时机</string>
     <string name="analysis_charging">仅充电时（推荐）</string>
     <string name="analysis_anytime">随时</string>
-    <string name="settings_sensitivity">运动的识别灵敏度</string>
-    <string name="sensitivity_loose">宽松（歌更多）</string>
-    <string name="sensitivity_normal">标准</string>
-    <string name="sensitivity_strict">严格（歌更少）</string>
 
     <string name="lyrics_search">在线搜索歌词</string>
     <string name="lyrics_search_title">搜索歌词</string>
@@ -474,4 +470,5 @@
     <string name="dim_calmness">平静程度</string>
     <string name="lan_refresh_roots">刷新共享文件夹</string>
     <string name="lan_roots_failed">无法刷新共享文件夹。请检查电脑服务、网络和设备授权后重试，已有下载和任务会保留。详情：%1$s</string>
+    <string name="filter_manual">已手工标注</string>
 </resources>

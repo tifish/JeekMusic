@@ -59,12 +59,13 @@ def main():
         for t in tracks:
             detail=call(c,"get_track",trackId=t["id"]);assert Path(detail["path"]).resolve().is_relative_to(music.resolve())
         if a.resume:
-            profile=(out/"fixture-profile-id.txt").read_text();call(c,"preference_profile",action="select",profileId=profile);call(c,"preference_profile",action="dimension",dimension="MOOD");report["frozenSyntheticFrame"]=True
+            profile=(out/"fixture-profile-id.txt").read_text();assert profile=="personal-label-learning-v3";call(c,"preference_data",action="dimension",dimension="MOOD");report["frozenSyntheticFrame"]=True
         else:
-            profile=call(c,"preference_profile",action="create",name="SYNTHETIC four-head pipeline; not human labels",purpose="synthetic_validation")["profileId"]
+            profile=call(c,"preference_data",action="status")["profileId"]
+            with sqlite3.connect(data/"preferences.db") as db: db.execute("INSERT OR REPLACE INTO local VALUES('syntheticFixture','1')")
             (out/"fixture-profile-id.txt").write_text(profile)
             for dimension,(positive,negative) in {"MOOD":("SPORT","NON_SPORT"),"VOICE":("VOCAL","INSTRUMENTAL"),"GENRE":("CLASSICAL","NON_CLASSICAL"),"CALMNESS":("CALM","NON_CALM")}.items():
-                call(c,"preference_profile",action="dimension",dimension=dimension)
+                call(c,"preference_data",action="dimension",dimension=dimension)
                 answered=set()
                 while len(answered)<24:
                     batch=call(c,"preference_batch",action="prepare",dimension=dimension)
@@ -76,7 +77,7 @@ def main():
                 state=job(c,"train",dimension)
                 assert state["state"] in ("components_required","identity_incomplete"),state
                 print("24 declared synthetic answers:",dimension,flush=True)
-            call(c,"preference_profile",action="dimension",dimension="MOOD")
+            call(c,"preference_data",action="dimension",dimension="MOOD")
             # Read only the synthetic fixture DB, never a user's production ledger.
             with sqlite3.connect(data/"preferences.db") as db:
                 recordings=[json.loads(row[0]) for row in db.execute("SELECT json FROM events WHERE profile=? AND kind='recording'",(profile,))]
@@ -87,8 +88,8 @@ def main():
             for i in range(84):
                 h=lambda text:hashlib.sha256(text.encode()).hexdigest()
                 entity=h("missing synthetic reference "+str(i))
-                events.append(dict(protocol=2,eventId=uuid.uuid4().hex,profileId=profile,entityId=entity,kind="recording",deviceId="synthetic_acceptance",revision=1,parents=[],at=int(time.time()*1000),payload=dict(recordingId=entity,contentSignature=h("synthetic content "+str(i)),title="Missing synthetic reference "+str(i),artist="Unseen synthetic "+str(i),album="Synthetic release "+str(i),artists=["UNSEEN "+str(i)],workGroup="UNSEEN WORK "+str(i),albumGroup="UNSEEN ALBUM "+str(i),durationMs=180000,identityReviewed=True,exposed=False,supported=True,fixture=True,referenceState="missing_file_fixture")))
-            delta=lan.wire(connection,"preference_delta",protocol=2,sender="synthetic_acceptance",after=0,page=dict(protocol=2,events=events,nextCursor=len(events),hasMore=False))
+                events.append(dict(protocol=3,generation=call(c,"preference_data",action="status")["sync"]["generation"],eventId=uuid.uuid4().hex,profileId=profile,entityId=entity,kind="recording",deviceId="synthetic_acceptance",revision=1,parents=[],at=int(time.time()*1000),payload=dict(recordingId=entity,contentSignature=h("synthetic content "+str(i)),title="Missing synthetic reference "+str(i),artist="Unseen synthetic "+str(i),album="Synthetic release "+str(i),artists=["UNSEEN "+str(i)],workGroup="UNSEEN WORK "+str(i),albumGroup="UNSEEN ALBUM "+str(i),durationMs=180000,identityReviewed=True,exposed=False,supported=True,fixture=True,referenceState="missing_file_fixture")))
+            delta=lan.wire(connection,"preference_delta",protocol=3,sender="synthetic_acceptance",after=0,page=dict(protocol=3,resetBoundary=[],generation=call(c,"preference_data",action="status")["sync"]["generation"],events=events,nextCursor=len(events),hasMore=False))
             assert "error" not in delta,delta
             frozen=call(c,"preference_inventory",action="freeze");assert frozen["state"]=="frozen"
             report["frozenSyntheticFrame"]=True

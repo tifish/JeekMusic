@@ -246,10 +246,6 @@
     <string name="settings_analysis_mode">When to analyze</string>
     <string name="analysis_charging">Only while charging (recommended)</string>
     <string name="analysis_anytime">Any time</string>
-    <string name="settings_sensitivity">Workout sensitivity</string>
-    <string name="sensitivity_loose">Loose (more songs)</string>
-    <string name="sensitivity_normal">Normal</string>
-    <string name="sensitivity_strict">Strict (fewer songs)</string>
 
     <string name="lyrics_search">Search lyrics online</string>
     <string name="lyrics_search_title">Search lyrics</string>
@@ -483,4 +479,5 @@
     <string name="dim_calmness">Calmness</string>
     <string name="lan_refresh_roots">Refresh shared folders</string>
     <string name="lan_roots_failed">Could not refresh shared folders. Check the PC service, network and device authorization, then retry. Existing downloads and tasks are kept. Details: %1$s</string>
+    <string name="filter_manual">Manually labeled</string>
 </resources>

@@ -33,7 +33,7 @@ class PreferenceViewModel @Inject constructor(val service: PreferenceService): V
     val training=MutableStateFlow("")
     init { viewModelScope.launch { service.revision.collect { try { refresh() } catch(e: Exception) { error.value=e.message.orEmpty() } } } }
     suspend fun refresh()=withContext(Dispatchers.IO) {
-        snapshot.value=JSONObject().put("profiles",JSONArray(service.profiles())).put("status",service.status()).put("batch",if(service.activeProfile.isNotEmpty() && !service.deleted(service.activeProfile)) service.batch() else JSONObject().put("items",JSONArray()))
+        snapshot.value=JSONObject().put("status",service.status()).put("batch",if(service.activeProfile.isNotEmpty() && !service.deleted(service.activeProfile)) service.batch() else JSONObject().put("items",JSONArray()))
     }
     fun run(block: suspend () -> Unit) { if(busy.value) return; viewModelScope.launch { busy.value=true; try { withContext(Dispatchers.IO) { block() }; refresh(); error.value="" } catch(e: Exception) { error.value=e.message.orEmpty() } finally { busy.value=false } } }
 }
@@ -48,25 +48,23 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
     val syncState by vm.service.syncState.collectAsStateWithLifecycle()
     val context=LocalContext.current
     val matchResultFormat=stringResource(R.string.preference_match_result)
-    var name by remember { mutableStateOf("") }
     var delete by remember { mutableStateOf(false) }
+    var supplement by remember { mutableStateOf(false) }
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if(uri!=null) vm.run { context.contentResolver.openOutputStream(uri)?.use { it.write(vm.service.export().toByteArray(Charsets.UTF_8)) } } }
     Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.preference_title),style=MaterialTheme.typography.titleLarge)
         val dimension=data.optJSONObject("status")?.optString("dimension") ?: "MOOD"
         Row { for(d in PreferenceStore.dimensions) TextButton(onClick={vm.run { vm.service.selectDimension(d) }},enabled=!busy) { Text((if(d==dimension) "✓ " else "")+stringResource(when(d) { "MOOD"->R.string.preference_mood; "VOICE"->R.string.preference_voice; "GENRE"->R.string.preference_genre; else->R.string.preference_calmness })) } }
         Text(stringResource(R.string.preference_intro),style=MaterialTheme.typography.bodySmall)
-        OutlinedTextField(name,{ name=it.take(80) },label={Text(stringResource(R.string.preference_profile_name))},modifier=Modifier.fillMaxWidth())
-        TextButton(onClick={vm.run { vm.service.create(name) }},enabled=!busy && name.isNotBlank()) { Text(stringResource(R.string.preference_create)) }
-        val profiles=PreferenceStore.objects(data.optJSONArray("profiles") ?: JSONArray()).filterNot { it.optBoolean("deleted") }
-        for(p in profiles) TextButton(onClick={vm.run { vm.service.select(p.getString("profileId")) }},enabled=!busy) { Text((if(p.getString("profileId")==data.optJSONObject("status")?.optString("profileId")) "✓ " else "")+p.optString("name")+" · "+p.getString("profileId").take(8)) }
         Text(stringResource(R.string.preference_progress,data.optJSONObject("status")?.optInt("answered") ?: 0,data.optJSONObject("status")?.optInt("conflicts") ?: 0))
-        Row {
-            TextButton(onClick={vm.run { vm.service.prepare() }},enabled=!busy) { Text(stringResource(R.string.preference_prepare)) }
-            TextButton(onClick={vm.run { vm.service.synchronize() }},enabled=!busy) { Text(stringResource(R.string.preference_sync)) }
-        }
-        TextButton(onClick={vm.run { val result=vm.service.matchLocalBatch(); vm.training.value=String.format(matchResultFormat,result.getInt("checkedFiles"),result.getInt("matched")) }},enabled=!busy) { Text(stringResource(R.string.preference_match)) }
+        Text(stringResource(R.string.preference_pending,data.optJSONObject("status")?.optJSONObject("dailyFeedback")?.optInt("pending") ?: 0))
+        TextButton(onClick={vm.run { vm.service.synchronize() }},enabled=!busy) { Text(stringResource(R.string.preference_sync)) }
         Text(stringResource(when(syncState) { "idle"->R.string.preference_idle; "syncing"->R.string.preference_syncing; "synced"->R.string.preference_synced; else->R.string.preference_offline }))
+        TextButton(onClick={supplement=!supplement}) { Text(stringResource(R.string.preference_supplement)) }
+        if(supplement) {
+        TextButton(onClick={vm.run { vm.service.prepare() }},enabled=!busy) { Text(stringResource(R.string.preference_prepare)) }
+        TextButton(onClick={vm.run { val result=vm.service.matchLocalBatch(); vm.training.value=String.format(matchResultFormat,result.getInt("checkedFiles"),result.getInt("matched")) }},enabled=!busy) { Text(stringResource(R.string.preference_match)) }
+
         Text(stringResource(R.string.preference_identity_warning),style=MaterialTheme.typography.bodySmall)
         val rows=PreferenceStore.objects(data.optJSONObject("batch")?.optJSONArray("items") ?: JSONArray())
         var currentIndex by remember(data.optJSONObject("batch")?.optString("manifestId")) { mutableIntStateOf(0) }
@@ -100,6 +98,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
                 }
             }
         }
+        }
         Text(stringResource(R.string.preference_training_note),style=MaterialTheme.typography.bodySmall)
         TextButton(onClick={vm.run { vm.training.value=vm.service.trainingStatus().optString("state") }},enabled=!busy) { Text(stringResource(R.string.preference_training_status)) }
         if(training.isNotEmpty()) Text(when(training) {
@@ -110,7 +109,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
             "cancelled","interrupted"->stringResource(R.string.preference_cancelled)
             "failed","incomplete","validation_failed","inconclusive"->stringResource(R.string.preference_failed)
             "synthetic_validation_complete"->stringResource(R.string.preference_synthetic_complete)
-            "development_required","regression_required","independent_test_required","training_gate_passed","pass_research_gate"->stringResource(R.string.preference_candidate)
+            "self_selected_candidate","development_required","regression_required","independent_test_required","training_gate_passed","pass_research_gate"->stringResource(R.string.preference_candidate)
             "invalidated"->stringResource(R.string.preference_invalidated)
             "idle"->stringResource(R.string.preference_idle)
             else->training
@@ -120,7 +119,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
             TextButton(onClick={delete=true},enabled=!busy) { Text(stringResource(R.string.preference_delete)) }
         }
         if(busy) CircularProgressIndicator()
-        if(error.isNotEmpty()) Text(error,color=MaterialTheme.colorScheme.error)
+        if(error.isNotEmpty()) Text(if(error.contains("profile",ignoreCase=true) || error.contains("upgrade",ignoreCase=true) || error.contains("protocol",ignoreCase=true)) stringResource(R.string.preference_upgrade_required) else error,color=MaterialTheme.colorScheme.error)
     }
     if(delete) AlertDialog(onDismissRequest={delete=false},title={Text(stringResource(R.string.preference_delete))},text={Text(stringResource(R.string.preference_delete_confirmation))},confirmButton={TextButton(onClick={delete=false;vm.run { vm.service.delete() }}) { Text(stringResource(R.string.preference_delete)) }},dismissButton={TextButton(onClick={delete=false}) {Text(stringResource(android.R.string.cancel))}})
 }

@@ -5,6 +5,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WorkoutEvidenceTest {
+    @Test fun oldSensitivityInputsAndSamplingAlwaysUseLoose() {
+        for(s in Sensitivity.entries) { assertEquals(2.75,s.sport,0.0); assertEquals(.50,s.legacy,0.0) }
+        val m=ModelScores(-3.0,-2.0,0.0,.003*(kotlin.math.exp(3.3)-1),0.0)
+        val e=AnalysisEvidence((0..1).map { i -> SegmentEvidence(i*40000L,i*40000L+10000,false,160000,1,1,m,List(12){m},null) },emptyList(),true,null,0,contract=6,rhythmContract=1,rhythmState="not_needed")
+        assertFalse(e.reasons().contains("mood_near_threshold")); assertFalse(e.reasons().contains("mood_segment_conflict"))
+        assertFalse(WorkoutEvidence.needsPulse(e)); assertTrue(WorkoutEvidence.plan(e,0,100000).isEmpty())
+        for(s in Sensitivity.entries) assertEquals(Tag.SPORT,WorkoutEvidence.classify(e,s))
+    }
     @Test fun sharedConjunctionFailuresAndSensitivity() {
         val cases = SharedCases.load("workout-v8.json").getJSONArray("cases")
         for (i in 0 until cases.length()) {

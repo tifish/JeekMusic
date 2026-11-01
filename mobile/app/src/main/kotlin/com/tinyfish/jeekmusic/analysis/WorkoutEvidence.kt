@@ -12,7 +12,7 @@ object WorkoutEvidence {
         return best
     }
     fun needsPulse(evidence: AnalysisEvidence) = evidence.complete &&
-        (evidence.aggregate()?.sport ?: Double.POSITIVE_INFINITY) < 3.75 &&
+        (evidence.aggregate()?.sport ?: Double.POSITIVE_INFINITY) < Sensitivity.LOOSE.sport &&
         evidence.scoredSegments().count { strongRun(it,Sensitivity.LOOSE) >= 3 } >= 2
 
     data class Context(val segment: SegmentEvidence, val startMs: Long, val endMs: Long)

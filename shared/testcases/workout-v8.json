@@ -229,8 +229,8 @@
       },
       "expected": {
         "LOOSE": "SPORT",
-        "NORMAL": "NON_SPORT",
-        "STRICT": "NON_SPORT"
+        "NORMAL": "SPORT",
+        "STRICT": "SPORT"
       }
     },
     {
@@ -1542,7 +1542,7 @@
       }
     },
     {
-      "name": "three_sensitivity_levels_use_original_thresholds",
+      "name": "legacy_sensitivity_inputs_all_use_fixed_loose",
       "evidence": {
         "contract": 6,
         "feature_complete": true,

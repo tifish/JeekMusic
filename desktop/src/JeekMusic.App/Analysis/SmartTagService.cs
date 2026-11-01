@@ -2,14 +2,15 @@ using System.Text.Json.Nodes;
 using JeekMusic.Core.Analysis;
 using JeekMusic.Infrastructure;
 using JeekMusic.Library;
-using JeekMusic.Settings;
 
 namespace JeekMusic.Analysis;
 
 /// <summary>UI、MCP 和后台分析共用的智能标签结果与手动覆盖；不读取或修改音频文件。</summary>
-public sealed class SmartTagService(LibraryService library, SettingsStore settings)
+public sealed class SmartTagService(LibraryService library)
 {
     readonly Lock _recompute = new();
+    public Func<string>? LearningGeneration { get; set; }
+    public Func<string>? LearningDevice { get; set; }
     LibraryDb Db => library.Db;
     public event Action? ResultsChanged;
 
@@ -29,7 +30,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         var row = Db.Features(track.TrackKey);
         var data = FeaturesData.Parse(row?.Data);
         var evidence = AnalysisEvidence.Parse(data?.AnalysisEvidence);
-        var sensitivity = Enum.TryParse<Sensitivity>(settings.Current.Sensitivity, out var s) ? s : Sensitivity.NORMAL;
+        const Sensitivity sensitivity = Sensitivity.LOOSE;
         var title = ClassicalTitles.Matches(track.Title, track.Album);
         var current = row is not null && row.Signature == AnalysisFeature.Signature(track);
         var usable = current && row!.AnalyzerVersion <= AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is not null;
@@ -54,7 +55,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             ["trackId"] = track.Id, ["automatic"] = auto, ["final"] = final, ["sources"] = sources,
             ["classicalTitleMatched"] = title, ["genreEvidenceSource"] = title ? "ClassicalTitles (forced before manual override)" : "model",
             ["analyzerVersion"] = row?.AnalyzerVersion, ["currentAnalyzerVersion"] = AnalysisFeature.AnalyzerVersion,
-            ["rulesVersion"] = AnalysisVersions.RulesVersion, ["signatureMatches"] = current, ["usable"] = usable,
+            ["rulesVersion"] = AnalysisVersions.RulesVersion, ["workoutPolicy"]="fixed_loose", ["sensitivity"]="LOOSE", ["signatureMatches"] = current, ["usable"] = usable,
             ["complete"] = current && row?.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && row.Failed == false && data?.Complete == true,
             ["pendingReanalysis"] = FeaturesData.NeedsAnalysis(row, AnalysisFeature.Signature(track)),
             ["attempts"] = data?.AnalysisAttempts, ["failed"] = row?.Failed,
@@ -62,7 +63,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
             ["thresholds"] = new JsonObject { ["VOICE"] = TagClassifier.VocalThreshold, ["MOOD"] = sensitivity.Sport(), ["GENRE"] = TagClassifier.ClassicalThreshold },
             ["marginsNotProbabilities"] = a is null ? null : new JsonObject {
                 ["VOICE"] = a.Vocal - TagClassifier.VocalThreshold, ["MOOD"] = a.Sport - sensitivity.Sport(), ["GENRE"] = a.Classical - TagClassifier.ClassicalThreshold },
-            ["sampleSupportNotProbabilities"] = a is null ? null : new JsonObject { ["VOICE"] = a.VocalSupport, ["MOOD_NORMAL"] = a.SportSupport, ["GENRE"] = a.ClassicalSupport },
+            ["sampleSupportNotProbabilities"] = a is null ? null : new JsonObject { ["VOICE"] = a.VocalSupport, ["MOOD_LOOSE"] = a.SportSupport, ["MOOD_NORMAL"] = a.SportSupport, ["GENRE"] = a.ClassicalSupport },
             ["workout"] = new JsonObject {
                 ["heuristicNotCalibrated"] = true, ["method"] = automatic.GetValueOrDefault(TagDimension.MOOD) is null ? "unavailable" :
                     a?.Sport >= sensitivity.Sport() ? "window_median" : evidence?.Contract == 6 && WorkoutEvidence.SupportedSegments(evidence, sensitivity) >= 2 ? "model_and_music_pulse" : "no_positive_support",
@@ -144,7 +145,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
                 features[track.TrackKey] = row;
             }
         var overrides = Db.TagOverrides().ToDictionary(o => (o.TrackKey, o.Dimension));
-        var sensitivity = Enum.TryParse<Sensitivity>(settings.Current.Sensitivity, out var s) ? s : Sensitivity.NORMAL;
+        const Sensitivity sensitivity = Sensitivity.LOOSE;
         var tags = new List<(string, string, string, string)>();
         foreach (var t in tracks)
         {
@@ -176,6 +177,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
         ArgumentNullException.ThrowIfNull(changes);
         if (tracks.Count == 0) throw new ArgumentException("At least one track is required");
         if (changes.Count == 0) throw new ArgumentException("At least one tag dimension is required");
+        var learningGeneration=LearningGeneration?.Invoke()??"";
         var edits = changes.ToArray();
         foreach (var (dimension, tag) in edits)
             if (!Enum.IsDefined(dimension) || tag is { } value && (!Enum.IsDefined(value) || value.Dimension() != dimension))
@@ -206,6 +208,7 @@ public sealed class SmartTagService(LibraryService library, SettingsStore settin
                 foreach (var (id, key) in targets)
                     Db.SaveTagReview(key, new JsonObject {
                         ["recordedAt"] = now, ["provenance"] = "manual_correction_not_independent_truth",
+                        ["learningGeneration"]=learningGeneration,["learningDevice"]=LearningDevice?.Invoke()??"",["recordingSignature"]=AnalysisFeature.Signature(byId[id]),["explicitCorrections"]=new JsonObject(edits.Select(edit=>new KeyValuePair<string,JsonNode?>(edit.Key.ToString(),JsonValue.Create(edit.Value?.ToString())))),
                         ["reason"] = reason, ["before"] = before[key], ["after"] = Explain(byId[id])
                     }.ToJsonString());
             });

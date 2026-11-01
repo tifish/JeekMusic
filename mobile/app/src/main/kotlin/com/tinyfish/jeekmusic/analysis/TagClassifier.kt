@@ -34,13 +34,13 @@ enum class Tag(val dimension: TagDimension) {
 }
 
 /**
- * 运动的识别灵敏度（需求 M-8）。阈值越低，归入"运动"的歌越多。
+ * 历史枚举兼容；所有值都采用固定宽松阈值，不再提供选择。
  * [legacy] 是旧的规则分类器（还没用模型重新分析的歌）使用的阈值。
  */
 enum class Sensitivity(val sport: Double, val legacy: Double) {
     LOOSE(2.75, 0.50),
-    NORMAL(3.25, 0.60),
-    STRICT(3.75, 0.70),
+    NORMAL(2.75, 0.50),
+    STRICT(2.75, 0.50),
 }
 
 /** YAMNet 模型给出的几组得分（docs/design.md §6.3）。 */

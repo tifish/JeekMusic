@@ -97,7 +97,7 @@ class LibraryDaoTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val settings = com.tinyfish.jeekmusic.data.settings.SettingsRepository(context)
         val previous = settings.current()
-        val repository = com.tinyfish.jeekmusic.analysis.TagRepository(db, db.tagDao(), settings)
+        val repository = com.tinyfish.jeekmusic.analysis.TagRepository(db, db.tagDao(), settings, com.tinyfish.jeekmusic.data.preference.DailyLearningFeedback(object: android.content.ContextWrapper(context) { override fun getNoBackupFilesDir()=java.io.File(context.cacheDir,"daily-library-test-"+System.nanoTime()).apply { mkdirs() } },db))
         val folder = addFolder("Calmness/")
         val track = track(folder, "Calmness/", "Sonata Op. 1.mp3")
         tracks.insert(listOf(track))

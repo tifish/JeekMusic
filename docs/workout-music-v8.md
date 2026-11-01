@@ -1,5 +1,7 @@
 # 运动分类：Analyzer 6 / Rules 8
 
+> 当前产品已更新为[Rules9固定宽松](workout-fixed-loose.md)。本文保留原研究与Rules8实现历史，三档选择已移除；个人学习层仍未启用。
+
 后续新阶段的重音层级、振幅攻击与局部周期受控实验见 [重音评估](workout-accent-evaluation.md)。该评估没有改变本页生产规则，也没有解决剩余三首漏判。
 
 随后固定的musicnn中间表示审查及新增《简单爱》同艺人正反对照见[表征评估](workout-representation-evaluation.md)；G.E.M.邓紫棋新配对与固定低容量验证见[偏好评估](workout-preference-evaluation.md)。均未增加生产分支；下文八首表为原交付时点记录，最新人工反馈共十一首。

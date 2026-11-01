@@ -61,12 +61,14 @@ public partial class MainWindow
         };
         _layoutDiagnostic = MainLayoutDiagnostics;
         _app.MainLayoutDiagnostics = _layoutDiagnostic;
+        _app.SongColumnsControl=ControlSongColumns;
         Closed += (_, _) =>
         {
             _layoutClosed = true;
             CancelAutomaticNavWidth();
             _vm.PropertyChanged -= OnLayoutViewModelChanged;
             if (_app.MainLayoutDiagnostics == _layoutDiagnostic) _app.MainLayoutDiagnostics = null;
+            if(_app.SongColumnsControl==ControlSongColumns) _app.SongColumnsControl=null;
         };
         RefreshLayoutBudget();
     }
@@ -228,6 +230,7 @@ public partial class MainWindow
         ["navigationOverflow"] = _navigationOverflow?.Diagnostics(),
         ["songOverflow"] = _songOverflow?.Diagnostics(),
         ["songCopy"] = SongCopyDiagnostics(),
-        ["smartTagColumns"] = SmartTagColumnDiagnostics()
+        ["smartTagColumns"] = SmartTagColumnDiagnostics(),
+        ["songColumns"]=SongColumnsStatus()
     };
 }

@@ -25,6 +25,7 @@ public static class Text
     /// <summary>智能标签的中文名（需求 M-1）。</summary>
     public static string TagName(string? tag) => tag switch
     {
+        "MANUAL" => L.T("已手工标注"),
         "SPORT" => L.T("运动"),
         "NON_SPORT" => L.T("非运动"),
         "CALM" => L.T("安静"),

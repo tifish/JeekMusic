@@ -15,10 +15,10 @@
     <string name="settings_group_online_summary">Sources, downloading and storage</string>
     <string name="settings_group_online_on">Online lookup on · sources and storage</string>
     <string name="settings_group_online_off">Online lookup off · sources and storage</string>
-    <string name="settings_group_analysis_summary">Analysis timing and sensitivity</string>
+    <string name="settings_group_analysis_summary">Local analysis and timing</string>
     <plurals name="settings_group_pending">
-        <item quantity="one">%1$d track pending · timing and sensitivity</item>
-        <item quantity="other">%1$d tracks pending · timing and sensitivity</item>
+        <item quantity="one">%1$d track pending · local analysis</item>
+        <item quantity="other">%1$d tracks pending · local analysis</item>
     </plurals>
     <string name="settings_group_devices">Device sync / connect to computer</string>
     <string name="settings_group_device_summary">Connect to a computer and choose music to sync</string>

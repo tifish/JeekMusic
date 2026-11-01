@@ -4,6 +4,15 @@ namespace JeekMusic.Core.Tests.Analysis;
 
 public sealed class WorkoutEvidenceTests
 {
+    [Fact] public void OldSensitivityInputsAndSamplingAlwaysUseLoose()
+    {
+        foreach(var sensitivity in Enum.GetValues<Sensitivity>()) { Assert.Equal(2.75,sensitivity.Sport()); Assert.Equal(.50,sensitivity.Legacy()); }
+        var m=new ModelScores(-3,-2,0,.003*(Math.Exp(3.3)-1),0);
+        var evidence=new AnalysisEvidence(6,Enumerable.Range(0,2).Select(i=>new SegmentEvidence(i*40000,i*40000+10000,false,160000,1,1,m,Enumerable.Repeat(m,12).ToArray(),null)).ToArray(),[],true,null,0,1,"not_needed");
+        Assert.DoesNotContain("mood_near_threshold",evidence.Reasons()); Assert.DoesNotContain("mood_segment_conflict",evidence.Reasons());
+        Assert.False(WorkoutEvidence.NeedsPulse(evidence)); Assert.Empty(WorkoutEvidence.Plan(evidence,0,100000));
+        foreach(var sensitivity in Enum.GetValues<Sensitivity>()) Assert.Equal(Tag.SPORT,WorkoutEvidence.Classify(evidence,sensitivity));
+    }
     [Fact]
     public void SharedConjunctionFailuresAndSensitivityPreserveIndependentDimensions()
     {

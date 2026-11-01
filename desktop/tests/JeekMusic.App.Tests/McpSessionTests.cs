@@ -61,7 +61,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(36, tools.Count);
+        Assert.Equal(38, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }
@@ -97,6 +97,13 @@ public sealed class McpSessionTests
     }
 
     [Theory]
+    [InlineData("song_columns", "{\"action\":\"set\",\"tag\":\"Tags\",\"visible\":true}")]
+    [InlineData("song_columns", "{\"action\":\"set\",\"tag\":\"Mood\",\"order\":11}")]
+    [InlineData("search_tracks", "{\"onlyManual\":\"true\"}")]
+    [InlineData("explain_analysis", "{\"trackId\":1,\"sensitivity\":\"STRICT\"}")]
+    [InlineData("analyze_tracks", "{\"action\":\"start\",\"trackIds\":[1],\"sensitivity\":\"NORMAL\"}")]
+    [InlineData("preference_data", "{\"action\":\"create\"}")]
+    [InlineData("preference_data", "{\"action\":\"status\",\"profileId\":\"old\"}")]
     [InlineData("set_volume", "{\"volume\":101}")]
     [InlineData("fetch_resources", "{}")]
     [InlineData("fetch_resources", "{\"action\":\"force\"}")]

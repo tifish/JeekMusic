@@ -20,6 +20,15 @@ class PipelineTests(unittest.TestCase):
                              componentId=str(i//3),artists=[str(i//3)],label="SPORT" if y==1 else "NON_SPORT",
                              vector=worker.unit(vector).tolist(),rules="NON_SPORT"))
         return rows
+    def test_self_selected_feedback_keeps_numeric_gates_and_never_enables_a_model(self):
+        rows=self.rows()
+        for row in rows:
+            row.update(exposed=True,selfSelectedTraining=True,labelSource="explicit_daily_tag_correction")
+        result=worker.evaluate(rows,24)
+        self.assertEqual(result["state"],"training_gate_passed")
+        self.assertIn("blocked",result["activation"])
+        rows[0]["identityReviewed"]=False
+        with self.assertRaises(ValueError):worker.evaluate(rows,24)
     def test_real_fixed_numeric_chain_on_synthetic_labels(self):
         report=worker.evaluate(self.rows(),24)
         self.assertEqual(report["state"],"training_gate_passed")

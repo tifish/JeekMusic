@@ -31,6 +31,7 @@ public sealed class AppServices : IDisposable
     internal UI.ViewModels.MainViewModel? Navigation { get; set; }
     internal Online.OnlineFeature? Online { get; set; }
     internal Func<System.Text.Json.Nodes.JsonObject>? MainLayoutDiagnostics { get; set; }
+    internal Func<System.Text.Json.Nodes.JsonObject,System.Text.Json.Nodes.JsonObject>? SongColumnsControl { get; set; }
     public Automation.McpServer Mcp { get; }
     public Sync.LanSyncService LanSync { get; }
     public Preferences.PreferenceService Preferences { get; }
@@ -55,7 +56,7 @@ public sealed class AppServices : IDisposable
         L.Initialize(Settings.Current.Language);
         Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
-        SmartTags = new Analysis.SmartTagService(Library, Settings);
+        SmartTags = new Analysis.SmartTagService(Library);
         Playlists = new PlaylistService(Library);
         Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
         var s = Settings.Current;

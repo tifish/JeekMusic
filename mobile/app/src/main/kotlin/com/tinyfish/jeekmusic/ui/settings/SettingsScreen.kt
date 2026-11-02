@@ -632,6 +632,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     }
                 }
                 if (page == SettingsPage.ABOUT) {
+                    item { com.tinyfish.jeekmusic.ui.main.UpdateDiagnosticsAction() }
                     // 检查更新放在最前面，打开设置就能点到，不用滚到底（需求 U-6）
                     item {
                         SettingAction(

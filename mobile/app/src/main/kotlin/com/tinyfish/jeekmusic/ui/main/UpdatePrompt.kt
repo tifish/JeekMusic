@@ -14,6 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -36,6 +39,19 @@ class UpdateViewModel @Inject constructor(val updater: AppUpdater) : ViewModel()
 fun UpdatePrompt(viewModel: UpdateViewModel = hiltViewModel()) {
     val updater = viewModel.updater
     val state by updater.state.collectAsStateWithLifecycle()
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { updater.onForeground() }
+    val confirmation = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { updater.onForeground() }
+    LifecycleResumeEffect(updater, state is UpdateState.ConfirmationRequired) {
+        updater.onForeground()
+        // Only a resumed activity opens the platform confirmation, including after the app was
+        // backgrounded. A broadcast receiver cannot reliably launch UI under BAL restrictions.
+        if (state is UpdateState.ConfirmationRequired) {
+            updater.installer.takeConfirmation()?.let {
+                runCatching { confirmation.launch(it) }.onFailure { updater.installer.cancel() }
+            }
+        }
+        onPauseOrDispose { }
+    }
     when (val s = state) {
         UpdateState.Idle -> Unit
         is UpdateState.Available -> AlertDialog(
@@ -80,7 +96,38 @@ fun UpdatePrompt(viewModel: UpdateViewModel = hiltViewModel()) {
             },
             confirmButton = {},
         )
-        is UpdateState.Installing -> Unit // 系统的安装确认界面接管
+        is UpdateState.PermissionRequired -> AlertDialog(
+            onDismissRequest = { updater.dismiss(skip = false) },
+            title = { Text(stringResource(R.string.update_permission_title)) },
+            text = { Text(stringResource(R.string.update_permission_summary)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching { permission.launch(updater.installer.permissionIntent()) }
+                        .onFailure { updater.dismiss(skip = false) }
+                }, modifier = Modifier.testTag("update_allow_installs")) { Text(stringResource(R.string.update_open_settings)) }
+            },
+            dismissButton = { TextButton(onClick = { updater.dismiss(skip = false) }) { Text(stringResource(R.string.update_later)) } },
+        )
+        is UpdateState.Installing -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.update_installing)) },
+            text = { Text(stringResource(R.string.update_installing_summary)) },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { updater.installer.cancel() }) { Text(stringResource(R.string.close)) } },
+        )
+        is UpdateState.ConfirmationRequired -> AlertDialog(
+            onDismissRequest = { updater.installer.cancel() },
+            title = { Text(stringResource(R.string.update_confirmation_title)) },
+            text = { Text(stringResource(R.string.update_confirmation_summary)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = updater.installer.takeConfirmation()
+                    if (intent != null) runCatching { confirmation.launch(intent) }.onFailure { updater.installer.cancel() }
+                    else updater.retryConfirmation()
+                }, modifier = Modifier.testTag("update_continue_confirmation")) { Text(stringResource(R.string.update_continue)) }
+            },
+            dismissButton = { TextButton(onClick = { updater.installer.cancel() }) { Text(stringResource(R.string.close)) } },
+        )
         is UpdateState.Failed -> AlertDialog(
             onDismissRequest = { updater.dismiss(skip = false) },
             title = { Text(stringResource(R.string.update_failed)) },

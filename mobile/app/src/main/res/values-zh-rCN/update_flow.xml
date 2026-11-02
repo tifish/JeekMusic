@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_permission_title">允许 JeekMusic 更新自身</string>
+    <string name="update_permission_summary">请在 Android 设置中为 JeekMusic 开启“允许来自此来源的应用”。返回后会继续安装已下载的更新。系统安装策略仍可能要求确认。</string>
+    <string name="update_open_settings">打开设置</string>
+    <string name="update_installing">正在安装更新…</string>
+    <string name="update_installing_summary">正在等待 Android 完成安装。更新生效时 JeekMusic 会关闭。</string>
+    <string name="update_confirmation_title">Android 要求确认安装</string>
+    <string name="update_confirmation_summary">系统要求确认本次更新。继续可查看系统确认界面，关闭可取消。更新诊断会记录此结果，目前尚未安装完成。</string>
+    <string name="update_continue">继续</string>
+    <string name="update_cancelled">已取消更新，可以重试。</string>
+    <string name="update_signature_mismatch">安装包签名与当前版本不一致，请从同一发布渠道获取更新。</string>
+    <string name="update_invalid_package">下载的安装包与预期包名、版本或校验值不符，请重新检查更新。</string>
+    <string name="update_interrupted">上次更新被中断，可以重试并继续使用已下载的安装包。</string>
+    <string name="update_install_error">Android 未完成更新。请检查剩余空间和安装权限后重试。可在“关于与更新”中复制更新诊断。</string>
+    <string name="update_diagnostics">更新诊断</string>
+    <string name="update_diagnostics_summary">复制 Android 版本、安装来源、权限和最近安装会话结果。不含下载地址、凭证或音乐数据。</string>
+    <string name="update_copy_diagnostics">复制诊断</string>
+</resources>

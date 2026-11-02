@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_permission_title">Allow JeekMusic to update itself</string>
+    <string name="update_permission_summary">Enable “Allow from this source” for JeekMusic in Android settings. The downloaded update will resume when you return. Android may still require confirmation under its install policy.</string>
+    <string name="update_open_settings">Open settings</string>
+    <string name="update_installing">Installing update…</string>
+    <string name="update_installing_summary">Waiting for Android to finish. JeekMusic will close when the update is applied.</string>
+    <string name="update_confirmation_title">Android requires confirmation</string>
+    <string name="update_confirmation_summary">Android requested a system confirmation for this update. Continue to review it, or close to cancel. Update diagnostics record this result; the update has not completed yet.</string>
+    <string name="update_continue">Continue</string>
+    <string name="update_cancelled">Update cancelled. You can retry.</string>
+    <string name="update_signature_mismatch">The APK signing identity does not match this installation. Download a release from the same distributor.</string>
+    <string name="update_invalid_package">The downloaded APK does not match the expected package, version or checksum. Please check for updates again.</string>
+    <string name="update_interrupted">The previous update was interrupted. Retry to continue with the downloaded APK.</string>
+    <string name="update_install_error">Android did not complete the update. Check free space and installation settings, then retry. You can copy update diagnostics from About &amp; updates.</string>
+    <string name="update_diagnostics">Update diagnostics</string>
+    <string name="update_diagnostics_summary">Copy Android version, installation source, permissions and the last install session result. No download addresses, credentials or music data are included.</string>
+    <string name="update_copy_diagnostics">Copy diagnostics</string>
+</resources>

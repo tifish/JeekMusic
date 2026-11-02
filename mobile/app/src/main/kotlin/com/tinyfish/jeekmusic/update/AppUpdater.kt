@@ -1,9 +1,6 @@
 package com.tinyfish.jeekmusic.update
 
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.util.Log
 import com.tinyfish.jeekmusic.BuildConfig
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
@@ -11,7 +8,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -40,6 +36,8 @@ sealed interface UpdateState {
     data class Available(val info: UpdateInfo) : UpdateState
     data class Downloading(val info: UpdateInfo, val progress: Float) : UpdateState
     data class Installing(val info: UpdateInfo) : UpdateState
+    data class PermissionRequired(val info: UpdateInfo) : UpdateState
+    data class ConfirmationRequired(val info: UpdateInfo) : UpdateState
     data class Failed(val info: UpdateInfo, val message: String?) : UpdateState
 }
 
@@ -55,31 +53,34 @@ enum class CheckResult { UPDATE_AVAILABLE, UP_TO_DATE, FAILED }
 class AppUpdater @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
+    val installer: UpdateInstaller,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    private val _state = installer.state
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     /** 启动后在后台调用：开关打开、且距上次检查超过一天时才联网。网络错误静默忽略。 */
     suspend fun checkIfDue() {
-        // 上次更新留下的安装包（已经装好了，或者没装）启动时清掉
-        withContext(Dispatchers.IO) { updatesDir().deleteRecursively() }
+        installer.reconcile()
+        if (state.value != UpdateState.Idle) return
         val current = settings.current()
         if (!current.autoUpdateCheck) return
         if (System.currentTimeMillis() - current.lastUpdateCheck < CHECK_INTERVAL_MS) return
-        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed", it) }.getOrNull() ?: return
+        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed: ${it.javaClass.simpleName}") }.getOrNull() ?: return
         settings.setLastUpdateCheck(System.currentTimeMillis())
-        if (info.versionCode > BuildConfig.VERSION_CODE && info.versionCode != current.skippedUpdateVersion) {
+        if (state.value == UpdateState.Idle && info.versionCode > BuildConfig.VERSION_CODE && info.versionCode != current.skippedUpdateVersion) {
             _state.value = UpdateState.Available(info)
         }
     }
 
     /** 设置里的"检查更新"：忽略检查间隔和"跳过此版本"。 */
     suspend fun checkNow(): CheckResult {
-        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed", it) }.getOrNull()
+        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed: ${it.javaClass.simpleName}") }.getOrNull()
             ?: return CheckResult.FAILED
         settings.setLastUpdateCheck(System.currentTimeMillis())
         if (info.versionCode <= BuildConfig.VERSION_CODE) return CheckResult.UP_TO_DATE
+        if (state.value is UpdateState.Installing || state.value is UpdateState.Downloading ||
+            state.value is UpdateState.ConfirmationRequired || state.value is UpdateState.PermissionRequired) return CheckResult.UPDATE_AVAILABLE
         _state.value = UpdateState.Available(info)
         return CheckResult.UPDATE_AVAILABLE
     }
@@ -87,39 +88,38 @@ class AppUpdater @Inject constructor(
     /** 关闭更新提示；[skip] 为 true 时以后不再自动提示这个版本。 */
     fun dismiss(skip: Boolean) {
         val info = (state.value as? UpdateState.Available)?.info ?: (state.value as? UpdateState.Failed)?.info
-        _state.value = UpdateState.Idle
+        installer.dismiss()
         if (skip && info != null) scope.launch { settings.setSkippedUpdateVersion(info.versionCode) }
     }
 
+    @Synchronized
     fun downloadAndInstall(info: UpdateInfo) {
-        if (state.value is UpdateState.Downloading || state.value is UpdateState.Installing) return
-        _state.value = UpdateState.Downloading(info, 0f)
+        if (state.value is UpdateState.Downloading || state.value is UpdateState.Installing || state.value is UpdateState.ConfirmationRequired) return
+        installer.downloading(info)
         scope.launch {
             try {
                 val apk = download(info)
-                _state.value = UpdateState.Installing(info)
-                install(apk)
+                installer.install(info, apk)
             } catch (e: Exception) {
-                Log.w(TAG, "update failed", e)
-                _state.value = UpdateState.Failed(info, e.message)
+                installer.fail(info, (e as? UpdateFailure)?.code ?: "download_or_install_error")
             }
         }
     }
 
-    /** 安装结果（[InstallResultReceiver]）：成功时 App 会被系统替换并重启，不会走到这里。 */
-    internal fun onInstallFailed(message: String?) {
-        val info = when (val s = state.value) {
-            is UpdateState.Installing -> s.info
-            is UpdateState.Downloading -> s.info
-            else -> return
+    /** Permission is checked before creating a session, so granting it does not leave an old
+     * confirmation session waiting for a second system button press. */
+    fun onForeground() {
+        scope.launch {
+            installer.reconcile()
+            val pending = state.value as? UpdateState.PermissionRequired
+            if (pending != null && installer.canInstall()) downloadAndInstall(pending.info)
         }
-        _state.value = UpdateState.Failed(info, message)
     }
 
-    /** 用户在系统的安装确认界面点了取消。 */
-    internal fun onInstallCancelled() {
-        val info = (state.value as? UpdateState.Installing)?.info ?: return
-        _state.value = UpdateState.Available(info)
+    fun retryConfirmation() {
+        val pending = state.value as? UpdateState.ConfirmationRequired ?: return
+        installer.cancel()
+        downloadAndInstall(pending.info)
     }
 
     private suspend fun fetchLatest(): UpdateInfo? = withContext(Dispatchers.IO) {
@@ -154,10 +154,10 @@ class AppUpdater @Inject constructor(
 
     private fun download(info: UpdateInfo): File {
         val dir = updatesDir().apply { mkdirs() }
-        val file = File(dir, "JeekMusic-${info.versionName}.apk")
+        val file = installer.apkFile
         dir.listFiles()?.filter { it != file }?.forEach { it.delete() }
         // 已经下载过（比如第一次安装时去设置里允许了"安装未知应用"，回来再点更新），校验通过就直接用
-        if (file.length() == info.sizeBytes && info.sha256 != null && sha256(file).equals(info.sha256, ignoreCase = true)) return file
+        if (file.length() == info.sizeBytes && runCatching { installer.validate(info, file) }.isSuccess) return file
         val digest = MessageDigest.getInstance("SHA-256")
         // GitHub 的下载地址会重定向到另一个 https 域名，HttpURLConnection 默认会跟随
         val connection = open(info.apkUrl)
@@ -184,7 +184,11 @@ class AppUpdater @Inject constructor(
         val actual = digest.digest().toHex()
         if (info.sha256 != null && !info.sha256.equals(actual, ignoreCase = true)) {
             file.delete()
-            error("SHA-256 mismatch")
+            throw UpdateFailure("digest_mismatch")
+        }
+        if (info.sizeBytes <= 0 || file.length() != info.sizeBytes) {
+            file.delete()
+            throw UpdateFailure("size_mismatch")
         }
         return file
     }
@@ -203,26 +207,6 @@ class AppUpdater @Inject constructor(
     }
 
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
-
-    private fun install(apk: File) {
-        val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(context.packageName)
-            // 本 App 是上次的安装来源时可以免确认；否则系统仍会弹出确认界面
-            setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-        }
-        val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            session.openWrite("base.apk", 0, apk.length()).use { out ->
-                apk.inputStream().use { it.copyTo(out) }
-                session.fsync(out)
-            }
-            val intent = Intent(context, InstallResultReceiver::class.java)
-            // 系统要往 Intent 里填安装结果，所以必须是 MUTABLE
-            val pending = PendingIntent.getBroadcast(context, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
-            session.commit(pending.intentSender)
-        }
-    }
 
     private fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = TIMEOUT_MS

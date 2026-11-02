@@ -1,0 +1,20 @@
+// Explicit opt-in fixture build, never applied to normal local or CI release builds.
+// Usage: gradlew --init-script tools/self-update-fixture.init.gradle
+//   -PupdateFixtureVersion=<increasing code> :app:assembleRelease :app:assembleReleaseAndroidTest
+// Uses the app's normal release signing configuration. No credentials are embedded here.
+allprojects { project ->
+    project.plugins.withId('com.android.application') {
+        project.android.testBuildType = 'release'
+        project.androidComponents.finalizeDsl { dsl ->
+            def value = project.findProperty('updateFixtureVersion')
+            if (value == null) throw new GradleException('Specify -PupdateFixtureVersion explicitly')
+            dsl.defaultConfig.versionCode = Integer.parseInt(value)
+            dsl.defaultConfig.versionName = 'update-fixture-' + dsl.defaultConfig.versionCode
+            // Keep dependencies that the Android instrumentation runner also uses. R8 can prune
+            // them from the app while treating them as supplied by the app in the test APK.
+            // Final delivery must be rebuilt normally, with shrinking enabled.
+            dsl.buildTypes.getByName('release').minifyEnabled = false
+            dsl.buildTypes.getByName('release').shrinkResources = false
+        }
+    }
+}

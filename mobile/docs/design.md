@@ -1074,8 +1074,8 @@ SAF 树授权不属于运行时权限，通过 `takePersistableUriPermission` �
 - 入口：设置页的第一项"检查更新"（显示版本号，检查中显示"正在检查…"，重复点击忽略）
 - 提示：`UpdatePrompt` 放在最外层（设置页里手动检查时也能显示）；"已是最新版本""检查更新失败"等全局提示（`MessageBus`）也在最外层的 `JeekMusicApp` 收集——以前只有主界面收集，设置、搜索等全屏页面打开时发出的提示都丢了。主界面的 Scaffold 用同一个 `SnackbarHostState` 显示在迷你播放条上方，其他页面在最外层显示。更新对话框："更新 / 跳过此版本 / 以后再说"，下载时显示进度
 - 下载：`HttpURLConnection`（GitHub 的下载地址会重定向到另一个 https 域名，默认跟随），写到 `cacheDir/updates/`，边下载边算 SHA-256，和 GitHub 给出的不一致时放弃
-- 安装：`PackageInstaller` 会话（`REQUEST_INSTALL_PACKAGES`），结果由 `InstallResultReceiver` 接收：`STATUS_PENDING_USER_ACTION` 时启动系统的确认界面（首次还会要求允许"安装未知应用"）；用户取消时回到"发现新版本"提示，失败时显示原因。签名不一致时系统会拒绝安装
-- 免确认：会话设置 `USER_ACTION_NOT_REQUIRED`，并声明 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`（普通权限）。第一次通过 App 内更新安装后，本 App 成为"安装来源"，之后的更新不再弹出系统确认；用 adb 或文件管理器安装的版本第一次更新仍需确认
+- 安装：`UpdateInstaller` 先校验 APK 大小、摘要（发布元数据提供时）、实际包名、递增版本和当前签名，再检查 `canRequestPackageInstalls`。未授权时从前台引导系统设置，返回后复用已验证 APK 创建全新会话，不留下等确认的旧会话。`InstallResultReceiver` 非导出，通过绑定会话的随机回调身份处理结果；系统要求确认时由前台 UI 打开，取消/失败可重试。私有会话记录支持进程死亡和包替换恢复，成功必须核对实际已安装版本。
+- 免确认：会话请求 `USER_ACTION_NOT_REQUIRED`，声明 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`。自更新本身是一种资格，无需先成为安装来源；未知来源授权、APK target 门槛、安装所有权/设备策略、系统静默更新限流和厂商策略仍可能要求确认。不能保证第一次确认后永不弹窗。设置“关于与更新 → 更新诊断”可复制脱敏会话证据，验证方法和实测范围见 [Android 自更新](../../docs/android-update.md)。
 - F-Droid 不允许应用自更新；以后上架 F-Droid 时需要单独的构建变体关闭这个功能
 
 ## 14. 风险

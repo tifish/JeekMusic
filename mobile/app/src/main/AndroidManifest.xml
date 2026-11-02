@@ -18,7 +18,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 从 GitHub 自动更新：用 PackageInstaller 安装新版本（需求 U-6） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- 上次由本 App 安装时，后续更新可以不再弹出系统确认（普通权限，自动授予） -->
+    <!-- Android 12+ 自更新可申请免确认；仍需未知来源授权并满足系统策略（普通权限） -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!--
         可选："写入音乐文件"保存封面、歌词时，用来把文件的修改时间改回原来的值（需求 C-4、LY-11）。
@@ -81,6 +81,10 @@
         </provider>
         <receiver
             android:name=".update.InstallResultReceiver"
-            android:exported="false" />
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

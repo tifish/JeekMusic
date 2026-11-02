@@ -1,7 +1,7 @@
 """Isolated loopback-only production TLS adversarial regression. Never target the daily listener.
 Uses new private data, synthetic audio, and an ephemeral 127.0.0.1 listener. No secrets in evidence.
 """
-import argparse, concurrent.futures, subprocess, hashlib, json, os, socket, ssl, struct, tempfile, time, uuid, wave
+import argparse, concurrent.futures, subprocess, shutil, hashlib, json, os, socket, ssl, struct, tempfile, time, uuid, wave
 from pathlib import Path
 from urllib.parse import urlsplit
 from mcp_client import McpClient
@@ -83,6 +83,8 @@ def main():
                 assert w.request("preference_training",protocol=3,action="learn",downloadConfirmed=True)["code"]=="unauthorized";w.close()
                 replay=Wire(peer,auth=False);replay.send(dict(op="pair",deviceId=uuid.uuid4().hex,invitation=secret));assert replay.receive()["code"]=="unauthorized";replay.close()
                 bad=Wire(peer,auth=False);bad.send(dict(op="auth",protocol=4,deviceId=peer["deviceId"],token="0"*64));assert bad.receive()["code"]=="unauthorized";bad.close()
+                denied=Wire(peer);denied.send(dict(op="request",kind="state",length=32_000_000));assert denied.receive()["code"]=="unauthorized";denied.close()
+                print("PASS write permission rejected before large-body admission",flush=True)
                 print("PASS pairing one-use replay, generic auth errors, default permissions/download bypass refusal",flush=True)
                 for payload in [b'{"op":"auth","op":"pair"}', b'{"a":{"b":{"c":{"d":{"e":1}}}}}', b'{"op":"auth","token":"'+bytes([255])+b'"}', b'[]', b'{"op":[]}', b'{"op":"auth","token":12}']:
                     bad=Wire(peer,source="127.0.0.2",auth=False)
@@ -149,6 +151,7 @@ def main():
                 job=good.request("plan",rootId=rootId,selection=[""])
                 plan=wait(lambda: (lambda r:None if r.get("pending") else r)(good.request("plan_status",job=job["job"])),30)
                 assert plan["total"]==205
+                completed=call(c,"lan_sync_control",action="cancel_task",jobId=job["job"]);assert completed["state"]=="complete"
                 p0=good.request("manifest",rootId=rootId,plan=plan["plan"],offset=0)["files"]
                 p1=good.request("manifest",rootId=rootId,plan=plan["plan"],offset=200)["files"]
                 assert len(p0)==200 and len(p1)==5
@@ -168,8 +171,14 @@ def main():
                 wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0,35)
                 slowRead.close();good.close();good=Wire(peer)
                 print("PASS real slow TLS writer, authenticated idle and stalled-body deadlines release all leases",flush=True)
-                # Permission change closes an existing TLS stream and invalidates the plan.
+                # Revoke the grant while a real download stream is blocked on an unread receiver.
+                revoking=Wire(peer,source="127.0.0.14");revoking.s.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,1024)
+                for i in range(20):
+                    value=dict(op="read",deviceId=peer["deviceId"],token=peer["token"],rootId=rootId,plan=plan["plan"],path=p0[0]["path"],offset=0)
+                    payload=json.dumps(value,separators=(",", ":")).encode();revoking.send(dict(op="request",kind="read",length=len(payload)));revoking.s.sendall(struct.pack(">i",len(payload))+payload)
                 call(c,"lan_sync_control",action="authorize",deviceId=peer["deviceId"],permissions=dict(readMusic=True,writeSync=False,manageLearning=False,downloadLearning=False))
+                wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0,3);revoking.close()
+                print("PASS concurrent permission revocation interrupts an active slow TLS download",flush=True)
                 try:good.request("roots");raise AssertionError("Downgrade left old TLS alive")
                 except (OSError,EOFError):pass
                 good.close();good=Wire(peer)
@@ -190,13 +199,27 @@ def main():
                 if a.android:
                     assert a.android.startswith("emulator-")
                     androidPeer,_=pair(dict(readMusic=True,writeSync=True,manageLearning=False,downloadLearning=False))
-                    config={"readOnly":dict(replacement,host="10.0.2.2"),"writable":dict(androidPeer,host="10.0.2.2")}
+                    config={"readOnly":dict(replacement,host="10.0.2.2"),"writable":dict(androidPeer,host="10.0.2.2"),"rootId":rootId}
                     adb=["adb","-s",a.android]
                     try:
                         subprocess.run(adb+["shell","run-as","com.tinyfish.jeekmusic.debug","mkdir","-p","files"],capture_output=True,check=True)
                         subprocess.run(adb+["shell","-T","run-as","com.tinyfish.jeekmusic.debug","dd","of=files/isolated-lan-test.json","bs=1","count="+str(len(json.dumps(config).encode()))],input=json.dumps(config).encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True,timeout=20)
-                        r=subprocess.run(adb+["shell","am","instrument","-w","-e","class","com.tinyfish.jeekmusic.data.sync.LanPublicProtocolTest","-e","lanFixture","true","com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner"],capture_output=True,text=True,timeout=180)
+                        r=subprocess.run(adb+["shell","am","instrument","-w","-e","class","com.tinyfish.jeekmusic.data.sync.LanPublicProtocolTest#realPinnedTlsPagingReadWriteLearningAndWrongPin","-e","lanFixture","true","com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner"],capture_output=True,text=True,timeout=180)
                         assert r.returncode==0 and "OK (1 test)" in r.stdout, r.stdout+r.stderr
+                        assert shutil.disk_usage(music).free>4*1024*1024*1024,"Cancellation fixture requires 4 GiB free scratch space"
+                        heavy=music/"Heavy";heavy.mkdir();large=heavy/"Synthetic.wav"
+                        with large.open("wb") as output:output.seek(2*1024*1024*1024-1);output.write(bytes(1))
+                        try:
+                            cancelled=subprocess.run(adb+["shell","am","instrument","-w","-e","class","com.tinyfish.jeekmusic.data.sync.LanPublicProtocolTest#cancelsTheOwnedRemotePlanWithoutBlockingTheCaller","-e","lanCancelFixture","true","com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner"],capture_output=True,text=True,timeout=60)
+                            assert cancelled.returncode==0 and "OK (1 test)" in cancelled.stdout,cancelled.stdout+cancelled.stderr
+                            assert any(t["state"]=="cancelled" and t["deviceId"]==replacement["deviceId"] for t in call(c,"lan_sync_status")["tasks"])
+                            time.sleep(.3)
+                            admin=Wire(replacement);job=admin.request("plan",rootId=rootId,selection=["Heavy"]);admin.close()
+                            assert call(c,"lan_sync_control",action="cancel_task",jobId=job["job"])["state"]=="cancelled"
+                            time.sleep(.3)
+                            probe=Wire(replacement);assert "roots" in probe.request("roots");probe.close()
+                            print("PASS actual Android cancellation is nonblocking, remote plan cancelled/diagnosed; MCP cancels active owned plan without revoking device",flush=True)
+                        finally:large.unlink();heavy.rmdir()
                         print("PASS actual Android LanProtocol: pinned TLS, directory/manifest paging, SHA-256 file, user/delta/status exchange and wrong-pin rejection",flush=True)
                     finally:subprocess.run(adb+["shell","run-as","com.tinyfish.jeekmusic.debug","rm","-f","files/isolated-lan-test.json"],capture_output=True)
                 if a.ui:

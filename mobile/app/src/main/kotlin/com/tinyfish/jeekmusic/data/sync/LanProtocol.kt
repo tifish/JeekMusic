@@ -18,7 +18,18 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
     private var output: DataOutputStream? = null
     private var authenticated = false
     @Volatile private var cancelled = false
-    fun cancel() { cancelled = true; runCatching { active?.close() } }
+    private val activePlan = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    internal val pendingPlanJobId: String? get() = activePlan.get()
+    @Volatile internal var remoteCancellationState = "none"
+        private set
+    private fun cancelRemotePlan() {
+        val id=activePlan.getAndSet(null) ?: return
+        remoteCancellationState="queued"
+        try { remoteCancellation.execute {
+            remoteCancellationState=try { LanProtocol(connection).use { it.call("plan_cancel",JSONObject().put("job",id)).optString("state","unreachable") } } catch(_: Exception) { "unreachable" }
+        } } catch(_: java.util.concurrent.RejectedExecutionException) { remoteCancellationState="unreachable" }
+    }
+    fun cancel() { cancelled = true; runCatching { active?.close() }; cancelRemotePlan() }
     override fun close() { runCatching { active?.close() }; active = null; input = null; output = null; authenticated = false }
     private fun pause(milliseconds: Long) {
         var remaining = milliseconds
@@ -62,6 +73,8 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
             output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
             var result = receive(if (op == "state") 32_000_000 else 2_000_000)
             if (op == "plan") {
+                if(result.optBoolean("pending")) activePlan.set(result.getString("job"))
+                if(cancelled) cancelRemotePlan()
                 val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(31)
                 while (result.optBoolean("pending")) {
                     if (System.nanoTime() > deadline) {
@@ -72,8 +85,9 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
                     result = call("plan_status", JSONObject().put("job", result.getString("job")))
                 }
             }
+            if(op == "plan") activePlan.set(null)
             return result
-        } catch (e: Exception) { close(); throw e }
+        } catch (e: Exception) { if(cancelled) cancelRemotePlan(); close(); throw e }
     }
     private fun send(value: JSONObject, maximum: Int) {
         val bytes = value.toString().toByteArray(Charsets.UTF_8); require(bytes.size <= maximum)
@@ -113,6 +127,8 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         } catch (e: Exception) { socket.close(); throw e }
     }
     companion object {
+        private val remoteCancellation = java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,
+            java.util.concurrent.ArrayBlockingQueue<Runnable>(4),java.util.concurrent.ThreadFactory { task -> Thread(task,"LAN plan cancellation").apply { isDaemon=true } },java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
         private val pacingGate = Any()
         private var nextRequest = 0L
         private fun requestDelay(): Long = synchronized(pacingGate) {

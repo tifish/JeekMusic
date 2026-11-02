@@ -50,4 +50,24 @@ class LanPublicProtocolTest {
         val wrongPin=JSONObject(readOnly.toString()).put("pin","0".repeat(64))
         assertTrue(runCatching { LanProtocol(wrongPin).use { it.call("roots") } }.isFailure)
     }
+    @Test fun cancelsTheOwnedRemotePlanWithoutBlockingTheCaller() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("lanCancelFixture") == "true")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val fixture=JSONObject(File(context.filesDir,"isolated-lan-test.json").readText())
+        val connection=fixture.getJSONObject("readOnly")
+        val client=LanProtocol(connection)
+        val executor=java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val future=executor.submit<JSONObject> { client.call("plan",JSONObject().put("rootId",fixture.getString("rootId")).put("selection",JSONArray(listOf("Heavy")))) }
+            val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+            while(client.pendingPlanJobId==null && !future.isDone && System.nanoTime()<deadline) Thread.sleep(5)
+            assertNotNull(client.pendingPlanJobId)
+            val started=System.nanoTime();client.cancel()
+            assertTrue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started)<500)
+            while(client.remoteCancellationState=="queued" && System.nanoTime()<deadline) Thread.sleep(10)
+            assertEquals("cancelled",client.remoteCancellationState)
+            assertTrue(runCatching { future.get(2,java.util.concurrent.TimeUnit.SECONDS) }.isFailure)
+        } finally { client.cancel();client.close();executor.shutdownNow() }
+    }
+
 }

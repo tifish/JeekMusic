@@ -246,6 +246,25 @@ public sealed class LanSyncService : IDisposable
     {
         if (Devices[device]?["permissions"]?[permission]?.GetValue<bool>() != true) throw new UnauthorizedAccessException();
     }
+    void RequireOperation(string device, string? operation)
+    {
+        if (operation == "capabilities") return;
+        if (operation is "state" or "preference_delta") Require(device, "writeSync");
+        else if (operation is "preference_training" or "preference_results")
+        {
+            if (Devices[device]?["permissions"]?["readMusic"]?.GetValue<bool>() != true && Devices[device]?["permissions"]?["manageLearning"]?.GetValue<bool>() != true) throw new UnauthorizedAccessException();
+        }
+        else Require(device, "readMusic");
+    }
+    public JsonObject CancelTask(string id, string? device = null)
+    {
+        lock (_gate)
+        {
+            if (!_jobs.TryGetValue(id, out var job) || device is not null && job.Device != device) throw new UnauthorizedAccessException();
+            if (!job.Task.IsCompleted) job.Cancel.Cancel();
+            Notify(); return new JsonObject { ["state"] = job.Cancel.IsCancellationRequested ? "cancelled" : "complete" };
+        }
+    }
     void Rate(string device, string? op)
     {
         lock (_gate)
@@ -292,7 +311,7 @@ public sealed class LanSyncService : IDisposable
             ["authenticationFailures"] = Interlocked.Read(ref _authFailures), ["protocolFailures"] = Interlocked.Read(ref _protocolFailures), ["rateLimited"] = Interlocked.Read(ref _limited), ["overloadRejected"] = Interlocked.Read(ref _overload),
             ["budgets"] = new JsonObject { ["handshakeSeconds"] = 5, ["authenticationSeconds"] = 5, ["requestSeconds"] = 30, ["writeSeconds"] = 15, ["connections"] = 24, ["unauthenticated"] = 8, ["authenticated"] = 16, ["largeFrames"] = 2, ["expensiveWork"] = 2, ["planConcurrency"] = 1, ["deviceRequestsPerSecond"] = 80, ["globalRequestsPerSecond"] = 320, ["plansPerDevicePerMinute"] = 4, ["deviceReadBytesPerSecond"] = 16 * 1024 * 1024, ["globalReadBytesPerSecond"] = 64 * 1024 * 1024, ["authenticationBytes"] = LanLimits.AuthFrame, ["smallFrameBytes"] = LanLimits.SmallFrame, ["largeFrameBytes"] = LanLimits.LargeFrame, ["planFiles"] = 100000, ["planBytes"] = 500L * 1024 * 1024 * 1024, ["planSeconds"] = 1800 },
             ["learningOwner"] = _app.Preferences.Training.RemoteOwner,
-            ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device, ["state"] = j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
+            ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device, ["state"] = j.Value.Cancel.IsCancellationRequested ? "cancelled" : j.Value.Task.IsFaulted || j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result.ContainsKey("error") ? "failed" : j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
             ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
             ["sharingMode"] = "library", ["libraryFolderCount"] = folders.Count,
@@ -426,6 +445,7 @@ public sealed class LanSyncService : IDisposable
                                 kind = header["kind"]?.GetValue<string>();
                                 var length = header["length"]?.GetValue<int>() ?? 0;
                                 if (header["op"]?.GetValue<string>() != "request" || length < 2 || length > LanLimits.Request(kind)) throw new IOException("Invalid request header");
+                                lock (_gate) RequireOperation(auth.Device, kind); // Deny unauthorized work before body allocation or acknowledgement.
                                 if (length > LanLimits.SmallFrame || kind is "state" or "preference_delta")
                                 {
                                     large = _largeFrames.Wait(0);
@@ -491,7 +511,7 @@ public sealed class LanSyncService : IDisposable
         if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = Devices[device]!["expiresAt"]!.DeepClone() }; }
         lock (_gate)
         {
-            Require(device, op is "state" or "preference_delta" ? "writeSync" : "readMusic");
+            RequireOperation(device, op);
         }
         if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read")) throw new ArgumentException("Unknown operation");
         lock (_gate) _lastOperation = op;
@@ -547,7 +567,7 @@ public sealed class LanSyncService : IDisposable
             lock (_gate)
             {
                 if (!_jobs.TryGetValue(a["job"]?.GetValue<string>() ?? "", out var job) || job.Device != device) throw new UnauthorizedAccessException();
-                if (op == "plan_cancel") { if (!job.Task.IsCompleted) job.Cancel.Cancel(); return new JsonObject { ["state"] = "cancelled" }; }
+                if (op == "plan_cancel") return CancelTask(a["job"]!.GetValue<string>(), device);
                 if (!job.Task.IsCompleted) return new JsonObject { ["pending"] = true, ["job"] = a["job"]!.DeepClone() };
                 return job.Task.GetAwaiter().GetResult().DeepClone().AsObject();
             }

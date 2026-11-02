@@ -517,3 +517,5 @@ Android结果同步每次最多100页并持久化 offset/version；快照变化�
 `lan_sync_control` 新增 `configure`（仅停止时，bindAddress IPv4、port 1–65535）、`authorize`（deviceId、完整 permissions、可选 credentialDays 1–365 默认90）。permissions 为严格对象，四个必填布尔字段 readMusic/writeSync/manageLearning/downloadLearning，不接受额外字段。授权变更会关闭该设备连接、使计划失效并取消归属任务；不会取消本机独立任务。invite 追加 advertisedPort 1–65535、permissions、credentialDays，新邀请默认只读。既有 start/stop/share/unshare/invite/revoke 参数兼容；旧 share/unshare 规则不变。includeQr 与文本 invite 共用授权和有效期参数。configure 不开服务，不改防火墙。详情见 [部署说明](../../docs/lan-public-deployment.md)。
 
 `checkpoint_client` 现在还调用正常退出共用的 Shell.SaveWindow，保存当前窗口位置/尺寸/最大化、导航目标、目录展开/收起和分隔/歌词布局。显式 JEEKMUSIC_DATA 指向默认数据目录时与省略变量使用同一实例与 MCP 管道，避免同目录双进程；非默认夹具仍保持隔离。
+
+`lan_sync_control cancel_task` 接受 jobId（32 字符，来自 status.tasks），复用 TLS plan_cancel 的业务服务，仅取消该计划；不撤销设备或取消独立学习。tasks.state 区分 running/complete/cancelled/failed。写同步权限在协议4的大帧确认/正文分配之前检查。

@@ -43,7 +43,9 @@ Windows 发布流程此前没有 Authenticode 签名，本机也没有发布者�
 凭证策略更新：已配对token长期有效（credentialPolicy=until_revoked），不执行旧expiresAt，不自动轮换或周期重配；旧token哈希不重置。credentialDays仅保留旧调用兼容且忽略。仍保留手动撤销/重配和降权立即终止会话/归属任务。邀请码仍为5分钟一次性；握手/空闲/6小时会话、计划/暂存资源期限不变。回归验证历史过期字段仍可认证。
 
 
-## 双向文件及直接目标集成（待最终交付SHA核对）
+## 双向文件及直接目标集成
+
+最终源码 `e9f9a22` / 正式 `1.0.224` 的两端 CI、标签与包来源、摘要/签名、MCP 对齐、生产保全重启和 Android 学习失败 UI 已补充到[最终交付记录](lan-public-delivery-1.0.224.md)。Windows 最终包前台视觉受系统防火墙授权弹窗阻挡，未冒充通过；其 MCP/状态保全通过。软件包 SHA 与后续纯交付文档提交分别记录，后者不重新发布软件。
 
 本轮文件合同1、layoutVersion2：旧映射不可执行且不搬删旧文件；新映射直接使用SAF所选根，fileProtocol缺失明确升级。六权限中的writeFiles/deleteFiles默认false，writeSync不授文件写。持久token仍长期有效。
 

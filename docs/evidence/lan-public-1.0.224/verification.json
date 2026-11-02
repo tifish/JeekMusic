@@ -1,0 +1,112 @@
+{
+  "buildSha": "e9f9a22b648c11074ba1451cdf3b526d0a69c79f",
+  "version": "1.0.224",
+  "verifiedDate": "2026-11-03",
+  "ci": [
+    {
+      "platform": "Desktop",
+      "headSha": "e9f9a22b648c11074ba1451cdf3b526d0a69c79f",
+      "conclusion": "success",
+      "url": "https://github.com/tifish/JeekMusic/actions/runs/41485753850",
+      "corePassed": 117,
+      "appPassed": 722,
+      "appSkipped": 2
+    },
+    {
+      "platform": "Mobile",
+      "headSha": "e9f9a22b648c11074ba1451cdf3b526d0a69c79f",
+      "conclusion": "success",
+      "url": "https://github.com/tifish/JeekMusic/actions/runs/41485753897",
+      "tasks": [
+        "lintDebug",
+        "testDebugUnitTest",
+        "assembleRelease"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "file": "JeekMusic-desktop-1.0.224-win-x64.zip",
+      "bytes": 41444547,
+      "sha256": "c6b080145588bf4afd7d1e490712894f46ef5ef99ad621267da48916c77c7da8",
+      "url": "https://github.com/tifish/JeekMusic/releases/download/desktop-v1.0.224/JeekMusic-desktop-1.0.224-win-x64.zip",
+      "tag": "desktop-v1.0.224",
+      "targetCommitish": "e9f9a22b648c11074ba1451cdf3b526d0a69c79f"
+    },
+    {
+      "file": "JeekMusic-1.0.224.apk",
+      "bytes": 24909941,
+      "sha256": "90f833d1ae41cc3c97ac13db4578078e76d5d5c8a2ee9fcab37086217a5252b4",
+      "url": "https://github.com/tifish/JeekMusic/releases/download/v1.0.224/JeekMusic-1.0.224.apk",
+      "tag": "v1.0.224",
+      "targetCommitish": "e9f9a22b648c11074ba1451cdf3b526d0a69c79f"
+    }
+  ],
+  "windows": {
+    "fileVersion": "1.0.224.0",
+    "productVersion": "1.0.224+e9f9a22b648c11074ba1451cdf3b526d0a69c79f",
+    "authenticode": "NotSigned"
+  },
+  "android": {
+    "package": "com.tinyfish.jeekmusic",
+    "versionCode": 224,
+    "versionName": "1.0.224",
+    "certificateSha256": "28a86a1affb4a31ed0a2a14e602b2ebed23d1c4385b366e9ccfac3eaf5a972fe",
+    "matchesPriorOfficialSigner": true,
+    "device": "JeekLanEmpty35 / emulator-5584 / API35",
+    "preservingUpgradeFrom": 221,
+    "learningFailureUi": "passed: sanitized actual historical decode_length status cached only in isolated AVD, opened diagnostics, original cache restored; no training"
+  },
+  "mcp": {
+    "toolCount": 40,
+    "catalogsExact": true,
+    "developmentDynamicCodeSupported": true,
+    "aotDynamicCodeSupported": false,
+    "sixPermissions": true,
+    "backupPaging": true,
+    "strictSchema": true
+  },
+  "restart": {
+    "version": "1.0.224.0",
+    "oldVersion": "1.0.215.0",
+    "newPid": 30088,
+    "nativeAot": true,
+    "processChanged": true,
+    "queueCount": 577,
+    "queueIdentityOrder": true,
+    "queueIndex": true,
+    "position": true,
+    "playing": true,
+    "muted": true,
+    "volume": true,
+    "volumeReadable": true,
+    "outputSelection": true,
+    "outputEndpoint": true,
+    "songFilter": true,
+    "columns": true,
+    "pairedDeviceIds": true,
+    "tokenHashes": true,
+    "certificate": true,
+    "listenerPort": true,
+    "listenerEnabled": true,
+    "learningEvents": true,
+    "explicitDefaultMcpSameProcess": true,
+    "noSystemVolumeWrite": true,
+    "source": true,
+    "persistedLayout": true
+  },
+  "analysis": {
+    "sensitivity": "NORMAL",
+    "rulesVersion": 10,
+    "modelThreshold": 3.25,
+    "legacyThreshold": 0.6,
+    "baseEvidenceReused": true,
+    "pendingReanalysis": false
+  },
+  "limitations": [
+    "Windows foreground visual acceptance blocked by OS firewall consent dialog for new executable path; no network permission granted or firewall rule changed. MCP/state acceptance passed.",
+    "No complete penetration audit or real public-network end-to-end acceptance.",
+    "API35 shared SAF/FUSE evidence is not ARM/OEM/SD-card coverage.",
+    "No user-library file write/delete, whole-library training, or public mapping activated."
+  ]
+}

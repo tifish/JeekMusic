@@ -12,4 +12,11 @@
 <string name="lan_restore_backup">Restore original</string>
 <string name="lan_purge_backup">Delete this backup</string>
 <string name="lan_backup_confirm">Only this verified receipt will be processed. Other files are retained.</string>
+<string name="lan_change_modified">Modified</string>
+<string name="lan_change_deleted">Deleted</string>
+<string name="lan_change_created">Created</string>
+<string name="lan_change_unchanged">Unchanged</string>
+<string name="lan_change_initial">Present without a baseline</string>
+<string name="lan_change_absent">Absent without a baseline</string>
+<string name="lan_change_unknown">Not available</string>
 </resources>

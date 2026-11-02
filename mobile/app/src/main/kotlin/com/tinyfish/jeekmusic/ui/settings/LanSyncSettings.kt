@@ -113,7 +113,7 @@ fun LanSyncSettings(lan: LanSyncService) {
         for(conflict in status.fileConflicts.take(20)) Card(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=4.dp)) {
             Column(Modifier.padding(12.dp)) {
                 Text(conflict.getString("path"),style=MaterialTheme.typography.titleSmall)
-                Text(stringResource(R.string.lan_file_conflict_changes,conflict.optString("localChange"),conflict.optString("remoteChange")),style=MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.lan_file_conflict_changes,fileChangeLabel(conflict.optString("localChange")),fileChangeLabel(conflict.optString("remoteChange"))),style=MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     TextButton(enabled=!status.running,onClick={ lan.resolveConflict(conflict.getString("id"),"local") }) { Text(stringResource(R.string.lan_use_phone)) }
                     TextButton(enabled=!status.running,onClick={ lan.resolveConflict(conflict.getString("id"),"remote") }) { Text(stringResource(R.string.lan_use_pc)) }
@@ -185,6 +185,13 @@ fun LanSyncSettings(lan: LanSyncService) {
     } },confirmButton={ TextButton(onClick={ backups=null }) { Text(stringResource(R.string.close)) } }) }
     backupAction?.let { (row,purge) -> AlertDialog(onDismissRequest={ if(!busy)backupAction=null },title={ Text(stringResource(if(purge) R.string.lan_purge_backup else R.string.lan_restore_backup)) },text={ Text(row.getString("path")+"\n"+stringResource(R.string.lan_backup_confirm)) },confirmButton={ TextButton(enabled=!busy,onClick={ scope.launch { busy=true;try { lan.maintainBackup(row.getString("operation"),purge);backupAction=null;backups=lan.backups() }catch(e: Exception) { error=e.message }finally { busy=false } } }) { Text(stringResource(R.string.confirm)) } },dismissButton={ TextButton(enabled=!busy,onClick={ backupAction=null }) { Text(stringResource(R.string.cancel)) } }) }
 }
+
+@Composable
+private fun fileChangeLabel(value: String)=stringResource(when(value) {
+    "modified"->R.string.lan_change_modified;"deleted"->R.string.lan_change_deleted;"created"->R.string.lan_change_created
+    "unchanged"->R.string.lan_change_unchanged;"untracked_present"->R.string.lan_change_initial;"absent"->R.string.lan_change_absent
+    else->R.string.lan_change_unknown
+})
 
 @Composable
 private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: () -> Unit, onError: (String) -> Unit) {

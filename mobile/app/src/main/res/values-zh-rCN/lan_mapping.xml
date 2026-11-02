@@ -12,4 +12,11 @@
 <string name="lan_restore_backup">恢复原文件</string>
 <string name="lan_purge_backup">删除此备份</string>
 <string name="lan_backup_confirm">只处理这条已核验回执，保留其他文件。</string>
+<string name="lan_change_modified">已修改</string>
+<string name="lan_change_deleted">已删除</string>
+<string name="lan_change_created">已新增</string>
+<string name="lan_change_unchanged">未改变</string>
+<string name="lan_change_initial">存在，尚无基线</string>
+<string name="lan_change_absent">不存在，尚无基线</string>
+<string name="lan_change_unknown">状态未知</string>
 </resources>

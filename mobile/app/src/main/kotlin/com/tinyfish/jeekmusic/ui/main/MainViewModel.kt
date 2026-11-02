@@ -77,7 +77,8 @@ class MainViewModel @Inject constructor(
 
     fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
 
-    fun toggleManualFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=!tagFilter.value.onlyManual)) }
+    fun toggleUnannotatedFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=false,onlyUnannotated=!tagFilter.value.unannotated)) }
+    fun toggleManualFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=!tagFilter.value.onlyManual,onlyUnannotated=false)) }
 
     fun clearFilter() = viewModelScope.launch { tagFilters.set(TagFilter()) }
 

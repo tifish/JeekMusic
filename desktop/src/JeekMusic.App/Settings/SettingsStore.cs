@@ -33,7 +33,7 @@ public sealed class SettingsStore
             {
                 var loaded = JsonSerializer.Deserialize(File.ReadAllBytes(path), SettingsJsonContext.Default.AppSettings) ?? new AppSettings();
                 // Unqualified QUIET in historical filters always meant the old MOOD negative.
-                loaded.TagFilter = loaded.TagFilter.Select(t => t switch { "QUIET" => "NON_SPORT", "POP" => "NON_CLASSICAL", _ => t }).Distinct().ToList();
+                loaded.TagFilter = JeekMusic.Library.ListBuilder.NormalizeFilter(loaded.TagFilter.Select(t => t switch { "QUIET" => "NON_SPORT", "POP" => "NON_CLASSICAL", _ => t }));
                 return loaded;
             }
         }

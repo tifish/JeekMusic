@@ -63,6 +63,43 @@ public sealed class SmartTagTests
         Assert.Equal(queue, h.Player.Queue.Items); Assert.Same(current, h.Player.CurrentTrack); Assert.Equal(position, h.Player.Position);
     });
 
+    [Fact] public Task UnannotatedRemovalKeepsNextAndOpenMenuOriginalTarget() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        h.Tools.Call("song_filter", new() { ["action"]="set", ["annotation"]="unannotated" });
+        await Until(() => !h.Vm.ComputingRows); h.Pump();
+        h.Table.SelectedItem=h.Rows[120]; h.ScrollTo(120);
+        var original=h.Track(120); var next=h.Track(121);
+        var context=h.Window.CaptureTagSelection([original]);
+        await h.Window.ApplyQuickTag([original],TagDimension.VOICE,Tag.VOCAL,context);
+        await Until(() => !h.Vm.ComputingRows && h.Rows.Count==259); h.Pump();
+        Assert.Equal(next.Id,((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        await h.Window.ApplyQuickTag([original],TagDimension.GENRE,Tag.CLASSICAL,context);
+        await Until(() => !h.Vm.ComputingRows); h.Pump();
+        Assert.Equal(next.Id,((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        Assert.All(h.App.Db.TagOverrides(),o=>Assert.Equal(original.TrackKey,o.TrackKey));
+        // Incoming sync uses the same recompute/snapshot notification, including AUTO withdrawal.
+        h.App.Db.SetTagOverride(original.TrackKey,"VOICE",null,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1000);
+        h.App.Db.SetTagOverride(original.TrackKey,"GENRE",null,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1000);
+        h.App.SmartTags.Recompute(); h.App.Library.RebuildSnapshot();
+        await Until(() => !h.Vm.ComputingRows && h.Rows.Count==260); h.Pump();
+        Assert.Equal(next.Id,((JeekMusic.UI.ViewModels.SongRow)h.Table.SelectedItem!).Track!.Id);
+        h.Vm.ToggleTag("MANUAL"); Assert.DoesNotContain("UNANNOTATED",h.Vm.TagFilter);
+        h.Vm.ToggleTag("UNANNOTATED"); Assert.DoesNotContain("MANUAL",h.Vm.TagFilter);
+    });
+
+    [Theory] [InlineData("MANUAL", "manual")] [InlineData("UNANNOTATED", "unannotated")]
+    public void AnnotationSettingsRoundTripAndLegacyManualCompatibility(string token,string state)
+    {
+        var path=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
+        try {
+            File.WriteAllText(path,new JsonObject { ["tagFilter"]=new JsonArray(token,"VOCAL") }.ToJsonString());
+            var settings=new SettingsStore(path); Assert.Equal(state,ListBuilder.AnnotationOf(settings.Current.TagFilter));
+            settings.WriteNow(); Assert.Equal(settings.Current.TagFilter,new SettingsStore(path).Current.TagFilter);
+            Assert.Equal(new[] { "MANUAL","CALM" },ListBuilder.NormalizeFilter(["MANUAL","UNANNOTATED","CALM"]));
+        } finally { File.Delete(path); }
+    }
+
     [Fact] public Task OpenMenuKeepsTargetsAndAnchorAcrossDimensionsAndFullDialogUsesSameContinuation() => Run(async () =>
     {
         using var h = new PlayingVisibilityTests.Harness();
@@ -159,10 +196,25 @@ public sealed class SmartTagTests
             await h.App.SmartTags.Override([t],new Dictionary<TagDimension,Tag?> { [dimension]=value }); Dispatcher.UIThread.RunJobs();
             Assert.Equal(1,tools.Call("search_tracks",new() { ["onlyManual"]=true,["query"]="Synthetic",["limit"]=1 })["total"]!.GetValue<int>());
             Assert.True(ListBuilder.FilterOf(h.App.Library.Snapshot,["MANUAL"])!(t));
+            Assert.False(ListBuilder.FilterOf(h.App.Library.Snapshot,["UNANNOTATED"])!(t));
+            Assert.Equal(tools.Call("search_tracks",new() { ["annotation"]="all" })["total"]!.GetValue<int>() - 1,
+                tools.Call("search_tracks",new() { ["annotation"]="unannotated" })["total"]!.GetValue<int>());
             await h.App.SmartTags.Override([t],new Dictionary<TagDimension,Tag?> { [dimension]=null }); Dispatcher.UIThread.RunJobs();
             Assert.Equal(0,tools.Call("search_tracks",new() { ["onlyManual"]=true })["total"]!.GetValue<int>());
         }
         Assert.NotEmpty(h.App.Db.TagReviews(t.TrackKey)); // History alone is not current manual state.
+        Assert.True(ListBuilder.FilterOf(h.App.Library.Snapshot,["UNANNOTATED"])!(t));
+        Assert.Throws<ArgumentException>(()=>tools.Call("search_tracks",new() { ["onlyManual"]=true,["annotation"]="unannotated" }));
+        var noResults = new LibrarySnapshot(h.App.Library.Snapshot.Folders, h.Tracks, new Dictionary<string,SongTags>());
+        Assert.True(ListBuilder.FilterOf(noResults,["UNANNOTATED"])!(t));
+        Assert.False(ListBuilder.FilterOf(noResults,["UNANNOTATED","VOCAL"])!(t));
+        h.App.Preferences.Store.Append(JeekMusic.Core.Preferences.PreferenceProtocol.Dataset,"isolated-sealed-answer","answer",new JsonObject {
+            ["source"]="explicit_human_blind_batch",["answer"]="SPORT",["basis"]="whole_recording_familiar",
+            ["contextId"]=JeekMusic.Core.Preferences.PreferenceProtocol.Context,["recordingId"]=new string('a',64),
+            ["contentSignature"]=new string('b',64),["manifestId"]="isolated-manifest",["role"]="sealed_test"
+        });
+        Assert.True(ListBuilder.FilterOf(h.App.Library.Snapshot,["UNANNOTATED"])!(t));
+        Assert.Equal(0,tools.Call("search_tracks",new() { ["annotation"]="manual" })["total"]!.GetValue<int>());
     });
     [Theory] [InlineData("NORMAL")] [InlineData("STRICT")] [InlineData("invalid")]
     public void OldStoredAndIncomingSettingsCannotChangeFixedLoosePolicy(string legacy)

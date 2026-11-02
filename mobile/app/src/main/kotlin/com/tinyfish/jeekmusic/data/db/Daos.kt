@@ -58,11 +58,12 @@ interface FolderDao {
             AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
         AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         AND (:onlyManual = 0 OR t.track_key IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
+        AND (:onlyUnannotated = 0 OR t.track_key NOT IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
         ) AS track_count
         FROM library_folder f ORDER BY f.display_name
         """,
     )
-    fun observeWithCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false): Flow<List<FolderWithCount>>
+    fun observeWithCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false, onlyUnannotated: Boolean=false): Flow<List<FolderWithCount>>
 }
 
 @Dao
@@ -104,10 +105,11 @@ interface TrackDao {
         AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
         AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         AND (:onlyManual = 0 OR t.track_key IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
+        AND (:onlyUnannotated = 0 OR t.track_key NOT IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
         GROUP BY relative_path
         """,
     )
-    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false): Flow<List<DirectoryCount>>
+    fun observeDirectoryCounts(folderId: Long, prefix: String, mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false, onlyUnannotated: Boolean=false): Flow<List<DirectoryCount>>
 
     @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path = :relativePath")
     fun observeInDirectory(folderId: Long, relativePath: String): Flow<List<TrackEntity>>
@@ -180,10 +182,11 @@ interface ArtistDao {
         AND (:genre IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'GENRE' AND value = :genre))
         AND (:calmness IS NULL OR t.track_key IN (SELECT track_key FROM track_tag WHERE dimension = 'CALMNESS' AND value = :calmness))
         AND (:onlyManual = 0 OR t.track_key IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
+        AND (:onlyUnannotated = 0 OR t.track_key NOT IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')))
         GROUP BY ta.artist_id
         """,
     )
-    fun observeCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false): Flow<List<ArtistCount>>
+    fun observeCounts(mood: String?, voice: String?, genre: String?, calmness: String? = null, onlyManual: Boolean=false, onlyUnannotated: Boolean=false): Flow<List<ArtistCount>>
 }
 
 @Dao
@@ -433,6 +436,9 @@ interface TagDao {
 
     @Query("SELECT DISTINCT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS')")
     fun observeManualKeys(): Flow<List<String>>
+
+    @Query("SELECT track_key FROM track WHERE track_key NOT IN (SELECT track_key FROM track_tag WHERE source='MANUAL' AND value IS NOT NULL AND dimension IN ('MOOD','VOICE','GENRE','CALMNESS'))")
+    fun observeUnannotatedKeys(): Flow<List<String>>
 
     @Query("SELECT track_key FROM track_tag WHERE dimension = :dimension AND value = :value")
     fun observeKeys(dimension: String, value: String): Flow<List<String>>

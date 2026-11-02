@@ -604,6 +604,7 @@
   "导入既有运动回归反馈": "Import legacy workout regression feedback",
   "请确认这11首明确运动反馈属于你本人，且当前本机录音版本仍对应原反馈。只导入回归用途，绝不用于训练或其他维度。": "Confirm these eleven explicit workout answers are yours and refer to the current local recording versions. Import for regression only, never fitting or another dimension.",
   "已手工标注": "Manually labeled",
+  "未标注": "Unannotated",
   "手工标注": "Manually annotated",
   "在主列表的运动、人声、古典、安静列或右键菜单修正任意歌曲，即可用于学习。这里只管理学习、训练和同步。自选反馈不是独立准确率证据。": "Correct any song using the main list tag columns or context menu to provide learning feedback. Manage training and sync here. Self-selected feedback does not establish independent accuracy.",
   "补充标注与独立验证（可选）": "Supplementary labeling and independent validation (optional)",

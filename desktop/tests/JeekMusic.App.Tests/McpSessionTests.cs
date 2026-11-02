@@ -6,6 +6,19 @@ namespace JeekMusic.App.Tests;
 public sealed class McpSessionTests
 {
     [Fact]
+    public void AnnotationCatalogHasCompatibleSearchAndSharedCurrentListSchema()
+    {
+        var catalog=McpTools.BuildCatalog();
+        foreach(var name in new[] { "search_tracks","song_filter" }) {
+            var tool=catalog.Single(t=>t!["name"]!.GetValue<string>()==name)!;
+            Assert.Equal(new[] { "all","manual","unannotated" },tool["inputSchema"]!["properties"]!["annotation"]!["enum"]!.AsArray().Select(v=>v!.GetValue<string>()));
+            Assert.Contains("sealed",tool["description"]!.GetValue<string>(),StringComparison.OrdinalIgnoreCase);
+        }
+        var search=catalog.Single(t=>t!["name"]!.GetValue<string>()=="search_tracks")!;
+        Assert.Equal("boolean",search["inputSchema"]!["properties"]!["onlyManual"]!["type"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void ResourceBatchCatalogDocumentsScopeAndProductionSaveSemantics()
     {
         var tool = McpTools.BuildCatalog().Single(x => x!["name"]!.GetValue<string>() == "fetch_resources")!;
@@ -61,7 +74,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(38, tools.Count);
+        Assert.Equal(39, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }

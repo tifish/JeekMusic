@@ -2,6 +2,20 @@
 
 Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使用相同的工具、参数校验和业务服务，没有开发专用开关。播放器的窗口、托盘和 MCP 操作共享同一份播放状态、队列和曲库。
 
+## 标注状态和当前列表
+
+`search_tracks` 新增可选 `annotation: "all" | "manual" | "unannotated"`，默认 all。manual 为 MOOD/VOICE/GENRE/CALMNESS 任一当前有效 MANUAL 值，包括与自动同值；unannotated 为严格补集，包含未分析和只有 AUTO/PERSONAL 结果的歌曲。不查询审计、学习或封存答案。与 query/folderId/artistKey/albumKey/tags 作 AND，在排序和分页前筛选整个结果；不保存 UI 设置。兼容 `onlyManual=true`（manual）和 false（无额外限制）；true 与显式 all/unannotated 冲突报错，不制造永远为空的组合。
+
+新增 `song_filter`：`action="status"` 仅读当前 UI 筛选和列表，另可 offset/limit；`action="set"` 至少提供 annotation 或 tags，省略字段保持当前值，`tags=[]` 清除四维标签限制，`annotation="all"` 清除标注状态限制。tags 每维最多一个；经同一 UI 服务本地保存、刷新目录/艺人数及完整列表，不修改标注或直接播放。返回 annotation/tags/source、ready、rowCount（包括缺失引用）及 total/items/nextOffset（有 Track 的完整当前列表分页）。ready=false 表示正在计算，items/total 暂为空；继续 status 读刷新后的结果。沿用搜索页在筛选后最多展示 200 首的既有行为。
+
+`get_diagnostics.songFilter` 只读报告 annotation/tagFilter/ready/rowCount、policy=`current-effective-MANUAL-any-four-dimensions-complement`、learningAnswersIncluded=false，不创建窗口。`fetch_resources` status 的 currentList 兼容增加 annotation。两者均使用同一筛选偏好；开发版与 NativeAOT 工具目录、Schema 和实现相同。checkpoint_client 保全当前实时状态，重启后仍保留标注筛选。
+
+```json
+{"annotation":"unannotated","tags":["VOCAL"],"offset":200,"limit":50}
+```
+
+上例用于 search_tracks，查询完整曲库中尚无有效手工覆盖且为人声的歌曲的第二百首之后。`python desktop/tools/test-unannotated-mcp.py --exe <path> --data desktop/artifacts/<new-name>-fixture --report <report.json>` 使用 245 首生成静音夹具和独立数据库，覆盖四维、同值、AUTO 撤回、历史、组合、分页、选择连续性、兼容参数及持久化，不触碰用户库。
+
 ## 主列表标签列与纠正诊断
 
 四维独立可选列与单元格/右键快捷纠正见[使用说明](../../docs/smart-tag-columns.md)。单元格只针对点击歌曲的单维度，右键直接显示四行并排操作按钮，支持捕获的批量目标；两者与完整面板共用现有 `set_smart_tags` 对应服务，不新增重复工具。具体值即使等于自动也写手工覆盖，恢复自动仍写带时戳的 null 同步记录，审核不作独立真值。提交后立即刷新快照与筛选。

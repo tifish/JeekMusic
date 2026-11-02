@@ -327,6 +327,8 @@ public partial class MainWindow : Window
         Group(L.T("平静程度"), "CALM", "NON_CALM");
         var manual=new MenuItem { Header=L.T("已手工标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("MANUAL") };
         manual.Click+=(_,_)=>_vm.ToggleTag("MANUAL"); menu.Items.Add(manual);
+        var unannotated=new MenuItem { Header=L.T("未标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("UNANNOTATED") };
+        unannotated.Click+=(_,_)=>_vm.ToggleTag("UNANNOTATED"); menu.Items.Add(unannotated);
         menu.Items.Add(new Separator());
         var clear = new MenuItem { Header = L.T("清除筛选"), IsEnabled = _vm.FilterActive };
         clear.Click += (_, _) => _vm.ClearFilterCommand.Execute(null);

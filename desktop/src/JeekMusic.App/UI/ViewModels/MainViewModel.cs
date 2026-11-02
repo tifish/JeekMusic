@@ -574,9 +574,15 @@ public sealed partial class MainViewModel : ObservableObject
     public void ToggleTag(string tag)
     {
         var dim = ListBuilder.DimensionOf(tag);
-        var list = S.TagFilter.Where(t => ListBuilder.DimensionOf(t) != dim).ToList();
+        var list = S.TagFilter.Where(t => tag is "MANUAL" or "UNANNOTATED"
+            ? t is not ("MANUAL" or "UNANNOTATED") : ListBuilder.DimensionOf(t) != dim).ToList();
         if (!S.TagFilter.Contains(tag)) list.Add(tag);
-        S.TagFilter = list.OrderBy(t => ListBuilder.DimensionOf(t) switch { "MOOD" => 0, "VOICE" => 1, "GENRE" => 2, _ => 3 }).ToList();
+        SetTagFilter(list);
+    }
+
+    public void SetTagFilter(IEnumerable<string> filter)
+    {
+        S.TagFilter = ListBuilder.NormalizeFilter(filter).OrderBy(t => ListBuilder.DimensionOf(t) switch { "MOOD" => 0, "VOICE" => 1, "GENRE" => 2, _ => 3 }).ToList();
         _settings.Save("filter");
         FilterChanged();
     }

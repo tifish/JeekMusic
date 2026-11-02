@@ -53,7 +53,7 @@ def main():
     try:
         with McpClient(a.exe,data,timeout=60) as c:
             pid=call(c,'get_diagnostics')['processId'];catalog=c.request('tools/list');(data/'catalog.json').write_text(json.dumps(catalog))
-            assert len(catalog['tools'])==38
+            assert len(catalog['tools'])==39
             initial=call(c,'get_status'); assert not initial['playing'] and initial['queueCount']==0
             call(c,'add_folder',path=str(music))
             deadline=time.monotonic()+45

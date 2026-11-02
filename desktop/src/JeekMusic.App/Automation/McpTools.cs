@@ -41,6 +41,7 @@ public sealed class McpTools
         Tool("preference_training", "Local optional Windows CPU CLAP worker shared with UI/NativeAOT. status/cancel accept action and optional dimension. prepare explicitly downloads official pinned 615 MB weights plus isolated CPU Python dependencies (several GB disk); requires installed Python 3.13+ and FFmpeg. extract resumes pending recordings from the frozen current-stage manifests, max six local recordings per call, 2 threads, 240s, monitored 2 GiB worker; completed vectors resume. train checks explicit training-only material, fixed fold-local PCA2 balanced ridge alpha1; head-specific frozen margins MOOD .25, VOICE/CALMNESS .35, GENRE .4 (not probability). learn/resume orchestrate all four heads, bounded six-recording batches, automatic fixed effect checks, local trusted per-head activation and asynchronous full-library update. downloadConfirmed=true confirms the stated first-download size/use only. status includes learning progress, active versions and coverage; diagnostics returns deployment metadata; activate requires locally verified independent receipts and equivalence, never accepts remote or synthetic artifacts. Insufficient material/failure/cancel remain visible. Sealed labels never in training input; model gates remain locked until validated.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"prepare\",\"extract\",\"regression_extract\",\"train\",\"evaluate\",\"learn\",\"resume\",\"activate\",\"diagnostics\",\"cancel\"]}", ["action"], openWorld:true),
         Tool("preference_conflicts", "Read concurrent training-answer revisions for explicit neutral review. No sealed test answers, raw reason text, paths, credentials or vectors returned. Resolve via preference_answer resolve=true; withdrawal remains non-training.", "", [], true),
         Tool("song_columns", "Read or persist the main song-list column layout without activating or navigating the window. status/save accept only action; save checkpoints the current layout.  set requires tag and at least one of visible/width/order; width is 64-3000 DIPs, order is zero-based across all columns. Title cannot be hidden. Retired Tags summary column is absent and rejected. Four dimension columns keep single-click correction. Returns actual columns, persisted status and native header-menu open/check states; menu uses StaysOpenOnClick for continuous toggles, closes by normal outside/Escape behavior. Same service as UI in daily/NativeAOT builds. No playback, tag or music writes.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"set\",\"save\"]},\"tag\":{\"type\":\"string\",\"enum\":[\"Title\",\"Artist\",\"Album\",\"Duration\",\"FileName\",\"Modified\",\"Format\",\"Mood\",\"Voice\",\"Genre\",\"Calmness\"]},\"visible\":{\"type\":\"boolean\"},\"width\":{\"type\":\"number\",\"minimum\":64,\"maximum\":3000},\"order\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":10}", ["action"]),
+        Tool("song_filter", "Read/set the current persisted song-list filter using the UI service. status accepts only action and paging; set requires annotation and/or tags. annotation: all/manual/unannotated, mutually exclusive; omitted fields retain current selections, tags=[] clears dimension filters. MANUAL means any current effective manual value across four dimensions, even equal to AUTO; unannotated is its complement, including unanalyzed songs. Audit history and sealed learning answers never count. Combines with current source/search/tags before sorting/virtualization; no playback or label writes. Returns readiness, source, annotation, tags, full current row count and paged available tracks. A computing response has ready=false; read status again after refresh. Daily/NativeAOT identical.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"set\"]}," + Page, ["action"]),
         Tool("checkpoint_client", "Capture the current queue entries/manual flags, committed source/anchor, shuffle/repeat and current position through the same QueuePersistence service as shutdown; flush current device-local settings and current main-window column layout. No playback, volume, queue, source handoff or tag changes. Useful immediately before a controlled client restart; subsequent user edits remain live and require a fresh checkpoint. Does not export data or write media/library roots.", "", []),
         Tool("get_status", "Read current playback, queue summary and library scan state. idle means no loaded audio stream and may retain a paused track/queue/position after output release. Playback commands are asynchronous; poll this tool to observe the result.", "", [], true),
         Tool("fetch_resources", "Start/status/cancel the same missing-resource batch as the song list menu. start requires kind (covers/lyrics) and scope (current_list/track_ids); track_ids additionally requires trackIds (1-1000), current_list rejects trackIds. current_list captures ALL available rows in the current filtered/source result, including virtualized rows, with the existing search 200-song cap; rejects a computing or empty list. Range is frozen before work; navigating later cannot change it. Existing local/cache resources take priority; no forced overwrite. Covers deduplicate albums and may fill missing album-member artwork using existing save policy; lyrics found locally are skipped. Uses current save settings (may embed/modify audio); never changes save preferences or enables online access. Online access for this kind must already be enabled. One batch across UI/MCP; rejects reentry including pending UI confirmation. Returns immediately; status reports preparing/running/cancelling/completed/cancelled/failed, captured targetSongCount and deduplicated totalUnits/processedUnits/savedUnits/failedUnits. cancel is cooperative and does not roll back completed writes. status/cancel accept only action. No playback or navigation changes.",
@@ -81,7 +82,7 @@ public sealed class McpTools
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
         Tool("remove_folder", "Schedule removing a folder from the library; never deletes music files. Response means queued, not completed.", "\"folderId\":{\"type\":\"integer\"}", ["folderId"], destructive: true),
         Tool("rescan_library", "Schedule incremental scan (default) or full rebuild (full=true) in the normal library work queue. Response means queued, not completed. Before enumeration the worker retries persisted tag transactions, never overwrites external conflicts, and defers affected folders while recovery is unresolved; see get_diagnostics.tagWriting and get_logs. Observe get_status and logs for scan progress/errors.", "\"full\":{\"type\":\"boolean\"}", []),
-        Tool("get_diagnostics", "Read version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state, typography default chain/installed Microsoft YaHei availability/actual shaped Chinese glyph families (normal and bold), lyricsPanel follow/manual/position/layout diagnostics (created=false before panel creation), artistList groups/current letter/visible range diagnostics, folderNavigation default expansion/local collapse preferences/temporary reveal counts (created=false before window creation), songVisibility/queueVisibility one-shot reveal, containment, actual full-row visibility, initial visibility, centering/edge-clamp result, center error and skip reason diagnostics (created=false before creation/after close), mainLayout.smartTagColumns reports the four optional MOOD/VOICE/GENRE/CALMNESS column visibility, actual width and display order, missing-value/source/check policies, vector-pencil MANUAL indicators and realized cell visibility/help text, selectionAfterCorrection next-survivor policy/result/selectedTrackIds/visibility (no names), inline batch-panel interaction and last quick-correction state/dimension/target count without song names; mainLayout.songCopy reports Ctrl+C current-list title-copy selection count, state and lastCopiedCount without reading clipboard contents; mainLayout actual navigation/song/artist/lyrics/splitter widths and visibility, responsive limits, one-shot folder-expansion fitting and navigationOverflow/songOverflow immediate click-through clipped row text reveal geometry/lifecycle/row height/borderless horizontal reading state and actual-theme composited palette/contrast diagnostics (no names; created=false before creation/after close), queueSource committed/pending source, handoff revision/status and history-only anchor index, tagWriting native format policy/limits, journaled commit/candidate binding, pending recovery count/problem (retried before any normal rescan), and latest saved/rejected outcome/reason without lyric content, and latest playback error. Output audioFormat/sampleRate share get_output idle/pending/active semantics; idle actualDevice/actualRate are null, while windowsDeviceDefault/windowsMix describe device configuration. Read-only; never creates a window, navigates or starts audio. No arguments.", "", [], true),
+        Tool("get_diagnostics", "Read songFilter current annotation/tags/readiness/count and effective-MANUAL complement policy; version, process ID/executable path, runtime framework/architecture/dynamic code support, data paths, library counts, engine state, typography default chain/installed Microsoft YaHei availability/actual shaped Chinese glyph families (normal and bold), lyricsPanel follow/manual/position/layout diagnostics (created=false before panel creation), artistList groups/current letter/visible range diagnostics, folderNavigation default expansion/local collapse preferences/temporary reveal counts (created=false before window creation), songVisibility/queueVisibility one-shot reveal, containment, actual full-row visibility, initial visibility, centering/edge-clamp result, center error and skip reason diagnostics (created=false before creation/after close), mainLayout.smartTagColumns reports the four optional MOOD/VOICE/GENRE/CALMNESS column visibility, actual width and display order, missing-value/source/check policies, vector-pencil MANUAL indicators and realized cell visibility/help text, selectionAfterCorrection next-survivor policy/result/selectedTrackIds/visibility (no names), inline batch-panel interaction and last quick-correction state/dimension/target count without song names; mainLayout.songCopy reports Ctrl+C current-list title-copy selection count, state and lastCopiedCount without reading clipboard contents; mainLayout actual navigation/song/artist/lyrics/splitter widths and visibility, responsive limits, one-shot folder-expansion fitting and navigationOverflow/songOverflow immediate click-through clipped row text reveal geometry/lifecycle/row height/borderless horizontal reading state and actual-theme composited palette/contrast diagnostics (no names; created=false before creation/after close), queueSource committed/pending source, handoff revision/status and history-only anchor index, tagWriting native format policy/limits, journaled commit/candidate binding, pending recovery count/problem (retried before any normal rescan), and latest saved/rejected outcome/reason without lyric content, and latest playback error. Output audioFormat/sampleRate share get_output idle/pending/active semantics; idle actualDevice/actualRate are null, while windowsDeviceDefault/windowsMix describe device configuration. Read-only; never creates a window, navigates or starts audio. No arguments.", "", [], true),
         Tool("get_logs", "Read the tail of app or playback logs (default app, 50 lines, at most 200 lines / 64 KiB). App logs include tagwriter success/failure, file path, cover/lyrics operations and ID3v1 preservation, without lyrics content. Older versions logged only failures. No arbitrary file access.",
             "\"kind\":{\"type\":\"string\",\"enum\":[\"app\",\"playback\"]},\"lines\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200}", [], true),
         Tool("show_window", "Show and activate the main player window. Other MCP tools do not activate windows.", "", [])
@@ -107,7 +108,15 @@ public sealed class McpTools
             tool["description"]=description+" Four independent dimensions: MOOD SPORT/NON_SPORT, VOICE VOCAL/INSTRUMENTAL, GENRE CLASSICAL/NON_CLASSICAL, CALMNESS CALM/NON_CALM. Single-dimension withdrawal/conflict invalidates that head only; identity pollution invalidates affected evaluation across heads. Manual overrides final; ClassicalTitles overrides personal GENRE in automatic output; legacy QUIET is NON_SPORT only.";
         }
         if(name=="preference_training") tool["inputSchema"]!["properties"]!["downloadConfirmed"]=new JsonObject { ["type"]="boolean",["description"]="learn/resume only: confirms initial 615 MB public model plus several GB private CPU dependencies; at least 6 GB disk, no song/label upload. Omitted means pause before first download." };
-        if(name=="search_tracks") { tool["inputSchema"]!["properties"]!["onlyManual"]=new JsonObject { ["type"]="boolean",["description"]="At least one current effective MANUAL dimension (including a manual value equal to automatic), before paging and combined with source/query/tags. AUTO withdrawal of the last manual dimension removes the song. Automatic results, audit history and blind/sealed learning answers do not count. Defaults false; does not persist UI filter." }; tool["description"]=tool["description"]!.GetValue<string>()+" onlyManual filters current effective manual labels across any of the four dimensions, before pagination."; }
+        if(name is "search_tracks" or "song_filter")
+        {
+            tool["inputSchema"]!["properties"]!["annotation"]=new JsonObject { ["type"]="string",["enum"]=new JsonArray("all","manual","unannotated"),["description"]="Mutually exclusive current effective four-dimension manual annotation state. Unannotated includes missing/AUTO/PERSONAL results; ignores audit and learning answers. Before paging. Search defaults all without saving; song_filter persists UI preference." };
+            if(name=="song_filter") tool["inputSchema"]!["properties"]!["tags"]=JsonNode.Parse("{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"string\",\"enum\":[\"SPORT\",\"NON_SPORT\",\"VOCAL\",\"INSTRUMENTAL\",\"CLASSICAL\",\"NON_CLASSICAL\",\"CALM\",\"NON_CALM\"]}}");
+            else {
+                tool["inputSchema"]!["properties"]!["onlyManual"]=new JsonObject { ["type"]="boolean",["description"]="Compatible alias: true means annotation=manual; false/omitted adds no constraint. true with annotation=all/unannotated is rejected. Does not persist UI filter." };
+                tool["description"]=description+" annotation selects all/manual/unannotated on the full result before paging; onlyManual=true remains compatible with manual. Missing results are unannotated. Sealed learning answers and audit history never count.";
+            }
+        }
         if (minProperties > 0) tool["inputSchema"]!["minProperties"] = minProperties;
         return tool;
     }
@@ -233,6 +242,7 @@ public sealed class McpTools
             case "preference_conflicts": return app.Preferences.Conflicts(a["dimension"]?.GetValue<string>());
             case "analyze_tracks": return AnalyzeTracks(a);
             case "fetch_resources": return FetchResources(a);
+            case "song_filter": return SongFilter(a);
             case "checkpoint_client": app.SongColumnsControl?.Invoke(new JsonObject { ["action"]="save" }); app.QueuePersistence.SaveQueue(); app.Settings.WriteNow(); return new JsonObject { ["saved"]=true,["status"]=Status() };
             case "get_status": return Status();
             case "lan_sync_status": return app.LanSync.Diagnostics();
@@ -267,9 +277,11 @@ public sealed class McpTools
                     var dimensions = selectedTags.Select(ListBuilder.DimensionOf).ToArray();
                     if (dimensions.Any(d => d is null) || dimensions.Distinct().Count() != dimensions.Length)
                         throw new ArgumentException("Select at most one tag per dimension");
-                    if (ListBuilder.FilterOf(app.Library.Snapshot, selectedTags) is { } predicate) tracks = tracks.Where(predicate);
+                    if (ListBuilder.FilterOf(snapshot, selectedTags) is { } predicate) tracks = tracks.Where(predicate);
                 }
-                if(a["onlyManual"]?.GetValue<bool>()==true && ListBuilder.FilterOf(snapshot,["MANUAL"]) is { } manualFilter) tracks=tracks.Where(manualFilter);
+                var annotation = a["annotation"]?.GetValue<string>() ?? (a["onlyManual"]?.GetValue<bool>() == true ? "manual" : "all");
+                if(a["onlyManual"]?.GetValue<bool>() == true && annotation != "manual") throw new ArgumentException("onlyManual=true conflicts with annotation");
+                if(ListBuilder.FilterOf(snapshot, AnnotationTokens(annotation)) is { } annotationFilter) tracks=tracks.Where(annotationFilter);
                 return Paginate(SortSearch(tracks, a, app.Settings.Current), a, TrackJson);
             case "diagnose_analysis":
                 var action = Required(a, "action").GetValue<string>();
@@ -443,7 +455,8 @@ public sealed class McpTools
                     ["queueSource"] = QueueSourceState(),
                     ["resourceBatch"] = app.Online?.Batches.Diagnostics() ?? new JsonObject { ["state"] = "unavailable", ["busy"] = false },
                     ["mainLayout"] = app.MainLayoutDiagnostics?.Invoke() ?? new JsonObject { ["created"] = false },
-                    ["folderNavigation"] = app.FolderExpansion.Diagnostics(app.Navigation?.Nav)
+                    ["folderNavigation"] = app.FolderExpansion.Diagnostics(app.Navigation?.Nav),
+                    ["songFilter"] = FilterDiagnostics()
                 };
             case "get_logs": return Logs(a);
             case "show_window": Shell.Current.ShowMainWindow(); return new JsonObject { ["shown"] = true };
@@ -495,8 +508,46 @@ public sealed class McpTools
             ["ready"] = !navigation.ComputingRows, ["source"] = navigation.CurrentSource?.Encode(),
             ["title"] = navigation.ContentTitle, ["availableSongCount"] = navigation.CaptureResourceTracks().Length,
             ["tagFilter"] = new JsonArray(navigation.TagFilter.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()),
+            ["annotation"] = ListBuilder.AnnotationOf(navigation.TagFilter),
             ["rowsGeneration"] = navigation.RowsGeneration
         } : null;
+        return result;
+    }
+
+    static string[] AnnotationTokens(string annotation) => annotation switch {
+        "all" => [], "manual" => ["MANUAL"], "unannotated" => ["UNANNOTATED"],
+        _ => throw new ArgumentException("Unknown annotation state")
+    };
+
+    JsonObject FilterDiagnostics() => new() {
+        ["annotation"]=ListBuilder.AnnotationOf(app.Settings.Current.TagFilter),
+        ["tagFilter"]=new JsonArray(app.Settings.Current.TagFilter.Select(t=>(JsonNode?)JsonValue.Create(t)).ToArray()),
+        ["policy"]="current-effective-MANUAL-any-four-dimensions-complement",
+        ["learningAnswersIncluded"]=false,
+        ["ready"]=app.Navigation is { ComputingRows:false },
+        ["rowCount"]=app.Navigation is { ComputingRows:false } n ? n.Rows.Count : null
+    };
+
+    JsonObject SongFilter(JsonObject a)
+    {
+        var navigation=app.Navigation ?? throw new InvalidOperationException("Main navigation unavailable");
+        var action=Required(a,"action").GetValue<string>();
+        if(action=="set") {
+            if(!a.ContainsKey("annotation") && !a.ContainsKey("tags")) throw new ArgumentException("set requires annotation or tags");
+            var tags=a["tags"] is JsonArray values ? values.Select(v=>v!.GetValue<string>()).ToArray()
+                : navigation.TagFilter.Where(t=>ListBuilder.DimensionOf(t)!=null).ToArray();
+            var dimensions=tags.Select(ListBuilder.DimensionOf).ToArray();
+            if(dimensions.Any(d=>d==null) || dimensions.Distinct().Count()!=dimensions.Length) throw new ArgumentException("Select at most one tag per dimension");
+            var state=a["annotation"]?.GetValue<string>() ?? ListBuilder.AnnotationOf(navigation.TagFilter);
+            navigation.SetTagFilter(tags.Concat(AnnotationTokens(state)));
+        }
+        else if(action!="status" || a.ContainsKey("annotation") || a.ContainsKey("tags")) throw new ArgumentException("status accepts only action and paging");
+        var result=Paginate(navigation.CaptureResourceTracks(),a,TrackJson);
+        result["ready"]=!navigation.ComputingRows;
+        result["rowCount"]=navigation.Rows.Count;
+        result["source"]=navigation.CurrentSource?.Encode();
+        result["annotation"]=ListBuilder.AnnotationOf(navigation.TagFilter);
+        result["tags"]=new JsonArray(navigation.TagFilter.Where(t=>ListBuilder.DimensionOf(t)!=null).Select(t=>(JsonNode?)JsonValue.Create(t)).ToArray());
         return result;
     }
 

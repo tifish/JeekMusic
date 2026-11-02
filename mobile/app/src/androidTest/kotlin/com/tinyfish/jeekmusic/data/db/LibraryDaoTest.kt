@@ -115,7 +115,7 @@ class LibraryDaoTest {
         try {
             settings.setTagRulesVersion(6)
             repository.recomputeIfRulesChanged()
-            assertEquals(8, settings.current().tagRulesVersion)
+            assertEquals(com.tinyfish.jeekmusic.analysis.TagRepository.RULES_VERSION, settings.current().tagRulesVersion)
             val migrated = dao.currentFeatures(track.trackKey)!!
             assertEquals(6,migrated.analyzerVersion)
             assertEquals(f.copy(analyzerVersion=6,analysisEvidence=migrated.analysisEvidence),migrated)
@@ -154,6 +154,54 @@ class LibraryDaoTest {
             settings.setTagFilter(previous.tagFilter)
             settings.setTagRulesVersion(previous.tagRulesVersion)
         }
+    }
+
+    @Test
+    fun unannotatedIsCurrentManualComplementAcrossFullLibraryAndCounts() = runTest {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = com.tinyfish.jeekmusic.data.settings.SettingsRepository(context)
+        val previous = settings.current().tagFilter
+        val folder = addFolder("Annotation/")
+        val items = (1..245).map { track(folder, "Annotation/", "song$it.mp3") }
+        val ids = tracks.insert(items)
+        val dao = db.tagDao()
+        artists.insert(listOf(ArtistEntity(name="Fixture",nameKey="fixture",sortKey="fixture",indexLetter="F")))
+        val artistId=artists.byNameKeys(listOf("fixture")).single().id
+        artists.insertLinks(ids.map { TrackArtistEntity(it,artistId) })
+        val feedback=com.tinyfish.jeekmusic.data.preference.DailyLearningFeedback(object: android.content.ContextWrapper(context) {
+            override fun getNoBackupFilesDir()=java.io.File(context.cacheDir,"annotation-test-"+System.nanoTime()).apply { mkdirs() }
+        },db)
+        val repository=com.tinyfish.jeekmusic.analysis.TagRepository(db,dao,settings,feedback)
+        val filters=com.tinyfish.jeekmusic.data.filter.TagFilterRepository(settings,dao)
+        var feedbackClosed=false
+        try {
+            settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(onlyUnannotated=true))
+            assertEquals(245,filters.allowedKeys.first()!!.size) // No model analysis at all.
+            assertEquals(245,folders.observeWithCounts(null,null,null,onlyUnannotated=true).first().single().trackCount)
+            for (d in com.tinyfish.jeekmusic.analysis.TagDimension.entries) {
+                val value=com.tinyfish.jeekmusic.analysis.Tag.of(d).first()
+                repository.setManual(items.last().trackKey,d,value)
+                assertEquals(244,filters.allowedKeys.first()!!.size)
+                assertEquals(listOf(items.last().trackKey),dao.observeManualKeys().first())
+                assertEquals(244,artists.observeCounts(null,null,null,onlyUnannotated=true).first().single().count)
+                assertEquals(244,tracks.observeDirectoryCounts(folder,"Annotation/",null,null,null,onlyUnannotated=true).first().sumOf { it.count })
+                repository.clearManual(items.last().trackKey,d)
+                assertEquals(245,filters.allowedKeys.first()!!.size) // Audit still exists.
+            }
+            feedback.close(); feedbackClosed=true // Drain background recomputation before direct result fixtures.
+            // Same value with AUTO and MANUAL sources; PERSONAL is also unannotated.
+            dao.insertTags(listOf(TrackTagEntity(items[0].trackKey,"VOICE","VOCAL","AUTO"),
+                TrackTagEntity(items[1].trackKey,"VOICE","VOCAL","MANUAL"),
+                TrackTagEntity(items[2].trackKey,"VOICE","VOCAL","PERSONAL")))
+            settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(voice=com.tinyfish.jeekmusic.analysis.Tag.VOCAL,onlyUnannotated=true))
+            assertEquals(setOf(items[0].trackKey,items[2].trackKey),filters.allowedKeys.first())
+            assertEquals(2,folders.observeWithCounts(null,"VOCAL",null,onlyUnannotated=true).first().single().trackCount)
+            val saved=com.tinyfish.jeekmusic.data.settings.SettingsRepository(context).current().tagFilter
+            assertEquals(true,saved.unannotated)
+            settings.setTagFilter(saved.copy(onlyManual=true)) // Legacy true wins malformed dual input.
+            assertEquals(false,settings.current().tagFilter.onlyUnannotated)
+            assertEquals(setOf(items[1].trackKey),filters.allowedKeys.first())
+        } finally { if(!feedbackClosed) feedback.close(); settings.setTagFilter(previous) }
     }
 
     @Test

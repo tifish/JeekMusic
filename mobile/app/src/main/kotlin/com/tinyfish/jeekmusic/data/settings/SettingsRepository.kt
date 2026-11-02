@@ -77,9 +77,10 @@ data class ScanConfig(
 )
 
 /** 全局的智能标签筛选（需求 M-6）：每个维度不选或选一个，多个维度同时满足。 */
-data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null, val onlyManual: Boolean=false) {
+data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null, val onlyManual: Boolean=false, val onlyUnannotated: Boolean=false) {
     val active: List<Tag> get() = listOfNotNull(mood, voice, genre, calmness)
-    val isActive: Boolean get() = active.isNotEmpty() || onlyManual
+    val unannotated: Boolean get() = onlyUnannotated && !onlyManual
+    val isActive: Boolean get() = active.isNotEmpty() || onlyManual || unannotated
 
     operator fun get(dimension: TagDimension): Tag? = when (dimension) {
         TagDimension.MOOD -> mood
@@ -176,6 +177,7 @@ class SettingsRepository @Inject constructor(
         val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
         val LOW_POWER = stringPreferencesKey("low_power_mode")
         val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
+        val FILTER_UNANNOTATED=booleanPreferencesKey("filter_unannotated")
         val FILTER_MANUAL=booleanPreferencesKey("filter_manual")
         val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
@@ -282,6 +284,7 @@ class SettingsRepository @Inject constructor(
         put(Keys.FILTER_GENRE, filter.genre)
         put(Keys.FILTER_CALMNESS, filter.calmness)
         prefs[Keys.FILTER_MANUAL]=filter.onlyManual
+        prefs[Keys.FILTER_UNANNOTATED]=filter.unannotated
     }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
@@ -334,6 +337,7 @@ class SettingsRepository @Inject constructor(
             genre = Tag.of(TagDimension.GENRE, this[Keys.FILTER_GENRE]),
             calmness = Tag.of(TagDimension.CALMNESS, this[Keys.FILTER_CALMNESS]),
             onlyManual=this[Keys.FILTER_MANUAL] ?: false,
+            onlyUnannotated=(this[Keys.FILTER_UNANNOTATED] ?: false) && this[Keys.FILTER_MANUAL] != true,
         ),
         songSort = SongSort.fromSaved(this[Keys.SONG_SORT]),
         hasSongSortPreference = SongSort.hasPreference(this[Keys.SONG_SORT]),

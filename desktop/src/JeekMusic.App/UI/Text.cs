@@ -26,6 +26,7 @@ public static class Text
     public static string TagName(string? tag) => tag switch
     {
         "MANUAL" => L.T("已手工标注"),
+        "UNANNOTATED" => L.T("未标注"),
         "SPORT" => L.T("运动"),
         "NON_SPORT" => L.T("非运动"),
         "CALM" => L.T("安静"),

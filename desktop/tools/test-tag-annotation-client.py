@@ -68,7 +68,7 @@ def main():
             diag = call("get_diagnostics"); player = diag["processId"]
             catalog = c.request("tools/list")
             a.report.with_suffix(".catalog.json").write_text(json.dumps(catalog, indent=2), encoding="utf-8")
-            assert len(catalog["tools"]) == 38
+            assert len(catalog["tools"]) == 39
             schema = next(t for t in catalog["tools"] if t["name"] == "get_diagnostics")["inputSchema"]
             assert schema["properties"] == {} and schema["additionalProperties"] is False
             for tag in ("Artist", "Album", "Duration", "FileName", "Modified", "Format"):

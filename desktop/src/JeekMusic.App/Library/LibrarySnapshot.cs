@@ -43,6 +43,7 @@ public sealed class DirNode
 public sealed record SongTags(string? Mood, string? Voice, string? Genre, bool MoodManual, bool VoiceManual, bool GenreManual, string? Calmness = null, bool CalmnessManual = false)
 {
     public string? this[string dimension] => dimension switch { "MOOD" => Mood, "VOICE" => Voice, "GENRE" => Genre, "CALMNESS" => Calmness, _ => null };
+    public bool HasManual => Source("MOOD") == "MANUAL" || Source("VOICE") == "MANUAL" || Source("GENRE") == "MANUAL" || Source("CALMNESS") == "MANUAL";
     public IReadOnlyDictionary<string,string>? Origins { get; init; }
     public string? Source(string dimension)=>this[dimension] is null?null:Origins?.GetValueOrDefault(dimension) ?? ((dimension switch { "MOOD"=>MoodManual,"VOICE"=>VoiceManual,"GENRE"=>GenreManual,"CALMNESS"=>CalmnessManual,_=>false })?"MANUAL":"AUTO");
 }

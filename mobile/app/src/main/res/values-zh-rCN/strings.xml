@@ -471,4 +471,5 @@
     <string name="lan_refresh_roots">刷新共享文件夹</string>
     <string name="lan_roots_failed">无法刷新共享文件夹。请检查电脑服务、网络和设备授权后重试，已有下载和任务会保留。详情：%1$s</string>
     <string name="filter_manual">已手工标注</string>
+    <string name="filter_unannotated">未标注</string>
 </resources>

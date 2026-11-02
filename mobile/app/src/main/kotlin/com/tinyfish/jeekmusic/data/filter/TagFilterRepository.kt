@@ -28,9 +28,10 @@ class TagFilterRepository @Inject constructor(
     /** 当前筛选允许的 track_key（各维度的交集）；null 表示不筛选。分类结果变化（分析完成、手动修正）时自动更新。 */
     val allowedKeys: Flow<Set<String>?> = filter.flatMapLatest { f ->
         val active = f.active
-        if (active.isEmpty() && !f.onlyManual) return@flatMapLatest flowOf(null)
+        if (active.isEmpty() && !f.onlyManual && !f.unannotated) return@flatMapLatest flowOf(null)
         val sources=active.map { tag -> tagDao.observeKeys(tag.dimension.name, tag.name) }.toMutableList()
         if(f.onlyManual) sources.add(tagDao.observeManualKeys())
+        if(f.unannotated) sources.add(tagDao.observeUnannotatedKeys())
         combine(sources) { lists ->
             lists.map { it.toHashSet() }.reduce { a, b -> a.apply { retainAll(b) } }
         }

@@ -30,7 +30,7 @@ def main():
     report={}
     with McpClient(args.exe,data) as client:
         initial=call(client,'get_status');assert not initial['playing']
-        catalog=client.request('tools/list');assert len(catalog['tools'])==38
+        catalog=client.request('tools/list');assert len(catalog['tools'])==39
         args.report.with_suffix('.catalog.json').write_text(json.dumps(catalog,ensure_ascii=False,indent=2),encoding='utf-8')
         status=call(client,'preference_data',action='status');identity=status['profileId'];assert identity=='personal-label-learning-v3'
         for name in ('ignored first name','ignored second name'):

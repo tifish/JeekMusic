@@ -12,14 +12,29 @@ public enum ListKind { Folder, FolderRecursive, Artist, Album, Playlist, Search 
 /// </summary>
 public static class ListBuilder
 {
-    /// <summary>智能标签筛选（需求 M-6）：每个维度选中的标签都要符合；没分析过的歌不符合任何筛选。</summary>
+    /// <summary>智能标签筛选（需求 M-6）：每个维度选中的标签都要符合；未标注包含没有分析结果的歌曲。</summary>
     public static Func<Track, bool>? FilterOf(LibrarySnapshot snapshot, IReadOnlyCollection<string> filter)
     {
         if (filter.Count == 0) return null;
         var wanted = filter.Select(t => (dimension: DimensionOf(t), tag: t)).Where(x => x.dimension is not null).ToList();
-        var manual=filter.Contains("MANUAL");
-        if (wanted.Count == 0 && !manual) return null;
-        return t => snapshot.Tags.TryGetValue(t.TrackKey, out var tags) && wanted.All(w => tags[w.dimension!] == w.tag) && (!manual || tags.MoodManual && tags.Mood!=null || tags.VoiceManual && tags.Voice!=null || tags.GenreManual && tags.Genre!=null || tags.CalmnessManual && tags.Calmness!=null);
+        var annotation = AnnotationOf(filter);
+        if (wanted.Count == 0 && annotation == "all") return null;
+        return t => {
+            snapshot.Tags.TryGetValue(t.TrackKey, out var tags);
+            var manual = tags?.HasManual == true;
+            return wanted.All(w => tags?[w.dimension!] == w.tag)
+                && (annotation == "all" || (annotation == "manual" ? manual : !manual));
+        };
+    }
+
+    public static string AnnotationOf(IEnumerable<string> filter) => filter.Contains("MANUAL") ? "manual" : filter.Contains("UNANNOTATED") ? "unannotated" : "all";
+
+    // Historical MANUAL settings remain valid; malformed dual states resolve to MANUAL.
+    public static List<string> NormalizeFilter(IEnumerable<string> filter)
+    {
+        var list = filter.Distinct().ToList();
+        if (list.Contains("MANUAL")) list.Remove("UNANNOTATED");
+        return list;
     }
 
     public static string? DimensionOf(string tag) => tag switch

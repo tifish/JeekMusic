@@ -1,0 +1,135 @@
+{
+  "version": "1.0.229",
+  "sourceSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+  "releases": [
+    {
+      "platform": "desktop",
+      "ci": {
+        "conclusion": "success",
+        "headSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+        "status": "completed",
+        "url": "https://github.com/tifish/JeekMusic/actions/runs/41501162146"
+      },
+      "sourceSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "tag": "desktop-v1.0.229",
+      "targetCommitish": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "tagSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "filename": "JeekMusic-desktop-1.0.229-win-x64.zip",
+      "sha256": "d7b40a21e901660059467a6b8cd1cc35955e439645e5f560219f009ae8bd8202",
+      "bytes": 41462530,
+      "url": "https://github.com/tifish/JeekMusic/releases/download/desktop-v1.0.229/JeekMusic-desktop-1.0.229-win-x64.zip"
+    },
+    {
+      "platform": "android",
+      "ci": {
+        "conclusion": "success",
+        "headSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+        "status": "completed",
+        "url": "https://github.com/tifish/JeekMusic/actions/runs/41501164114"
+      },
+      "sourceSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "tag": "v1.0.229",
+      "targetCommitish": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "tagSha": "a2bf486ce430510344491c7c87d9d8f292533699",
+      "filename": "JeekMusic-1.0.229.apk",
+      "sha256": "093d9c997b042429133af5dfa913b6e8b969230a0b46550ee045f4fdb68a8dd0",
+      "bytes": 24901281,
+      "url": "https://github.com/tifish/JeekMusic/releases/download/v1.0.229/JeekMusic-1.0.229.apk"
+    }
+  ],
+  "windows": {
+    "fileVersion": "1.0.229.0",
+    "productVersion": "1.0.229+a2bf486ce430510344491c7c87d9d8f292533699",
+    "authenticode": "NotSigned"
+  },
+  "android": {
+    "versionCode": 229,
+    "package": "com.tinyfish.jeekmusic",
+    "certificateSha256": "28a86a1affb4a31ed0a2a14e602b2ebed23d1c4385b366e9ccfac3eaf5a972fe",
+    "signatureVerified": true,
+    "isolatedCoverInstall": true,
+    "firstInstallUnchanged": true
+  },
+  "tests": {
+    "desktopCorePassed": 117,
+    "desktopAppPassed": 731,
+    "desktopAppSkipped": 2,
+    "mobileLocalUnitPassed": 119,
+    "androidRealBidirectionalCasesPassed": 3,
+    "pairedNewLegacyTlsAllCapabilities": true,
+    "normalizationPersistedIdempotent": true,
+    "revokeClosesSessionsAndRejectsReusedIdOldTokens": true,
+    "boundedFileBackupConflictGuards": true,
+    "exactWindowsRuleLifecycle": true,
+    "developmentAotCatalogExact": true,
+    "mcpTools": 40,
+    "officialNativeUiRevoke": true,
+    "unknownDeviceRejectedByCurrentProductionTls": true
+  },
+  "restart": {
+    "version": "1.0.229.0",
+    "oldVersion": "1.0.224.0",
+    "newPid": 16240,
+    "nativeAot": true,
+    "processChanged": true,
+    "queueCount": 577,
+    "queueIdentityOrder": true,
+    "queueIndex": true,
+    "queueSource": true,
+    "position": true,
+    "playing": true,
+    "muted": true,
+    "volume": true,
+    "volumeReadable": true,
+    "outputSelection": true,
+    "outputEndpoint": true,
+    "songFilter": true,
+    "columns": true,
+    "pairedDeviceIds": true,
+    "tokenHashes": true,
+    "certificate": true,
+    "listenerPort": true,
+    "listenerEnabled": true,
+    "learningEvents": true,
+    "explicitDefaultMcpSameProcess": true,
+    "noSystemVolumeWrite": true,
+    "allPairedCapabilities": true,
+    "listenerBind": true,
+    "generations": true,
+    "layoutSettings": true,
+    "layoutSnapshot": true
+  },
+  "runtime": {
+    "pid": 16240,
+    "version": "1.0.229.0",
+    "nativeAot": true,
+    "singleInstance": true,
+    "userDataSyncReady": true,
+    "allPairedCapabilities": true,
+    "productionForegroundObstructed": true,
+    "systemNetworkAccessPromptPresent": true
+  },
+  "firewall": {
+    "state": "configured",
+    "bind": "0.0.0.0",
+    "port": 39843,
+    "satisfied": true,
+    "localAddress": "Any",
+    "remoteAddress": "Any",
+    "protocol": "TCP",
+    "profiles": [
+      "Domain",
+      "Private",
+      "Public"
+    ],
+    "ownedRuleCount": 1,
+    "activeExactRuleCount": 1,
+    "reachability": "not_verified"
+  },
+  "untested": [
+    "real UAC consent/refusal (session already administrative; EnableLUA=0 unchanged)",
+    "enterprise managed-policy and third-party firewall environments",
+    "real internet reachability",
+    "unobstructed production foreground: Windows Security prompt not exposed to UIAutomation"
+  ]
+}

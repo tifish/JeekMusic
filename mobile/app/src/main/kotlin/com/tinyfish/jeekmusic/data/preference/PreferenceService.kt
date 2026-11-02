@@ -120,6 +120,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     suspend fun synchronize(includeUserData: Boolean=true)=withContext(Dispatchers.IO) { syncGate.withLock {
         feedback.capture()
         syncState.value="syncing"
+        try {
         val connection=lan.read().getJSONObject("connection")
         val peer="pc:"+connection.getString("pin")
         var upload=(store.local("upload:$peer") ?: "0").toLong()
@@ -137,7 +138,13 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
                 pages++
             } while((reply.getBoolean("hasMore") || page.getBoolean("hasMore")) && pages<100)
         }
-        transport=null; syncState.value="synced"; notifyChanged()
+        } catch(e: Exception) {
+            syncState.value=when((e as? com.tinyfish.jeekmusic.data.sync.LanRemoteException)?.code) {
+                "unauthorized"->"pairing_required"; "upgrade_required"->"upgrade_required"; else->"offline"
+            }
+            notifyChanged();throw e
+        } finally { transport=null }
+        syncState.value="synced"; notifyChanged()
         // Old paired versions fail explicitly; labels already committed above remain available offline.
         try { synchronizeResults() } finally { tags.recomputeAll() }
     } }

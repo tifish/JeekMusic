@@ -83,7 +83,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
             } }
         }
         Text(stringResource(R.string.preference_result_coverage),style=MaterialTheme.typography.bodySmall)
-        Text(stringResource(when(syncState) { "syncing"->R.string.preference_syncing; "synced"->R.string.preference_synced; else->R.string.preference_offline }))
+        Text(stringResource(when(syncState) { "pairing_required"->R.string.lan_pairing_revoked; "upgrade_required"->R.string.lan_paired_upgrade; "syncing"->R.string.preference_syncing; "synced"->R.string.preference_synced; else->R.string.preference_offline }))
         TextButton(onClick={vm.run { vm.service.synchronize() }},enabled=!busy) { Text(stringResource(R.string.preference_sync)) }
         Row {
             TextButton(onClick={export.launch("personal-preference.json")},enabled=!busy) { Text(stringResource(R.string.preference_export)) }

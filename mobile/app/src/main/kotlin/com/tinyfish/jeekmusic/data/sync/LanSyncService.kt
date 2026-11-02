@@ -182,7 +182,7 @@ class LanSyncService @Inject constructor(
                     dataClient.use {
                         val remote = dataClient.call("state", sync.exportLan())
                         sync.acceptLan(remote)
-                        try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }
+                        try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
                     }
                     _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {

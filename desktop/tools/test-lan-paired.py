@@ -58,10 +58,16 @@ def main():
                         wait(lambda:call(c,'preference_training',action='status')['learning']['state']=='insufficient_material',20)
                         assert 'state' in w.request('preference_training',protocol=3,action='cancel')
                         def request(op,**args):
-                            result=w.request(op,fileProtocol=1,**args)
-                            while result.get('pending'): time.sleep(.05); result=w.request('plan_status',job=result['job'])
-                            assert 'error' not in result,result
-                            return result
+                            nonlocal w
+                            for attempt in range(3):
+                                result=w.request(op,fileProtocol=1,**args)
+                                if result.get('code')=='busy' and attempt<2:
+                                    # The background library refresh shares the bounded file-work lease.
+                                    # Match the production Android retry contract; never relax the budget.
+                                    w.close();time.sleep(30);w=Wire(peer);continue
+                                while result.get('pending'): time.sleep(.05); result=w.request('plan_status',job=result['job'])
+                                assert 'error' not in result,result
+                                return result
                         scope=request('file_open',rootId=root_id,mapping=str(uuid.uuid4()),selection=[''])['scope']
                         name=f'Fixture{index}.wav'; content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+bytes([index]); digest=hashlib.sha256(content).hexdigest(); operation=uuid.uuid4().hex
                         request('file_begin',scope=scope,operation=operation,path=name,hash=digest,size=len(content),expectedHash=None,baselineVersion='')

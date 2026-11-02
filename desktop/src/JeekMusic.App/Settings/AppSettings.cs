@@ -110,7 +110,7 @@ public sealed class AppSettings
     // ── 智能标签 ──
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.PluggedIn;
     /// <summary>Legacy serialized field. Workout recognition is always loose; old writes are ignored.</summary>
-    public string Sensitivity { get => "LOOSE"; set { } }
+    public string Sensitivity { get => "NORMAL"; set { } }
     public int TagRulesVersion { get; set; }
 
     // ── 在线歌词、封面（同移动端 LY-8、C-3、OL-1）──

@@ -12,8 +12,8 @@ object WorkoutEvidence {
         return best
     }
     fun needsPulse(evidence: AnalysisEvidence) = evidence.complete &&
-        (evidence.aggregate()?.sport ?: Double.POSITIVE_INFINITY) < Sensitivity.LOOSE.sport &&
-        evidence.scoredSegments().count { strongRun(it,Sensitivity.LOOSE) >= 3 } >= 2
+        (evidence.aggregate()?.sport ?: Double.POSITIVE_INFINITY) < Sensitivity.NORMAL.sport &&
+        evidence.scoredSegments().count { strongRun(it,Sensitivity.NORMAL) >= 3 } >= 2
 
     data class Context(val segment: SegmentEvidence, val startMs: Long, val endMs: Long)
     fun plan(evidence: AnalysisEvidence, logicalStartMs: Long, durationMs: Long): List<Context> {
@@ -21,7 +21,7 @@ object WorkoutEvidence {
         if (!needsPulse(evidence)) return result
         val length = minOf(30000L,durationMs)
         if (length < 4000) return result
-        for (s in evidence.scoredSegments().filter { strongRun(it,Sensitivity.LOOSE) >= 3 }) {
+        for (s in evidence.scoredSegments().filter { strongRun(it,Sensitivity.NORMAL) >= 3 }) {
             val start = ((s.startMs+s.endMs-length)/2).coerceIn(logicalStartMs,logicalStartMs+durationMs-length)
             val end = start+length
             if (result.any { start < it.endMs && end > it.startMs }) continue

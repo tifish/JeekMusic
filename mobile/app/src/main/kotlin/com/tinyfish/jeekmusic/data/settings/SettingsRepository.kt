@@ -130,7 +130,7 @@ data class Settings(
     val unsupportedFileCount: Int = 0,
     val lowPowerMode: LowPowerMode = LowPowerMode.BACKGROUND,
     val analysisMode: AnalysisMode = AnalysisMode.CHARGING,
-    val sensitivity: Sensitivity = Sensitivity.LOOSE,
+    val sensitivity: Sensitivity = Sensitivity.NORMAL,
     /** 在线歌词，默认关闭（需求 LY-8）。 */
     val onlineLyrics: Boolean = false,
     /** 播放到没有歌词的歌时是否自动获取。 */
@@ -221,7 +221,7 @@ class SettingsRepository @Inject constructor(
 
     /** Deprecated compatibility write; all old values normalize to loose. */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = Sensitivity.LOOSE.name }
+    suspend fun setSensitivity(sensitivity: Sensitivity) = context.dataStore.edit { it[Keys.SENSITIVITY] = Sensitivity.NORMAL.name }
 
     suspend fun setOnlineLyrics(enabled: Boolean) = context.dataStore.edit { it[Keys.ONLINE_LYRICS] = enabled }
 
@@ -312,7 +312,7 @@ class SettingsRepository @Inject constructor(
         unsupportedFileCount = this[Keys.UNSUPPORTED] ?: 0,
         lowPowerMode = this[Keys.LOW_POWER]?.let { runCatching { LowPowerMode.valueOf(it) }.getOrNull() } ?: LowPowerMode.BACKGROUND,
         analysisMode = this[Keys.ANALYSIS_MODE]?.let { runCatching { AnalysisMode.valueOf(it) }.getOrNull() } ?: AnalysisMode.CHARGING,
-        sensitivity = Sensitivity.LOOSE, // Old stored/synced values cannot change production policy.
+        sensitivity = Sensitivity.NORMAL, // Old stored/synced values cannot change production policy.
         onlineLyrics = this[Keys.ONLINE_LYRICS] ?: false,
         lyricsFetchMode = this[Keys.LYRICS_FETCH_MODE]?.let { runCatching { FetchMode.valueOf(it) }.getOrNull() }
             ?: if (this[Keys.AUTO_FETCH] == true) FetchMode.WIFI else FetchMode.MANUAL,

@@ -478,9 +478,9 @@ LAN preference_delta 使用版本3、最多100事件/页和独立上传/下载�
 
 ## 固定宽松运动识别（Rules9）
 
-Windows / Android 均移除灵敏度选项。生产路径、追加采样、节奏补采及解释统一采用 LOOSE：模型阈值2.75、旧声学规则阈值.50。旧设置NORMAL/STRICT及旧同步输入不会改变有效行为。既有MCP没有可写灵敏度参数，Schema继续拒绝额外`sensitivity`参数，不能藉诊断工具切回较严档。
+Windows / Android 均移除灵敏度选项。生产路径、追加采样、节奏补采及解释统一采用 NORMAL：模型阈值3.25、旧声学规则阈值.60。旧设置LOOSE/STRICT及旧同步输入不会改变有效行为。既有MCP没有可写灵敏度参数，Schema继续拒绝额外`sensitivity`参数，不能藉诊断工具切回较严档。
 
-`explain_analysis` 返回`sensitivity=LOOSE`、`workoutPolicy=fixed_loose`、`rulesVersion=9`，MOOD阈值与margin按2.75计算。`sampleSupportNotProbabilities.MOOD_LOOSE`为当前支持率；保留`MOOD_NORMAL`作为弃用别名，值同MOOD_LOOSE，不代表标准档。`diagnose_analysis`、`analyze_tracks`复用同一固定规则。只提高规则版本，Analyzer仍为6；升级重算有效缓存，不为此重提取音频或向量。手工覆盖及其他三维、ClassicalTitles不变。详见[固定宽松规则](../../docs/workout-fixed-loose.md)。
+`explain_analysis` 返回`sensitivity=NORMAL`、`workoutPolicy=fixed_normal`、`rulesVersion=10`，MOOD阈值与margin按3.25计算。`sampleSupportNotProbabilities.MOOD_NORMAL`为当前支持率；保留`MOOD_LOOSE`作为弃用别名，值同MOOD_NORMAL。`diagnose_analysis`、`analyze_tracks`复用同一固定规则。Analyzer仍为6；升级重算有效缓存，不为此重提取音频或向量。手工覆盖、其他三维、ClassicalTitles及已验证启用的个人结果优先语义不变。详见[固定普通规则](../../docs/workout-fixed-normal.md)。
 
 学习同步页总携带`resetBoundary`和`generation`；无正文页也传播清除。旧协议1/2要求升级。并发清除的边界取并集；未观察到全部清除的写入被清除优先规则舍弃。普通并发答案保留修订冲突。完整一次性重置、普通业务保全及重新使用语义见[学习数据协议](../../docs/personal-tag-learning.md)。
 

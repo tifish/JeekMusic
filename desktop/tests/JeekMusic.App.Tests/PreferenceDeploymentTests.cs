@@ -28,7 +28,7 @@ public sealed class PreferenceDeploymentTests
         var vector=new JsonArray(Enumerable.Range(0,512).Select(i=>(JsonNode?)JsonValue.Create(i==0?1d:0d)).ToArray());
         return new JsonObject { ["state"]="training_gate_passed",["profileId"]=Dataset,["dimension"]=dimension,["extractor"]=Extractor,["margin"]=HeadContract()["heads"]![dimension]!["margin"]!.DeepClone(),["trainingSetHash"]=Hash("isolated simulated training"),["headProtocolHash"]=Hash(HeadContract().ToJsonString()),
             ["workerHash"]=Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,"Preferences","Runtime","preference_worker.py")))),
-            ["scope"]="whole_recording",["analyzerVersion"]=6,["publicRulesVersion"]=9,["model"]=new JsonObject { ["center"]=new JsonArray(Enumerable.Range(0,512).Select(_=>(JsonNode?)JsonValue.Create(0d)).ToArray()),["axes"]=new JsonArray(Enumerable.Range(0,512).Select(i=>(JsonNode)new JsonArray(i==0?1d:0d,i==1?1d:0d)).ToArray()),["scale"]=new JsonArray(1d,1d),["coef"]=new JsonArray(1d,0d),["intercept"]=0d },
+            ["scope"]="whole_recording",["analyzerVersion"]=6,["publicRulesVersion"]=JeekMusic.Core.Analysis.AnalysisVersions.RulesVersion,["model"]=new JsonObject { ["center"]=new JsonArray(Enumerable.Range(0,512).Select(_=>(JsonNode?)JsonValue.Create(0d)).ToArray()),["axes"]=new JsonArray(Enumerable.Range(0,512).Select(i=>(JsonNode)new JsonArray(i==0?1d:0d,i==1?1d:0d)).ToArray()),["scale"]=new JsonArray(1d,1d),["coef"]=new JsonArray(1d,0d),["intercept"]=0d },
             ["deploymentProbes"]=new JsonArray(Enumerable.Range(0,12).Select(_=>(JsonNode)new JsonObject { ["vector"]=vector.DeepClone(),["score"]=1d,["decision"]=Labels(dimension).Positive }).ToArray()) };
     }
     static void InstallFixture(AppServices app,string d,bool receipts=true)
@@ -45,6 +45,19 @@ public sealed class PreferenceDeploymentTests
         if(receipts) foreach(var stage in d=="MOOD"?new[]{"development","calibration_regression","sealed_test"}:new[]{"development","sealed_test"})
             s.SetLocal("passed:"+d+":"+stage,new JsonObject { ["trainingHash"]=hash,["artifactHash"]=Hash(artifact.ToJsonString()),["dependencies"]=PrivateHash(t,"ReceiptDependencies",d,stage),["resultHash"]=Hash("isolated engineering fixture") }.ToJsonString());
     }
+    [Fact] public Task ExistingValidatedRules9HeadSurvivesPublicRuleUpgradeButNewRules9ActivationIsRejected()=>Run(app=> {
+        var t=app.Preferences.Training; var store=app.Preferences.Store;
+        InstallFixture(app,"VOICE"); t.Activate("VOICE");
+        var entry=JsonNode.Parse(store.Local("active-head:VOICE")!)!.AsObject();
+        entry["artifact"]!["publicRulesVersion"]=9; entry["version"]=Hash(entry["artifact"]!.ToJsonString());
+        var metadata=store.Current(Dataset,"model").Single(e=>S(e["entityId"])==S(entry["candidateId"]))["payload"]!.DeepClone().AsObject();
+        metadata["version"]=entry["version"]!.DeepClone(); store.Append(Dataset,S(entry["candidateId"]),"model",metadata);
+        store.SetLocal("active-head:VOICE",entry.ToJsonString()); t.RefreshDeployment(); Assert.True(t.Enabled("VOICE"));
+        var method=typeof(PreferenceTraining).GetMethod("VersionScopeValid",BindingFlags.Static|BindingFlags.NonPublic)!;
+        Assert.False((bool)method.Invoke(null,[entry["artifact"]!.AsObject(),false])!);
+        entry["artifact"]!["publicRulesVersion"]=8; store.SetLocal("active-head:VOICE",entry.ToJsonString()); t.RefreshDeployment(); Assert.False(t.Enabled("VOICE"));
+        return Task.CompletedTask;
+    });
     [Fact] public Task MetadataAndTrainingSuccessAloneNeverActivate()=>Run(app=> {
         InstallFixture(app,"VOICE",false);
         Assert.False(app.Preferences.Training.Enabled("VOICE"));

@@ -173,7 +173,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
                 currentCoroutineContext().ensureActive()
                 val reply=try { client.call("preference_results",JSONObject().put("protocol",3).put("offset",cursor.offset).put("version",cursor.version)) }
                     catch(e: com.tinyfish.jeekmusic.data.sync.LanRemoteException) { cursor.reset(); throw e }
-                val compatible=reply.getInt("resultProtocol")==1 && reply.getString("scope")=="sha256_whole_recording" && reply.getInt("analyzerVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.ANALYZER_VERSION && reply.getInt("rulesVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.RULES_VERSION
+                val compatible=reply.getInt("resultProtocol")==1 && reply.getString("scope")=="sha256_whole_recording" && reply.getInt("analyzerVersion")==com.tinyfish.jeekmusic.analysis.TagRepository.ANALYZER_VERSION && reply.getInt("rulesVersion") in 9..com.tinyfish.jeekmusic.analysis.TagRepository.RULES_VERSION
                 if(!compatible) { store.removeLocal("desktop-heads"); error("Recognition versions differ; update both devices") }
                 require(reply.getString("generation")==generation && store.generation==generation) { "Learning changed during sync; retry" }
                 for(row in objects(reply.getJSONArray("rows"))) {

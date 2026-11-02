@@ -53,7 +53,7 @@ public sealed partial class PreferenceTraining
                 var entry=JsonNode.Parse(json)!.AsObject();
                 var artifact=entry["artifact"]!.AsObject();
                 var metadata=service.Store.Current(Dataset,"model").Where(e=>S(e["entityId"])==S(entry["candidateId"])).ToArray();
-                if(!VersionScopeValid(artifact) || !IndependentScopeValid(d) || S(entry["dependencies"])!=Dependencies(d) || S(entry["workerHash"])!=FileHash(Worker) || S(entry["contractHash"])!=Hash(HeadContract().ToJsonString()) ||
+                if(!VersionScopeValid(artifact, active:true) || !IndependentScopeValid(d) || S(entry["dependencies"])!=Dependencies(d) || S(entry["workerHash"])!=FileHash(Worker) || S(entry["contractHash"])!=Hash(HeadContract().ToJsonString()) ||
                     S(entry["version"])!=Hash(artifact.ToJsonString()) || metadata.Length!=1 || S(metadata[0]["payload"]?["state"])!="active" || S(metadata[0]["payload"]?["version"])!=S(entry["version"])) continue;
                 new PersonalHead(artifact).VerifyEquivalence(artifact["deploymentProbes"]!.AsArray());
                 next[d]=entry;
@@ -65,7 +65,7 @@ public sealed partial class PreferenceTraining
         if(changed) _=Task.Run(()=>app.SmartTags.Recompute());
     }
     public bool Enabled(string d) { lock(deploymentGate) return activeHeads.ContainsKey(d); }
-    static bool VersionScopeValid(JsonObject artifact)=>S(artifact["scope"])=="whole_recording" && artifact["analyzerVersion"]?.GetValue<int>()==JeekMusic.Core.Analysis.AnalysisVersions.AnalyzerVersion && artifact["publicRulesVersion"]?.GetValue<int>()==JeekMusic.Core.Analysis.AnalysisVersions.RulesVersion;
+    static bool VersionScopeValid(JsonObject artifact,bool active=false)=>S(artifact["scope"])=="whole_recording" && artifact["analyzerVersion"]?.GetValue<int>()==JeekMusic.Core.Analysis.AnalysisVersions.AnalyzerVersion && (artifact["publicRulesVersion"]?.GetValue<int>()==JeekMusic.Core.Analysis.AnalysisVersions.RulesVersion || active && artifact["publicRulesVersion"]?.GetValue<int>()==9);
     public JsonObject DeploymentStatus()
     {
         lock(deploymentGate) return new JsonObject { ["heads"]=new JsonArray(Dimensions.Select(d=>(JsonNode)new JsonObject { ["dimension"]=d,["enabled"]=activeHeads.ContainsKey(d),["version"]=activeHeads.TryGetValue(d,out var a)?S(a["version"]):null,["blocker"]=activeHeads.ContainsKey(d)?null:service.Store.Local("learning-blocker:"+d) }).ToArray()),["scope"]="exact_recording_whole_windows_cpu_results",["results"]=service.Store.LocalRows("personal-result:",100000).Count };

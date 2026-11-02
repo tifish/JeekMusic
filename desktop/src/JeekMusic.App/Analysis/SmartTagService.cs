@@ -31,7 +31,7 @@ public sealed class SmartTagService(LibraryService library)
         var row = Db.Features(track.TrackKey);
         var data = FeaturesData.Parse(row?.Data);
         var evidence = AnalysisEvidence.Parse(data?.AnalysisEvidence);
-        const Sensitivity sensitivity = Sensitivity.LOOSE;
+        const Sensitivity sensitivity = Sensitivity.NORMAL;
         var title = ClassicalTitles.Matches(track.Title, track.Album);
         var current = row is not null && row.Signature == AnalysisFeature.Signature(track);
         var usable = current && row!.AnalyzerVersion <= AnalysisFeature.AnalyzerVersion && FeaturesData.FromRow(row) is not null;
@@ -59,7 +59,7 @@ public sealed class SmartTagService(LibraryService library)
             ["trackId"] = track.Id, ["automatic"] = auto, ["publicAutomatic"]=publicAutomatic,["personal"]=personal,["final"] = final, ["sources"] = sources,
             ["classicalTitleMatched"] = title, ["genreEvidenceSource"] = title ? "ClassicalTitles (forced before manual override)" : "model",
             ["analyzerVersion"] = row?.AnalyzerVersion, ["currentAnalyzerVersion"] = AnalysisFeature.AnalyzerVersion,
-            ["rulesVersion"] = AnalysisVersions.RulesVersion, ["workoutPolicy"]="fixed_loose", ["sensitivity"]="LOOSE", ["signatureMatches"] = current, ["usable"] = usable,
+            ["rulesVersion"] = AnalysisVersions.RulesVersion, ["workoutPolicy"]="fixed_normal", ["sensitivity"]="NORMAL", ["signatureMatches"] = current, ["usable"] = usable,
             ["complete"] = current && row?.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && row.Failed == false && data?.Complete == true,
             ["pendingReanalysis"] = FeaturesData.NeedsAnalysis(row, AnalysisFeature.Signature(track)),
             ["attempts"] = data?.AnalysisAttempts, ["failed"] = row?.Failed,
@@ -149,7 +149,7 @@ public sealed class SmartTagService(LibraryService library)
                 features[track.TrackKey] = row;
             }
         var overrides = Db.TagOverrides().ToDictionary(o => (o.TrackKey, o.Dimension));
-        const Sensitivity sensitivity = Sensitivity.LOOSE;
+        const Sensitivity sensitivity = Sensitivity.NORMAL;
         var tags = new List<(string, string, string, string)>();
         foreach (var t in tracks)
         {

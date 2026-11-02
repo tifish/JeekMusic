@@ -47,7 +47,7 @@ class TagRepository @Inject constructor(
     suspend fun recomputeAll() = mutex.withLock { db.withTransaction { recomputeCore() } }
 
     private suspend fun recomputeCore() {
-        val sensitivity = Sensitivity.LOOSE
+        val sensitivity = Sensitivity.NORMAL
         val overrides = dao.overrides().groupBy { it.trackKey }.mapValues { (_, list) -> list.mapTo(HashSet()) { it.dimension } }
         val classicalTitles = dao.titles().filter { ClassicalTitles.matches(it.title, it.album) }.mapTo(HashSet()) { it.trackKey }
         val features = dao.allFeatures().map { original ->
@@ -146,7 +146,7 @@ class TagRepository @Inject constructor(
         fun values(map: Map<TagDimension, Tag?>) = JSONObject().also { o -> map.forEach { (d, v) -> o.put(d.name, v?.name ?: JSONObject.NULL) } }
         return JSONObject().put("automatic", values(info.auto)).put("final", values(info.tags))
             .put("manual", org.json.JSONArray(info.manual.map { it.name })).put("analyzerVersion", info.features?.analyzerVersion)
-            .put("rulesVersion", RULES_VERSION).put("workoutPolicy","fixed_loose").put("sensitivity","LOOSE").put("evidence", evidence?.toJson()?.let(::JSONObject))
+            .put("rulesVersion", RULES_VERSION).put("workoutPolicy","fixed_normal").put("sensitivity","NORMAL").put("evidence", evidence?.toJson()?.let(::JSONObject))
             .put("calmness", calm?.toJson() ?: JSONObject.NULL)
             .put("classicalTitleMatched", dao.title(key)?.let { ClassicalTitles.matches(it.title, it.album) } == true)
     }
@@ -154,7 +154,7 @@ class TagRepository @Inject constructor(
     suspend fun info(trackKey: String): TagInfo {
         val features = dao.currentFeatures(trackKey)
         val classicalTitle = dao.title(trackKey)?.let { ClassicalTitles.matches(it.title, it.album) } == true
-        val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, Sensitivity.LOOSE, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
+        val auto = features?.takeIf { it.usable() }?.let { TagClassifier.classify(it, Sensitivity.NORMAL, classicalTitle) }.orEmpty().toMutableMap().also { if (classicalTitle) it[TagDimension.GENRE] = Tag.CLASSICAL }
         feedback.personalResults()[trackKey]?.takeIf { it.optString("signature")==libraryTrackSignature(trackKey) }?.getJSONObject("heads")?.let { result ->
             for(d in TagDimension.entries) if(!(classicalTitle && d==TagDimension.GENRE)) Tag.of(d,result.optJSONObject(d.name)?.optString("value"))?.let { auto[d]=it }
         }
@@ -174,7 +174,7 @@ class TagRepository @Inject constructor(
          */
         const val ANALYZER_VERSION = 6
         /** 分类规则（不需要重新分析的部分）的版本；1：曲风改为古典 / 非古典；2：用曲名补救漏判的古典；4：氛围改为运动 / 非运动（3 被测试版本用过，跳过）。 */
-        const val RULES_VERSION = 9
+        const val RULES_VERSION = 10
         const val SOURCE_AUTO = "AUTO"
         private const val TAG = "TagRepository"
         const val SOURCE_MANUAL = "MANUAL"

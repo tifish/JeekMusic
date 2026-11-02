@@ -1,7 +1,7 @@
 namespace JeekMusic.Core.Analysis;
 
 /// <summary>Conservative v8 extension: sustained model evidence AND independent musical pulse evidence.
-/// Rules9 uses the fixed loose threshold for decisions and sampling; support is uncalibrated, not probability.</summary>
+/// Rules10 uses the fixed normal threshold for decisions and sampling; support is uncalibrated, not probability.</summary>
 public static class WorkoutEvidence
 {
     public static int StrongRun(SegmentEvidence segment, Sensitivity sensitivity)
@@ -16,8 +16,8 @@ public static class WorkoutEvidence
     }
 
     public static bool NeedsPulse(AnalysisEvidence evidence) => evidence.Complete &&
-        evidence.Aggregate() is { } aggregate && aggregate.Sport < Sensitivity.LOOSE.Sport() &&
-        evidence.ScoredSegments().Count(s => StrongRun(s, Sensitivity.LOOSE) >= 3) >= 2;
+        evidence.Aggregate() is { } aggregate && aggregate.Sport < Sensitivity.NORMAL.Sport() &&
+        evidence.ScoredSegments().Count(s => StrongRun(s, Sensitivity.NORMAL) >= 3) >= 2;
 
     public static IReadOnlyList<(SegmentEvidence Segment, long StartMs, long EndMs)> Plan(
         AnalysisEvidence evidence, long logicalStartMs, long durationMs)
@@ -26,7 +26,7 @@ public static class WorkoutEvidence
         if (!NeedsPulse(evidence)) return result;
         long length = Math.Min(30000, durationMs);
         if (length < 4000) return result;
-        foreach (var s in evidence.ScoredSegments().Where(s => StrongRun(s, Sensitivity.LOOSE) >= 3))
+        foreach (var s in evidence.ScoredSegments().Where(s => StrongRun(s, Sensitivity.NORMAL) >= 3))
         {
             long start = Math.Clamp((s.StartMs + s.EndMs - length) / 2, logicalStartMs, logicalStartMs + durationMs - length);
             long end = start + length;

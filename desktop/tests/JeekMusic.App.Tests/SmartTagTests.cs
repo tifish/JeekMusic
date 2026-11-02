@@ -216,18 +216,18 @@ public sealed class SmartTagTests
         Assert.True(ListBuilder.FilterOf(h.App.Library.Snapshot,["UNANNOTATED"])!(t));
         Assert.Equal(0,tools.Call("search_tracks",new() { ["annotation"]="manual" })["total"]!.GetValue<int>());
     });
-    [Theory] [InlineData("NORMAL")] [InlineData("STRICT")] [InlineData("invalid")]
-    public void OldStoredAndIncomingSettingsCannotChangeFixedLoosePolicy(string legacy)
+    [Theory] [InlineData("LOOSE")] [InlineData("NORMAL")] [InlineData("STRICT")] [InlineData("invalid")]
+    public void OldStoredAndIncomingSettingsCannotChangeFixedNormalPolicy(string legacy)
     {
-        var root=Path.Combine(Path.GetTempPath(),"jeek-fixed-loose-"+Guid.NewGuid()); Directory.CreateDirectory(root);
+        var root=Path.Combine(Path.GetTempPath(),"jeek-fixed-normal-"+Guid.NewGuid()); Directory.CreateDirectory(root);
         try {
             var path=Path.Combine(root,"settings.json"); File.WriteAllText(path,new JsonObject { ["sensitivity"]=legacy }.ToJsonString());
-            var settings=new SettingsStore(path); Assert.Equal("LOOSE",settings.Current.Sensitivity);
-            settings.Current.Sensitivity=legacy; Assert.Equal("LOOSE",settings.Current.Sensitivity);
-            settings.WriteNow(); Assert.Equal("LOOSE",JsonNode.Parse(File.ReadAllText(path))!["sensitivity"]!.GetValue<string>());
+            var settings=new SettingsStore(path); Assert.Equal("NORMAL",settings.Current.Sensitivity);
+            settings.Current.Sensitivity=legacy; Assert.Equal("NORMAL",settings.Current.Sensitivity);
+            settings.WriteNow(); Assert.Equal("NORMAL",JsonNode.Parse(File.ReadAllText(path))!["sensitivity"]!.GetValue<string>());
         } finally { Directory.Delete(root,true); }
     }
-    [Fact] public Task FixedLooseReclassifiesCachedEvidenceWithoutDecodingAndPreservesManualAndTitleRules() => Run(async()=>
+    [Fact] public Task FixedNormalReclassifiesCachedEvidenceWithoutDecodingAndPreservesManualAndTitleRules() => Run(async()=>
     {
         using var h=new Harness(); var t=h.Tracks[0];
         h.App.Settings.Current.Sensitivity="STRICT";
@@ -241,10 +241,10 @@ public sealed class SmartTagTests
         var features=h.App.Db.AllFeatures().ToArray(); var overrides=h.App.Db.TagOverrides().ToArray();
         h.App.SmartTags.Recompute(); t=h.App.Db.AllTracks().Single(x=>x.Id==t.Id);
         var explanation=h.App.SmartTags.Explain(t);
-        Assert.Equal("SPORT",explanation["automatic"]!["MOOD"]!.GetValue<string>());
+        Assert.Equal("NON_SPORT",explanation["automatic"]!["MOOD"]!.GetValue<string>());
         Assert.Equal("CLASSICAL",explanation["automatic"]!["GENRE"]!.GetValue<string>());
         Assert.Equal("INSTRUMENTAL",explanation["automatic"]!["VOICE"]!.GetValue<string>());
-        Assert.Equal("LOOSE",explanation["sensitivity"]!.GetValue<string>()); Assert.Equal(2.75,explanation["thresholds"]!["MOOD"]!.GetValue<double>());
+        Assert.Equal("NORMAL",explanation["sensitivity"]!.GetValue<string>()); Assert.Equal(3.25,explanation["thresholds"]!["MOOD"]!.GetValue<double>());
         Assert.Equal("NON_SPORT",h.App.SmartTags.Read()[h.Tracks[1].TrackKey].Mood); Assert.Equal("CALM",h.App.SmartTags.Read()[h.Tracks[1].TrackKey].Calmness);
         Assert.Equal(features,h.App.Db.AllFeatures()); Assert.Equal(overrides,h.App.Db.TagOverrides());
         Assert.False(FeaturesData.NeedsAnalysis(h.App.Db.Features(t.TrackKey),AnalysisFeature.Signature(t)));

@@ -28,7 +28,7 @@ data class AnalysisEvidence(val segments: List<SegmentEvidence>, val additionalR
         val classical = good.sumOf { it.mean!!.classical * it.frames.size } / frames.size
         return DimensionEvidence(vocal, sport, classical,
             frames.count { it.vocal >= TagClassifier.VOCAL_THRESHOLD }.toDouble() / frames.size,
-            frames.count { TagClassifier.sportScore(it) >= Sensitivity.LOOSE.sport }.toDouble() / frames.size,
+            frames.count { TagClassifier.sportScore(it) >= Sensitivity.NORMAL.sport }.toDouble() / frames.size,
             frames.count { it.classical >= TagClassifier.CLASSICAL_THRESHOLD }.toDouble() / frames.size)
     }
     fun reasons(): List<String> = buildList {
@@ -37,11 +37,11 @@ data class AnalysisEvidence(val segments: List<SegmentEvidence>, val additionalR
         if (a == null || good.sumOf { it.frames.size } < 10 || good.size != segments.size) add("insufficient_evidence")
         if (a != null) {
             if (abs(a.vocal - TagClassifier.VOCAL_THRESHOLD) <= .5) add("voice_near_threshold")
-            if (abs(a.sport - Sensitivity.LOOSE.sport) <= .35) add("mood_near_threshold")
+            if (abs(a.sport - Sensitivity.NORMAL.sport) <= .35) add("mood_near_threshold")
             if (abs(a.classical - TagClassifier.CLASSICAL_THRESHOLD) <= .35) add("genre_near_threshold")
             fun conflict(positive: (SegmentEvidence) -> Boolean) = good.any(positive) && good.any { !positive(it) }
             if (conflict { it.mean!!.vocal >= TagClassifier.VOCAL_THRESHOLD }) add("voice_segment_conflict")
-            if (conflict { TagClassifier.sportScore(it.mean!!) >= Sensitivity.LOOSE.sport }) add("mood_segment_conflict")
+            if (conflict { TagClassifier.sportScore(it.mean!!) >= Sensitivity.NORMAL.sport }) add("mood_segment_conflict")
             if (conflict { it.mean!!.classical >= TagClassifier.CLASSICAL_THRESHOLD }) add("genre_segment_conflict")
         }
     }

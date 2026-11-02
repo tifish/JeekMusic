@@ -69,7 +69,7 @@ public static class Tags
     public static IReadOnlyList<Tag> Of(TagDimension dimension) => All.Where(t => t.Dimension() == dimension).ToList();
 }
 
-/// <summary>历史序列化枚举；所有输入统一采用固定宽松规则。</summary>
+/// <summary>历史序列化枚举；所有输入统一采用固定普通规则。</summary>
 public enum Sensitivity
 {
     LOOSE,
@@ -80,10 +80,10 @@ public enum Sensitivity
 public static class SensitivityExtensions
 {
     /// <summary>模型得分的运动阈值。</summary>
-    public static double Sport(this Sensitivity s) => 2.75; // Legacy enum inputs all use the fixed loose policy.
+    public static double Sport(this Sensitivity s) => 3.25; // Legacy enum inputs all use the fixed normal policy.
 
     /// <summary>旧的规则分类器（还没用模型重新分析的歌）使用的阈值。</summary>
-    public static double Legacy(this Sensitivity s) => 0.50;
+    public static double Legacy(this Sensitivity s) => 0.60;
 }
 
 /// <summary>YAMNet 模型给出的几组得分（移动端设计 §6.3）。</summary>
@@ -139,7 +139,7 @@ public static class TagClassifier
     private const int GenreOnlyVersion = 4;
 
     /// <param name="f">分析结果</param>
-    /// <param name="sensitivity">Legacy compatibility input; all values use loose.</param>
+    /// <param name="sensitivity">Legacy compatibility input; all values use normal.</param>
     /// <param name="classicalTitle">歌名或专辑名里有古典作品的标志（<see cref="ClassicalTitles"/>），模型判为非古典时用它补救（需求 M-10）</param>
     /// <returns>每个维度的标签；没有结果的维度不在字典里或值为 null</returns>
     public static IReadOnlyDictionary<TagDimension, Tag?> Classify(TrackFeatures f, Sensitivity sensitivity, bool classicalTitle = false)
@@ -208,7 +208,7 @@ public static class AnalysisVersions
     public const int AnalyzerVersion = 6;
 
     /// <summary>分类规则的版本：规则变了但不需要重新分析时提高，启动时按保存的版本判断是否全部重算一次。</summary>
-    public const int RulesVersion = 9;
+    public const int RulesVersion = 10;
 
     public const string SourceAuto = "AUTO";
     public const string SourceManual = "MANUAL";

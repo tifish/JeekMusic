@@ -41,7 +41,7 @@ public sealed record AnalysisEvidence(int Contract, SegmentEvidence[] Segments, 
         var classical = good.Sum(s => s.Mean!.Classical * s.ValidWindows) / frames.Length;
         return new(vocal, sport, classical,
             frames.Count(f => f.Vocal >= TagClassifier.VocalThreshold) / (double)frames.Length,
-            frames.Count(f => TagClassifier.SportScore(f) >= Sensitivity.LOOSE.Sport()) / (double)frames.Length,
+            frames.Count(f => TagClassifier.SportScore(f) >= Sensitivity.NORMAL.Sport()) / (double)frames.Length,
             frames.Count(f => f.Classical >= TagClassifier.ClassicalThreshold) / (double)frames.Length);
     }
 
@@ -54,11 +54,11 @@ public sealed record AnalysisEvidence(int Contract, SegmentEvidence[] Segments, 
         if (a is not null)
         {
             if (Math.Abs(a.Vocal - TagClassifier.VocalThreshold) <= .5) reasons.Add("voice_near_threshold");
-            if (Math.Abs(a.Sport - Sensitivity.LOOSE.Sport()) <= .35) reasons.Add("mood_near_threshold");
+            if (Math.Abs(a.Sport - Sensitivity.NORMAL.Sport()) <= .35) reasons.Add("mood_near_threshold");
             if (Math.Abs(a.Classical - TagClassifier.ClassicalThreshold) <= .35) reasons.Add("genre_near_threshold");
             bool Conflict(Func<SegmentEvidence, bool> positive) => good.Any(positive) && good.Any(s => !positive(s));
             if (Conflict(s => s.Mean!.Vocal >= TagClassifier.VocalThreshold)) reasons.Add("voice_segment_conflict");
-            if (Conflict(s => TagClassifier.SportScore(s.Mean!) >= Sensitivity.LOOSE.Sport())) reasons.Add("mood_segment_conflict");
+            if (Conflict(s => TagClassifier.SportScore(s.Mean!) >= Sensitivity.NORMAL.Sport())) reasons.Add("mood_segment_conflict");
             if (Conflict(s => s.Mean!.Classical >= TagClassifier.ClassicalThreshold)) reasons.Add("genre_segment_conflict");
         }
         return reasons.ToArray();

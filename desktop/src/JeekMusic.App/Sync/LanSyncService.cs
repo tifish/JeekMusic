@@ -18,6 +18,7 @@ namespace JeekMusic.Sync;
 public sealed partial class LanSyncService : IDisposable
 {
     readonly AppServices _app;
+    readonly LanFirewall _firewall;
     readonly object _gate = new();
     readonly LanAdmission _admission = new();
     readonly SemaphoreSlim _largeFrames = new(2);
@@ -38,8 +39,6 @@ public sealed partial class LanSyncService : IDisposable
     DateTime _transferWindow;
     long _transferBytes;
     long _authFailures, _protocolFailures, _limited, _overload;
-    JsonObject _invitePermissions = Permissions();
-    static JsonObject Permissions(bool write = false, bool learn = false, bool download = false) => new() { ["readMusic"] = true, ["writeSync"] = write, ["manageLearning"] = learn, ["downloadLearning"] = download, ["writeFiles"]=false, ["deleteFiles"]=false };
     static string Stamp() => Guid.NewGuid().ToString("N");
     readonly Dictionary<string, (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files)> _plans = new();
     readonly string _configPath = Path.Combine(AppPaths.DataDir, "lan-sync.json");
@@ -47,6 +46,7 @@ public sealed partial class LanSyncService : IDisposable
     X509Certificate2? _certificate;
     JsonObject _config;
     TcpListener? _listener;
+    int _firewallPendingPort;
     CancellationTokenSource? _stop;
     string? _invitation;
     DateTime _invitationUntil;
@@ -67,15 +67,15 @@ public sealed partial class LanSyncService : IDisposable
     public LanSyncService(AppServices app)
     {
         _app = app;
+        _firewall = LanFirewall.Create(Notify);
         try { _config = JsonNode.Parse(File.ReadAllText(_configPath))!.AsObject(); }
         catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { _config = new(); }
         _config["bindAddress"] ??= _config["port"] is null ? "127.0.0.1" : "0.0.0.0";
         _config["roots"] ??= new JsonObject(); _config["devices"] ??= new JsonObject();
-        // Preserve existing media/data peers. Remote compute/download now needs local opt-in.
+        LanPairingPolicy.Normalize(Devices);
+        // Keep credentials and generations stable for all existing paired peers.
         foreach (var d in Devices.Select(p => p.Value).OfType<JsonObject>())
         {
-            if (d["permissions"] is null) { d["permissions"] = Permissions(write: true); d["permissionMigration"] = "v4-read-write-learning-requires-approval"; }
-            d["permissions"]!["writeFiles"]??=false;d["permissions"]!["deleteFiles"]??=false;
             d["generation"] ??= Stamp();
             // Legacy expiresAt is retained for rollback compatibility but is never enforced.
         }
@@ -86,6 +86,7 @@ public sealed partial class LanSyncService : IDisposable
         app.Library.SnapshotChanged += ReconcileRoots;
         if (_config["enabled"]?.GetValue<bool>() == true)
             try { Start(); } catch (IOException) { /* A failed optional listener must not prevent player startup. */ }
+        else if (_config["firewallManaged"]?.GetValue<bool>() == true) _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
     }
 
     X509Certificate2 Certificate()
@@ -120,27 +121,58 @@ public sealed partial class LanSyncService : IDisposable
     {
         lock (_gate)
         {
-            if (_listener is not null) return;
+            if (_listener is not null) { _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), Port); return; }
             try
             {
                 Certificate(); // Only provision a private key when the user enables LAN sharing.
                 ReconcileRoots(shareAll: true);
                 var bind = IPAddress.Parse(_config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0");
-                _listener = new TcpListener(bind, port ?? _config["port"]?.GetValue<int>() ?? 39843); _listener.Start(32);
+                var actualPort = port ?? _config["port"]?.GetValue<int>() ?? 39843;
+                if (!IPAddress.IsLoopback(bind))
+                {
+                    // Reserve the actual port without listening, so the precise rule exists before
+                    // Windows sees an inbound listener. Port 0 never becomes an all-ports rule.
+                    using var reservation = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    reservation.Bind(new IPEndPoint(bind, actualPort));
+                    actualPort = ((IPEndPoint)reservation.LocalEndPoint!).Port;
+                    _config["firewallManaged"] = true; Save();
+                    _firewallPendingPort = actualPort;
+                    _firewall.Set(bind.ToString(), actualPort).GetAwaiter().GetResult();
+                    if (_firewall.Status()["state"]?.GetValue<string>() != "configured")
+                    {
+                        Problem = "Windows firewall setup needs attention; the network listener was not started. See firewall status and repair.";
+                        throw new IOException(Problem);
+                    }
+                }
+                _listener = new TcpListener(bind, actualPort); _listener.Start(32);
                 _stop = new CancellationTokenSource();
+                if (!IPAddress.IsLoopback(bind)) _config["firewallManaged"] = true;
                 _config["enabled"] = true; _config["port"] = Port; Save(); Problem = "";
                 _ = Accept(_listener, _stop.Token);
+                _firewallPendingPort = 0;
+                if (IPAddress.IsLoopback(bind)) _ = _firewall.Set(bind.ToString(), Port);
             }
-            catch (SocketException) { _listener?.Stop(); _listener = null; Problem = "Cannot listen on LAN port. Check port use/network permissions; firewall rules are not changed."; throw new IOException(Problem); }
+            catch (SocketException) { _listener?.Stop(); _listener = null; _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0); Problem = "Cannot listen on LAN port. Check port use or local network permissions. Firewall status is reported separately."; throw new IOException(Problem); }
             catch (Exception e) when (e is CryptographicException or UnauthorizedAccessException or IOException)
-            { _listener?.Stop(); _listener = null; Problem = "Cannot start LAN sharing: certificate storage or configuration is unavailable. Player remains usable."; throw new IOException(Problem); }
+            { _listener?.Stop(); _listener = null; if (_firewall.Status()["state"]?.GetValue<string>() == "configured") _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0); if (!Problem.StartsWith("Windows firewall", StringComparison.Ordinal)) Problem = "Cannot start LAN sharing: certificate storage or configuration is unavailable. Player remains usable."; throw new IOException(Problem); }
         }
         Notify();
     }
     public void Stop()
     {
-        lock (_gate) { InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear(); _config["enabled"] = false; Save(); }
+        lock (_gate) { _firewallPendingPort = 0; InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear(); _config["enabled"] = false; Save(); }
+        _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
         Notify();
+    }
+    public async Task<JsonObject> RepairFirewall()
+    {
+        if (_firewallPendingPort > 0)
+        {
+            try { Start(_firewallPendingPort); } catch (IOException) { }
+            return Diagnostics();
+        }
+        Task pending; lock (_gate) pending = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), Port);
+        await pending; return Diagnostics();
     }
     public JsonObject EnableRoot(long folderId, bool enabled)
     {
@@ -171,7 +203,7 @@ public sealed partial class LanSyncService : IDisposable
         if (advertisedPort is < 1 or > 65535) throw new ArgumentException("Invalid endpoint");
         lock (_gate)
         {
-            _invitePermissions = ValidatePermissions(permissions ?? Permissions()); // credentialDays is an ignored compatibility input.
+            LanPairingPolicy.RejectLegacyPermissions(permissions); // credentialDays remains an ignored compatibility input.
             _invitation = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
             _invitationUntil = DateTime.UtcNow.AddMinutes(5);
             Notify();
@@ -183,26 +215,8 @@ public sealed partial class LanSyncService : IDisposable
         lock (_gate) return Port != 0 && _invitation is not null && DateTime.UtcNow < _invitationUntil && value.EndsWith("/" + _invitation, StringComparison.Ordinal);
     }
     public void Revoke(string id) { lock (_gate) { Invalidate(id); Devices.Remove(id); _rates.Remove(id); _transfers.Remove(id); Save(); } Notify(); }
-    static JsonObject ValidatePermissions(JsonObject permissions)
-    {
-        if (permissions.Any(p => p.Key is not ("readMusic" or "writeSync" or "manageLearning" or "downloadLearning" or "writeFiles" or "deleteFiles"))) throw new ArgumentException("Unknown permission");
-        var result = Permissions();
-        foreach (var key in result.Select(p => p.Key).ToArray()) result[key] = permissions[key]?.GetValue<bool>() ?? false;
-        if (result["downloadLearning"]!.GetValue<bool>() && !result["manageLearning"]!.GetValue<bool>()) throw new ArgumentException("Downloads require learning permission");
-        if(result["writeFiles"]!.GetValue<bool>() && !result["readMusic"]!.GetValue<bool>() || result["deleteFiles"]!.GetValue<bool>() && !result["writeFiles"]!.GetValue<bool>())throw new ArgumentException("File writes require readMusic; deletes additionally require writeFiles");
-        return result;
-    }
-    public void Authorize(string id, JsonObject permissions, int credentialDays = 90)
-    {
-        var grants = ValidatePermissions(permissions);
-        lock (_gate)
-        {
-            var d = Devices[id] as JsonObject ?? throw new ArgumentException("Unknown device");
-            Invalidate(id); d["permissions"] = grants; d["generation"] = Stamp();
-            Save(); // Persistent credentials do not expire.
-        }
-        Notify();
-    }
+    public void Authorize(string id, JsonObject permissions, int credentialDays = 90) =>
+        throw new NotSupportedException("Per-permission authorization is retired. Paired devices have all sync capabilities. Use revoke to remove access.");
     public void Configure(string bindAddress, int port)
     {
         if (!IPAddress.TryParse(bindAddress, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork || port is < 1 or > 65535 || (!ip.Equals(IPAddress.Any) && (ip.GetAddressBytes()[0] == 0 || ip.GetAddressBytes()[0] >= 224)) || ip.Equals(IPAddress.Broadcast)) throw new ArgumentException("IPv4 bind and port 1–65535 required");
@@ -245,7 +259,7 @@ public sealed partial class LanSyncService : IDisposable
     }
     void Require(string device, string permission)
     {
-        if (Devices[device]?["permissions"]?[permission]?.GetValue<bool>() != true) throw new UnauthorizedAccessException();
+        if (!LanPairingPolicy.Keys.Contains(permission) || Devices[device] is not JsonObject paired || !LanPairingPolicy.HasCredential(paired)) throw new UnauthorizedAccessException();
     }
     void RequireOperation(string device, string? operation)
     {
@@ -259,7 +273,7 @@ public sealed partial class LanSyncService : IDisposable
         if (operation is "state" or "preference_delta") Require(device, "writeSync");
         else if (operation is "preference_training" or "preference_results")
         {
-            if (Devices[device]?["permissions"]?["readMusic"]?.GetValue<bool>() != true && Devices[device]?["permissions"]?["manageLearning"]?.GetValue<bool>() != true) throw new UnauthorizedAccessException();
+            Require(device, "readMusic");
         }
         else Require(device, "readMusic");
     }
@@ -311,7 +325,7 @@ public sealed partial class LanSyncService : IDisposable
         var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
-            ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
+            ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
             ["sourceBuckets"] = _admission.SourceCount, ["connectionRejected"] = _admission.Rejected,
@@ -329,7 +343,7 @@ public sealed partial class LanSyncService : IDisposable
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
             ["roots"] = new JsonArray(Roots.Select(p => { var f = folders.FirstOrDefault(f => f.Id == p.Value!["folderId"]!.GetValue<long>() && f.Identity == p.Value["folderIdentity"]?.GetValue<string>()); return (JsonNode)new JsonObject
                 { ["rootId"] = p.Key, ["folderId"] = p.Value!["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f is { Available: true } }; }).ToArray()),
-            ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone(), ["permissions"] = p.Value["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked", ["migration"] = p.Value["permissionMigration"]?.DeepClone() }).ToArray())
+            ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone(), ["permissions"] = LanPairingPolicy.HasCredential(p.Value.AsObject()) ? LanPairingPolicy.Permissions() : null, ["expiresAt"] = null, ["credentialPolicy"]="until_revoked", ["migration"] = p.Value["permissionMigration"]?.DeepClone() }).ToArray())
         };
     }
     string RootPath(string id)
@@ -511,14 +525,14 @@ public sealed partial class LanSyncService : IDisposable
                 var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
                 if (Devices[id] is null && Devices.Count >= 64) throw Busy();
                 Invalidate(id);
-                Devices[id] = new JsonObject { ["name"] = name, ["tokenHash"] = Hash(token), ["generation"] = Stamp(), ["permissions"] = _invitePermissions.DeepClone() };
+                Devices[id] = new JsonObject { ["name"] = name, ["tokenHash"] = Hash(token), ["generation"] = Stamp(), ["permissions"] = LanPairingPolicy.Permissions(), ["permissionMigration"] = LanPairingPolicy.Mode };
                 _invitation = null; Save(); Notify();
                 return new JsonObject { ["token"] = token, ["protocol"] = 4, ["name"] = Environment.MachineName };
             }
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["authorizationPolicy"] = LanPairingPolicy.Mode, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
@@ -559,7 +573,7 @@ public sealed partial class LanSyncService : IDisposable
                     r.Learn = now; _rates[device] = r;
                     var download = a["downloadConfirmed"]?.GetValue<bool>() == true;
                     if (download) Require(device, "downloadLearning");
-                    return training.StartLearning(download, owner: "lan:" + device, allowDownload: Devices[device]!["permissions"]!["downloadLearning"]!.GetValue<bool>());
+                    return training.StartLearning(download, owner: "lan:" + device, allowDownload: true);
                 }
             }
             if(action!="status") throw new ArgumentException("Unsupported remote learning action");
@@ -715,5 +729,5 @@ public sealed partial class LanSyncService : IDisposable
         public override void Write(byte[] bytes, int offset, int count) { cancel.ThrowIfCancellationRequested(); if (Length + count > maximum) throw new IOException("Response budget exceeded; upgrade or split data"); base.Write(bytes, offset, count); }
     }
     sealed class FrameTooLargeException : IOException { }
-    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; lock (_gate) InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); }
+    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; lock (_gate) InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); if (_config["firewallManaged"]?.GetValue<bool>() == true) _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0).GetAwaiter().GetResult(); }
 }

@@ -21,7 +21,7 @@ Android从电脑根内选择全部或子目录，通过系统SAF选择本机目�
 | 上次确认后变化 | 行为 |
 |---|---|
 | 单边新增或修改，另一边没改 | 自动传到另一边 |
-| 单边删除，另一边仍是基线内容 | 自动传播删除，保留恢复备份；需专门删除权限 |
+| 单边删除，另一边仍是基线内容 | 自动传播删除，保留恢复备份 |
 | 两边删除 | 确认收敛 |
 | 两边变成相同SHA256 | 复用并确认，无需重复传输 |
 | 两边改成不同内容 | 保留双方，显示冲突 |
@@ -34,11 +34,13 @@ Android从电脑根内选择全部或子目录，通过系统SAF选择本机目�
 
 ## 权限与文件安全
 
-设备六项权限：readMusic、writeSync、writeFiles、deleteFiles、manageLearning、downloadLearning。writeSync只允许领域数据合并，不授文件写权限。writeFiles需readMusic；deleteFiles还需writeFiles。新邀请默认只读；既有设备保留凭证、原读/元数据写，新增文件写删默认关闭，学习仍需明确授权。只读设备遇需要写回或传播删除时显示延期，不能虚报双向已完成。
+配对是全部现有同步操作的授权边界：readMusic、writeSync、writeFiles、deleteFiles、manageLearning、downloadLearning 对有效已配对设备统一为 true，不再逐项选择。旧 false/缺失权限在启动时统一归一，token/generation 与其他配置保留，旧设备无需重配。细粒度 authorize / invite.permissions 明确拒绝；移除访问使用 revoke。MCP 与 UI 使用同一服务，兼容 read 诊断保留。
 
-持久token长期有效直到手动撤销或重新配对，不执行历史expiresAt、不周期重配。邀请码仍为256bit、5分钟、一次性原子消费；Android验证TLS证书DER SHA256 pin与有效期。降权/撤销立即关闭连接、取消设备任务和计划；重新配对相同deviceId不复活旧scope或权限。默认全部曲库共享不意味着允许任意磁盘写入。
+持久 token 长期有效直到手动撤销或重新配对，不执行历史 expiresAt。邀请码仍为 256bit、5 分钟、一次性原子消费；Android 验证 TLS pin 与有效期。撤销立即关闭连接、取消该设备计划/上传/学习；复用 deviceId 不复活旧 token 或 scope。首次实际学习下载仍需原有操作确认，权限迁移不启动同步/学习。配对全权限不意味着允许任意磁盘写入或代码执行。
 
-文件合同1在传输4内协商；新客户端缺fileProtocol=1明确要求升级。旧端保留受限读取/元数据合同，不能访问新文件写路径。所有文件操作限定到当前credential-owner/root/mapping/selection scope，读块/上传块最大256KiB。只允许原音频、CUE/LRC和封面扩展名，并验证上传容器签名、拒绝可执行文件封装。CUE路径不能越根；音轨依赖有冲突、未同步或在选择外时，上传延期。
+Windows 自动维护精确程序路径、TCP 实际监听端口与本地绑定地址的入站规则，所有网络配置文件，非回环来源 Any（兼容 LAN 与既有公网映射）。停服、端口及升级路径变更只清理经核验的自建旧规则；回环无需放行。UAC/策略失败独立报告，不修改路由/UPnP；详情见部署说明。
+
+文件合同1在传输4内协商；新客户端缺fileProtocol=1明确要求升级。旧端保留原有小请求读取/元数据合同；缺少文件协议的客户端需升级以使用新文件同步。所有文件操作限定到当前credential-owner/root/mapping/selection scope，读块/上传块最大256KiB。只允许原音频、CUE/LRC和封面扩展名，并验证上传容器签名、拒绝可执行文件封装。CUE路径不能越根；音轨依赖有冲突、未同步或在选择外时，上传延期。
 
 Windows以无reparse父目录/最终句柄固定目标，独占原文件并条件重命名；Android使用openat/O_NOFOLLOW/renameat2(RENAME_NOREPLACE)、句柄身份、hash复核与持久日志。占用/并发更改延期，保留双方；不沿链接、不写出根、不递归删除用户目录。平台不支持NOREPLACE时使用明确的条件复制合同；独占创建、句柄身份或边界保护不可用则拒绝，不使用公共目标覆盖。
 

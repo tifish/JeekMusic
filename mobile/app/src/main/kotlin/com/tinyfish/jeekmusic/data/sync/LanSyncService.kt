@@ -70,7 +70,9 @@ class LanSyncService @Inject constructor(
         catch (e: LanLedgerException) { ledgerLoaded = false; throw e } // Recovery reloads the confirmed disk state.
     }
     private fun report() { _revision.value++ }
-    private fun problem(e: Exception): String = if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
+    private fun problem(e: Exception): String = if(e is LanRemoteException && e.code=="unauthorized") context.getString(R.string.lan_pairing_revoked)
+        else if(e is LanRemoteException && e.code=="upgrade_required") context.getString(R.string.lan_paired_upgrade)
+        else if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
         else e.message?.lineSequence()?.firstOrNull()?.take(240) ?: e.javaClass.simpleName
     private fun protocol() = LanProtocol(store.read().getJSONObject("connection")).also { transport?.close(); transport = it }
 
@@ -176,8 +178,8 @@ class LanSyncService @Inject constructor(
                     }
                     ensureActive()
                     val dataClient = protocol()
-                    val writable = dataClient.call("capabilities").getJSONObject("permissions").optBoolean("writeSync")
-                    if (writable) {
+                    LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
+                    dataClient.use {
                         val remote = dataClient.call("state", sync.exportLan())
                         sync.acceptLan(remote)
                         try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }

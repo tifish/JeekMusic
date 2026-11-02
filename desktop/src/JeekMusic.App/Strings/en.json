@@ -680,5 +680,18 @@
   "手机可达的 TCP 端口": "TCP port reachable from the phone",
   "手机扫码配对，或手动输入邀请。使用手机可达的 IPv4 或域名，可填写公网映射端口。邀请 5 分钟有效且只能使用一次；请勿截图或公开。": "Scan or enter the invitation on Android. Use a reachable IPv4 address or DNS hostname and mapped TCP port. Invitations expire after five minutes and work once. Keep them private.",
   "高级监听配置（先停服务；IPv4，新安装默认仅回环 127.0.0.1:39843）": "Advanced listener (stop first; new installs use loopback 127.0.0.1:39843)",
-  "绑定 127.0.0.1 时只允许本机。手机访问需先停服并绑定指定 IPv4 网卡或 0.0.0.0；现有安装保持原绑定范围。": "127.0.0.1 permits local clients only. To allow phones, stop first and bind a specific IPv4 interface or 0.0.0.0. Existing installations keep their previous binding."
+  "绑定 127.0.0.1 时只允许本机。手机访问需先停服并绑定指定 IPv4 网卡或 0.0.0.0；现有安装保持原绑定范围。": "127.0.0.1 permits local clients only. To allow phones, stop first and bind a specific IPv4 interface or 0.0.0.0. Existing installations keep their previous binding.",
+  "Windows 防火墙": "Windows firewall",
+  "修复 Windows 防火墙": "Repair Windows firewall",
+  "无法监听端口。请检查端口占用及网络权限；防火墙结果单独显示。": "Cannot listen on the port. Check port use and network permissions; firewall results are shown separately.",
+  "连接采用 TLS TCP 透传。自动维护当前程序路径、实际 TCP 端口及绑定地址的 Windows 入站规则（所有网络配置文件、任意来源）；回环监听无需放行。不会修改路由、公网映射或 UPnP。": "TLS over TCP. The app maintains a Windows inbound rule for this executable, actual TCP port and bind address, all profiles and any remote source. Loopback needs no rule. Router, public forwarding and UPnP settings are unchanged.",
+  "配对设备可访问并双向同步全部已登记曲库及管理学习。配对即拥有全部同步权限，旧设备无需重新配对；可随时撤销设备。凭证长期有效。": "Paired devices can access and sync all registered libraries in both directions and manage learning. Pairing grants all sync capabilities; existing devices need no re-pairing. Credentials remain valid until revoked.",
+  "手机选择音乐文件夹及直接保存目录。按双方确认的内容基线双向同步；单边修改/删除自动传播，真实冲突才需要选择。配对即可使用全部同步能力。开启服务自动共享全部曲库；取消同步不删除音乐。": "Choose music folders and the direct destination on the phone. Sync uses confirmed content baselines; single-side changes/deletions propagate automatically and real conflicts require a choice. Pairing grants all sync capabilities. Enabling shares all registered libraries; cancelling preserves music.",
+  "手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；连接失败时检查服务、网络及防火墙状态。": "Each sync hashes all selected content, detecting changes even at the same size and mtime. Large folders can take longer. Check service, network and firewall status if connecting fails.",
+  "已配置当前程序的精确 TCP 入站规则；外网可达性尚未验证。": "The exact TCP inbound rule for this program is active. Internet reachability is not verified.",
+  "服务关闭或仅回环监听，无需入站放行。": "The service is stopped or loopback-only; no inbound rule is needed.",
+  "正在配置；Windows 可能请求管理员确认。": "Configuring; Windows may request administrator consent.",
+  "管理员确认已取消，点击修复后重试。": "Administrator consent was cancelled. Select Repair to retry.",
+  "组织策略禁止本地入站规则，请联系管理员。": "Managed policy blocks local inbound rules. Contact your administrator.",
+  "防火墙未就绪。点击修复；若仍失败，请检查管理员权限、系统策略或第三方防火墙。": "Firewall setup is not ready. Select Repair; if it still fails, check administrator permissions, system policy or third-party firewalls."
 }

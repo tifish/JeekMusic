@@ -19,4 +19,6 @@
 <string name="lan_change_initial">Present without a baseline</string>
 <string name="lan_change_absent">Absent without a baseline</string>
 <string name="lan_change_unknown">Not available</string>
+    <string name="lan_pairing_revoked">This pairing is no longer valid. Pair again if the device was revoked.</string>
+    <string name="lan_paired_upgrade">Upgrade the PC app for all paired-device sync capabilities. Individual PC permissions are no longer needed.</string>
 </resources>

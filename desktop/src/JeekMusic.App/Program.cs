@@ -13,6 +13,7 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--lan-firewall-helper") return Sync.WindowsLanFirewall.Helper(args);
         Args = args;
         // GBK / Big5 / Shift-JIS（乱码修复、.lrc / .cue 编码识别）
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);

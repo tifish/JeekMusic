@@ -134,7 +134,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
     suspend fun synchronize(mapping: JSONObject,client: LanProtocol,onPinned: ()->Unit,progress: (String,LanFileReport)->Unit,beforeChange: (String,JSONObject?,Boolean)->Unit,afterChange: suspend ()->Unit): LanFileReport {
         val report=LanFileReport();val key=mapping.getString("key")
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==1) { "Upgrade both devices for bidirectional file sync" }
-        val permissions=capabilities.getJSONObject("permissions")
+        LanProtocol.requirePairedCapabilities(capabilities)
         val scopeInfo=call(client,"","file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",key).put("selection",mapping.getJSONArray("selection")))
         val scope=scopeInfo.getString("scope");val revision=scopeInfo.getString("revision")
         val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
@@ -182,7 +182,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 if(status.optBoolean("committed"))store(pending,"remote_committed")
                                 else if(pending.optString("kind")=="upload" && hash(pending)!=hash(local)) {
                                     if(status.optString("state")=="uploading" || status.optString("state")=="not_found") { if(status.optString("state")!="not_found")call(client,scope,"file_abort",JSONObject().put("operation",pending.getString("operation")));store(pending,"aborted");pending=null }
-                                    else if(status.optString("state")=="prepared" && permissions.optBoolean("writeFiles")) { call(client,scope,"file_finish",JSONObject().put("operation",pending.getString("operation")));store(pending,"remote_committed") }
+                                    else if(status.optString("state")=="prepared") { call(client,scope,"file_finish",JSONObject().put("operation",pending.getString("operation")));store(pending,"remote_committed") }
                                 }
                             }
                             var effective=base(baseline)
@@ -208,7 +208,6 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 } else { report.conflict(conflict);if(!cues)db.hold(key,path);report.processed++;continue }
                             }
                             if(decision.action=="defer")throw LanLocalDeferred(decision.reason!!)
-                            if(decision.action=="upload" && !permissions.optBoolean("writeFiles") || decision.action in setOf("delete_local","delete_remote") && !permissions.optBoolean("deleteFiles"))throw LanLocalDeferred("file_permission_required")
                             val version=baseline?.optString("version").orEmpty()
                             var transaction: JSONObject?=null
                             when(decision.action) {

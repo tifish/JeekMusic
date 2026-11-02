@@ -7,6 +7,19 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 class LanProtocolTest {
+    @Test fun pairedCapabilitiesRejectOldRestrictedServersRatherThanSilentlySkipSync() {
+        val grants=JSONObject()
+        val keys=listOf("readMusic","writeSync","writeFiles","deleteFiles","manageLearning","downloadLearning")
+        keys.forEach { grants.put(it,true) }
+        LanProtocol.requirePairedCapabilities(JSONObject().put("permissions",grants))
+        for(key in keys) {
+            val old=JSONObject(grants.toString()).put(key,false)
+            val failure=runCatching { LanProtocol.requirePairedCapabilities(JSONObject().put("permissions",old)) }.exceptionOrNull()
+            assertTrue(failure is LanRemoteException)
+            assertEquals("upgrade_required",(failure as LanRemoteException).code)
+        }
+    }
+
     @Test fun versionFourUsesSmallAuthenticationAndOperationBudgets() {
         assertEquals(4096, LanProtocol.requestLimit("auth"))
         assertEquals(4096, LanProtocol.requestLimit("pair"))

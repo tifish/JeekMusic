@@ -402,7 +402,7 @@ python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --e
 ## 局域网同步（生产与开发版同套服务）
 
 - `lan_sync_status {}`：只读，返回 `enabled/port/problem/protocol/invitationActive/lastOperation/bytesServed/sharingMode/libraryFolderCount/sharedFolderCount/addresses/roots/devices`。`sharingMode=library`，全局服务开启后自动共享所有登记曲库目录及后续新增目录；离线目录保留并标 available=false。sharedFolderCount 含离线目录，服务关闭时为 0；roots 保留永久撤销记录，enabled 是有效身份绑定，不再是单独开关。不会返回邀请、令牌、令牌 hash 或私钥。
-- `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TLS 服务。start 可选 `port`（整数 0–65535，0 由系统选择空闲端口）；省略时使用保存的端口，首次为 39843。只有 start 接受 port；修改监听端口前先 stop。默认不启动，停用中断连接与计划；不修改防火墙。
+- `lan_sync_control {"action":"start"}` / `stop`：启动或停用 TLS 服务。start 可选 `port`（整数 0–65535，0 由系统选择空闲端口）；省略时使用保存的端口，首次为 39843。只有 start 接受 port；修改监听端口前先 stop。默认不启动，停用中断连接与计划，并清理经所有权核验的自建 Windows 防火墙规则。非回环启动先自动配置精确程序/实际 TCP 端口/绑定地址，覆盖所有网络配置文件和任意远端来源；失败状态与监听分开，不改路由/UPnP。
 - 兼容旧 `lan_sync_control {"action":"share","folderId":1}`：服务开启时只查询登记目录的自动 rootId，返回 enabled=true、sharingMode=library、deprecated=true；不会启动已关闭的服务。旧 `unshare` 仍在 Schema 中接受，但总是返回明确错误，提示使用 stop 全局关闭；不能用它排除单个目录。未登记目录、父目录或任意磁盘路径不能共享。
 - `lan_sync_control {"action":"invite","host":"192.168.1.7"}`：生成 5 分钟、单次有效邀请，含地址、证书指纹和随机授权值。可选 `includeQr:true` 同时返回内存 `qrPngBase64`，使用设置界面同一编码器，并异步校验地址不是 loopback/未指定/广播/组播（DNS 解析必须为可用 IPv4）。不传时保持旧文本邀请兼容。文本和二维码均是敏感凭证，只向要配对的手机私下传递，不写日志、截图或报告；`invitationActive` 只报告是否仍有效。
 - `lan_sync_control {"action":"revoke","deviceId":"..."}`：撤销设备。既有 TLS 连接每个请求重新检查授权，后续读取被拒绝；已下载的文件不删除。
@@ -514,7 +514,9 @@ Android结果同步每次最多100页并持久化 offset/version；快照变化�
 
 新增本地文件备份管理后共40个工具。`lan_sync_status` 新增 bindAddress/configuredPort、budgets、activeConnections/unauthenticatedConnections、sourceBuckets、connectionRejected/authenticationFailures/protocolFailures/rateLimited、tasks[].id/deviceId/state、devices[].permissions/credentialPolicy/migration（expiresAt恒null）；不含邀请码/token/私钥。安全计数为进程内有界计数，不写每请求日志。
 
-`lan_sync_control` 新增 `configure`（仅停止时，bindAddress IPv4、port 1–65535）、`authorize`（deviceId、完整 permissions、已弃用兼容输入 credentialDays（忽略））。permissions 为严格对象，原四个必填布尔字段 readMusic/writeSync/manageLearning/downloadLearning；新增可选writeFiles/deleteFiles默认false，拒绝其他字段。writeFiles需readMusic，deleteFiles还需writeFiles。授权变更会关闭该设备连接、使计划失效并取消归属任务；不会取消本机独立任务。invite 追加 advertisedPort 1–65535、permissions，新邀请默认只读。既有 start/stop/share/unshare/invite/revoke 参数兼容；旧 share/unshare 规则不变。includeQr 与文本 invite 共用授权和有效期参数。configure 不开服务，不改防火墙。详情见 [部署说明](../../docs/lan-public-deployment.md)。
+`lan_sync_control.configure` 仅停止时保存 bindAddress IPv4、port 1–65535，不自动开服务。`invite` 接受 host/advertisedPort/includeQr，成功配对即拥有全部现有同步能力；旧有效设备统一归一为全能力，无需重新配对。`authorize` 和 `invite.permissions` 已废弃且明确拒绝（包括全 true 输入），提示省略 permissions 并用 revoke 移除访问。旧严格布尔参数 Schema 保留以便旧调用得到明确错误；不接受后行为不符。credentialDays 为忽略的兼容输入，凭证长期有效。`capabilities` / `lan_sync_status` 新增 authorizationPolicy=paired_all，六项 permissions 只作兼容读诊断。撤销立即断开连接及取消归属任务，复用 deviceId 的新配对轮换 token。
+
+`lan_sync_control {"action":"firewall_repair"}` 重试同一自动防火墙服务；可能需要合法 UAC，仅提权固定 helper，播放器不常态提权。`lan_sync_status.firewall` 含 state/message、精确 program/port/localAddress/remoteAddress/profiles、ownedRuleCount/activeExactRuleCount、profilePolicy 和 reachability=not_verified。规则仅管理当前用户/数据目录所有者的可核验自建组，随停服/退出/升级路径/端口变化收敛，不碰用户手工规则。回环不用入站规则。非回环来源 Any，支持 LAN 和管理员已有公网 TCP 转发，不自动配置映射。UAC 拒绝、策略禁止、查询/操作失败如实报告；configured 只证明 Windows 规则已激活，不保证第三方防火墙/外网可达。详情见 [部署说明](../../docs/lan-public-deployment.md)。
 
 `checkpoint_client` 现在还调用正常退出共用的 Shell.SaveWindow，保存当前窗口位置/尺寸/最大化、导航目标、目录展开/收起和分隔/歌词布局。显式 JEEKMUSIC_DATA 指向默认数据目录时与省略变量使用同一实例与 MCP 管道，避免同目录双进程；非默认夹具仍保持隔离。
 
@@ -536,7 +538,7 @@ Android结果同步每次最多100页并持久化 offset/version；快照变化�
 
 ### 双向文件与恢复
 
-lan_sync_status.fileSync返回fileProtocol=1、actions/conflicts/deferred、peerConfirmedActions、基线/事务/备份字节及上限。tasks增加kind/reason，区分计划和文件hash/确认/提交任务，保留设备归属。旧四权限输入兼容，文件写删必须另授权，凭证仍长期有效。
+lan_sync_status.fileSync返回fileProtocol=1、actions/conflicts/deferred、peerConfirmedActions、基线/事务/备份字节及上限。tasks增加kind/reason，区分计划和文件hash/确认/提交任务，保留设备归属。六权限字段保留只读兼容诊断，配对即全能力；旧细粒度修改明确拒绝，凭证仍长期有效。
 
 lan_file_backups（开发与NativeAOT共用）：action=list，offset默认0，每页100；返回receipt/rootId/path/bytes/state/kind、next/hasMore和retainedBytes，无token。action=restore|purge需receipt，且先停LAN服务。restore要求当前路径仍为该事务结果，核对原备份hash并条件提交，保留被替换结果，不推进同步基线。purge仅处理已确认且未变化的单个备份；无递归删除或任意路径参数。文件工作占用时明确拒绝，重试不会绕过预算。这是本机管理员能力，未桥接到TLS端口。
 

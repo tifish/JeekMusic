@@ -409,7 +409,7 @@
     <string name="sync_failed">Sync failed: %1$s</string>
     <string name="sync_changes">Synced %2$d changes from “%1$s”</string>
     <string name="lan_title">LAN music sync</string>
-    <string name="lan_intro">Sync selected PC music folders with the exact folder you choose. Single-side changes and tracked deletions are automatic after confirmation; only genuine conflicts need a choice. File writes and deletes require separate PC grants. Pausing or forgetting keeps files.</string>
+    <string name="lan_intro">Sync selected PC music folders with the exact folder you choose. Single-side changes and tracked deletions are automatic after confirmation; only genuine conflicts need a choice. Pairing grants access to all registered libraries, bidirectional sync and learning management. Pausing or forgetting keeps files.</string>
     <string name="lan_pair">Pair with PC</string>
     <string name="lan_pair_again">Pair again (remove mappings first)</string>
     <string name="lan_paired">Paired securely</string>
@@ -429,7 +429,7 @@
     <string name="lan_done">Sync complete · SHA-256 verified</string>
     <string name="lan_issues">Sync needs attention</string>
     <string name="lan_cancelled">Cancelled. Partial downloads retained for retry.</string>
-    <string name="lan_failed">Connection/sync failed. Check PC authorization, LAN, port and firewall; then retry. Partial downloads and existing files are preserved.</string>
+    <string name="lan_failed">Connection/sync failed. Check pairing, network, PC service and firewall status; then retry. Partial downloads and existing files are preserved.</string>
     <string name="lan_cleaned">Clean finished; task paused. See any retained conflicts below.</string>
     <string name="lan_folders_hint">Selected folders include subfolders. Browse with ›. Select the root to download everything in it. Only selected files and CUE dependencies are transferred.</string>
     <string name="lan_whole_root">Entire shared folder</string>

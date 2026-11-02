@@ -40,7 +40,7 @@ class PreferenceViewModel @Inject constructor(val service: PreferenceService): V
     suspend fun refresh()=withContext(Dispatchers.IO) { snapshot.value=service.status() }
     fun run(block: suspend () -> Unit) {
         if(busy.value) return
-        viewModelScope.launch { busy.value=true; try { withContext(Dispatchers.IO) { block() }; refresh(); error.value="" } catch(e: Exception) { error.value=e.message.orEmpty() } finally { busy.value=false } }
+        viewModelScope.launch { busy.value=true; try { withContext(Dispatchers.IO) { block() }; refresh(); error.value="" } catch(e: Exception) { error.value=if(e is com.tinyfish.jeekmusic.data.sync.LanRemoteException) e.code else e.message.orEmpty() } finally { busy.value=false } }
     }
 }
 
@@ -66,7 +66,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
         if(desktop.optInt("total")>0) Text(stringResource(R.string.preference_library_progress,desktop.optInt("processed"),desktop.optInt("total"),desktop.optInt("uncovered")))
         Button(onClick={if(desktop.optString("state")=="download_required") download=true else action()},enabled=!busy && !running) { Text(stringResource(if(desktop.optString("state") in listOf("cancelled","interrupted","incomplete")) R.string.preference_learning_resume else R.string.preference_learning_start)) }
         if(running) OutlinedButton(onClick={vm.run { vm.service.learningAction("cancel") }},enabled=!busy) { Text(stringResource(R.string.preference_learning_cancel)) }
-        if(error.isNotEmpty()) Text(stringResource(if(listOf("version","protocol","upgrade").any { error.contains(it,ignoreCase=true) }) R.string.preference_upgrade_required else R.string.preference_computer_unavailable),color=MaterialTheme.colorScheme.error)
+        if(error.isNotEmpty()) Text(stringResource(if(error=="unauthorized") R.string.lan_pairing_revoked else if(listOf("version","protocol","upgrade").any { error.contains(it,ignoreCase=true) }) R.string.preference_upgrade_required else R.string.preference_computer_unavailable),color=MaterialTheme.colorScheme.error)
         Text(stringResource(R.string.preference_local_coverage,data.optInt("matchedSongs"),data.optInt("fallbackSongs")),style=MaterialTheme.typography.bodySmall)
         if(data.optBoolean("resultPagesPending")) Text(stringResource(R.string.preference_result_pages_pending),style=MaterialTheme.typography.bodySmall)
         for(head in PreferenceStore.objects(data.optJSONArray("heads") ?: org.json.JSONArray())) {

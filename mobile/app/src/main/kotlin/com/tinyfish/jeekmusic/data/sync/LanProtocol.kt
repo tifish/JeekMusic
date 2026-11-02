@@ -137,6 +137,12 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
             maxOf(0L,(at-now)/1_000_000L)
         }
 
+        internal fun requirePairedCapabilities(capabilities: JSONObject) {
+            val permissions=capabilities.optJSONObject("permissions")
+            if (permissions == null || listOf("readMusic","writeSync","writeFiles","deleteFiles","manageLearning","downloadLearning").any { !permissions.optBoolean(it) })
+                throw LanRemoteException("upgrade_required", "Upgrade the PC to enable all paired-device sync capabilities; no individual permission selection is needed.")
+        }
+
         internal fun requestLimit(op: String): Int = when(op) { "pair", "auth" -> 4096; "state" -> 32_000_000; "preference_delta" -> 4_000_000; "file_chunk" -> 512*1024; else -> 64 * 1024 }
 
         fun sha(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

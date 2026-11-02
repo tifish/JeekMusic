@@ -70,7 +70,7 @@ def main():
                 port=call(c,"lan_sync_status")["port"]
                 def pair(permissions=None, device=None):
                     args=dict(action="invite",host="127.0.0.1")
-                    if permissions is not None:args["permissions"]=permissions
+                    if permissions is not None: assert c.call("lan_sync_control",dict(args,permissions=permissions)).get("isError")
                     u=urlsplit(call(c,"lan_sync_control",**args)["invitation"]);pin,secret=u.path.strip("/").split("/")
                     connection=dict(port=port,pin=pin,deviceId=device or uuid.uuid4().hex)
                     w=Wire(connection,auth=False)
@@ -80,12 +80,10 @@ def main():
                     return connection,secret
                 peer,secret=pair(); w=Wire(peer)
                 assert "roots" in w.request("roots")
-                assert w.request("preference_training",protocol=3,action="learn",downloadConfirmed=True)["code"]=="unauthorized";w.close()
+                assert all(w.request("capabilities")["permissions"].values());w.close()
                 replay=Wire(peer,auth=False);replay.send(dict(op="pair",deviceId=uuid.uuid4().hex,invitation=secret));assert replay.receive()["code"]=="unauthorized";replay.close()
                 bad=Wire(peer,auth=False);bad.send(dict(op="auth",protocol=4,deviceId=peer["deviceId"],token="0"*64));assert bad.receive()["code"]=="unauthorized";bad.close()
-                denied=Wire(peer);denied.send(dict(op="request",kind="state",length=32_000_000));assert denied.receive()["code"]=="unauthorized";denied.close()
-                print("PASS write permission rejected before large-body admission",flush=True)
-                print("PASS pairing one-use replay, generic auth errors, default permissions/download bypass refusal",flush=True)
+                print("PASS one-use pairing grants all capabilities; invitation replay and invalid token rejected",flush=True)
                 for payload in [b'{"op":"auth","op":"pair"}', b'{"a":{"b":{"c":{"d":{"e":1}}}}}', b'{"op":"auth","token":"'+bytes([255])+b'"}', b'[]', b'{"op":[]}', b'{"op":"auth","token":12}']:
                     bad=Wire(peer,source="127.0.0.2",auth=False)
                     bad.s.sendall(struct.pack(">i",len(payload))+payload)
@@ -176,15 +174,13 @@ def main():
                 for i in range(20):
                     value=dict(op="read",deviceId=peer["deviceId"],token=peer["token"],rootId=rootId,plan=plan["plan"],path=p0[0]["path"],offset=0)
                     payload=json.dumps(value,separators=(",", ":")).encode();revoking.send(dict(op="request",kind="read",length=len(payload)));revoking.s.sendall(struct.pack(">i",len(payload))+payload)
-                call(c,"lan_sync_control",action="authorize",deviceId=peer["deviceId"],permissions=dict(readMusic=True,writeSync=False,manageLearning=False,downloadLearning=False))
+                call(c,"lan_sync_control",action="revoke",deviceId=peer["deviceId"])
                 wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0,3);revoking.close()
-                print("PASS concurrent permission revocation interrupts an active slow TLS download",flush=True)
-                try:good.request("roots");raise AssertionError("Downgrade left old TLS alive")
+                print("PASS device revocation interrupts an active slow TLS download",flush=True)
+                try:good.request("roots");raise AssertionError("Revocation left old TLS alive")
                 except (OSError,EOFError):pass
-                good.close();good=Wire(peer)
-                assert good.request("manifest",rootId=rootId,plan=plan["plan"],offset=0)["code"]=="unauthorized";good.close()
-                good=Wire(peer)
-                denied=good.request("state",state={});assert denied["code"]=="unauthorized";good.close()
+                good.close()
+                rejected=Wire(peer,auth=False);rejected.send(dict(op="auth",protocol=4,deviceId=peer["deviceId"],token=peer["token"]));assert rejected.receive()["code"]=="unauthorized";rejected.close()
                 # A local task must not become cancellable through a remote identity.
                 local=call(c,"preference_training",action="learn")
                 call(c,"lan_sync_control",action="revoke",deviceId=peer["deviceId"])
@@ -192,7 +188,7 @@ def main():
                 assert replacement["token"]!=peer["token"]
                 bad=Wire(peer,auth=False);bad.send(dict(op="auth",protocol=4,deviceId=peer["deviceId"],token=peer["token"]));assert bad.receive()["code"]=="unauthorized";bad.close()
                 d=call(c,"lan_sync_status");assert d["authenticationFailures"]>0 and d["connectionRejected"]>=0 and d["protocolFailures"]>0
-                print("PASS 205-directory/manifest paging, async hashing/read, live downgrade, invalid plans, revoke and device-ID re-pair rotation",flush=True)
+                print("PASS 205-directory/manifest paging, async hashing/read, live revocation, invalid credentials, revoke and device-ID re-pair rotation",flush=True)
                 call(c,"preference_training",action="cancel")
                 wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0)
                 print("PASS no active network leases leaked; diagnostic counters redact credentials",flush=True)
@@ -246,7 +242,7 @@ def main():
                 status=call(c,"lan_sync_status");port=status["port"]
                 replacement["port"]=port;legacy["port"]=port
                 migrated=next(d for d in status["devices"] if d["id"]==legacy["deviceId"])
-                assert migrated["permissions"]==dict(readMusic=True,writeSync=True,manageLearning=False,downloadLearning=False,writeFiles=False,deleteFiles=False) and migrated["migration"]
+                assert migrated["permissions"]==dict(readMusic=True,writeSync=True,manageLearning=True,downloadLearning=True,writeFiles=True,deleteFiles=True) and migrated["migration"]
                 old=Wire(legacy,auth=False);old.send(dict(op="roots",deviceId=legacy["deviceId"],token=legacy["token"]))
                 assert old.receive().get("roots");old.close()
                 old=Wire(legacy,auth=False);old.s.sendall(struct.pack(">i",5000));assert old.receive()["code"]=="upgrade_required";old.close()
@@ -254,7 +250,7 @@ def main():
                 assert live.request("roots").get("roots");live.close()
                 retained=Wire(replacement); assert retained.request("capabilities")["credentialPolicy"]=="until_revoked";retained.close()
                 assert all(d["expiresAt"] is None for d in status["devices"])
-                print("PASS persisted legacy read/write migration, old small-frame compatibility, explicit upgrade limit and credentials retained despite historical expiry",flush=True)
+                print("PASS persisted legacy all-capability migration, old small-frame compatibility, explicit upgrade limit and credentials retained despite historical expiry",flush=True)
             finally:
                 call(c,"lan_sync_control",action="stop")
                 subprocess.run(["taskkill","/pid",str(pid),"/f"],capture_output=True,check=False);time.sleep(.3)

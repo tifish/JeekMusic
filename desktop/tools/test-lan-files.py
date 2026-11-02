@@ -19,8 +19,7 @@ def main():
                 call(c,'add_folder',path=str(music));call(c,'lan_sync_control',action='start',port=0)
                 status=wait(lambda:(lambda s:s if s['roots'] else None)(call(c,'lan_sync_status')))
                 port=status['port'];root=status['roots'][0]['rootId']
-                permissions=dict(readMusic=True,writeSync=False,manageLearning=False,downloadLearning=False,writeFiles=True,deleteFiles=True)
-                u=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1',permissions=permissions)['invitation']);pin,secret=u.path.strip('/').split('/')
+                u=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1')['invitation']);pin,secret=u.path.strip('/').split('/')
                 peer=dict(host='127.0.0.1',port=port,pin=pin,deviceId=uuid.uuid4().hex)
                 w=Wire(peer,auth=False);w.send(dict(op='pair',deviceId=peer['deviceId'],name='Synthetic file fixture',invitation=secret));peer['token']=w.receive()['token'];w.close()
                 with_peer=lambda:Wire(peer)

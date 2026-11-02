@@ -1,6 +1,6 @@
 # 直接公网部署与安全边界（传输协议 4）
 
-本轮实现软件加固，不开放路由、防火墙、UPnP 或公网端口，不创建生产邀请。该协议是 **TLS 1.2/1.3 内的长度前缀 JSON TCP 协议，不是 HTTP**。公网端到端可达性与分布式攻击未在真实公网验收；隔离负载回归不等于完整安全审计或绝对安全保证。
+同步服务自动维护应用所需的精确 Windows 防火墙规则，不修改路由、UPnP 或公网映射，不自动创建生产邀请。该协议是 **TLS 1.2/1.3 内的长度前缀 JSON TCP 协议，不是 HTTP**。公网端到端可达性与分布式攻击未在真实公网验收；隔离负载回归不等于完整安全审计或绝对安全保证。
 
 ## 部署前必须了解
 
@@ -34,24 +34,28 @@
 
 内存额度是载荷与工作集合的上界，不是进程 RSS 保证：JSON DOM、TLS、SQLite、UI、运行时及哈希缓冲还有额外开销。按 IP 限制无法抵御分布式耗尽；全局上限保证资源有界及停滞连接过期后可恢复，不保证持续攻击下每个新合法连接都有名额。大量合法设备共用 NAT 也受每 IP 8 个已认证会话约束。
 
-大曲库使用子目录分批（每批不超过 500 GiB/10 万文件）；目录与清单均按 200 条分页，依次拉取直至完整。计划任务返回 `{pending:true,job}`；`plan_status` 查询，`plan_cancel` 可取消。任务独立于网络连接，断线后用相同设备凭证查询；手机取消会关闭传输，并通过独立、有界队列发送 plan_cancel；若网络或过载导致取消报文不可达，计划最迟在 30 分钟截止时结束。本地 MCP 可用 cancel_task/jobId 单独取消计划，不需要撤销设备。撤销、降权、移除曲库根立即取消关联任务；目录新增不打断现有连接。终止期间已完成的网络发送不可收回，已提交的数据不会回滚。
+大曲库使用子目录分批（每批不超过 500 GiB/10 万文件）；目录与清单均按 200 条分页，依次拉取直至完整。计划任务返回 `{pending:true,job}`；`plan_status` 查询，`plan_cancel` 可取消。任务独立于网络连接，断线后用相同设备凭证查询；手机取消会关闭传输，并通过独立、有界队列发送 plan_cancel；若网络或过载导致取消报文不可达，计划最迟在 30 分钟截止时结束。本地 MCP 可用 cancel_task/jobId 单独取消计划，不需要撤销设备。撤销设备、移除曲库根立即取消关联任务；目录新增不打断现有连接。终止期间已完成的网络发送不可收回，已提交的数据不会回滚。
 
 ## 权限与升级迁移
 
-六项权限分别是 `readMusic`（全部登记曲库）、`writeSync`（用户数据及学习事件写入）、`writeFiles`（音乐文件新增/更新，须readMusic）、`deleteFiles`（传播已确认基线的删除，另须writeFiles）、`manageLearning`（启动/续接及取消**本设备**的独立学习任务）、`downloadLearning`（允许该设备触发组件下载，依赖学习管理）。首次下载仍须手机明确确认；`downloadConfirmed=true` 本身不能授予下载权限，本机曾经确认下载也不能绕过该设备的下载权限。
+**配对即明确授权全部现有同步能力**：读取全部登记曲库、双向用户/学习数据同步、范围内音乐文件新增/更新/已确认删除、管理本设备发起的学习、按应用原有流程下载学习组件。不要求逐项选择；这不授予全盘访问或任意代码执行。
 
-新邀请默认仅 `readMusic=true`。现有设备保持 token 和读音乐/写同步能力，不执行历史过期字段；文件写入/删除、远程学习管理及组件下载默认为关闭，诊断的 `migration` 明确记录此迁移。没有全量撤销旧设备。UI 展示各设备权限与长期凭证策略；MCP 的旧 credentialDays 输入保留兼容但忽略。授权保存即关闭该设备会话、撤销计划并停止该设备任务，下次请求重鉴权。撤销后重新配对相同 deviceId 使用全新 token 和权限，不继承旧授权。远程学习在客户端重启后保持 interrupted，不自动重启；本机独立学习不因撤销其他设备而取消。
+旧设备保留 token、generation、证书 pin 和长期凭证，无需重新配对。启动时将正常有效凭证记录的旧缺失/false 权限统一归一为全 true，记录 `permissionMigration=paired_all`；重复启动不再次修改权限或其他配置。不执行历史 expiresAt。未配对或已撤销记录不会凭空生成，复用 deviceId 仍需新一次有效配对并生成新 token，旧 token 不复活。
 
-只读手机可读取/下载音乐；需要写回、传播删除或写领域数据时明确延期，不能当作双向已完成。旧 Android 的小请求继续使用 TLS 及逐请求鉴权；首帧最多 4 KiB，后续最多 64 KiB，旧端超过帧预算收到 `upgrade_required`；旧端学习动作同样经过桌面权限检查。新 Android 要求协议 4，连接旧桌面明确提示升级，**没有不安全的自动降级**。学习事件格式仍为协议 3，用户数据格式仍为 format 2，二者与传输版本 4 不冲突。推荐先更新桌面，再覆盖安装 Android。
+`capabilities` / MCP `lan_sync_status` 提供 `authorizationPolicy=paired_all` 以及六个全 true 的兼容诊断字段。细粒度 `authorize` 和 `invite.permissions` 已废弃，明确拒绝并说明使用 `revoke`，不接受后静默忽略。省略 permissions 即可邀请；credentialDays 仍只作忽略的旧兼容输入。首次组件下载仍经原有用户操作确认，不因升级或权限迁移自动开始下载/学习/文件写删。远程学习重启保持 interrupted；撤销立即关闭连接、取消设备计划/上传及归属学习，不取消本机独立任务。
+
+Android 不再把旧权限 false 当作有效的只读工作模式或跳过领域同步。遇受限旧桌面提示升级；认证失效显示配对问题。系统 SAF/Android 存储权限仍属于本地目录访问条件，与配对授权不同。
+
+旧 Android 的小请求继续使用 TLS 及逐请求鉴权；首帧最多 4 KiB，后续最多 64 KiB，旧端超过帧预算收到 `upgrade_required`；旧端学习动作同样经过桌面权限检查。新 Android 要求协议 4，连接旧桌面明确提示升级，**没有不安全的自动降级**。学习事件格式仍为协议 3，用户数据格式仍为 format 2，二者与传输版本 4 不冲突。推荐先更新桌面，再覆盖安装 Android。
 
 ## 可执行部署步骤
 
 1. 安装/覆盖本轮 Windows 包，保持原数据目录和同一个 Windows 账户；不要删除 `lan-sync.json`、数据库或证书存储。Android 用原正式签名覆盖安装，不卸载清数据。校验交付 SHA-256。
-2. 查看设置“同步”或本地 MCP `lan_sync_status`，核对服务状态、绑定、共享根、设备权限/长期凭证策略、失败计数及任务归属。先撤销不认识的设备，并按所需功能收紧权限。
+2. 查看设置“同步”或本地 MCP `lan_sync_status`，核对服务状态、绑定、共享根、设备权限/长期凭证策略、失败计数及任务归属。先撤销不认识的设备；配对设备均具备全部同步能力。查看独立 firewall 状态，不能只凭 enabled 判断可连。
 3. 确定稳定的**本机 IPv4 地址/网卡**和监听端口。先停止服务，再在高级配置保存；例如只绑定指定网卡 `192.168.1.20:39843`。如只经本机四层代理进入，可保留回环绑定。`0.0.0.0` 会扩大到所有 IPv4 网卡，需管理员明确选择。
 4. 确定手机可达 IPv4 或仅有 A 记录的域名，以及外部 TCP 端口（可与内部端口不同）。本轮不原生监听 IPv6；不承诺 IPv6 地址/AAAA 优先解析可用。邀请 UI 的地址与可达端口用于该外部入口，不必使用检测到的 LAN IP。
-5. **由部署管理员单独实施**防火墙与路由规则：仅所需 TCP 入口，尽量限制来源；若使用四层代理，必须原样转发 TCP/TLS，不做 HTTP 反代，不终止/替换 TLS 证书，不转发私钥。经过代理后应用看到的是代理 IP，配额按该 IP 聚合，代理本身也需连接/速率保护。此文不自动执行任何网络配置。
-6. 在桌面检查新邀请权限（默认只读），只在确实要配对时生成 5 分钟一次性邀请，通过当面扫码或可信私密渠道传给设备。不要公开二维码、放网页/日志/聊天群，不在截图中保留有效邀请。
+5. Windows 防火墙由程序自动维护：只允许当前 EXE 路径、实际 TCP 监听端口和指定本地 IPv4（0.0.0.0 对应 Any），覆盖 Domain/Private/Public，非回环绑定的来源为 Any，因此兼容 LAN 与既有公网 TCP 转发。回环监听不创建入站放行。启用前先核验规则；失败不启动远程监听。只提权窄权限 helper，合法 UAC 需系统确认，不提升常态播放器。路由/公网映射仍由管理员单独配置；四层代理必须原样转发 TLS，不转发 MCP 或私钥。来源/IP 配额仍按实际代理 IP 聚合。
+6. 确认要授权该设备全部同步能力时，才生成 5 分钟一次性邀请，通过当面扫码或可信私密渠道传给设备。不要公开二维码、放网页/日志/聊天群，不在截图中保留有效邀请。
 7. 手机从独立外网实际连接，先同步一个合成/非敏感小目录，再核对 hash、分页、撤销与重连。检查 diagnostics 的活动连接/拒绝/认证失败/限流是否合理。公网真实端到端尚未验收时保持“待公网验证”，不能用本机测试宣布已经安全开放。
 8. 故障/异常时先停服务或关闭已有公网转发，再撤销失陷设备、重新配对轮换 token；证书私钥疑似泄露时需要管理员在停服并备份配置后有计划更换证书，所有客户端重新获得可信 pin。不要为了恢复连接关闭 pin 校验。
 
@@ -61,14 +65,23 @@
 {"action":"stop"}
 {"action":"configure","bindAddress":"192.168.1.20","port":39843}
 {"action":"start"}
-{"action":"authorize","deviceId":"<已配对设备ID>","permissions":{"readMusic":true,"writeSync":false,"manageLearning":false,"downloadLearning":false}}
+{"action":"firewall_repair"}
+{"action":"revoke","deviceId":"<要撤销的已配对设备ID>"}
 ```
 
-以上均调用 `lan_sync_control`。`invite` 可传 `host`、`advertisedPort`、同结构 `permissions` 和 `credentialDays`；返回值含秘密，切勿记录。`revoke` 只需 action/deviceId。MCP 仍只在本机当前用户上下文可用。
+以上均调用 `lan_sync_control`。`invite` 可传 `host`、`advertisedPort`、`credentialDays`（忽略的兼容输入，不传 permissions）；返回值含秘密，切勿记录。`revoke` 只需 action/deviceId。MCP 仍只在本机当前用户上下文可用。
+
+## 自动防火墙生命周期与失败状态
+
+规则稳定所有者为当前 Windows 用户 SID 与规范化数据目录的 SHA-256；固定 Group / Description 标记以及按程序路径、本地地址和端口计算的 Name 共同核验所有权，只查询这个精确组。旧规则只有同时满足所有权标记、名称摘要、JeekMusic.exe 路径、TCP/Inbound/Allow 结构才允许移除；不删除用户手工规则、系统弹窗规则或其他软件规则。
+
+停服/正常退出清理自建规则；更换端口或升级程序路径时清理同一所有者旧规则并创建新精确规则；崩溃遗留在下次启动/修复时收敛。重复修复幂等。进程被强制结束时来不及执行清理，遗留规则仍只限定原 EXE/地址/端口。清理被拒绝时状态明确显示失败，不宣称已移除。
+
+`firewall.state` 区分 pending/configuring/configured/not_required/repair_required/uac_cancelled/access_denied/policy_blocked/configuration_failed/check_failed；含实际程序、端口、localAddress、remoteAddress、profiles、组内自建规则数、活动精确规则数。`firewall_repair` 走同一服务，重试规则或此前失败的启动。监听失败单独在 problem 中报告。企业策略拒绝本地入站规则、PowerShell/NetSecurity 被禁用、UAC 拒绝均不会冒充成功；查询/规则操作有超时。只核验 Windows 规则，第三方防火墙及真实外网连通仍需另行验证，`reachability=not_verified` 不会变成可达保证。不关闭 Windows 防火墙、不改 NAT/路由/UPnP。
 
 ## 验证与交付限制
 
-执行 `python desktop/tools/test-lan-security.py --exe <隔离构建EXE>`：工具创建全新私有数据、合成 WAV、回环临时端口，并确认实际 PID/EXE；不会读取/改动生产设置、真实音乐或生产端口。`--android emulator-...` 需先安装 debug 与 androidTest APK，仅在自有隔离模拟器执行生产 LanProtocol 的 TLS/pin/分页/数据测试；凭证通过应用私有文件临时传递并删除。`--ui` 仅为隔离真实客户端权限界面验收保留进程。单元测试为补充，UI 需实际窗口截图。
+执行 `python desktop/tools/test-lan-security.py --exe <隔离构建EXE>`：工具创建全新私有数据、合成 WAV、回环临时端口，并确认实际 PID/EXE；不会读取/改动生产设置、真实音乐或生产端口。`--android emulator-...` 需先安装 debug 与 androidTest APK，仅在自有隔离模拟器执行生产 LanProtocol 的 TLS/pin/分页/数据测试；凭证通过应用私有文件临时传递并删除。`--ui` 仅为隔离真实客户端设备管理界面验收保留进程。单元测试为补充，UI 需实际窗口截图。
 
 Windows 现有发布流程提供 NativeAOT ZIP，**原来并无 Authenticode 签名**，本机无代码签名证书；没有可信发布者证书就不能交付“已签名 Windows 包”，不能用 TLS 证书或临时自签名冒充。Android 继续用现有正式 keystore；须以 apksigner 比对旧正式 APK 签名后才称覆盖包。最终验收记录列出版本、修复 SHA、实际 GitHub Desktop/Mobile CI、包哈希、真实 UI/模拟器结果与未验项。
 

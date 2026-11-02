@@ -20,7 +20,7 @@ class LanPublicProtocolTest {
         val readOnly = fixture.getJSONObject("readOnly")
         val writable = fixture.getJSONObject("writable")
         LanProtocol(readOnly).use { client ->
-            assertFalse(client.call("capabilities").getJSONObject("permissions").getBoolean("writeSync"))
+            LanProtocol.requirePairedCapabilities(client.call("capabilities"))
             val root = client.call("roots").getJSONArray("roots").getJSONObject(0).getString("rootId")
             fun args() = JSONObject().put("rootId", root).put("path", "")
             assertEquals(200, client.call("tree", args().put("offset",0)).getJSONArray("directories").length())
@@ -44,8 +44,7 @@ class LanPublicProtocolTest {
             val page=JSONObject().put("protocol",3).put("generation",generation).put("resetBoundary",JSONArray()).put("events",JSONArray()).put("nextCursor",0).put("hasMore",false)
             assertTrue(client.call("preference_delta",JSONObject().put("protocol",3).put("sender","isolated-android").put("page",page).put("after",0)).has("acceptedCursor"))
             assertTrue(client.call("preference_training",JSONObject().put("protocol",3).put("action","status")).has("learning"))
-            try { client.call("preference_training",JSONObject().put("protocol",3).put("action","learn").put("downloadConfirmed",true)); fail("Unauthorized learning accepted") }
-            catch(e: LanRemoteException) { assertEquals("unauthorized",e.code) }
+            assertTrue(client.call("preference_training",JSONObject().put("protocol",3).put("action","cancel")).has("state"))
         }
         val wrongPin=JSONObject(readOnly.toString()).put("pin","0".repeat(64))
         assertTrue(runCatching { LanProtocol(wrongPin).use { it.call("roots") } }.isFailure)

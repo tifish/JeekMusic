@@ -14,9 +14,10 @@ internal static class LanSyncSettings
     {
         var service = c.App.LanSync;
         panel.Children.Add(SubHeading(L.T("局域网音乐同步")));
-        panel.Children.Add(Note(L.T("手机选择音乐文件夹及直接保存目录。按双方确认的内容基线双向同步；单边修改/删除自动传播，真实冲突才需要选择。文件写入和删除须单独授权。开启服务自动共享全部曲库；取消同步不删除音乐。")));
+        panel.Children.Add(Note(L.T("手机选择音乐文件夹及直接保存目录。按双方确认的内容基线双向同步；单边修改/删除自动传播，真实冲突才需要选择。配对即可使用全部同步能力。开启服务自动共享全部曲库；取消同步不删除音乐。")));
         var problem = Note(service.Problem); panel.Children.Add(problem);
         var activity = Note(""); panel.Children.Add(activity);
+        var firewall = Note(""); panel.Children.Add(firewall);
         var sharing = Note("");
         var guidance = Note("");
         var folders = new StackPanel { Spacing = 4 };
@@ -29,6 +30,15 @@ internal static class LanSyncSettings
             var status = service.Diagnostics();
             activity.Text = L.T("已传输") + " " + status["bytesServed"] + " bytes · " + status["lastOperation"] + " · " + status["devices"]!.AsArray().Count + " " + L.T("已配对设备");
             problem.Text = service.Problem;
+            var fw = status["firewall"]!;
+            firewall.Text = L.T("Windows 防火墙") + ": " + L.T(fw["state"]?.GetValue<string>() switch {
+                "configured" => "已配置当前程序的精确 TCP 入站规则；外网可达性尚未验证。",
+                "not_checked" or "not_required" => "服务关闭或仅回环监听，无需入站放行。",
+                "pending" or "configuring" => "正在配置；Windows 可能请求管理员确认。",
+                "uac_cancelled" => "管理员确认已取消，点击修复后重试。",
+                "policy_blocked" => "组织策略禁止本地入站规则，请联系管理员。",
+                _ => "防火墙未就绪。点击修复；若仍失败，请检查管理员权限、系统策略或第三方防火墙。"
+            });
             sharing.Text = L.T("已共享音乐文件夹") + ": " + status["sharedFolderCount"]!.GetValue<int>();
             guidance.Text = service.Port == 0 ? L.T("局域网服务已关闭。开启后会自动共享所有已添加的音乐文件夹。")
                 : status["libraryFolderCount"]!.GetValue<int>() == 0 ? L.T("尚未添加音乐文件夹。请前往曲库添加，手机再点击“刷新共享文件夹”，无需重新扫码。")
@@ -49,13 +59,14 @@ internal static class LanSyncSettings
         {
             if (refreshing) return;
             try { if (enabled) service.Start(); else service.Stop(); c.Window.Build(); }
-            catch (Exception) { Refresh(); problem.Text = L.T("无法监听端口。检查端口占用、网络权限和防火墙；程序不会修改系统防火墙。"); }
+            catch (Exception) { Refresh(); problem.Text = L.T("无法监听端口。请检查端口占用及网络权限；防火墙结果单独显示。"); }
         });
         panel.Children.Add(enabledSwitch);
         Refresh();
         var diagnostics = service.Diagnostics();
-        panel.Children.Add(Note(L.T("连接采用 TLS TCP 透传。程序不会开放防火墙或路由；公网可达性需单独部署与验证，不能视为绝对安全。")));
+        panel.Children.Add(Note(L.T("连接采用 TLS TCP 透传。自动维护当前程序路径、实际 TCP 端口及绑定地址的 Windows 入站规则（所有网络配置文件、任意来源）；回环监听无需放行。不会修改路由、公网映射或 UPnP。")));
         panel.Children.Add(Note(L.T("安全预算") + $": TLS/auth 5s · 24 connections / 8 unauthenticated / 16 authenticated · {diagnostics["authenticationFailures"]} auth failures · {diagnostics["connectionRejected"]} rejected · {diagnostics["rateLimited"]} limited"));
+        panel.Children.Add(Action(L.T("修复 Windows 防火墙"), async () => { await service.RepairFirewall(); Refresh(); }));
         var bind = new TextBox { Text = diagnostics["bindAddress"]!.GetValue<string>(), PlaceholderText = "IPv4 bind", Width = 300 };
         var listenPort = new TextBox { Text = diagnostics["configuredPort"]!.ToString(), PlaceholderText = "TCP port", Width = 300 };
         panel.Children.Add(Note(L.T("高级监听配置（先停服务；IPv4，新安装默认仅回环 127.0.0.1:39843）")));
@@ -86,19 +97,7 @@ internal static class LanSyncSettings
                 backupStatus.Text=L.T("恢复备份保留字节")+": "+result["retainedBytes"];
             }catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException) { backupStatus.Text=L.T("文件任务忙或存储不可用，请稍后重试。"); }
         }));
-        Func<JsonObject> PermissionEditor(JsonObject? grants)
-        {
-            var values = new Dictionary<string, CheckBox>();
-            foreach (var (key, title) in new[] { ("readMusic", "读取全部曲库"), ("writeSync", "写入用户和学习同步数据"), ("writeFiles", "允许手机新增和更新音乐文件"), ("deleteFiles", "允许传播已建立同步基线的文件删除（保留恢复备份）"), ("manageLearning", "管理该设备发起的学习任务"), ("downloadLearning", "允许下载学习组件（615 MB 模型及数 GB 依赖）") })
-            {
-                var check = new CheckBox { Content = L.T(title), IsChecked = grants?[key]?.GetValue<bool>() ?? key == "readMusic" };
-                values[key] = check; panel.Children.Add(check);
-            }
-            return () => new JsonObject(values.Select(v => new KeyValuePair<string, JsonNode?>(v.Key, JsonValue.Create(v.Value.IsChecked == true))));
-        }
-        panel.Children.Add(SubHeading(L.T("新邀请的设备权限")));
-        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、文件写入/删除、学习管理与组件下载须分别授权；旧设备保留音乐读取和元数据同步，文件写删及学习需明确授权。同步凭证长期有效，直到手动撤销或重新配对。")));
-        var inviteGrants = PermissionEditor(null);
+        panel.Children.Add(Note(L.T("配对设备可访问并双向同步全部已登记曲库及管理学习。配对即拥有全部同步权限，旧设备无需重新配对；可随时撤销设备。凭证长期有效。")));
         panel.Children.Add(SubHeading(L.T("共享音乐文件夹")));
         panel.Children.Add(sharing); panel.Children.Add(guidance); panel.Children.Add(folders); panel.Children.Add(addFolders);
         panel.Children.Add(Note(L.T("手机扫码配对，或手动输入邀请。使用手机可达的 IPv4 或域名，可填写公网映射端口。邀请 5 分钟有效且只能使用一次；请勿截图或公开。")));
@@ -141,7 +140,7 @@ internal static class LanSyncSettings
                 await LanPairingQr.ValidatePhoneHost(address);
                 if (detached) return;
                 if (!int.TryParse(externalPort.Text, out var reachablePort)) throw new ArgumentException();
-                current = service.Invite(address, reachablePort, inviteGrants());
+                current = service.Invite(address, reachablePort);
                 bitmap = new Bitmap(new MemoryStream(LanPairingQr.Encode(current)));
                 invitation.Text = current; qr.Source = bitmap; qr.IsVisible = true;
                 lifetime.Text = L.T("用手机扫码，或复制下方邀请手动配对。刷新会使旧邀请失效。");
@@ -161,14 +160,8 @@ internal static class LanSyncSettings
             var id = device!["id"]!.GetValue<string>();
             panel.Children.Add(SubHeading(device["name"]!.GetValue<string>() + " · " + id[..Math.Min(8, id.Length)]));
             panel.Children.Add(Note(L.T("同步凭证长期有效，直到手动撤销或重新配对。")));
-            var grants = PermissionEditor(device["permissions"]!.AsObject());
-            var deviceProblem = Note(""); panel.Children.Add(deviceProblem);
-            panel.Children.Add(Action(L.T("保存设备权限"), () => {
-                try { service.Authorize(id, grants()); c.Window.Build(); }
-                catch (ArgumentException) { deviceProblem.Text = L.T("组件下载必须同时授权学习管理。"); }
-            }));
             panel.Children.Add(Action(L.T("撤销设备") + " — " + device["name"]!.GetValue<string>(), () => { service.Revoke(id); c.Window.Build(); }));
         }
-        panel.Children.Add(Note(L.T("手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；权限或防火墙阻止连接时可重试，不会自动更改系统规则。")));
+        panel.Children.Add(Note(L.T("手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；连接失败时检查服务、网络及防火墙状态。")));
     }
 }

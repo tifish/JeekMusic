@@ -19,4 +19,6 @@
 <string name="lan_change_initial">存在，尚无基线</string>
 <string name="lan_change_absent">不存在，尚无基线</string>
 <string name="lan_change_unknown">状态未知</string>
+    <string name="lan_pairing_revoked">此配对已失效。若设备已撤销，请重新配对。</string>
+    <string name="lan_paired_upgrade">请升级电脑端以使用配对设备的全部同步能力，无需逐项到电脑授权。</string>
 </resources>

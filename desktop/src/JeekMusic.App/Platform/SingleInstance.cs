@@ -12,8 +12,16 @@ namespace JeekMusic.Platform;
 public sealed class SingleInstance : IDisposable
 {
     internal static readonly string Id = "JeekMusic-" + (WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName) + DataSuffix();
-    static string DataSuffix() => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JEEKMUSIC_DATA")) ? "" :
-        "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(AppPaths.DataDir).TrimEnd('\\').ToUpperInvariant())))[..16];
+    static string DataSuffix() => DataSuffix(AppPaths.DataDir,
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JeekMusic"));
+    // Identity follows the directory, not whether its default path was explicitly supplied.
+    internal static string DataSuffix(string dataDirectory, string defaultDirectory)
+    {
+        var path = Path.GetFullPath(dataDirectory).TrimEnd('\\', '/');
+        var normal = Path.GetFullPath(defaultDirectory).TrimEnd('\\', '/');
+        return path.Equals(normal, StringComparison.OrdinalIgnoreCase) ? "" :
+            "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(path.ToUpperInvariant())))[..16];
+    }
     readonly Mutex _mutex;
     readonly CancellationTokenSource _cts = new();
 

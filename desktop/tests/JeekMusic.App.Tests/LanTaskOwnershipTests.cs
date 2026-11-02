@@ -10,6 +10,27 @@ namespace JeekMusic.App.Tests;
 public sealed class LanTaskOwnershipTests
 {
     [Fact]
+    public void DefaultDirectoryUsesTheSameInstanceRegardlessOfExplicitEnvironment()
+    {
+        const string path = @"C:\Users\fixture\AppData\Local\JeekMusic";
+        Assert.Equal("", JeekMusic.Platform.SingleInstance.DataSuffix(path, path));
+        Assert.Equal("", JeekMusic.Platform.SingleInstance.DataSuffix(path.ToLowerInvariant()+"/", path));
+        Assert.NotEqual("", JeekMusic.Platform.SingleInstance.DataSuffix(path+"-isolated",path));
+        Assert.Equal(JeekMusic.Platform.SingleInstance.DataSuffix(path+"-isolated",path),JeekMusic.Platform.SingleInstance.DataSuffix(path+"-isolated/",path));
+    }
+    [Fact]
+    public async Task CheckpointPersistsWindowBeforeQueueAndSettings()
+    {
+        using var session=HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
+        await session.Dispatch(async()=> {
+            using var app = new AppServices(new SettingsStore(Path.Combine(Path.GetTempPath(), "jeek-checkpoint-" + Guid.NewGuid(), "settings.json")), new LibraryDb(":memory:"),
+                source => new PlayerService(source, o => new OutputModeSwitchTests.FakeEngine(o), new OutputModeSwitchTests.FakeEndpointVolume()));
+            bool captured=false; app.CheckpointWindow=()=>captured=true;
+            var result=await new JeekMusic.Automation.McpTools(app).CallAsync("checkpoint_client",new());
+            Assert.True(captured); Assert.True(result["saved"]!.GetValue<bool>()); return 0;
+        },CancellationToken.None);
+    }
+    [Fact]
     public async Task RevocationCancelsOnlyTheOwningRemoteWorkerToken()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));

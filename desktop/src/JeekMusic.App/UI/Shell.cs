@@ -46,6 +46,7 @@ public sealed partial class Shell
 
         _main = new MainWindow(_app);
         RestoreWindow();
+        _app.CheckpointWindow = SaveWindow;
         _main.ViewModel.InitialTarget = InitialTarget();
         _main.Opened += (_, _) => OnFirstShown();
         _main.ViewModel.SnapshotApplied += OnSnapshotApplied;

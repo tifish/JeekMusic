@@ -38,7 +38,6 @@ public sealed class LanSyncService : IDisposable
     long _transferBytes;
     long _authFailures, _protocolFailures, _limited, _overload;
     JsonObject _invitePermissions = Permissions();
-    int _inviteDays = 90;
     static JsonObject Permissions(bool write = false, bool learn = false, bool download = false) => new() { ["readMusic"] = true, ["writeSync"] = write, ["manageLearning"] = learn, ["downloadLearning"] = download };
     static string Stamp() => Guid.NewGuid().ToString("N");
     readonly Dictionary<string, (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files)> _plans = new();
@@ -76,7 +75,7 @@ public sealed class LanSyncService : IDisposable
         {
             if (d["permissions"] is null) { d["permissions"] = Permissions(write: true); d["permissionMigration"] = "v4-read-write-learning-requires-approval"; }
             d["generation"] ??= Stamp();
-            d["expiresAt"] ??= DateTimeOffset.UtcNow.AddDays(90).ToUnixTimeSeconds();
+            // Legacy expiresAt is retained for rollback compatibility but is never enforced.
         }
         Save();
         // Pre-release folderId-only grants cannot establish which record originally owned the ID.
@@ -167,10 +166,10 @@ public sealed class LanSyncService : IDisposable
     {
         if (Port == 0) throw new InvalidOperationException("LAN service is disabled. Enable it to pair and automatically share registered music folders.");
         if (host.Length > 253 || !Uri.CheckHostName(host).Equals(UriHostNameType.IPv4) && !Uri.CheckHostName(host).Equals(UriHostNameType.Dns)) throw new ArgumentException("Enter LAN IPv4 address or hostname");
-        if (advertisedPort is < 1 or > 65535 || credentialDays is < 1 or > 365) throw new ArgumentException("Invalid endpoint or lifetime");
+        if (advertisedPort is < 1 or > 65535) throw new ArgumentException("Invalid endpoint");
         lock (_gate)
         {
-            _invitePermissions = ValidatePermissions(permissions ?? Permissions()); _inviteDays = credentialDays;
+            _invitePermissions = ValidatePermissions(permissions ?? Permissions()); // credentialDays is an ignored compatibility input.
             _invitation = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
             _invitationUntil = DateTime.UtcNow.AddMinutes(5);
             Notify();
@@ -192,13 +191,12 @@ public sealed class LanSyncService : IDisposable
     }
     public void Authorize(string id, JsonObject permissions, int credentialDays = 90)
     {
-        if (credentialDays is < 1 or > 365) throw new ArgumentException("Lifetime must be 1–365 days");
         var grants = ValidatePermissions(permissions);
         lock (_gate)
         {
             var d = Devices[id] as JsonObject ?? throw new ArgumentException("Unknown device");
             Invalidate(id); d["permissions"] = grants; d["generation"] = Stamp();
-            d["expiresAt"] = DateTimeOffset.UtcNow.AddDays(credentialDays).ToUnixTimeSeconds(); Save();
+            Save(); // Persistent credentials do not expire.
         }
         Notify();
     }
@@ -230,14 +228,13 @@ public sealed class LanSyncService : IDisposable
         var id = a["deviceId"]?.GetValue<string>() ?? "";
         lock (_gate)
         {
-            if (Devices[id] is not JsonObject d || !Fixed(d["tokenHash"]!.GetValue<string>(), Hash(a["token"]?.GetValue<string>() ?? "")) || d["expiresAt"]!.GetValue<long>() <= DateTimeOffset.UtcNow.ToUnixTimeSeconds())
-            { if (Devices[id] is not null && Devices[id]!["expiresAt"]!.GetValue<long>() <= DateTimeOffset.UtcNow.ToUnixTimeSeconds()) Invalidate(id); throw new UnauthorizedAccessException(); }
+            if (Devices[id] is not JsonObject d || !Fixed(d["tokenHash"]!.GetValue<string>(), Hash(a["token"]?.GetValue<string>() ?? "")))
+            { throw new UnauthorizedAccessException(); }
             if (_deviceLifetimes.TryGetValue(id, out var old) && old.IsCancellationRequested) { _deviceLifetimes.Remove(id); old.Dispose(); }
             if (!_deviceLifetimes.TryGetValue(id, out var lifetime))
             {
                 _deviceLifetimes[id] = lifetime = new();
                 lifetime.Token.Register(() => _app.Preferences.Training.CancelOwned("lan:" + id));
-                lifetime.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(d["expiresAt"]!.GetValue<long>() - DateTimeOffset.UtcNow.ToUnixTimeSeconds(), 1, 6 * 3600)));
             }
             return (id, d["generation"]!.GetValue<string>(), lifetime.Token);
         }
@@ -322,7 +319,7 @@ public sealed class LanSyncService : IDisposable
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
             ["roots"] = new JsonArray(Roots.Select(p => { var f = folders.FirstOrDefault(f => f.Id == p.Value!["folderId"]!.GetValue<long>() && f.Identity == p.Value["folderIdentity"]?.GetValue<string>()); return (JsonNode)new JsonObject
                 { ["rootId"] = p.Key, ["folderId"] = p.Value!["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f is { Available: true } && Directory.Exists(f.Root) }; }).ToArray()),
-            ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone(), ["permissions"] = p.Value["permissions"]!.DeepClone(), ["expiresAt"] = p.Value["expiresAt"]!.DeepClone(), ["migration"] = p.Value["permissionMigration"]?.DeepClone() }).ToArray())
+            ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone(), ["permissions"] = p.Value["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked", ["migration"] = p.Value["permissionMigration"]?.DeepClone() }).ToArray())
         };
     }
     string RootPath(string id)
@@ -425,6 +422,7 @@ public sealed class LanSyncService : IDisposable
                 var auth = Authenticate(first);
                 if (!_admission.Authenticate(lease, auth.Device)) { await WriteFrame(ssl, BusyResponse(), deadline.Token); return; }
                 using var revoked = auth.Lifetime.Register(lifetime.Cancel);
+                lifetime.CancelAfter(TimeSpan.FromHours(6)); // Session resource lifetime, never a credential expiry.
                 var modern = first["op"]?.GetValue<string>() == "auth" && first["protocol"]?.GetValue<int>() == 4;
                 if (first["op"]?.GetValue<string>() == "auth" && !modern) { await WriteFrame(ssl, Error("upgrade_required"), deadline.Token); return; }
                 JsonObject? pending = modern ? null : first;
@@ -501,14 +499,14 @@ public sealed class LanSyncService : IDisposable
                 var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
                 if (Devices[id] is null && Devices.Count >= 64) throw Busy();
                 Invalidate(id);
-                Devices[id] = new JsonObject { ["name"] = name, ["tokenHash"] = Hash(token), ["generation"] = Stamp(), ["permissions"] = _invitePermissions.DeepClone(), ["expiresAt"] = DateTimeOffset.UtcNow.AddDays(_inviteDays).ToUnixTimeSeconds() };
+                Devices[id] = new JsonObject { ["name"] = name, ["tokenHash"] = Hash(token), ["generation"] = Stamp(), ["permissions"] = _invitePermissions.DeepClone() };
                 _invitation = null; Save(); Notify();
                 return new JsonObject { ["token"] = token, ["protocol"] = 4, ["name"] = Environment.MachineName };
             }
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = Devices[device]!["expiresAt"]!.DeepClone() }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);

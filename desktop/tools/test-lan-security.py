@@ -235,7 +235,7 @@ def main():
                 time.sleep(.3)
 
         config=json.loads((data/"lan-sync.json").read_text())
-        config["devices"][replacement["deviceId"]]["expiresAt"]=int(time.time())+10
+        config["devices"][replacement["deviceId"]]["expiresAt"]=int(time.time())-100
         legacy=identities[0]
         for key in ("permissions","expiresAt","generation"):config["devices"][legacy["deviceId"]].pop(key,None)
         (data/"lan-sync.json").write_text(json.dumps(config))
@@ -251,11 +251,10 @@ def main():
                 assert old.receive().get("roots");old.close()
                 old=Wire(legacy,auth=False);old.s.sendall(struct.pack(">i",5000));assert old.receive()["code"]=="upgrade_required";old.close()
                 live=Wire(replacement)
-                wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0,15)
-                live.close()
-                expired=Wire(replacement,auth=False);expired.send(dict(op="auth",protocol=4,deviceId=replacement["deviceId"],token=replacement["token"]))
-                assert expired.receive()["code"]=="unauthorized";expired.close()
-                print("PASS persisted legacy read/write migration, old small-frame compatibility, explicit upgrade limit and live credential expiry",flush=True)
+                assert live.request("roots").get("roots");live.close()
+                retained=Wire(replacement); assert retained.request("capabilities")["credentialPolicy"]=="until_revoked";retained.close()
+                assert all(d["expiresAt"] is None for d in status["devices"])
+                print("PASS persisted legacy read/write migration, old small-frame compatibility, explicit upgrade limit and credentials retained despite historical expiry",flush=True)
             finally:
                 call(c,"lan_sync_control",action="stop")
                 subprocess.run(["taskkill","/pid",str(pid),"/f"],capture_output=True,check=False);time.sleep(.3)

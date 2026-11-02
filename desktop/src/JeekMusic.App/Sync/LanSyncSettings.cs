@@ -76,7 +76,7 @@ internal static class LanSyncSettings
             return () => new JsonObject(values.Select(v => new KeyValuePair<string, JsonNode?>(v.Key, JsonValue.Create(v.Value.IsChecked == true))));
         }
         panel.Children.Add(SubHeading(L.T("新邀请的设备权限")));
-        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、学习管理与组件下载须分别授权；旧设备保留读写，学习需重新授权。凭证默认 90 天，到期需重新配对。")));
+        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、学习管理与组件下载须分别授权；旧设备保留读写，学习需重新授权。同步凭证长期有效，直到手动撤销或重新配对。")));
         var inviteGrants = PermissionEditor(null);
         panel.Children.Add(SubHeading(L.T("共享音乐文件夹")));
         panel.Children.Add(sharing); panel.Children.Add(guidance); panel.Children.Add(folders); panel.Children.Add(addFolders);
@@ -139,10 +139,10 @@ internal static class LanSyncSettings
         {
             var id = device!["id"]!.GetValue<string>();
             panel.Children.Add(SubHeading(device["name"]!.GetValue<string>() + " · " + id[..Math.Min(8, id.Length)]));
-            panel.Children.Add(Note(L.T("凭证到期") + ": " + DateTimeOffset.FromUnixTimeSeconds(device["expiresAt"]!.GetValue<long>()).ToLocalTime().ToString("yyyy-MM-dd HH:mm")));
+            panel.Children.Add(Note(L.T("同步凭证长期有效，直到手动撤销或重新配对。")));
             var grants = PermissionEditor(device["permissions"]!.AsObject());
             var deviceProblem = Note(""); panel.Children.Add(deviceProblem);
-            panel.Children.Add(Action(L.T("保存设备权限并续期 90 天"), () => {
+            panel.Children.Add(Action(L.T("保存设备权限"), () => {
                 try { service.Authorize(id, grants()); c.Window.Build(); }
                 catch (ArgumentException) { deviceProblem.Text = L.T("组件下载必须同时授权学习管理。"); }
             }));

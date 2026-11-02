@@ -86,19 +86,35 @@ class WorkflowGuards(unittest.TestCase):
             def request(self, method):
                 calls.append(method)
                 return {"tools": [{"name": "get_diagnostics", "inputSchema": {
-                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(23)]}
+                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(tool_count - 1)]}
 
-        with patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
-             patch.object(mcp, "McpClient", Client), \
-             patch.object(mcp, "close_player") as close, \
-             patch.object(mcp.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as process, \
-             patch.object(mcp.wave, "open") as audio, \
-             contextlib.redirect_stdout(io.StringIO()):
-            mcp.main()
-        self.assertEqual(calls, ["get_diagnostics", "get_status", "tools/list"])
-        audio.assert_not_called()
-        close.assert_called_once_with(12345)
-        self.assertEqual(process.call_args.args[0][1:], ["--mcp"])
+        # Match the current 39-tool contract, and exercise failure cleanup too.
+        # A fake client must never send a real signal to its invented PID, even
+        # when a catalog assertion fails before graceful shutdown.
+        for tool_count in (39, 24, 38, 40):
+            calls.clear()
+            with self.subTest(tool_count=tool_count), \
+                 patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
+                 patch.object(mcp, "McpClient", Client), \
+                 patch.object(mcp, "close_player") as close, \
+                 patch.object(mcp.os, "kill") as kill, \
+                 patch.object(mcp.time, "sleep"), \
+                 patch.object(mcp.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as process, \
+                 patch.object(mcp.wave, "open") as audio, \
+                 contextlib.redirect_stdout(io.StringIO()):
+                if tool_count == 39:
+                    mcp.main()
+                    close.assert_called_once_with(12345)
+                    kill.assert_not_called()
+                    self.assertEqual(process.call_args.args[0][1:], ["--mcp"])
+                else:
+                    with self.assertRaises(AssertionError):
+                        mcp.main()
+                    close.assert_not_called()
+                    kill.assert_called_once_with(12345, mcp.signal.SIGTERM)
+                    process.assert_not_called()
+                self.assertEqual(calls, ["get_diagnostics", "get_status", "tools/list"])
+                audio.assert_not_called()
 
     def test_mcp_exclusive_requires_explicit_audio_and_conflicting_modes_fail_before_client_creation(self):
         for options in (["--exclusive"], ["--startup-only", "--audio"]):

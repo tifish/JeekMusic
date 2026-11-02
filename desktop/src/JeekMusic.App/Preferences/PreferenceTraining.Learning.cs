@@ -11,6 +11,9 @@ namespace JeekMusic.Preferences;
 public sealed partial class PreferenceTraining
 {
     bool learning;
+    string? remoteOwner;
+    public void CancelOwned(string owner) { lock (gate) { if (remoteOwner == owner && cancel is not null) Cancel(); } }
+    public string? RemoteOwner { get { lock (gate) return cancel is null ? null : remoteOwner; } }
     int maintenanceStarted;
     internal void Maintain()
     {
@@ -20,6 +23,7 @@ public sealed partial class PreferenceTraining
             if(Interlocked.Exchange(ref maintenanceStarted,1)==0 && S(saved?["state"]) is "checking_material" or "learning" or "updating_library" or "preparing_components" or "waiting_playback")
             {
                 var recoveries=int.TryParse(service.Store.Local("learning-recoveries"),out var n)?n:0;
+                if(service.Store.Local("learning-remote-owner") is { Length: > 0 }) { jobGeneration=service.Store.Generation; LearningSet("interrupted","远程任务在重启后停止。请在授权设备或本机重新开始。"); return; }
                 if(recoveries<3) { service.Store.SetLocal("learning-recoveries",(recoveries+1).ToString()); StartLearning(automatic:true); }
                 else { jobGeneration=service.Store.Generation; LearningSet("interrupted","连续中断已停止自动重试。点击继续学习，可从已完成分析续接。"); }
                 return;
@@ -27,7 +31,7 @@ public sealed partial class PreferenceTraining
             if(!Dimensions.Any(Enabled) || service.Store.Local("learning-user-stopped")=="1") return;
             var tracks=app.Library.Snapshot.Tracks.OrderBy(t=>t.TrackKey,StringComparer.Ordinal).ToArray(); if(tracks.Length==0) return;
             var frame=LibraryFrame(tracks); if(service.Store.Local("library-auto-attempt")==frame) return;
-            lock(gate) { if(cancel!=null || quiescing) return; cancel=new(); learning=true; jobProfile=Dataset; jobGeneration=service.Store.Generation; jobDimension=Dimensions.First(Enabled);
+            lock(gate) { if(cancel!=null || quiescing) return; remoteOwner=null; cancel=new(); learning=true; jobProfile=Dataset; jobGeneration=service.Store.Generation; jobDimension=Dimensions.First(Enabled);
                 service.Store.SetLocalForGeneration("library-auto-attempt",frame,jobGeneration);
                 var token=cancel.Token;
                 jobTask=Task.Run(async()=> {
@@ -46,7 +50,7 @@ public sealed partial class PreferenceTraining
         var saved=service.Store.Local("learning-workflow");
         var s=saved is null?new JsonObject { ["state"]="idle" }:JsonNode.Parse(saved)!.AsObject();
         lock(gate) { s["running"]=learning && cancel!=null; if(!learning && S(s["state"]) is "checking_material" or "learning" or "updating_library" or "preparing_components" or "waiting_playback") s["state"]="interrupted"; }
-        s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["deployment"]=DeploymentStatus();
+        s["remoteOwner"]=RemoteOwner; s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["deployment"]=DeploymentStatus();
         return s;
     }
     void LearningSet(string status,string detail,int processed=0,int total=0,int uncovered=0)
@@ -54,18 +58,20 @@ public sealed partial class PreferenceTraining
         service.Store.SetLocalForGeneration("learning-workflow",new JsonObject { ["state"]=status,["detail"]=detail,["processed"]=processed,["total"]=total,["uncovered"]=uncovered,["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }.ToJsonString(),jobGeneration);
         service.Notify();
     }
-    public JsonObject StartLearning(bool downloadConfirmed=false,bool automatic=false)
+    public JsonObject StartLearning(bool downloadConfirmed=false,bool automatic=false,string? owner=null,bool allowDownload=true)
     {
         var consent=FileHash(Path.Combine(Path.GetDirectoryName(Worker)!,"components.json"));
         lock(gate)
         {
             if(cancel!=null || quiescing) throw new InvalidOperationException("学习正在进行或停止，请等待或取消。");
+            remoteOwner=owner;
+            service.Store.SetLocal("learning-remote-owner",owner??"");
             jobProfile=Dataset; jobGeneration=service.Store.Generation; jobDimension=service.ActiveDimension;
             learning=true; cancel=new();
             if(!automatic) service.Store.SetLocal("learning-recoveries","0");
             if(!automatic) service.Store.RemoveLocal("learning-user-stopped");
             if(downloadConfirmed) service.Store.SetLocalForGeneration("learning-download-consent",consent,jobGeneration);
-            downloadConfirmed=downloadConfirmed || service.Store.Local("learning-download-consent")==consent;
+            downloadConfirmed=allowDownload && (downloadConfirmed || service.Store.Local("learning-download-consent")==consent);
             LearningSet("checking_material","正在检查四个维度的标注和本机录音。");
             var token=cancel.Token; jobTask=Task.Run(()=>Learn(downloadConfirmed,token));
             return LearningStatus();

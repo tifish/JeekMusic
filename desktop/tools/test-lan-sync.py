@@ -32,7 +32,7 @@ def wire(connection, op, **args):
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT);context.check_hostname=False;context.verify_mode=ssl.CERT_NONE
     with socket.create_connection(("127.0.0.1",connection["port"]),timeout=20) as tcp, context.wrap_socket(tcp,server_hostname="JeekMusic") as s:
         assert hashlib.sha256(s.getpeercert(binary_form=True)).hexdigest()==connection["pin"]
-        value={**connection,**args,"op":op};data=json.dumps(value).encode();s.sendall(struct.pack(">i",len(data))+data)
+        value={**{k:v for k,v in connection.items() if k in ("deviceId","token")},**args,"op":op};data=json.dumps(value).encode();s.sendall(struct.pack(">i",len(data))+data)
         def receive(n):
             data=b""
             while len(data)<n:

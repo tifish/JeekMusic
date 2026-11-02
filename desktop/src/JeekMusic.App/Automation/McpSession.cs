@@ -120,6 +120,7 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
             "integer" => value is not null && value.TryGetValue<long>(out _),
             "number" => value is not null && value.TryGetValue<double>(out var n) && double.IsFinite(n),
             "array" => node is JsonArray,
+            "object" => node is JsonObject,
             _ => false
         };
         if (!valid) throw new ArgumentException($"{name} must be {type}");
@@ -137,6 +138,7 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
             if (rule["minLength"] is { } min && text.Trim().Length < min.GetValue<int>() ||
                 rule["maxLength"] is { } max && text.Length > max.GetValue<int>()) throw new ArgumentException($"{name} has invalid length");
         }
+        if (node is JsonObject obj) Validate(obj, rule);
         if (node is JsonArray array)
         {
             if (rule["minItems"] is { } min && array.Count < min.GetValue<int>() || rule["maxItems"] is { } max && array.Count > max.GetValue<int>())

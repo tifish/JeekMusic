@@ -508,3 +508,10 @@ Windows / Android 均移除灵敏度选项。生产路径、追加采样、节�
 验证入口：`test-tag-learning-client.py --exe ... --data desktop/artifacts/...fixture --components ... [--real-extract]`，拒绝生产路径和既有夹具目录。它用声明生成的材料模拟独立可信输入，只在隔离库验证训练→固定检查→原子激活→44首全库更新→撤回回退，并与一次真实CLAP提取分开报告。数值夹具和模拟凭据均不是用户模型有效性证据。
 
 Android结果同步每次最多100页并持久化 offset/version；快照变化后从头重新获取，完成后归零。手机界面分开显示电脑更新进度与本机按准确文件签名核对的匹配/回退数量，不以远端元数据宣称本机运行模型。
+
+
+### LAN 公网加固（传输协议 4）
+
+工具数量不变。`lan_sync_status` 新增 bindAddress/configuredPort、budgets、activeConnections/unauthenticatedConnections、sourceBuckets、connectionRejected/authenticationFailures/protocolFailures/rateLimited、tasks[].id/deviceId/state、devices[].permissions/expiresAt/migration；不含邀请码/token/私钥。安全计数为进程内有界计数，不写每请求日志。
+
+`lan_sync_control` 新增 `configure`（仅停止时，bindAddress IPv4、port 1–65535）、`authorize`（deviceId、完整 permissions、可选 credentialDays 1–365 默认90）。permissions 为严格对象，四个必填布尔字段 readMusic/writeSync/manageLearning/downloadLearning，不接受额外字段。授权变更会关闭该设备连接、使计划失效并取消归属任务；不会取消本机独立任务。invite 追加 advertisedPort 1–65535、permissions、credentialDays，新邀请默认只读。既有 start/stop/share/unshare/invite/revoke 参数兼容；旧 share/unshare 规则不变。includeQr 与文本 invite 共用授权和有效期参数。configure 不开服务，不改防火墙。详情见 [部署说明](../../docs/lan-public-deployment.md)。

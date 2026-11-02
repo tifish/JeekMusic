@@ -181,11 +181,11 @@ public sealed class SyncFeature : IFeature
         return result;
     }
 
-    public async Task Synchronize(bool directory = true, JsonObject? incoming = null, JsonObject? incomingFeatures = null)
+    public async Task Synchronize(bool directory = true, JsonObject? incoming = null, JsonObject? incomingFeatures = null, CancellationToken cancel = default, Action<Action>? authorizedCommit = null)
     {
         if (_stopped) return;
         if (_running && incoming is null) { _again = true; return; }
-        await _mergeGate.WaitAsync();
+        await _mergeGate.WaitAsync(cancel);
         _running = true;
         directory &= DirectoryEnabled;
         try
@@ -193,6 +193,7 @@ public sealed class SyncFeature : IFeature
             var folders = _app.Library.Snapshot.Folders.ToList();
             if (folders.Count == 0 && directory) return;
             var files = await Task.Run(() => (directory ? ReadFiles(folders, false).Concat(_app.LanSync.Incoming(false)) : incoming is null ? [] : new[] { incoming }).ToList());
+            cancel.ThrowIfCancellationRequested();
             if (_stopped) return;
             _devices = LatestPerDevice(files, Str(_device["id"]));
             var refs = References();
@@ -223,7 +224,7 @@ public sealed class SyncFeature : IFeature
             _app.Db.SetValue("sync_initialized", "1");
             var merged = Merge(local, files, Str(_device["id"]), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             _applying = true;
-            try { Apply(merged, Match); }
+            try { if (authorizedCommit is null) Apply(merged, Match); else authorizedCommit(() => Apply(merged, Match)); }
             finally { _applying = false; }
             var state = Capture(refs);
             var content = state.ToJsonString();
@@ -242,7 +243,7 @@ public sealed class SyncFeature : IFeature
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("sync", "写入同步文件失败", e); }
             }
-            await ShareFeatures(directory ? folders : [], refs, Match, incomingFeatures);
+            await ShareFeatures(directory ? folders : [], refs, Match, incomingFeatures, cancel, authorizedCommit);
             if (_stopped) return;
             Status = L.F($"上次同步 {DateTime.Now:HH:mm:ss}；发现 {_devices.Count} 台设备");
             Changed?.Invoke();
@@ -254,7 +255,12 @@ public sealed class SyncFeature : IFeature
                 foreach (var group in merged.Changes.GroupBy(c => c.DeviceName)) _shell.Main.ViewModel.ShowToast(L.F($"已同步来自「{group.Key}」的 {group.Count()} 项改动"));
             }
         }
-        catch (Exception e) { Log.Error("sync", "同步失败", e); Status = L.T("同步失败：") + e.Message; Changed?.Invoke(); if(incoming is not null) throw; }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested) { throw; }
+        catch (Exception e)
+        {
+            if (incoming is not null) { Log.Warn("sync", "Remote data exchange refused"); Status = L.T("同步失败"); Changed?.Invoke(); throw; }
+            Log.Error("sync", "同步失败", e); Status = L.T("同步失败：") + e.Message; Changed?.Invoke();
+        }
         finally { _running = false; _mergeGate.Release(); if (_again) { _again = false; Schedule(); } }
     }
 
@@ -320,10 +326,11 @@ public sealed class SyncFeature : IFeature
         });
     }
 
-    async Task ShareFeatures(List<LibraryFolder> folders, Dictionary<string, string> refs, Func<string, string?> match, JsonObject? incoming = null)
+    async Task ShareFeatures(List<LibraryFolder> folders, Dictionary<string, string> refs, Func<string, string?> match, JsonObject? incoming = null, CancellationToken cancel = default, Action<Action>? authorizedCommit = null)
     {
         if(folders.Count==0 && incoming is null) return;
         var files = await Task.Run(() => ReadFiles(folders, true).Concat(incoming is null ? _app.LanSync.Incoming(true) : new[] { incoming }).ToList());
+        cancel.ThrowIfCancellationRequested();
         if (_stopped) return;
         bool imported = false;
         foreach (var file in files)
@@ -335,7 +342,8 @@ public sealed class SyncFeature : IFeature
                 if (Number(data["size"]) != t.Size || Math.Abs(Number(data["duration_ms"]) - t.DurationMs) > 1000) continue;
                 if (_app.Db.Features(key) is { Failed: false } old && old.AnalyzerVersion == AnalysisFeature.AnalyzerVersion && old.Signature == AnalysisFeature.Signature(t) && FeaturesData.Parse(old.Data)?.Complete == true) continue;
                 if (data["features"] is not { } features || FeaturesData.Parse(features.ToJsonString())?.Complete != true) continue;
-                _app.Db.SaveFeatures(new FeaturesRow(key, AnalysisFeature.Signature(t), AnalysisFeature.AnalyzerVersion, features.ToJsonString(), false));
+                void SaveFeature() => _app.Db.SaveFeatures(new FeaturesRow(key, AnalysisFeature.Signature(t), AnalysisFeature.AnalyzerVersion, features.ToJsonString(), false));
+                if (authorizedCommit is null) SaveFeature(); else authorizedCommit(SaveFeature);
                 imported = true;
             }
         }
@@ -360,10 +368,11 @@ public sealed class SyncFeature : IFeature
         }
     }
 
-    internal async Task<JsonObject> LanExchange(JsonObject incoming, JsonObject? features, bool includeFeatures = true)
+    internal async Task<JsonObject> LanExchange(JsonObject incoming, JsonObject? features, bool includeFeatures = true, CancellationToken cancel = default, Action<Action>? authorizedCommit = null)
     {
         _app.Db.SetValue("sync_initialized", "1");
-        await Synchronize(false, incoming, features);
+        await Synchronize(false, incoming, features, cancel, authorizedCommit);
+        cancel.ThrowIfCancellationRequested();
         var refs = References();
         var lan = _app.Library.Snapshot.ByKey.Values.ToDictionary(t => t.TrackKey,
             t => _app.LanSync.Reference(t.FolderId, t.RelativePath + (t.CueTrackNo is { } n ? $"#{n:00}" : "")) ?? refs.GetValueOrDefault(t.TrackKey, t.TrackKey));

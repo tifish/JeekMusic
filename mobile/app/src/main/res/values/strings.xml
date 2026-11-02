@@ -481,4 +481,5 @@
     <string name="lan_roots_failed">Could not refresh shared folders. Check the PC service, network and device authorization, then retry. Existing downloads and tasks are kept. Details: %1$s</string>
     <string name="filter_manual">Manually labeled</string>
     <string name="filter_unannotated">Unannotated</string>
+    <string name="lan_read_only_done">Music sync complete. This device is read-only; user and learning data were not exchanged.</string>
 </resources>

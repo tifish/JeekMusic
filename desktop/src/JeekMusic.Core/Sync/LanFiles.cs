@@ -9,6 +9,7 @@ namespace JeekMusic.Core.Sync;
 /// <summary>Read-only source boundary. No request ever supplies an absolute filesystem path.</summary>
 public static partial class LanFiles
 {
+    public sealed record Budget(int Files = 100_000, long Bytes = 500L * 1024 * 1024 * 1024, int Visited = 250_000, long Memory = 64L * 1024 * 1024);
     public sealed record Entry(string Path, long Size, long ModifiedNs, string Hash, IReadOnlyList<string>? Dependencies = null);
     static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
     { ".mp3", ".flac", ".m4a", ".mp4", ".aac", ".ogg", ".oga", ".opus", ".wav", ".mka", ".amr", ".cue", ".lrc", ".jpg", ".jpeg", ".png", ".webp" };
@@ -45,11 +46,16 @@ public static partial class LanFiles
         return path;
     }
 
-    public static IReadOnlyList<string> Directories(string root, string relative)
+    public static IReadOnlyList<string> Directories(string root, string relative, CancellationToken cancel = default)
     {
         var path = Resolve(root, relative, true);
-        var names = Directory.EnumerateDirectories(path).Where(p => !System.IO.Path.GetFileName(p).StartsWith('.'))
-            .Select(p => System.IO.Path.GetFileName(p)).ToArray();
+        var names = new List<string>(); var visited = 0;
+        foreach (var child in Directory.EnumerateDirectories(path))
+        {
+            cancel.ThrowIfCancellationRequested();
+            if (++visited > 100_000) throw new IOException("Directory budget exceeded; use smaller folders");
+            var name = System.IO.Path.GetFileName(child); if (!name.StartsWith('.')) names.Add(name);
+        }
         CheckCollisions(names);
         return names.Where(n => { try { Resolve(root, Join(relative, n)); return true; } catch (IOException) { return false; } }).Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
@@ -85,24 +91,41 @@ public static partial class LanFiles
             throw new IOException("Case or Unicode path collision");
     }
 
-    public static async Task<IReadOnlyList<Entry>> Manifest(string root, IEnumerable<string> selection, CancellationToken cancel = default)
+    public static async Task<IReadOnlyList<Entry>> Manifest(string root, IEnumerable<string> selection, CancellationToken cancel = default, Budget? budget = null)
     {
+        budget ??= new();
+        long workMemory = 0;
         var paths = new HashSet<string>(StringComparer.Ordinal);
         var dependencies = new Dictionary<string, List<string>>();
-        void Walk(string relative)
+        int visited = 0, dependencyCount = 0;
+        var walked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string path)
         {
             cancel.ThrowIfCancellationRequested();
+            if (paths.Add(path)) workMemory += 192L + path.Length * 2L;
+            if (workMemory > budget.Memory) throw new IOException("Manifest memory budget exceeded; choose smaller folders");
+            if (paths.Count > budget.Files) throw new IOException("Selection exceeds 100000 files; choose smaller folders");
+        }
+        void Walk(string relative, int depth = 0)
+        {
+            cancel.ThrowIfCancellationRequested();
+            if (depth > 64) throw new IOException("Directory depth exceeded");
+            if (!walked.Add(relative)) return;
             var dir = Resolve(root, relative, true);
-            var children = Directory.EnumerateFileSystemEntries(dir).Where(p => !System.IO.Path.GetFileName(p).StartsWith('.')).ToArray();
-            CheckCollisions(children.Select(System.IO.Path.GetFileName)!);
-            foreach (var child in children)
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var child in Directory.EnumerateFileSystemEntries(dir))
             {
-                var rel = Join(relative, System.IO.Path.GetFileName(child));
+                cancel.ThrowIfCancellationRequested();
+                if (++visited > budget.Visited) throw new IOException("Enumeration budget exceeded; choose smaller folders");
+                var name = System.IO.Path.GetFileName(child);
+                if (name.StartsWith('.')) continue;
+                if (!names.Add(name.Normalize(NormalizationForm.FormC))) throw new IOException("Case or Unicode path collision");
+                var rel = Join(relative, name);
                 var attrs = File.GetAttributes(child);
                 if ((attrs & FileAttributes.ReparsePoint) != 0) continue;
                 Relative(rel);
-                if ((attrs & FileAttributes.Directory) != 0) Walk(rel);
-                else if (Extensions.Contains(System.IO.Path.GetExtension(child))) paths.Add(rel);
+                if ((attrs & FileAttributes.Directory) != 0) Walk(rel, depth + 1);
+                else if (Extensions.Contains(System.IO.Path.GetExtension(child))) Add(rel);
             }
         }
         foreach (var selected in selection.Distinct()) Walk(Relative(selected, true));
@@ -131,7 +154,8 @@ public static partial class LanFiles
                 var audio = Resolve(root, dep);
                 var audioExtension = System.IO.Path.GetExtension(audio).ToLowerInvariant();
                 if (!File.Exists(audio) || !Extensions.Contains(audioExtension) || audioExtension is ".cue" or ".lrc" or ".jpg" or ".jpeg" or ".png" or ".webp") throw new IOException("CUE audio dependency unavailable");
-                paths.Add(dep);
+                Add(dep);
+                if (++dependencyCount > 100_000 || required.Count >= 1000 || (workMemory += 32L) > budget.Memory) throw new IOException("CUE dependency budget exceeded");
                 required.Add(dep);
                 var directory = System.IO.Path.GetDirectoryName(dep)?.Replace('\\', '/') ?? "";
                 var stem = System.IO.Path.GetFileNameWithoutExtension(audio);
@@ -142,15 +166,19 @@ public static partial class LanFiles
                     lyricNames.Add(title + ".lrc"); lyricNames.Add($"{track.Number:00}. {title}.lrc");
                 }
                 foreach (var sidecar in Directory.EnumerateFiles(System.IO.Path.GetDirectoryName(audio)!))
+                {
+                    cancel.ThrowIfCancellationRequested(); if (++visited > budget.Visited) throw new IOException("Enumeration budget exceeded");
                     if (lyricNames.Contains(System.IO.Path.GetFileName(sidecar)) ||
                         new[] { ".jpg", ".jpeg", ".png", ".webp" }.Contains(System.IO.Path.GetExtension(sidecar).ToLowerInvariant()) &&
                         (System.IO.Path.GetFileNameWithoutExtension(sidecar).Equals(stem, StringComparison.OrdinalIgnoreCase) ||
                             new[] { "cover", "folder", "front", "albumart", "album" }.Contains(System.IO.Path.GetFileNameWithoutExtension(sidecar).ToLowerInvariant())))
-                    { var relative = Join(directory, System.IO.Path.GetFileName(sidecar)); Resolve(root, relative); paths.Add(relative); required.Add(relative); }
+                    { var relative = Join(directory, System.IO.Path.GetFileName(sidecar)); Resolve(root, relative); Add(relative); if (++dependencyCount > 100_000 || required.Count >= 1000 || (workMemory += 32L) > budget.Memory) throw new IOException("CUE dependency budget exceeded"); required.Add(relative); }
+                }
             }
         }
         CheckCollisions(paths);
-        if (paths.Count > 100_000) throw new IOException("Selection exceeds 100000 files; choose smaller folders");
+        if (paths.Count > budget.Files) throw new IOException("Selection exceeds 100000 files; choose smaller folders");
+        long bytes = 0;
         var entries = new List<Entry>();
         foreach (var path in paths.Order(StringComparer.Ordinal))
         {
@@ -159,6 +187,8 @@ public static partial class LanFiles
             using var stream = OpenRead(root, path);
             var info = new FileInfo(full);
             var size = info.Length; var ticks = info.LastWriteTimeUtc.Ticks;
+            bytes = checked(bytes + size);
+            if (bytes > budget.Bytes) throw new IOException("Selection exceeds 500 GiB; choose smaller folders");
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancel));
             info.Refresh();
             if (info.Length != size || info.LastWriteTimeUtc.Ticks != ticks) throw new IOException("Source changed during verification; retry");

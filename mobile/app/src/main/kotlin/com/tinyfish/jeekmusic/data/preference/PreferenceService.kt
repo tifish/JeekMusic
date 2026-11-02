@@ -126,6 +126,9 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         var pages=0
         com.tinyfish.jeekmusic.data.sync.LanProtocol(connection).use { client ->
             transport=client
+            if (!client.call("capabilities").getJSONObject("permissions").optBoolean("writeSync")) {
+                transport=null; syncState.value="read_only"; notifyChanged(); return@withLock
+            }
             if(includeUserData) userData.acceptLan(client.call("state",userData.exportLan(false).put("includeFeatures",false)))
             do {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()

@@ -10,7 +10,7 @@ namespace JeekMusic.Infrastructure;
 public static class Log
 {
     const long MaxSize = 5 * 1024 * 1024;
-    static readonly BlockingCollection<(string file, string line)> Queue = new();
+    static readonly BlockingCollection<(string file, string line)> Queue = new(2048);
     static readonly Thread Writer;
 
     static Log()
@@ -36,7 +36,8 @@ public static class Log
 #if DEBUG
         System.Diagnostics.Debug.WriteLine(line);
 #endif
-        Queue.Add((file, line));
+        if (line.Length > 8192) line = line[..8192] + " [truncated]";
+        Queue.TryAdd((file, line));
     }
 
     static void WriteLoop()
@@ -47,7 +48,7 @@ public static class Log
             var item = Queue.Take();
             Append(pending, item);
             // 一次把排队的都取出来，合并写入
-            while (Queue.TryTake(out var more)) Append(pending, more);
+            for (var count = 0; count < 256 && Queue.TryTake(out var more); count++) Append(pending, more);
             foreach (var (file, text) in pending)
             {
                 if (text.Length == 0) continue;

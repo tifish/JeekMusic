@@ -113,17 +113,19 @@ public sealed partial class PreferenceTraining
         return result;
     }
     // Authenticated paired transport carries data-only results, never weights, vectors or code.
-    public JsonObject ResultPage(int offset=0,string? expectedVersion=null)
+    public JsonObject ResultPage(int offset=0,string? expectedVersion=null,CancellationToken cancel=default)
     {
+        cancel.ThrowIfCancellationRequested();
         if(offset<0) throw new ArgumentException("Invalid result cursor");
         var deployment=DeploymentStatus(); var heads=deployment["heads"]!.AsArray();
         foreach(var head in heads) head!["answerRevision"]=AnswerRevision(S(head["dimension"]));
         var all=service.Store.LocalRows("personal-result:",100000).OrderBy(kv=>kv.Key,StringComparer.Ordinal).ToArray();
-        var version=Hash(service.Store.Generation+heads.ToJsonString()+string.Join("\n",all.Select(kv=>kv.Key+":"+Hash(kv.Value))));
+        var version=Hash(service.Store.Generation+heads.ToJsonString()+string.Join("\n",all.Select(kv=> { cancel.ThrowIfCancellationRequested(); return kv.Key+":"+Hash(kv.Value); })));
         if(offset>0 && expectedVersion!=version) throw new InvalidOperationException("Active versions/results changed; restart result sync");
         var rows=new JsonArray();
         foreach(var (_,raw) in all.Skip(offset).Take(100))
         {
+            cancel.ThrowIfCancellationRequested();
             var saved=JsonNode.Parse(raw)!; var track=app.Library.ByKey(S(saved["trackKey"]));
             if(track is null) continue;
             rows.Add((JsonNode)new JsonObject { ["contentSignature"]=S(saved["contentSignature"]),["durationMs"]=track.DurationMs,["heads"]=ResultsFor(track) });

@@ -82,6 +82,7 @@ public sealed partial class PreferenceTraining : IDisposable
         lock(gate)
         {
             if(cancel!=null || quiescing) throw new InvalidOperationException("Training/component job already running or stopping");
+            remoteOwner=null;
             cancel=new();
             jobDimension=selectedDimension; jobProfile=selectedProfile; jobGeneration=service.Store.Generation;
             Set(action=="prepare" ? "preparing_components" : "checking_material");

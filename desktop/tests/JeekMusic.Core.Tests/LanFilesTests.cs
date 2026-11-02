@@ -8,6 +8,18 @@ public sealed class LanFilesTests : IDisposable
     readonly string _root = Path.Combine(Path.GetTempPath(), "jeek-lan-tests-" + Guid.NewGuid().ToString("N"));
     public LanFilesTests() => Directory.CreateDirectory(_root);
     void Put(string path, string text) { var full = Path.Combine(_root, path); Directory.CreateDirectory(Path.GetDirectoryName(full)!); File.WriteAllText(full, text); }
+    [Fact]
+    public async Task TraversalStopsDuringEnumerationAndBeforeOversizedHashing()
+    {
+        Put("A/one.wav", "1234"); Put("A/two.wav", "1234"); Put("B/three.wav", "1234");
+        await Assert.ThrowsAsync<IOException>(() => LanFiles.Manifest(_root, [""], budget: new(Files: 2)));
+        await Assert.ThrowsAsync<IOException>(() => LanFiles.Manifest(_root, [""], budget: new(Bytes: 3)));
+        await Assert.ThrowsAsync<IOException>(() => LanFiles.Manifest(_root, [""], budget: new(Visited: 2)));
+        await Assert.ThrowsAsync<IOException>(() => LanFiles.Manifest(_root, [""], budget: new(Memory: 128)));
+        using var cancel = new CancellationTokenSource(); cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => LanFiles.Manifest(_root, [""], cancel.Token));
+        Assert.Equal(3, (await LanFiles.Manifest(_root, ["", "A"])).Count);
+    }
     [Theory]
     [InlineData("../secret.wav")][InlineData("/absolute")][InlineData("C:/Music")][InlineData("a\\b")]
     [InlineData("a/../b")][InlineData("a//b")][InlineData("CON.wav")][InlineData("a./x")][InlineData("x /.cue")][InlineData(".jeekmusic/state.json")]

@@ -1,0 +1,30 @@
+# 公网加固验收记录
+
+本轮从 main `a3f35e4` 开始，初始工作区干净；独立完成，未委派。软件实现与部署边界见 [部署说明](lan-public-deployment.md)。没有对生产监听实施负载、模糊测试或公网攻击，没有开放路由/防火墙/UPnP，没有创建生产配对邀请，没有上传真实音频、标签、队列或凭证。
+
+## 已完成的本地验证
+
+- Windows 全套：Core 114 通过；App 697 通过、2 个真实音频硬件用例按环境跳过（共 811 通过）。另 7 项构建工作流测试通过。早期使用 RID 运行测试时，进程探针按非 RID 路径找子进程而失败；改用正常测试布局、`JeekStageDailyBuild=false` 后全套通过。该开关仅控制复制日常输出，不改变软件/MCP 功能。
+- Android：114 单元测试通过；lintDebug、正式签名 assembleRelease、debug 与 androidTest 构建通过。
+- 真正的生产 TLS 服务（Managed 与 NativeAOT 隔离实例）：一次性邀请码重放拒绝、无效令牌、默认权限与 downloadConfirmed 绕过拒绝；认证前超大长度/负数/短帧/截断、重复字段、错误类型、深层 JSON、非法 UTF-8 拒绝后恢复。
+- 8 条停滞 TLS 握手并发；已认证合法请求继续可用，握手超时后名额恢复。认证帧慢速滴入不延长 5 秒截止。2 个大帧槽饱和时小请求仍可用；远端中断正确归还名额。16 个认证连接、NAT/设备限制、拒绝及恢复通过。
+- 真实 TLS 不读响应造成慢写、已认证空闲和慢正文通过期限关闭，连接数最终归零。合成 205 个目录与 205 个文件跨页完成；异步计划、SHA-256、文件分块可用；授权变更关闭现有 TLS，旧计划拒绝；撤销后相同 ID 配对轮换 token，旧 token 拒绝。
+- 隔离重启后真实 TLS 验证旧设备迁移保留读/写、关闭学习/下载权限；旧小帧正常访问，超限返回 upgrade_required；到期凭证使已有会话关闭，之后认证拒绝。
+- 文件枚举单元测试用缩小的同一生产预算验证文件数、遍历数、总字节、内存限额及取消；重叠选择去重正常。未创建十万真实文件或传输 500 GiB，不能把缩小预算夹具称为满规模性能验收。
+- 任务归属单元夹具使用实际 worker 消费的 CancellationToken 与受控等待任务，验证撤销其他设备及本机独立任务不受影响，撤销归属设备取消远程任务。没有下载公共模型或运行完整训练来测试中途撤销；这项真实大下载/训练验收保留为未验项。
+
+## 真正客户端与 Android 调用
+
+Windows 使用实际新客户端和 Win32/UI Automation 操作设置“同步”，截图检查监听提示、安全预算、邀请默认只读、设备到期、四项权限和设备 ID 后缀。操作复选框及保存按钮：缺少学习管理时拒绝下载权限，错误显示在该设备旁；随后将该隔离设备降为只读并保存，MCP 从同一业务服务读取的权限与 UI 一致。没有生成或拍摄有效邀请。此项不是 Headless 替代验收。
+
+本地截图（未提交/上传）位于 `desktop/artifacts/public-hardening-evidence/`：`security-settings.png`、`new-invitation-permissions.png`、`final-device-permissions.png`、`permission-validation.png`。截图只含合成夹具；最后两张为包含最终 UI 修正的 NativeAOT 客户端。
+
+在自有 API35/x86_64 AVD `JeekLanEmpty35`（本轮 serial emulator-5584）安装新 debug/androidTest，生产 `LanProtocol` 实际连接隔离 NativeAOT TLS 服务：pin 正确连接、错误 pin 拒绝；205 目录/清单分页、异步计划、两块文件与完整 SHA-256 核验、format-2 用户交换、协议-3 学习 delta、学习状态，以及远程学习越权拒绝均通过。测试凭证经应用私有临时文件输入，随后删除。没有用测试替身关闭 pin 或改成信任所有证书。
+
+NativeAOT 和 Managed 的 39 项实际 tools/list 描述/参数 Schema 已逐项比对完全相同。根删除与 SQLite ID 复用的既有真实 TLS 回归也通过；测试传输助手已修正为只发送 deviceId/token，不把本地 port/pin 连接元数据混入认证首帧。最终源码 SHA、精确 CI run、包 SHA-256 与重启前后保全结果放在本地最终交付清单。CI 在每个相关 Windows 构建的 NativeAOT 发布后运行真实 loopback 安全回归；最终必须查询修复 SHA 的 Desktop/Mobile 两项实际结果，不以旧 SHA 的绿灯代替。
+
+## 交付边界
+
+Windows 发布流程此前没有 Authenticode 签名，本机也没有发布者代码签名证书；NativeAOT ZIP 不称为已签名 Windows 包。Android 使用原正式 keystore，以 apksigner 对比原包证书确认覆盖兼容。当前用户客户端重启前必须即时执行 checkpoint_client，保存当前队列/顺序/进度/暂停/筛选/布局等；不导入历史队列，不清数据或已有凭证。具体比较结果见最终交付清单，私有 checkpoint 不上传。
+
+公网真实端到端、持续分布式攻击、外部代理/NAT/防火墙、ARM64/OEM、真实模型下载/完整训练撤销和独立渗透审计未验收。Windows 目录元数据 I/O 的取消受驱动影响；预算与 TLS 不能防止所有底层驱动卡顿或系统漏洞。用户仍须确定外部可达主机/端口、内部绑定网卡/端口及具体设备权限，再由部署管理员实施网络配置。

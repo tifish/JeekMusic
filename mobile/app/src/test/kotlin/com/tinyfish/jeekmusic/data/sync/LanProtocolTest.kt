@@ -7,6 +7,14 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 class LanProtocolTest {
+    @Test fun versionFourUsesSmallAuthenticationAndOperationBudgets() {
+        assertEquals(4096, LanProtocol.requestLimit("auth"))
+        assertEquals(4096, LanProtocol.requestLimit("pair"))
+        assertEquals(32_000_000, LanProtocol.requestLimit("state"))
+        assertEquals(4_000_000, LanProtocol.requestLimit("preference_delta"))
+        assertEquals(64 * 1024, LanProtocol.requestLimit("read"))
+    }
+
     @Test fun replacingCueBindingsRefreshesOldAndNewAudioAndRetainsOtherCueOwners() {
         val bindings = JSONObject().put("Shared/A.wav", JSONArray(listOf("Selected/Album.cue", "Other/Keep.cue")))
         val affected = LanBindings.replace(bindings, "Selected/Album.cue", listOf("Shared/B.wav"))

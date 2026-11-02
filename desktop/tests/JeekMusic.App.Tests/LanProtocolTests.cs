@@ -28,7 +28,7 @@ public sealed class LanProtocolTests
         stream.Position = 0; var result = await LanSyncService.ReadFrame(stream);
         Assert.Equal("音乐/一.wav", result["path"]!.GetValue<string>());
         foreach (var bytes in new byte[][] { [2, 0, 0, 1], [255, 255, 255, 255], [0, 0, 0, 1] })
-            await Assert.ThrowsAsync<IOException>(() => LanSyncService.ReadFrame(new MemoryStream(bytes)));
+            await Assert.ThrowsAnyAsync<IOException>(() => LanSyncService.ReadFrame(new MemoryStream(bytes)));
     }
     [Fact]
     public void LanToolsHaveStrictProductionSchemasAndRedactedDiagnostics()

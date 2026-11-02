@@ -74,9 +74,9 @@ public sealed class McpTools
         Tool("get_playlist", "Read playlist entries in manual order, including unavailable entries. Indices are zero-based. Paginated.", "\"playlistId\":{\"type\":\"integer\"}," + Page, ["playlistId"], true),
         Tool("edit_playlist", "Create/rename/delete/add/remove/move a playlist. create requires name; other actions require playlistId; rename requires name; add requires trackIds; remove/move require positions; move also needs target (index before moving). Changes persist and use normal sync events. Deleting removes only the playlist, never music files.",
             "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"rename\",\"delete\",\"add\",\"remove\",\"move\"]},\"playlistId\":{\"type\":\"integer\"},\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200},\"trackIds\":" + Ids + ",\"positions\":" + Positions + ",\"target\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2147483647}", ["action"], destructive: true),
-        Tool("lan_sync_status", "Read LAN sharingMode=library, libraryFolderCount (registered music folders), sharedFolderCount (automatically shared while service is running, including offline folders; zero when stopped), root IDs, permanent revocation and availability, addresses, port, invitationActive (no credential) and paired device IDs. All registered folders are automatically shared; no per-folder switch. Never returns invitations, tokens or private keys. Uses the production service.", "", [], true),
-        Tool("lan_sync_control", "Control the production LAN sync service: start/stop, invite or revoke. Enabling the service automatically shares all registered library music folders; newly added folders join automatically, never their parent folders or arbitrary disk paths. start accepts optional port (0 selects an available port, default saved port or 39843). Deprecated share requires folderId and only returns the existing automatic root while the service is running; it never starts the service. Deprecated unshare is always rejected with an explicit error: stop the service to disable all sharing. invite requires host and an already running service; it never enables a stopped service. includeQr=true returns sensitive in-memory qrPngBase64 after phone-host validation. A five-minute single-use TLS-pinned invitation may be created with zero shared folders when the library is empty. Android can refresh without re-pairing. Removing a registered folder permanently revokes its old root/plan; row ID reuse never retargets it. Legacy ID-only/revoked grants are never rebound. Invitation and QR are sensitive: do not log, publish or screenshot. No firewall changes.",
-            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"share\",\"unshare\",\"invite\",\"revoke\"],\"description\":\"start shares every registered library root automatically. share is a deprecated lookup; unshare is rejected. Use stop for the global switch.\"},\"port\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":65535},\"folderId\":{\"type\":\"integer\"},\"host\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":253},\"includeQr\":{\"type\":\"boolean\",\"description\":\"Return sensitive in-memory QR PNG; rejects loopback/unspecified/broadcast/multicast endpoints. Never log or screenshot.\"},\"deviceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
+        Tool("lan_sync_status", "Read v4 bounded security counters, active connections/tasks, permissions/expiry/migration and budgets (no secrets). Read LAN sharingMode=library, libraryFolderCount (registered music folders), sharedFolderCount (automatically shared while service is running, including offline folders; zero when stopped), root IDs, permanent revocation and availability, addresses, port, invitationActive (no credential) and paired device IDs. All registered folders are automatically shared; no per-folder switch. Never returns invitations, tokens or private keys. Uses the production service.", "", [], true),
+        Tool("lan_sync_control", "Control the production LAN sync service: start/stop, invite, revoke, authorize or configure. configure requires stopped service, bindAddress IPv4 and port 1–65535. authorize requires deviceId and complete permissions, expires in credentialDays (1–365, default 90); closes sessions, invalidates plans and cancels only that device remote tasks. invite defaults readMusic only, accepts permissions/credentialDays/advertisedPort. Existing peers migrate read/write, learning disabled. downloadConfirmed never grants downloadLearning. Re-pair rotates credentials. No MCP network bridge. Enabling the service automatically shares all registered library music folders; newly added folders join automatically, never their parent folders or arbitrary disk paths. start accepts optional port (0 selects an available port, default saved port or 39843). Deprecated share requires folderId and only returns the existing automatic root while the service is running; it never starts the service. Deprecated unshare is always rejected with an explicit error: stop the service to disable all sharing. invite requires host and an already running service; it never enables a stopped service. includeQr=true returns sensitive in-memory qrPngBase64 after phone-host validation. A five-minute single-use TLS-pinned invitation may be created with zero shared folders when the library is empty. Android can refresh without re-pairing. Removing a registered folder permanently revokes its old root/plan; row ID reuse never retargets it. Legacy ID-only/revoked grants are never rebound. Invitation and QR are sensitive: do not log, publish or screenshot. No firewall changes.",
+            "\"action\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"share\",\"unshare\",\"invite\",\"revoke\",\"authorize\",\"configure\"],\"description\":\"start shares every registered library root automatically. share is a deprecated lookup; unshare is rejected. Use stop for the global switch.\"},\"port\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":65535},\"folderId\":{\"type\":\"integer\"},\"host\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":253},\"includeQr\":{\"type\":\"boolean\",\"description\":\"Return sensitive in-memory QR PNG; rejects loopback/unspecified/broadcast/multicast endpoints. Never log or screenshot.\"},\"deviceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
         Tool("list_folders", "Read library folders, IDs, paths and availability.", "", [], true),
         Tool("add_folder", "Schedule adding and scanning an existing absolute local folder. If it contains registered child folders, replaceChildren must explicitly be true. Work runs in the normal library queue; response means queued, not completed.",
             "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767},\"replaceChildren\":{\"type\":\"boolean\"}", ["path"]),
@@ -107,6 +107,14 @@ public sealed class McpTools
             tool["inputSchema"]!["properties"]!["dimension"]=new JsonObject { ["type"]="string",["enum"]=new JsonArray("MOOD","VOICE","GENRE","CALMNESS"),["description"]="Independent head; defaults to active UI dimension. No missing labels are inferred. Shared audio cache and leakage-safe recording split." };
             tool["description"]=description+" Four independent dimensions: MOOD SPORT/NON_SPORT, VOICE VOCAL/INSTRUMENTAL, GENRE CLASSICAL/NON_CLASSICAL, CALMNESS CALM/NON_CALM. Single-dimension withdrawal/conflict invalidates that head only; identity pollution invalidates affected evaluation across heads. Manual overrides final; ClassicalTitles overrides personal GENRE in automatic output; legacy QUIET is NON_SPORT only.";
         }
+        if (name == "lan_sync_control")
+        {
+            var propertiesNode = tool["inputSchema"]!["properties"]!;
+            propertiesNode["bindAddress"] = new JsonObject { ["type"] = "string", ["maxLength"] = 15 };
+            propertiesNode["advertisedPort"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 65535 };
+            propertiesNode["credentialDays"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 365 };
+            propertiesNode["permissions"] = JsonNode.Parse("{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"readMusic\",\"writeSync\",\"manageLearning\",\"downloadLearning\"],\"properties\":{\"readMusic\":{\"type\":\"boolean\"},\"writeSync\":{\"type\":\"boolean\"},\"manageLearning\":{\"type\":\"boolean\"},\"downloadLearning\":{\"type\":\"boolean\"}}}");
+        }
         if(name=="preference_training") tool["inputSchema"]!["properties"]!["downloadConfirmed"]=new JsonObject { ["type"]="boolean",["description"]="learn/resume only: confirms initial 615 MB public model plus several GB private CPU dependencies; at least 6 GB disk, no song/label upload. Omitted means pause before first download." };
         if(name is "search_tracks" or "song_filter")
         {
@@ -130,14 +138,14 @@ public sealed class McpTools
         if(name=="preference_batch" && a["action"]?.GetValue<string>()=="match") { if(a["dimension"] is { } dim) app.Preferences.SelectDimension(dim.GetValue<string>()); return await app.Preferences.MatchLocalBatch(); }
         if (name == "preference_inventory" && a["action"]?.GetValue<string>() == "register") return await app.Preferences.PrepareBatch(inventoryOnly:true);
         if (name == "preference_batch" && a["action"]?.GetValue<string>() == "prepare") { if(a["dimension"] is { } dim) app.Preferences.SelectDimension(dim.GetValue<string>()); await app.Preferences.PrepareBatch(); return app.Preferences.Batch(false); }
-        if (name == "lan_sync_control" && a["port"] is not null && a["action"]?.GetValue<string>() != "start")
-            throw new ArgumentException("port is only supported for start");
+        if (name == "lan_sync_control" && a["port"] is not null && a["action"]?.GetValue<string>() is not ("start" or "configure"))
+            throw new ArgumentException("port is only supported for start/configure");
         if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "invite" && a["includeQr"]?.GetValue<bool>() == true)
         {
             McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
             var host = Required(a, "host").GetValue<string>();
             await LanPairingQr.ValidatePhoneHost(host);
-            var invitation = app.LanSync.Invite(host);
+            var invitation = app.LanSync.Invite(host, a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90);
             return new JsonObject { ["invitation"] = invitation, ["qrPngBase64"] = Convert.ToBase64String(LanPairingQr.Encode(invitation)) };
         }
         if (name != "set_smart_tags") return Call(name, a);
@@ -247,14 +255,16 @@ public sealed class McpTools
             case "get_status": return Status();
             case "lan_sync_status": return app.LanSync.Diagnostics();
             case "lan_sync_control":
-                if (a["port"] is not null && a["action"]?.GetValue<string>() != "start") throw new ArgumentException("port is only supported for start");
+                if (a["port"] is not null && a["action"]?.GetValue<string>() is not ("start" or "configure")) throw new ArgumentException("port is only supported for start/configure");
                 switch (Required(a, "action").GetValue<string>())
                 {
                     case "start": app.LanSync.Start(a["port"]?.GetValue<int>()); break;
                     case "stop": app.LanSync.Stop(); break;
                     case "share": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), true);
                     case "unshare": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), false);
-                    case "invite": return new JsonObject { ["invitation"] = app.LanSync.Invite(Required(a, "host").GetValue<string>()) };
+                    case "invite": return new JsonObject { ["invitation"] = app.LanSync.Invite(Required(a, "host").GetValue<string>(), a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90) };
+                    case "configure": app.LanSync.Configure(Required(a, "bindAddress").GetValue<string>(), Required(a, "port").GetValue<int>()); break;
+                    case "authorize": app.LanSync.Authorize(Required(a, "deviceId").GetValue<string>(), Required(a, "permissions").AsObject(), a["credentialDays"]?.GetValue<int>() ?? 90); break;
                     case "revoke": app.LanSync.Revoke(Required(a, "deviceId").GetValue<string>()); break;
                     default: throw new ArgumentException("Unknown action");
                 }

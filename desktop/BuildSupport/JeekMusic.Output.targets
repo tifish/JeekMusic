@@ -16,7 +16,7 @@
   <!-- Always copy, including incremental builds and Debug/Release switches. RID and
        publish builds never replace the user's daily test entry point. -->
   <Target Name="StageJeekDailyBuild" AfterTargets="Build"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true' and '$(RuntimeIdentifier)' == '' and '$(SelfContained)' != 'true'">
+          Condition="'$(JeekStageDailyBuild)' != 'false' and '$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true' and '$(RuntimeIdentifier)' == '' and '$(SelfContained)' != 'true'">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(TargetDir).&quot;" />
   </Target>
 </Project>

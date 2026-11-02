@@ -3,6 +3,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using JeekMusic.Infrastructure;
 using JeekMusic.UI;
+using System.Text.Json.Nodes;
 using static JeekMusic.UI.SettingsWindow;
 
 namespace JeekMusic.Sync;
@@ -53,9 +54,33 @@ internal static class LanSyncSettings
         panel.Children.Add(enabledSwitch);
         Refresh();
         var diagnostics = service.Diagnostics();
+        panel.Children.Add(Note(L.T("连接采用 TLS TCP 透传。程序不会开放防火墙或路由；公网可达性需单独部署与验证，不能视为绝对安全。")));
+        panel.Children.Add(Note(L.T("安全预算") + $": TLS/auth 5s · 24 connections / 8 unauthenticated / 16 authenticated · {diagnostics["authenticationFailures"]} auth failures · {diagnostics["connectionRejected"]} rejected · {diagnostics["rateLimited"]} limited"));
+        var bind = new TextBox { Text = diagnostics["bindAddress"]!.GetValue<string>(), PlaceholderText = "IPv4 bind", Width = 300 };
+        var listenPort = new TextBox { Text = diagnostics["configuredPort"]!.ToString(), PlaceholderText = "TCP port", Width = 300 };
+        panel.Children.Add(Note(L.T("高级监听配置（先停服务；IPv4，新安装默认仅回环 127.0.0.1:39843）")));
+        panel.Children.Add(bind); panel.Children.Add(listenPort);
+        panel.Children.Add(Note(L.T("绑定 127.0.0.1 时只允许本机。手机访问需先停服并绑定指定 IPv4 网卡或 0.0.0.0；现有安装保持原绑定范围。")));
+        panel.Children.Add(Action(L.T("保存监听配置"), () => {
+            try { if (!int.TryParse(listenPort.Text, out var port)) throw new ArgumentException(); service.Configure(bind.Text?.Trim() ?? "", port); c.Window.Build(); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException) { problem.Text = L.T("先停止服务，再填写有效 IPv4 和 1–65535 端口。"); }
+        }));
+        Func<JsonObject> PermissionEditor(JsonObject? grants)
+        {
+            var values = new Dictionary<string, CheckBox>();
+            foreach (var (key, title) in new[] { ("readMusic", "读取全部曲库"), ("writeSync", "写入用户和学习同步数据"), ("manageLearning", "管理该设备发起的学习任务"), ("downloadLearning", "允许下载学习组件（615 MB 模型及数 GB 依赖）") })
+            {
+                var check = new CheckBox { Content = L.T(title), IsChecked = grants?[key]?.GetValue<bool>() ?? key == "readMusic" };
+                values[key] = check; panel.Children.Add(check);
+            }
+            return () => new JsonObject(values.Select(v => new KeyValuePair<string, JsonNode?>(v.Key, JsonValue.Create(v.Value.IsChecked == true))));
+        }
+        panel.Children.Add(SubHeading(L.T("新邀请的设备权限")));
+        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、学习管理与组件下载须分别授权；旧设备保留读写，学习需重新授权。凭证默认 90 天，到期需重新配对。")));
+        var inviteGrants = PermissionEditor(null);
         panel.Children.Add(SubHeading(L.T("共享音乐文件夹")));
         panel.Children.Add(sharing); panel.Children.Add(guidance); panel.Children.Add(folders); panel.Children.Add(addFolders);
-        panel.Children.Add(Note(L.T("手机扫码配对，或手动输入邀请。两端须在同一局域网。邀请 5 分钟有效且只能使用一次；请勿截图或公开。")));
+        panel.Children.Add(Note(L.T("手机扫码配对，或手动输入邀请。使用手机可达的 IPv4 或域名，可填写公网映射端口。邀请 5 分钟有效且只能使用一次；请勿截图或公开。")));
         var addresses = diagnostics["addresses"]!.AsArray().Select(n => n!.GetValue<string>()).Distinct().ToArray();
         var host = new TextBox { Text = addresses.FirstOrDefault() ?? "", PlaceholderText = L.T("PC 局域网 IP 地址"), Width = 300 };
         if (addresses.Length > 0)
@@ -66,6 +91,8 @@ internal static class LanSyncSettings
             panel.Children.Add(choices);
         }
         panel.Children.Add(host);
+        var externalPort = new TextBox { Text = service.Port.ToString(), PlaceholderText = L.T("手机可达的 TCP 端口"), Width = 300 };
+        panel.Children.Add(externalPort);
         var invitation = new TextBox { IsReadOnly = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, PlaceholderText = L.T("一次性配对邀请"), MinHeight = 65 };
         var qr = new Image { Width = 300, Height = 300, IsVisible = false };
         var lifetime = Note("");
@@ -92,7 +119,8 @@ internal static class LanSyncSettings
                 var address = host.Text?.Trim() ?? "";
                 await LanPairingQr.ValidatePhoneHost(address);
                 if (detached) return;
-                current = service.Invite(address);
+                if (!int.TryParse(externalPort.Text, out var reachablePort)) throw new ArgumentException();
+                current = service.Invite(address, reachablePort, inviteGrants());
                 bitmap = new Bitmap(new MemoryStream(LanPairingQr.Encode(current)));
                 invitation.Text = current; qr.Source = bitmap; qr.IsVisible = true;
                 lifetime.Text = L.T("用手机扫码，或复制下方邀请手动配对。刷新会使旧邀请失效。");
@@ -110,6 +138,14 @@ internal static class LanSyncSettings
         foreach (var device in diagnostics["devices"]!.AsArray())
         {
             var id = device!["id"]!.GetValue<string>();
+            panel.Children.Add(SubHeading(device["name"]!.GetValue<string>() + " · " + id[..Math.Min(8, id.Length)]));
+            panel.Children.Add(Note(L.T("凭证到期") + ": " + DateTimeOffset.FromUnixTimeSeconds(device["expiresAt"]!.GetValue<long>()).ToLocalTime().ToString("yyyy-MM-dd HH:mm")));
+            var grants = PermissionEditor(device["permissions"]!.AsObject());
+            var deviceProblem = Note(""); panel.Children.Add(deviceProblem);
+            panel.Children.Add(Action(L.T("保存设备权限并续期 90 天"), () => {
+                try { service.Authorize(id, grants()); c.Window.Build(); }
+                catch (ArgumentException) { deviceProblem.Text = L.T("组件下载必须同时授权学习管理。"); }
+            }));
             panel.Children.Add(Action(L.T("撤销设备") + " — " + device["name"]!.GetValue<string>(), () => { service.Revoke(id); c.Window.Build(); }));
         }
         panel.Children.Add(Note(L.T("手机同步时完整核验所选内容，可检测大小和修改时间均未变化的文件。首次核验大目录可能较慢；权限或防火墙阻止连接时可重试，不会自动更改系统规则。")));

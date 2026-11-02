@@ -82,6 +82,7 @@ class LanSyncService @Inject constructor(
             val client = LanProtocol(connection); transport = client
             val response = client.call("pair", JSONObject().put("invitation", uri.token).put("name", Build.MODEL))
             client.close()
+            require(response.optInt("protocol") == 4) { "Upgrade the PC for LAN protocol 4" }
             connection.put("token", response.getString("token")).put("name", response.optString("name", uri.host))
             store.update { it.put("connection", connection) }; report()
             _status.value = LanStatus(text = context.getString(R.string.lan_paired_identity, connection.getString("name"), uri.endpoint))
@@ -92,8 +93,16 @@ class LanSyncService @Inject constructor(
     }
     suspend fun directories(root: String, path: String): List<String> = withContext(Dispatchers.IO) {
         LanProtocol.relative(path, true)
-        val a = protocol().call("tree", JSONObject().put("rootId", root).put("path", path)).getJSONArray("directories")
-        List(a.length()) { a.getString(it).also { p -> LanProtocol.relative(p) } }
+        val result = mutableListOf<String>()
+        protocol().use { client ->
+            do {
+                val page = client.call("tree", JSONObject().put("rootId", root).put("path", path).put("offset", result.size))
+                val a = page.getJSONArray("directories")
+                repeat(a.length()) { result += a.getString(it).also { p -> LanProtocol.relative(p) } }
+                require(result.size <= 100_000) { "Directory budget exceeded" }
+            } while(a.length() == page.optInt("pageSize", Int.MAX_VALUE))
+        }
+        result
     }
     suspend fun estimate(root: String, selected: Set<String>): JSONObject = withContext(Dispatchers.IO) {
         require(selected.isNotEmpty()) { "Choose at least one folder" }
@@ -191,11 +200,14 @@ class LanSyncService @Inject constructor(
                         drainRefresh()
                     }
                     ensureActive()
-                    val payload = sync.exportLan()
-                    val remote = protocol().call("state", payload)
-                    sync.acceptLan(remote)
-                    try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }
-                    _status.value = LanStatus(false, context.getString(if (problems.isEmpty()) R.string.lan_done else R.string.lan_issues), done, total, problems, timeDetails, precisionNs)
+                    val dataClient = protocol()
+                    val writable = dataClient.call("capabilities").getJSONObject("permissions").optBoolean("writeSync")
+                    if (writable) {
+                        val remote = dataClient.call("state", sync.exportLan())
+                        sync.acceptLan(remote)
+                        try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }
+                    }
+                    _status.value = LanStatus(false, context.getString(if (!writable && problems.isEmpty()) R.string.lan_read_only_done else if (problems.isEmpty()) R.string.lan_done else R.string.lan_issues), done, total, problems, timeDetails, precisionNs)
                 } catch (e: CancellationException) {
                     _status.value = LanStatus(false, context.getString(R.string.lan_cancelled), done, total, problems, timeDetails, precisionNs)
                 } catch (e: Exception) {

@@ -65,26 +65,32 @@ public sealed class PreferenceDeploymentTests
         s.Append(Dataset,"new-identity","recording",new JsonObject { ["contentSignature"]=Hash("new unrelated fixture"),["artists"]=Strings(["fixture"]) });
         Assert.Throws<InvalidOperationException>(()=>t.Activate("GENRE")); Assert.False(t.Enabled("GENRE")); return Task.CompletedTask;
     });
-    [Fact] public Task ExactRecordingResultsUsePersonalSourceManualWinsAndFileChangesFallBack()=>Run(async app=> {
+    [Fact] public async Task ExactRecordingResultsUsePersonalSourceManualWinsAndFileChangesFallBack()
+    {
         var root=Path.Combine(Path.GetTempPath(),"jeek-personal-results-"+Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var path=Path.Combine(root,"fixture.wav"); File.WriteAllText(path,"isolated fixture bytes, no real song"); var stat=new FileInfo(path);
-            var folder=app.Db.AddFolder("fixture","\\isolated\\",root+Path.DirectorySeparatorChar,"Fixture");
-            using(var tx=app.Db.Begin()) { app.Db.ReplaceFile(tx,folder,"","fixture.wav",[new Track { FolderId=folder,TrackKey="fixture",Dir="",FileName="fixture.wav",Title="Fixture",ArtistDisplay="Fixture",Artists=["Fixture"],DurationMs=180000,Size=stat.Length,Mtime=stat.LastWriteTimeUtc.Ticks }]); tx.Commit(); }
-            app.Library.RebuildSnapshot(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            InstallFixture(app,"VOICE"); app.Preferences.Training.Activate("VOICE");
-            var track=app.Library.ByKey("fixture")!; var version=app.Preferences.Training.DeploymentStatus()["heads"]!.AsArray().Single(h=>S(h?["dimension"])=="VOICE")!["version"]!.DeepClone();
-            app.Preferences.Store.SetLocal("personal-result:fixture",new JsonObject { ["trackKey"]="fixture",["signature"]=JeekMusic.Analysis.AnalysisFeature.Signature(track),["contentSignature"]=Hash("isolated fixture bytes, no real song"),["heads"]=new JsonObject { ["VOICE"]=new JsonObject { ["version"]=version,["value"]="VOCAL" } } }.ToJsonString());
-            app.SmartTags.Recompute(); Assert.Equal(("VOCAL","PERSONAL"),app.Db.AllTags()["fixture"]["VOICE"]);
-            Assert.Equal("VOCAL",S(app.SmartTags.Explain(track)["automatic"]?["VOICE"]));
-            await app.SmartTags.Override([track],new Dictionary<JeekMusic.Core.Analysis.TagDimension,JeekMusic.Core.Analysis.Tag?> { [JeekMusic.Core.Analysis.TagDimension.VOICE]=JeekMusic.Core.Analysis.Tag.INSTRUMENTAL });
-            Assert.Equal(("INSTRUMENTAL","MANUAL"),app.Db.AllTags()["fixture"]["VOICE"]);
-            File.AppendAllText(path,"changed"); Assert.Empty(app.Preferences.Training.ResultsFor(track));
-            Assert.Empty(app.Player.Queue.Items);
+            await Run(async app=> {
+                var path=Path.Combine(root,"fixture.wav"); File.WriteAllText(path,"isolated fixture bytes, no real song"); var stat=new FileInfo(path);
+                var folder=app.Db.AddFolder("fixture","\\isolated\\",root+Path.DirectorySeparatorChar,"Fixture");
+                using(var tx=app.Db.Begin()) { app.Db.ReplaceFile(tx,folder,"","fixture.wav",[new Track { FolderId=folder,TrackKey="fixture",Dir="",FileName="fixture.wav",Title="Fixture",ArtistDisplay="Fixture",Artists=["Fixture"],DurationMs=180000,Size=stat.Length,Mtime=stat.LastWriteTimeUtc.Ticks }]); tx.Commit(); }
+                app.Library.RebuildSnapshot(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                InstallFixture(app,"VOICE"); app.Preferences.Training.Activate("VOICE");
+                var track=app.Library.ByKey("fixture")!; var version=app.Preferences.Training.DeploymentStatus()["heads"]!.AsArray().Single(h=>S(h?["dimension"])=="VOICE")!["version"]!.DeepClone();
+                app.Preferences.Store.SetLocal("personal-result:fixture",new JsonObject { ["trackKey"]="fixture",["signature"]=JeekMusic.Analysis.AnalysisFeature.Signature(track),["contentSignature"]=Hash("isolated fixture bytes, no real song"),["heads"]=new JsonObject { ["VOICE"]=new JsonObject { ["version"]=version,["value"]="VOCAL" } } }.ToJsonString());
+                app.SmartTags.Recompute(); Assert.Equal(("VOCAL","PERSONAL"),app.Db.AllTags()["fixture"]["VOICE"]);
+                Assert.Equal("VOCAL",S(app.SmartTags.Explain(track)["automatic"]?["VOICE"]));
+                // Check content invalidation before a manual correction starts the
+                // asynchronous daily-feedback reader (and invalidates this head).
+                File.AppendAllText(path,"changed"); Assert.Empty(app.Preferences.Training.ResultsFor(track));
+                await app.SmartTags.Override([track],new Dictionary<JeekMusic.Core.Analysis.TagDimension,JeekMusic.Core.Analysis.Tag?> { [JeekMusic.Core.Analysis.TagDimension.VOICE]=JeekMusic.Core.Analysis.Tag.INSTRUMENTAL });
+                Assert.Equal(("INSTRUMENTAL","MANUAL"),app.Db.AllTags()["fixture"]["VOICE"]);
+                Assert.Empty(app.Player.Queue.Items);
+            });
         }
+        // Run disposes the services and joins background readers before cleanup.
         finally { Directory.Delete(root,true); }
-    });
+    }
     [Fact] public Task LearningWithNoTruthTerminatesWithoutDownloadOrTagWritesAndCanResume()=>Run(async app=> {
         var t=app.Preferences.Training;
         t.WithStoppedJobs(()=>Assert.Throws<InvalidOperationException>(()=>t.StartLearning()));

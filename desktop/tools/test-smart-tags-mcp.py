@@ -57,7 +57,9 @@ def main():
                 assert columns["missingValue"] == "—" and columns["manualCheckPolicy"] == "manual-overrides-only"
                 assert columns["cellAction"] == "single-track-dimension-menu" and columns["cellKeyboard"] == "Enter/Space"
                 assert columns["batchAction"] == "inline-four-row-panel"
-                assert columns["quickCorrection"] == dict(state="idle", dimension=None, targetCount=0, busy=False)
+                assert columns["quickCorrection"] == dict(
+                    state="idle", dimension=None, targetCount=0, busy=False,
+                    menuOpen=False, currentValueLines=1, keepsOpenAfterSave=True, currentValues={})
                 assert "smartTagColumns" in next(t for t in catalog if t["name"] == "get_diagnostics")["description"]
                 assert next(t for t in catalog if t["name"] == "get_diagnostics")["inputSchema"]["properties"] == {}
                 tool = next(t for t in catalog if t["name"] == "set_smart_tags")

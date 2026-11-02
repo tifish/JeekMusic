@@ -58,3 +58,12 @@ Android 当前没有独立 MCP 控制端口。本任务提供签名 instrumentat
 核对实际CI时发现另一个可复现的问题：构建 `ac608848`（218）的旧任务发布时，main已前进到 `6b506450`（219）；`v1.0.218` 被创建在新HEAD上，资产仍名为218。本次219任务因此看到“当前HEAD已打标签”，误判无应用变化，跳过正式签名与发布。旧任务最终显示cancelled也不能撤回已经发出的发布API请求。
 
 `softprops/action-gh-release` 的 [target_commitish文档](https://github.com/softprops/action-gh-release#inputs)明确说明默认使用仓库默认分支。Mobile工作流现在显式绑定 `${{ github.sha }}`，并把自身workflow文件加入应用变更检测：修复发布流程也必须重建APK。已有错误标签保持原样，不移动已发布版本；以后交付必须分别核对实际run的headSha、远端tag解析SHA、APK版本/签名/摘要，不能只看版本标签或CI绿灯。该问题是发布身份错误，与系统安装确认资格分别处理。
+
+
+## 正式发布包最终验收（221）
+
+Mobile [run 41455431467](https://github.com/tifish/JeekMusic/actions/runs/41455431467) 对 `710f46f9e334d8db446eaa13fc42782e598455d0` 的lint、完整单元测试、正常R8/资源裁剪release和发布均实际成功。远端 `v1.0.221` 解析到同一SHA，release的target_commitish也为该SHA；APK manifest为com.tinyfish.jeekmusic / 221 / 1.0.221 / target37，正式证书与原安装一致。
+
+随后使用已有220的instrumentation桥，从App自身提交真实PackageInstaller安装这份公开发布APK，完成 **220→221**，没有adb覆盖安装，也没有系统安装按钮点击。主机观察记录中没有系统安装界面；更新后拉取的实际base.apk与GitHub资产SHA-256逐字一致：`20abec49bc692ee1b9ef14890906ed552416a9dedacaa538a932e865351aa696`。该轮补足了正常裁剪正式发布包的实测，先前同签名fixture证据仍单独保留。
+
+APK：`output/android-update/release-221/JeekMusic-1.0.221.apk`；来源校验：`release-221/provenance.json`；真实更新记录：`release-221/device/result.json`、`observations.json`、`request-instrumentation.txt`。第一次启动截图捕获偏早仍为launcher，未当作UI通过；补验明确等待真实客户端层级出现后截图，已目视验证：`release-221/client-ui-verified/screen.png` / `screen.xml`。最后设备为正常正式221，并已交回集成开发；实体手机/OEM仍未验收。

@@ -1,0 +1,485 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "untracked:None:None",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "none",
+      "reason": null
+    },
+    {
+      "name": "untracked:None:a",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "download",
+      "reason": null
+    },
+    {
+      "name": "untracked:None:b",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "download",
+      "reason": null
+    },
+    {
+      "name": "untracked:a:None",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "upload",
+      "reason": null
+    },
+    {
+      "name": "untracked:a:a",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "untracked:a:b",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "conflict",
+      "reason": "initial_different_content"
+    },
+    {
+      "name": "untracked:b:None",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "upload",
+      "reason": null
+    },
+    {
+      "name": "untracked:b:a",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "conflict",
+      "reason": "initial_different_content"
+    },
+    {
+      "name": "untracked:b:b",
+      "tracked": false,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "None:None:None",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "none",
+      "reason": null
+    },
+    {
+      "name": "None:None:a",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "download",
+      "reason": null
+    },
+    {
+      "name": "None:None:b",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "download",
+      "reason": null
+    },
+    {
+      "name": "None:a:None",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "upload",
+      "reason": null
+    },
+    {
+      "name": "None:a:a",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "None:a:b",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "conflict",
+      "reason": "both_modified"
+    },
+    {
+      "name": "None:b:None",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "upload",
+      "reason": null
+    },
+    {
+      "name": "None:b:a",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "conflict",
+      "reason": "both_modified"
+    },
+    {
+      "name": "None:b:b",
+      "tracked": true,
+      "base": null,
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "a:None:None",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "a:None:a",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "delete_remote",
+      "reason": null
+    },
+    {
+      "name": "a:None:b",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "conflict",
+      "reason": "modified_vs_deleted"
+    },
+    {
+      "name": "a:a:None",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "delete_local",
+      "reason": null
+    },
+    {
+      "name": "a:a:a",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "none",
+      "reason": null
+    },
+    {
+      "name": "a:a:b",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "a"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "download",
+      "reason": null
+    },
+    {
+      "name": "a:b:None",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": null
+      },
+      "action": "conflict",
+      "reason": "modified_vs_deleted"
+    },
+    {
+      "name": "a:b:a",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "upload",
+      "reason": null
+    },
+    {
+      "name": "a:b:b",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "b"
+      },
+      "remote": {
+        "known": true,
+        "hash": "b"
+      },
+      "action": "ack",
+      "reason": null
+    },
+    {
+      "name": "local_unknown_False",
+      "tracked": false,
+      "base": "a",
+      "local": {
+        "known": false,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "defer",
+      "reason": "state_unknown"
+    },
+    {
+      "name": "local_unknown_True",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": false,
+        "hash": null
+      },
+      "remote": {
+        "known": true,
+        "hash": "a"
+      },
+      "action": "defer",
+      "reason": "state_unknown"
+    },
+    {
+      "name": "remote_unknown_False",
+      "tracked": false,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": false,
+        "hash": "a"
+      },
+      "action": "defer",
+      "reason": "state_unknown"
+    },
+    {
+      "name": "remote_unknown_True",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": null
+      },
+      "remote": {
+        "known": false,
+        "hash": "a"
+      },
+      "action": "defer",
+      "reason": "state_unknown"
+    },
+    {
+      "name": "both_changed_same_new_content",
+      "tracked": true,
+      "base": "a",
+      "local": {
+        "known": true,
+        "hash": "c"
+      },
+      "remote": {
+        "known": true,
+        "hash": "c"
+      },
+      "action": "ack",
+      "reason": null
+    }
+  ]
+}

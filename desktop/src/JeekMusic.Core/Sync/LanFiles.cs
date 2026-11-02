@@ -128,7 +128,13 @@ public static partial class LanFiles
                 else if (Extensions.Contains(System.IO.Path.GetExtension(child))) Add(rel);
             }
         }
-        foreach (var selected in selection.Distinct()) Walk(Relative(selected, true));
+        Resolve(root,"",true); // An unavailable root must never become an empty snapshot.
+        foreach (var selected in selection.Distinct()) {
+            var path=Relative(selected,true);
+            try { Resolve(root,path,true); }
+            catch(Exception e) when(path.Length>0 && e is FileNotFoundException or DirectoryNotFoundException) { continue; }
+            Walk(path);
+        }
         // CUE dependencies may be outside the selected subdirectory, but never outside its root.
         foreach (var cue in paths.Where(p => p.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)).ToArray())
         {

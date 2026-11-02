@@ -246,7 +246,7 @@ def main():
                 status=call(c,"lan_sync_status");port=status["port"]
                 replacement["port"]=port;legacy["port"]=port
                 migrated=next(d for d in status["devices"] if d["id"]==legacy["deviceId"])
-                assert migrated["permissions"]==dict(readMusic=True,writeSync=True,manageLearning=False,downloadLearning=False) and migrated["migration"]
+                assert migrated["permissions"]==dict(readMusic=True,writeSync=True,manageLearning=False,downloadLearning=False,writeFiles=False,deleteFiles=False) and migrated["migration"]
                 old=Wire(legacy,auth=False);old.send(dict(op="roots",deviceId=legacy["deviceId"],token=legacy["token"]))
                 assert old.receive().get("roots");old.close()
                 old=Wire(legacy,auth=False);old.s.sendall(struct.pack(">i",5000));assert old.receive()["code"]=="upgrade_required";old.close()

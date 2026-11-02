@@ -1,0 +1,15 @@
+<resources>
+<string name="lan_mapping_reselect">旧映射已失效，请重新选择目录。已有文件保留原位，不自动搬动或删除。</string>
+<string name="lan_target_direct">最终目录：%1$s。远端相对路径从这里开始，不另建子目录。</string>
+<string name="lan_file_summary">已检查 %1$d 个路径 · 自动处理 %2$d 项 · 冲突 %3$d 项 · 延期 %4$d 项</string>
+<string name="lan_file_conflict_changes">手机：%1$s · 电脑：%2$s。选择前保留双方版本。</string>
+<string name="lan_use_phone">使用手机版本</string><string name="lan_use_pc">使用电脑版本</string>
+<string name="lan_files_access">安全双向文件访问</string>
+<string name="lan_files_access_allowed">已具备所有文件访问权限；仍需单独选择并授权准确的同步目录。</string>
+<string name="lan_files_access_needed">安全条件替换和保留时间需要“所有文件访问权限”及你选择的SAF目录授权。缺少时延期文件同步，不使用不安全覆盖。</string>
+<string name="lan_backups">文件恢复备份</string>
+<string name="lan_backup_help">最多显示100条回执。原文件保留在目标旁。仅已确认且未改变的备份可清除；恢复要求当前文件仍是该事务结果，并保留替换版本。不会改动同步基线。</string>
+<string name="lan_restore_backup">恢复原文件</string>
+<string name="lan_purge_backup">删除此备份</string>
+<string name="lan_backup_confirm">只处理这条已核验回执，保留其他文件。</string>
+</resources>

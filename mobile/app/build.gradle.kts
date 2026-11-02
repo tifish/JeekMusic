@@ -18,6 +18,10 @@ val gitCommitCount: Int = providers.exec {
 android {
     namespace = "com.tinyfish.jeekmusic"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
+    }
 
     defaultConfig {
         applicationId = "com.tinyfish.jeekmusic"

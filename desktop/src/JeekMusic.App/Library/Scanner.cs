@@ -33,16 +33,17 @@ public sealed class Scanner(LibraryDb db)
     /// 扫描一个音乐文件夹。<paramref name="scopes"/> 为 null 时扫整个文件夹，否则只扫这些目录（相对路径，"\" 结尾，递归）。
     /// <paramref name="full"/> 为 true 时所有文件都重新解析（"重建曲库"）。
     /// </summary>
-    public ScanResult Scan(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct)
+    public ScanResult Scan(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct,IReadOnlySet<string>? forceFiles=null)
     {
         // Enumeration and missing-record deletion must not observe the name gap
         // of a live in-process tag commit after the recovery check returned.
-        lock (Online.TagWriteCommit.Gate) return ScanCore(folder, builder, scopes, full, ct);
+        lock (Online.TagWriteCommit.Gate) return ScanCore(folder, builder, scopes, full, ct,forceFiles);
     }
 
-    ScanResult ScanCore(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct)
+    ScanResult ScanCore(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct,IReadOnlySet<string>? forceFiles)
     {
         var root = folder.Root;
+        if(Sync.LanFileSyncStore.BlocksScan(Path.Combine(AppPaths.DataDir,"lan-file-sync"),root))return new(0,0,0,0,1);
         if (!Online.TagWriteRecovery.RecoverBeforeScan(root)) return new(0, 0, 0, 0, 1);
         var audio = new Dictionary<string, (long mtime, long size)>(StringComparer.OrdinalIgnoreCase);
         var cues = new Dictionary<string, (long mtime, long size)>(StringComparer.OrdinalIgnoreCase);
@@ -85,11 +86,11 @@ public sealed class Scanner(LibraryDb db)
         // .cue 新增、改了或删了的目录：里面的整轨文件要重新解析
         var cueDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (rel, state) in cues)
-            if (!existingCues.TryGetValue(rel, out var old) || old != state) cueDirs.Add(DirOf(rel));
+            if (forceFiles?.Contains(rel)==true || !existingCues.TryGetValue(rel, out var old) || old != state) cueDirs.Add(DirOf(rel));
         foreach (var rel in existingCues.Keys)
             if (!cues.ContainsKey(rel)) cueDirs.Add(DirOf(rel));
 
-        var toParse = audio.Where(kv => full || !existing.TryGetValue(kv.Key, out var old) || old != kv.Value
+        var toParse = audio.Where(kv => full || forceFiles?.Contains(kv.Key)==true || !existing.TryGetValue(kv.Key, out var old) || old != kv.Value
                                         || cueDirs.Contains(DirOf(kv.Key)) && CueLocator.ImageExtensions.Contains(Path.GetExtension(kv.Key)))
             .Select(kv => kv.Key).ToList();
         var toDelete = existing.Keys.Where(k => !audio.ContainsKey(k)).ToList();

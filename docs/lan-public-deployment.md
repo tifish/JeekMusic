@@ -38,11 +38,11 @@
 
 ## 权限与升级迁移
 
-四项权限分别是 `readMusic`（全部登记曲库）、`writeSync`（用户数据及学习事件写入）、`manageLearning`（启动/续接及取消**本设备**的独立学习任务）、`downloadLearning`（允许该设备触发组件下载，依赖学习管理）。首次下载仍须手机明确确认；`downloadConfirmed=true` 本身不能授予下载权限，本机曾经确认下载也不能绕过该设备的下载权限。
+六项权限分别是 `readMusic`（全部登记曲库）、`writeSync`（用户数据及学习事件写入）、`writeFiles`（音乐文件新增/更新，须readMusic）、`deleteFiles`（传播已确认基线的删除，另须writeFiles）、`manageLearning`（启动/续接及取消**本设备**的独立学习任务）、`downloadLearning`（允许该设备触发组件下载，依赖学习管理）。首次下载仍须手机明确确认；`downloadConfirmed=true` 本身不能授予下载权限，本机曾经确认下载也不能绕过该设备的下载权限。
 
-新邀请默认仅 `readMusic=true`。现有设备保持 token 和读音乐/写同步能力，不执行历史过期字段；远程学习管理及组件下载改为关闭，诊断的 `migration` 明确记录此迁移。没有全量撤销旧设备。UI 展示各设备权限与长期凭证策略；MCP 的旧 credentialDays 输入保留兼容但忽略。授权保存即关闭该设备会话、撤销计划并停止该设备任务，下次请求重鉴权。撤销后重新配对相同 deviceId 使用全新 token 和权限，不继承旧授权。远程学习在客户端重启后保持 interrupted，不自动重启；本机独立学习不因撤销其他设备而取消。
+新邀请默认仅 `readMusic=true`。现有设备保持 token 和读音乐/写同步能力，不执行历史过期字段；文件写入/删除、远程学习管理及组件下载默认为关闭，诊断的 `migration` 明确记录此迁移。没有全量撤销旧设备。UI 展示各设备权限与长期凭证策略；MCP 的旧 credentialDays 输入保留兼容但忽略。授权保存即关闭该设备会话、撤销计划并停止该设备任务，下次请求重鉴权。撤销后重新配对相同 deviceId 使用全新 token 和权限，不继承旧授权。远程学习在客户端重启后保持 interrupted，不自动重启；本机独立学习不因撤销其他设备而取消。
 
-只读手机仍可完成音乐下载，结尾明确显示未交换用户/学习数据。旧 Android 的小请求继续使用 TLS 及逐请求鉴权；首帧最多 4 KiB，后续最多 64 KiB，旧端超过帧预算收到 `upgrade_required`；旧端学习动作同样经过桌面权限检查。新 Android 要求协议 4，连接旧桌面明确提示升级，**没有不安全的自动降级**。学习事件格式仍为协议 3，用户数据格式仍为 format 2，二者与传输版本 4 不冲突。推荐先更新桌面，再覆盖安装 Android。
+只读手机可读取/下载音乐；需要写回、传播删除或写领域数据时明确延期，不能当作双向已完成。旧 Android 的小请求继续使用 TLS 及逐请求鉴权；首帧最多 4 KiB，后续最多 64 KiB，旧端超过帧预算收到 `upgrade_required`；旧端学习动作同样经过桌面权限检查。新 Android 要求协议 4，连接旧桌面明确提示升级，**没有不安全的自动降级**。学习事件格式仍为协议 3，用户数据格式仍为 format 2，二者与传输版本 4 不冲突。推荐先更新桌面，再覆盖安装 Android。
 
 ## 可执行部署步骤
 
@@ -78,3 +78,17 @@ Windows 现有发布流程提供 NativeAOT ZIP，**原来并无 Authenticode 签
 
 
 凭证策略更新：已配对token长期有效（credentialPolicy=until_revoked），不执行旧expiresAt，不自动轮换或周期重配；旧token哈希不重置。credentialDays仅保留旧调用兼容且忽略。仍保留手动撤销/重配和降权立即终止会话/归属任务。邀请码仍为5分钟一次性；握手/空闲/6小时会话、计划/暂存资源期限不变。回归验证历史过期字段仍可认证。
+
+## 双向文件合同1
+
+新增fileProtocol=1，在传输4鉴权后协商，缺能力明确升级，不降级文件写。旧设备新增writeFiles/deleteFiles均为false；旧四个权限输入继续兼容，新两项可选且默认false。管理员须明确授予文件写/删除，writeSync不授文件系统写。文件基线、直目录映射、冲突规则与安全恢复见[同步合同](lan-sync.md)。
+
+单文件8GiB，暂存16GiB，备份32GiB；scope10万基线，全局100万，128scope/每credential8scope，事务25万，SQLite最大1GiB。目标盘保留至少256MiB且约5%（最高5GiB）空间。每UTC日预约上传每设备64GiB/全局256GiB，失败预约不退款；分块最大256KiB，所有帧仍预鉴权/分级准入。文件全局工作1项，无等待队列；重工作15分钟deadline，可查询/取消，prepared资源保留用于恢复，不因暂存TTL丢弃已移走的原文件。
+
+备份保留在原目录旁，未确认不清除。桌面设置或本地MCP lan_file_backups可分页查看；停止服务后按receipt核验恢复/清除单个备份，不递归搬删目录、不改变同步基线。Android设置有同一生产句柄服务的备份管理。达到备份/元数据预算时延期；管理员检查后明确清除，不擅自丢弃恢复副本。
+
+文件hash工作另有每凭证每小时2TiB、全局4TiB读取预算，进程重启清零；上传日预约持久保存。Android公共共享存储的FUSE可能不实现advisory flock，遇ENOSYS/EOPNOTSUPP/EINVAL时仍执行句柄身份与完整hash复核、RENAME_NOREPLACE及保留原文件；真实锁占用仍延期。flock本身不是其他应用必须遵守的写锁，不能据此声称能阻止恶意本机应用的所有竞争。句柄/路径保护不可用时拒绝提交。公共FUSE目录不支持NOREPLACE时使用下述明确的条件复制合同，绝不对公共目标使用覆盖rename。依据：[Android共享存储权限](https://developer.android.com/training/data-storage/manage-all-files)、[Linux renameat2](https://man7.org/linux/man-pages/man2/rename.2.html)、[Windows句柄重命名](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_rename_info)。
+
+Android公共共享目录实测不支持flock/NOREPLACE，不能用应用私有目录测试结果冒充指定SAF目录可用。其commitMode=conditional_copy明确采用：原文件移到本应用排他创建、私有日志固定目录身份的`.jeek-sync-<operation>.recovery/original`恢复槽；公共目标只能O_EXCL创建，按私有日志记录的inode复制/续传，重启仅续写与源完全相同的已有前缀，不截断公共文件。目标被其他文件抢占或已有前缀被修改时保留双方，进入延期/冲突。普通rename仅面向该内部新建恢复槽，绝不用于覆盖公共目标。这些内部目录只存恢复版本，不是音乐文件命名空间，所选目录仍直接保存音乐相对路径。
+
+条件复制期间本应用扫描器依持久事务排除未完成路径；其他不协作的应用可能看到部分目标文件，因此不宣称公共FUSE上具备整文件原子可见性。拥有本机广泛文件权限的恶意应用可破坏共享存储内部恢复槽，属于额外本机信任风险；网络协议拒绝这些点号内部路径，不能由远端选择或写入。使用完整hash/身份复核、原版本保留和条件创建限制正常并发竞争，不能据此声称抵抗已失陷本机的所有竞争。

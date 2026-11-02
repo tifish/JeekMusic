@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(jeek_sync LANGUAGES C)
+add_library(jeek_sync SHARED lan_atomic.c)
+target_compile_options(jeek_sync PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
+target_compile_definitions(jeek_sync PRIVATE _GNU_SOURCE)

@@ -34,13 +34,14 @@ import kotlin.coroutines.resume
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0)
+data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0)
 
 @Singleton
 class LanSyncService @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val store: LanSyncStore,
     private val ledgerStore: LanSyncLedger,
+    private val fileDatabase: LanFileDatabase,
     private val tree: DocumentTree,
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
@@ -51,7 +52,8 @@ class LanSyncService @Inject constructor(
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val gate = Mutex()
-    private var job: Job? = null
+    @Volatile private var job: Job? = null
+    private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing) }
     @Volatile private var transport: LanProtocol? = null
     private val _status = MutableStateFlow(LanStatus())
     val status = _status.asStateFlow()
@@ -121,26 +123,20 @@ class LanSyncService @Inject constructor(
             val path = SafPaths.fromTreeDocumentId(id) ?: error("Unsupported local storage")
             val parent = LibraryFolderEntity(treeUri = target.toString(), treeDocumentId = id, volumeName = path.volumeName, relativePath = path.relativePath,
                 displayName = root.getString("name"), addedAt = System.currentTimeMillis())
-            val namespace = "JeekMusic-$rootId"
-            // Never nest managed roots or put a namespace inside another managed namespace.
             LanMappingTargets.requireSeparate(store.mappings(), rootId, path.volumeName, path.relativePath)
-            val child = child(parent, id, namespace) ?: tree.create(parent, id, DocumentsContract.Document.MIME_TYPE_DIR, namespace) ?: error("Cannot create destination")
-            require(child.isDirectory && child.name == namespace) { "Destination name collision" }
-            val actual = DocumentsContract.buildDocumentUriUsingTree(target, child.documentId)
-            // Reuse the parent's durable grant; addFolder takes the tree grant only when needed below.
-            val folder = parent.copy(treeUri = actual.toString(), treeDocumentId = child.documentId, relativePath = path.relativePath + namespace + "/")
-            library.registerSyncDestination(folder)
-            val old = store.mappings().firstOrNull { it.getString("rootId") == rootId && it.optString("treeUri") == target.toString() }
-            val mapping = JSONObject().put("rootId", rootId).put("name", root.getString("name")).put("selection", JSONArray(selected.toList().sorted()))
-                .put("treeUri", target.toString()).put("documentId", child.documentId).put("volume", path.volumeName).put("relative", folder.relativePath)
+            localBoundary(parent)
+            library.registerSyncDestination(parent)
+            val old = store.mappings().firstOrNull { LanMappingTargets.isCurrent(it) && it.getString("rootId") == rootId && it.optString("treeUri") == target.toString() && it.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) }.toSet()==selected } }
+            val mapping = JSONObject().put("layoutVersion",LanMappingTargets.VERSION).put("rootId", rootId).put("name", root.getString("name")).put("selection", JSONArray(selected.toList().sorted()))
+                .put("treeUri", target.toString()).put("documentId", id).put("volume", path.volumeName).put("relative", path.relativePath)
                 .put("key", old?.getString("key") ?: java.util.UUID.randomUUID().toString()).put("enabled", true)
-            old?.optJSONObject("cueBindings")?.let { mapping.put("cueBindings", it) }
+            old?.optString("directoryIdentity")?.takeIf { it.isNotEmpty() }?.let { mapping.put("directoryIdentity",it) }
             store.saveMapping(mapping); report()
         }
     }
     fun setEnabled(root: String, enabled: Boolean) {
         check(job?.isActive != true) { "Cancel sync first" }
-        val mapping = store.mappings().single { it.getString("rootId") == root }; mapping.put("enabled", enabled); store.saveMapping(mapping); report()
+        val mapping = store.mappings().single { it.getString("rootId") == root }; if(enabled) LanMappingTargets.requireCurrent(mapping); mapping.put("enabled", enabled); store.saveMapping(mapping); report()
     }
     fun forget(root: String) {
         check(job?.isActive != true) { "Cancel sync first" }
@@ -154,49 +150,28 @@ class LanSyncService @Inject constructor(
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying))
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
+                    val obsolete=store.mappings().count { !LanMappingTargets.isCurrent(it) }
+                    if(obsolete>0) problems += context.getString(R.string.lan_mapping_reselect)
                     loadLedger()
                     recoverPending()
                     drainRefresh()
-                    for (mapping in store.mappings().filter { it.optBoolean("enabled", true) }) {
+                    val actions=mutableMapOf<String,Int>();val conflicts=mutableListOf<JSONObject>();var deferredCount=0;var processed=0;var lastProgress=0L
+                    for (mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }) {
                         ensureActive()
-                        val client = protocol(); val root = mapping.getString("rootId")
-                        val selection = mapping.getJSONArray("selection")
-                        val plan = client.call("plan", JSONObject().put("rootId", root).put("selection", selection))
-                        total += plan.getLong("bytes")
-                        val entries = mutableListOf<JSONObject>()
-                        var offset = 0
-                        while (offset < plan.getInt("total")) {
-                            ensureActive()
-                            val page = client.call("manifest", JSONObject().put("rootId", root).put("plan", plan.getString("plan")).put("offset", offset)).getJSONArray("files")
-                            require(page.length() > 0) { "Incomplete manifest" }
-                            for (i in 0 until page.length()) entries += page.getJSONObject(i)
-                            offset += page.length()
-                        }
-                        val portable = entries.map { LanProtocol.relative(it.getString("path")) }
-                        require(portable.map { java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT) }.distinct().size == portable.size) { "Case or Unicode collision" }
-                        val folder = folder(mapping)
-                        recover(mapping, folder)
-                        // Install dependencies before CUE files. Parsing is notified only after this batch.
-                        val failedPaths = mutableSetOf<String>()
-                        for (entry in entries.sortedBy { it.getString("path").endsWith(".cue", true) }) {
-                            ensureActive()
-                            val path = entry.getString("path")
-                            _status.value = LanStatus(true, path, done, total, problems.toList(), timeDetails.toList(), precisionNs)
-                            try {
-                                val dependencies = entry.optJSONArray("dependencies")?.let { a -> List(a.length()) { LanProtocol.relative(a.getString(it)) } }
-                                require(dependencies?.all { it in portable && it !in failedPaths } ?: (!path.endsWith(".cue", true) || failedPaths.isEmpty())) { context.getString(R.string.lan_cue_held) }
-                                transfer(mapping, folder, client, plan.getString("plan"), entry, { warning, precision ->
-                                    if (precision > 0) { timeDetails += "$path: $warning"; precisionNs = maxOf(precisionNs, precision) } else problems += "$path: $warning"
-                                }) { progress ->
-                                    _status.value = LanStatus(true, path, done + progress, total, problems.toList(), timeDetails.toList(), precisionNs)
+                        val client=protocol()
+                        try {
+                            val result=fileSynchronizer.synchronize(mapping,client,{ store.saveMapping(mapping);report() },{ path,progress ->
+                                val now=android.os.SystemClock.elapsedRealtime()
+                                if(now-lastProgress>=250) {
+                                    lastProgress=now
+                                    _status.value=LanStatus(true,path,done+progress.bytes,0,problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileConflicts=(conflicts+progress.conflicts).take(100).map { JSONObject(it.toString()) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed)
                                 }
-                            } catch (e: CancellationException) { throw e }
-                            catch (e: Exception) {
-                                if (e is LanLedgerException || ledger.has("pending")) throw e // Never continue after a journal failure.
-                                failedPaths += path; problems += "$path: ${problem(e)}"
-                            }
-                            done += entry.getLong("size")
-                        }
+                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ if(fileDatabase.refreshPaths(mapping.getString("key")).size>=200)drainRefresh() })
+                            for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
+                            conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
+                            for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
+                            _status.value=_status.value.copy(fileActions=actions.toMap(),fileConflicts=conflicts.map { JSONObject(it.toString()) },fileDeferredCount=deferredCount,fileProcessed=processed)
+                        } finally { client.close() }
                         drainRefresh()
                     }
                     ensureActive()
@@ -207,13 +182,13 @@ class LanSyncService @Inject constructor(
                         sync.acceptLan(remote)
                         try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(_: Exception) { problems += "Personal preference delta pending: peer offline or older protocol" }
                     }
-                    _status.value = LanStatus(false, context.getString(if (!writable && problems.isEmpty()) R.string.lan_read_only_done else if (problems.isEmpty()) R.string.lan_done else R.string.lan_issues), done, total, problems, timeDetails, precisionNs)
+                    _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {
-                    _status.value = LanStatus(false, context.getString(R.string.lan_cancelled), done, total, problems, timeDetails, precisionNs)
+                    _status.value = _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: Exception) {
                     // Transport exceptions can contain connection addresses, but never serialize the invitation/token.
-                    _status.value = if (!currentCoroutineContext().isActive) LanStatus(false, context.getString(R.string.lan_cancelled), done, total, problems, timeDetails, precisionNs)
-                        else LanStatus(false, context.getString(R.string.lan_failed), done, total, problems + problem(e), timeDetails, precisionNs)
+                    _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
+                        else _status.value.copy(running=false,text=context.getString(R.string.lan_failed),done=done,total=total,problems=problems+problem(e),timeDetails=timeDetails,precisionNs=precisionNs)
                 } finally { transport?.close(); transport = null; report(); startRecovery() }
             }
         }
@@ -226,67 +201,45 @@ class LanSyncService @Inject constructor(
         } }
     }
     private fun recoverPending() {
-        val pending = ledger.optJSONObject("pending") ?: return
-        val mapping = pending.optJSONObject("mapping") ?: store.mappings().singleOrNull { it.getString("key") == pending.getString("key") }
-            ?: error("An unfinished file transaction requires its original destination")
-        recover(mapping, folder(mapping))
+        val pending=ledger.optJSONObject("pending") ?: return
+        ledger.put("obsoletePending",pending);ledger.remove("pending");saveLedger()
     }
     private fun audioDependencies(entry: JSONObject): Set<String> = entry.optJSONArray("dependencies")?.let { a ->
         List(a.length()) { LanProtocol.relative(a.getString(it)) }.filter { it.substringAfterLast('.').lowercase() in setOf("wav", "flac") }.toSet()
     }.orEmpty()
-    private fun cueAudio(mapping: JSONObject, cue: String): Set<String> {
-        val bindings = mapping.optJSONObject("cueBindings") ?: return emptySet()
-        return bindings.keys().asSequence().filter { key -> bindings.optJSONArray(key)?.let { a -> (0 until a.length()).any { a.getString(it) == cue } } == true }.toSet()
-    }
-    private fun queueRefresh(mapping: JSONObject, path: String, entry: JSONObject? = null) {
-        val queue = ledger.optJSONObject("refresh") ?: JSONObject().also { ledger.put("refresh", it) }
-        val key = mapping.getString("key")
-        val task = queue.optJSONObject(key) ?: JSONObject().put("mapping", mapping).put("paths", JSONArray()).put("cues", JSONObject()).also { queue.put(key, it) }
-        val paths = task.getJSONArray("paths")
-        fun add(value: String) { if ((0 until paths.length()).none { paths.getString(it) == value }) paths.put(LanProtocol.relative(value)) }
-        add(path)
-        if (entry != null && path.endsWith(".cue", true)) {
-            val latest = store.mappings().firstOrNull { it.getString("key") == key } ?: mapping
-            cueAudio(latest, path).forEach(::add); audioDependencies(entry).forEach(::add)
-            task.getJSONObject("cues").put(path, JSONObject().put("hash", entry.getString("hash")).put("audio", JSONArray(audioDependencies(entry).toList())))
-        }
-        saveLedger() // Durable BEFORE the file/mtime commit, not after the next network request.
+    private fun queueRefresh(mapping: JSONObject,path: String,entry: JSONObject?=null,deleted: Boolean=false) {
+        val paths=linkedSetOf(LanProtocol.relative(path));val audio=entry?.let(::audioDependencies).orEmpty()
+        if(path.endsWith(".cue",true)) { paths.addAll(fileDatabase.cueAudio(mapping.getString("key"),path));paths.addAll(audio) }
+        fileDatabase.queueRefresh(mapping.getString("key"),path,JSONObject().put("hash",entry?.optString("hash")).put("deleted",deleted).put("audio",JSONArray(audio.toList())).put("paths",JSONArray(paths.toList())))
     }
     private suspend fun drainRefresh() {
-        check(!ledger.has("pending")) { "Resolve the unfinished file transaction before refreshing" }
-        val queue = ledger.optJSONObject("refresh") ?: return
-        for (key in queue.keys().asSequence().toList()) {
-            val task = queue.getJSONObject(key)
-            val mapping = store.mappings().firstOrNull { it.getString("key") == key } ?: task.getJSONObject("mapping")
-            val folder = folder(mapping)
-            val bindings = JSONObject(mapping.optJSONObject("cueBindings")?.toString() ?: "{}")
-            val updates = task.getJSONObject("cues")
-            for (cue in updates.keys()) {
-                val update = updates.getJSONObject(cue)
-                val target = child(folder, directory(folder, cue), cue.substringAfterLast('/'))
-                if (target == null || hash(folder, target.documentId) != update.getString("hash")) continue // An aborted commit retains its old binding.
-                val audio = update.getJSONArray("audio")
-                LanBindings.replace(bindings, cue, List(audio.length()) { audio.getString(it) })
-
+        // Legacy refresh entries are inert, just like legacy file transactions.
+        if(ledger.has("refresh")) { ledger.remove("refresh");saveLedger() }
+        for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optString("directoryIdentity").isNotEmpty() }) {
+            val key=mapping.getString("key")
+            while(true) {
+                val queued=fileDatabase.refreshPaths(key);if(queued.isEmpty())break
+                LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { local ->
+                    for(path in queued) {
+                        val update=fileDatabase.refresh(key,path) ?: continue
+                        if(path.endsWith(".cue",true)) {
+                            val actual=local.observe(path);val missing=actual.isNull("hash")
+                            if(update.optBoolean("deleted") && missing)fileDatabase.bindCue(key,path,emptyList())
+                            else if(!missing && actual.getString("hash")==update.optString("hash")) {
+                                val audio=update.getJSONArray("audio");fileDatabase.bindCue(key,path,List(audio.length()) { audio.getString(it) })
+                            }
+                        }
+                        val paths=update.getJSONArray("paths");for(offset in 0 until paths.length() step 200)refresh(mapping,List(minOf(200,paths.length()-offset)) { paths.getString(offset+it) })
+                        fileDatabase.refreshed(key,path)
+                    }
+                }
             }
-            mapping.put("cueBindings", bindings)
-            if (store.mappings().any { it.getString("key") == key }) store.saveMapping(mapping)
-            val paths = task.getJSONArray("paths").let { a -> List(a.length()) { a.getString(it) } }
-            refresh(mapping, paths)
-            queue.remove(key); saveLedger() // Only acknowledge after the normal scanner completes.
         }
     }
-    private fun folder(m: JSONObject) = LibraryFolderEntity(treeUri = m.getString("treeUri"), treeDocumentId = m.getString("documentId"), volumeName = m.getString("volume"),
-        relativePath = m.getString("relative"), displayName = m.getString("name"), addedAt = 0)
-    private fun owned(m: JSONObject): JSONObject = ledger.optJSONObject(m.getString("key")) ?: JSONObject().also { ledger.put(m.getString("key"), it) }
-    private fun child(folder: LibraryFolderEntity, parent: String, name: String): DocumentTree.Child? {
-        fun portable(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT)
-        val uri = DocumentsContract.buildChildDocumentsUriUsingTree(Uri.parse(folder.treeUri), parent)
-        val children = context.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)
-            ?.use { c -> buildList<DocumentTree.Child> { while (c.moveToNext()) add(DocumentTree.Child(c.getString(0), c.getString(1), c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR)) } } ?: error("Destination directory unavailable")
-        val candidates = children.filter { portable(it.name) == portable(name) }
-        require(candidates.size <= 1 && candidates.none { it.name != name }) { "Case or Unicode destination collision" }
-        return candidates.singleOrNull()
+    private fun folder(m: JSONObject): LibraryFolderEntity {
+        LanMappingTargets.requireCurrent(m)
+        require(DocumentsContract.getTreeDocumentId(Uri.parse(m.getString("treeUri")))==m.getString("documentId")) { "Mapping must use the selected directory itself" }
+        return LibraryFolderEntity(treeUri=m.getString("treeUri"),treeDocumentId=m.getString("documentId"),volumeName=m.getString("volume"),relativePath=m.getString("relative"),displayName=m.getString("name"),addedAt=0)
     }
     private fun localBoundary(folder: LibraryFolderEntity, path: String = "") {
         val volume = context.getSystemService(StorageManager::class.java).storageVolumes.singleOrNull { it.mediaStoreVolumeName == folder.volumeName }?.directory ?: error("Storage offline")
@@ -298,178 +251,24 @@ class LanSyncService @Inject constructor(
             require(target.canonicalPath == target.absolutePath) { "Linked destination rejected" }
         }
     }
-    private fun directory(folder: LibraryFolderEntity, path: String): String {
-        localBoundary(folder, path)
-        context.contentResolver.query(tree.documentUri(folder, folder.treeDocumentId), arrayOf(DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)?.use {
-            require(it.moveToFirst() && it.getString(0) == DocumentsContract.Document.MIME_TYPE_DIR) { "Destination root offline" }
-        } ?: error("Destination root offline")
-        var id = folder.treeDocumentId
-        for (part in path.split('/').dropLast(1)) {
-            val child = child(folder, id, part) ?: tree.create(folder, id, DocumentsContract.Document.MIME_TYPE_DIR, part) ?: error("Cannot create directory")
-            require(child.isDirectory && child.name == part) { "Directory collision" }; id = child.documentId
-        }
-        return id
-    }
-    private fun hash(folder: LibraryFolderEntity, id: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        context.contentResolver.openInputStream(tree.documentUri(folder, id))!!.use { input ->
-            val buffer = ByteArray(128 * 1024)
-            while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
-    private fun modified(folder: LibraryFolderEntity, id: String): Long = context.contentResolver.openFileDescriptor(tree.documentUri(folder, id), "r")!!.use {
-        Os.fstat(it.fileDescriptor).st_mtim.let { time -> time.tv_sec * 1_000_000_000L + time.tv_nsec }
-    }
-    private fun timestamp(folder: LibraryFolderEntity, id: String, requested: Long): Long {
-        require(android.os.Environment.isExternalStorageManager()) { context.getString(R.string.lan_mtime_permission) }
-        context.contentResolver.openFileDescriptor(tree.documentUri(folder, id), "rw")!!.use { pfd ->
-            val path = SafPaths.fromTreeDocumentId(id) ?: error("Unsupported timestamp provider")
-            val volume = context.getSystemService(StorageManager::class.java).storageVolumes.singleOrNull { it.mediaStoreVolumeName == path.volumeName }?.directory ?: error("Storage offline")
-            val file = File(volume, path.relativePath.trimEnd('/'))
-            require(file.canonicalPath == file.absolutePath) { "Linked destination rejected" }
-            val descriptor = Os.fstat(pfd.fileDescriptor); val local = Os.stat(file.path)
-            require(descriptor.st_dev == local.st_dev && descriptor.st_ino == local.st_ino) { "SAF descriptor/path mismatch" }
-            Files.setLastModifiedTime(file.toPath(), FileTime.from(requested, TimeUnit.NANOSECONDS))
-        }
-        return modified(folder, id)
-    }
-    private fun checkBusy(folder: LibraryFolderEntity, path: String) {
-        require(!playing.isBusy("${folder.volumeName}:${folder.relativePath}$path")) { context.getString(R.string.lan_busy_file) }
-    }
-    private fun timePrecision(requested: Long, actual: Long): Long = when (kotlin.math.abs(actual - requested)) {
-        in 0..999 -> 1_000; in 1000..999_999 -> 1_000_000; in 1_000_000..999_999_999 -> 1_000_000_000; else -> 2_000_000_000
-    }
-    private fun applyTime(folder: LibraryFolderEntity, id: String, requested: Long): Triple<Long, String?, Boolean> {
-        val actual = try { timestamp(folder, id, requested) } catch (e: Exception) { return Triple(modified(folder, id), e.message?.lineSequence()?.firstOrNull()?.take(240) ?: "mtime refused", false) }
-        return Triple(actual, if (actual == requested) null else context.getString(R.string.lan_time_precision, requested, actual), actual != requested)
-    }
-    private suspend fun transfer(m: JSONObject, folder: LibraryFolderEntity, client: LanProtocol, plan: String, entry: JSONObject, warn: (String, Long) -> Unit, progress: (Long) -> Unit): Boolean {
-        val path = LanProtocol.relative(entry.getString("path")); val expected = entry.getString("hash")
-        require(expected.matches(Regex("[0-9a-f]{64}")) && entry.getLong("size") >= 0 && entry.getLong("modifiedNs") > 0)
-        val parent = directory(folder, path); val name = path.substringAfterLast('/')
-        val records = owned(m); val old = records.optJSONObject(path)
-        val current = child(folder, parent, name)
-        checkBusy(folder, path)
-        if (current != null) {
-            require(!current.isDirectory && old != null && hash(folder, current.documentId) == old.getString("hash") && modified(folder, current.documentId) == old.getLong("actualNs")) { context.getString(R.string.lan_conflict) }
-            if (old.getString("hash") == expected) {
-                if (path.endsWith(".cue", true)) {
-                    val latestMapping = store.mappings().firstOrNull { it.getString("key") == m.getString("key") } ?: m
-                    if (cueAudio(latestMapping, path) != audioDependencies(entry)) queueRefresh(m, path, entry)
-                }
-                if (old.getLong("remoteNs") == entry.getLong("modifiedNs") && (old.getLong("actualNs") == entry.getLong("modifiedNs") || old.optBoolean("timeRounded"))) {
-                    old.optString("timeWarning").takeIf { it.isNotEmpty() }?.let {
-                        if (old.optBoolean("timeRounded")) warn(context.getString(R.string.lan_time_precision, old.getLong("remoteNs"), old.getLong("actualNs")), timePrecision(old.getLong("remoteNs"), old.getLong("actualNs"))) else warn(it, 0)
-                    }; return false
-                }
-                queueRefresh(m, path, entry)
-                val (actual, warning, rounded) = applyTime(folder, current.documentId, entry.getLong("modifiedNs"))
-                old.put("actualNs", actual).put("remoteNs", entry.getLong("modifiedNs")).put("timeWarning", warning).put("timeRounded", rounded); saveLedger()
-                warning?.let { warn(it, if (old.optBoolean("timeRounded")) timePrecision(entry.getLong("modifiedNs"), actual) else 0) }
-                return true
-            }
-        }
-        val key = LanProtocol.sha((m.getString("key") + "/" + path + "/" + expected).toByteArray())
-        val partial = File(partials, "$key.part")
-        if (partial.length() > entry.getLong("size")) require(partial.delete())
-        require(partials.usableSpace > entry.getLong("size") - partial.length() + 4 * 1024 * 1024) { "Insufficient staging space" }
-        FileOutputStream(partial, true).use { out ->
-            var offset = partial.length()
-            while (offset < entry.getLong("size")) {
-                currentCoroutineContext().ensureActive()
-                val result = client.call("read", JSONObject().put("rootId", m.getString("rootId")).put("plan", plan).put("path", path).put("offset", offset))
-                val bytes = Base64.decode(result.getString("data"), Base64.NO_WRAP)
-                require(bytes.isNotEmpty() && bytes.size <= 256 * 1024 && offset + bytes.size <= entry.getLong("size")) { "Invalid file range" }
-                out.write(bytes); offset += bytes.size; progress(offset)
-            }
-            out.fd.sync()
-        }
-        if (com.tinyfish.jeekmusic.data.tags.SafeTagWriter.sha256(partial) != expected) {
-            partial.delete(); error("Content hash mismatch; partial discarded, retry with a fresh plan")
-        }
-        currentCoroutineContext().ensureActive(); checkBusy(folder, path)
-        val suffix = java.util.UUID.randomUUID().toString(); val stageName = ".jeek-lan-stage-$suffix"; val backupName = ".jeek-lan-backup-$suffix"
-        // Only a task-owned staging name is touched; a pre-existing stage is checked by its final hash.
-        val stage = child(folder, parent, stageName) ?: tree.create(folder, parent, "application/octet-stream", stageName) ?: error("Cannot create temporary file")
-        require(stage.name == stageName)
-        var journaled = false
-        try {
-        android.os.ParcelFileDescriptor.AutoCloseOutputStream(context.contentResolver.openFileDescriptor(tree.documentUri(folder, stage.documentId), "w")!!).use { output ->
-            partial.inputStream().use { input ->
-                val buffer = ByteArray(128 * 1024)
-                while (true) { currentCoroutineContext().ensureActive(); val n = input.read(buffer); if (n < 0) break; output.write(buffer, 0, n) }
-            }; output.fd.sync()
-        }
-        require(hash(folder, stage.documentId) == expected) { "Destination hash mismatch" }
-        val actual = applyTime(folder, stage.documentId, entry.getLong("modifiedNs")).first
-        currentCoroutineContext().ensureActive(); checkBusy(folder, path)
-        val latest = child(folder, parent, name)
-        if (current != null) require(latest != null && hash(folder, latest.documentId) == old!!.getString("hash") && modified(folder, latest.documentId) == old.getLong("actualNs")) { "Local conflict before commit" }
-        else require(latest == null) { "Local file appeared before commit" }
-        val record = JSONObject().put("hash", expected).put("actualNs", actual).put("remoteNs", entry.getLong("modifiedNs"))
-        val pending = JSONObject().put("key", m.getString("key")).put("path", path).put("parent", parent).put("stage", stageName).put("backup", backupName)
-            .put("record", record).put("oldHash", old?.getString("hash"))
-        check(!ledger.has("pending")) { "An unfinished file transaction must be recovered first" }
-        pending.put("mapping", m).put("old", old?.let { JSONObject(it.toString()) })
-        queueRefresh(m, path, entry)
-        ledger.put("pending", pending); saveLedger()
-        journaled = true
-        if (current != null) require(tree.rename(folder, current.documentId, backupName)) { "Cannot preserve previous file" }
-        require(tree.rename(folder, stage.documentId, name)) { "Commit rename failed; previous file retained for recovery" }
-        val committed = child(folder, parent, name) ?: error("Committed file unavailable")
-        require(hash(folder, committed.documentId) == expected) { "Committed content changed; previous file retained" }
-        val (committedTime, committedWarning, committedRounded) = applyTime(folder, committed.documentId, entry.getLong("modifiedNs"))
-        record.put("actualNs", committedTime).put("timeWarning", committedWarning).put("timeRounded", committedRounded)
-        records.put(path, record); saveLedger()
-        child(folder, parent, backupName)?.let { require(tree.delete(folder, it.documentId)) { "Cannot remove transaction backup" } }
-        ledger.remove("pending"); saveLedger(); partial.delete()
-        committedWarning?.let { warn(it, if (record.optBoolean("timeRounded")) timePrecision(entry.getLong("modifiedNs"), committedTime) else 0) }
-        return true
-        } finally { if (!journaled) tree.delete(folder, stage.documentId) }
-    }
-    private fun recover(m: JSONObject, folder: LibraryFolderEntity) {
-        val p = ledger.optJSONObject("pending") ?: return
-        require(p.getString("key") == m.getString("key")) { "Another destination has an unfinished transaction; sync it first" }
-        val parent = p.getString("parent"); val name = p.getString("path").substringAfterLast('/')
-        val target = child(folder, parent, name); val backup = child(folder, parent, p.getString("backup"))
-        val old = p.optJSONObject("old") ?: owned(m).optJSONObject(p.getString("path"))
-        fun isOld(file: DocumentTree.Child) = old != null && hash(folder, file.documentId) == p.getString("oldHash") && modified(folder, file.documentId) == old.getLong("actualNs")
-        if (target != null && hash(folder, target.documentId) == p.getJSONObject("record").getString("hash")) {
-            require(modified(folder, target.documentId) == p.getJSONObject("record").getLong("actualNs")) { "Transaction timestamp conflict; preserved all copies" }
-            owned(m).put(p.getString("path"), p.getJSONObject("record")); saveLedger()
-            if (backup != null) { require(isOld(backup)) { "Backup conflict; preserved all copies" }; require(tree.delete(folder, backup.documentId)) }
-        } else if (target == null && backup != null) {
-            require(isOld(backup)) { "Backup conflict; preserved all copies" }; require(tree.rename(folder, backup.documentId, name))
-        } else {
-            require(backup == null && (target == null && old == null || target != null && isOld(target))) { "Transaction conflict; preserved all copies" }
-        }
-        child(folder, parent, p.getString("stage"))?.let { stage ->
-            require(hash(folder, stage.documentId) == p.getJSONObject("record").getString("hash")) { "Staging conflict; preserved all copies" }
-            require(tree.delete(folder, stage.documentId))
-        }
-        ledger.remove("pending"); saveLedger()
-    }
-    suspend fun clean(root: String) = withContext(Dispatchers.IO) {
-        gate.withLock {
-            check(job?.isActive != true) { "Cancel sync first" }
-            loadLedger()
-            val m = store.mappings().single { it.getString("rootId") == root }; val folder = folder(m); recover(m, folder)
-            val records = owned(m); val issues = mutableListOf<String>()
-            for (path in records.keys().asSequence().toList()) try {
-                LanProtocol.relative(path); checkBusy(folder, path)
-                val id = directory(folder, path); val target = child(folder, id, path.substringAfterLast('/'))
-                val r = records.getJSONObject(path)
-                if (target != null) {
-                    require(hash(folder, target.documentId) == r.getString("hash") && modified(folder, target.documentId) == r.getLong("actualNs")) { "Local conflict; kept" }
-                    require(tree.delete(folder, target.documentId)) { "Delete refused" }
-                }
-                records.remove(path); saveLedger()
-            } catch (e: Exception) { if (e is LanLedgerException) throw e; issues += "$path: ${e.message}" }
-            m.put("enabled", false); store.saveMapping(m); report()
-            _status.value = LanStatus(text = context.getString(R.string.lan_cleaned), problems = issues)
+    @Deprecated("Bidirectional sync has no local-only cleanup")
+    suspend fun clean(root: String): Unit=throw IllegalStateException("Remove the mapping to keep files. Ordinary tracked deletions propagate during sync.")
+    fun resolveConflict(id: String,choice: String) {
+        check(job?.isActive!=true) { "Cancel sync first" }
+        scope.launch(Dispatchers.IO) {
+            if(!gate.tryLock())return@launch
+            try { fileSynchronizer.choose(id,choice) }finally { gate.unlock() }
+            start()
         }
     }
+    suspend fun backups(): List<JSONObject> = withContext(Dispatchers.IO) { gate.withLock { store.mappings().filter { LanMappingTargets.isCurrent(it) }.flatMap { fileDatabase.backupRows(it.getString("key")) }.take(100) } }
+    suspend fun maintainBackup(operation: String,purge: Boolean)=withContext(Dispatchers.IO) { gate.withLock {
+        check(job?.isActive!=true) { "Cancel sync first" }
+        val row=fileDatabase.receipt(operation) ?: error("Backup receipt missing")
+        val mapping=store.mappings().single { it.optString("key")==row.getString("mapping") }
+        val part=File(context.cacheDir,"lan-restore-${java.util.UUID.randomUUID()}.part")
+        try { LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { it.maintainBackup(row,purge,part) };if(!purge) { queueRefresh(mapping,row.getString("path"),JSONObject().put("hash",row.getString("expectedHash")));drainRefresh() };report() }finally { part.delete() }
+    } }
     private suspend fun refresh(m: JSONObject, paths: List<String>) {
         if (paths.isEmpty()) return
         val volume = context.getSystemService(StorageManager::class.java).storageVolumes.singleOrNull { it.mediaStoreVolumeName == m.getString("volume") }?.directory ?: error("Storage offline")

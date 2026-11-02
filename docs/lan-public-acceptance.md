@@ -41,3 +41,20 @@ Windows 发布流程此前没有 Authenticode 签名，本机也没有发布者�
 
 
 凭证策略更新：已配对token长期有效（credentialPolicy=until_revoked），不执行旧expiresAt，不自动轮换或周期重配；旧token哈希不重置。credentialDays仅保留旧调用兼容且忽略。仍保留手动撤销/重配和降权立即终止会话/归属任务。邀请码仍为5分钟一次性；握手/空闲/6小时会话、计划/暂存资源期限不变。回归验证历史过期字段仍可认证。
+
+
+## 双向文件及直接目标集成（待最终交付SHA核对）
+
+本轮文件合同1、layoutVersion2：旧映射不可执行且不搬删旧文件；新映射直接使用SAF所选根，fileProtocol缺失明确升级。六权限中的writeFiles/deleteFiles默认false，writeSync不授文件写。持久token仍长期有效。
+
+实测：Core117通过（含共享32种三方存在/内容/未知状态矩阵）；桌面受影响定向103通过，新增取消边界事务集7通过。真实生产TLS文件脚本通过分块重放、条件提交/删除、基线确认、路径越界及本机备份恢复清除。真实TLS安全全脚本再次通过认证前攻击帧、八停滞握手、慢读写、容量/NAT/恢复、撤销下载与旧expires字段认证。
+
+Android生产调解器真实TLS三组instrumentation全部通过（271.56秒，含正常限流退避）：首次双方补齐、单边改删、同内容合并、无基线异内容、双方修改、修改vs删除、选边保留备份。该三组使用私有目录fixture，不冒充SAF公共目录支持。
+
+真实公共共享FUSE随后发现不支持flock/NOREPLACE，原方案安全拒绝而未覆盖文件；改为文档明确的conditional_copy合同。最终真实句柄/事务10项通过，包含公共Documents条件复制、替换/删除/恢复、公共目标抢占不覆盖、重启精确前缀续写与独立编辑保留。Android规则/学习错误/映射矩阵定向单元15项（5+4+2+1+3）全部通过，lintDebug通过。第一次lint内部ClassCastException后串行重跑成功，未屏蔽规则或把失败说成通过。
+
+Windows真实设置六权限和备份分页入口已截图；Android真实系统所有文件权限、SAF选择Documents/JeekLanFinalDirect并显示直接目标，完整文件与合成源字节/SHA256匹配。进一步UI与最终CI/正式包来源/生产重启结果以最终交付记录补充。没有在生产端口或真实音乐执行删除/攻击性测试，没有启动全库重训。
+
+公共FUSE条件复制不保证其他应用看不到部分目标；本应用扫描器按持久事务排除未完成路径。恶意本机广泛文件权限可破坏公共恢复槽，不宣称抵抗已失陷本机。没有宣称真实公网E2E或所有OEM/SD卡通过。
+
+实际SAF目标同步随后成功显示“Sync complete · SHA-256 verified”；初次UI夹具用随机配对ID导致末尾元数据鉴权失败，已改为使用App自己的同步身份，未归咎或修改生产鉴权。合成文件双方在已确认基线上独立修改后，真实UI显示Phone modified / PC modified、1冲突/0自动动作，并提供使用手机/电脑版本；选择前双方文件均保留。证据：desktop/artifacts/public-hardening-evidence/android-direct-target.png、android-direct-sync-complete.png、android-both-modified-conflict.png、bidirectional-permissions.png。

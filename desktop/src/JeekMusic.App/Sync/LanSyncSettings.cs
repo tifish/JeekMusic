@@ -14,7 +14,7 @@ internal static class LanSyncSettings
     {
         var service = c.App.LanSync;
         panel.Children.Add(SubHeading(L.T("局域网音乐同步")));
-        panel.Children.Add(Note(L.T("电脑提供音乐，手机选择音乐文件夹或子文件夹及保存位置。开启局域网服务后，所有已添加的曲库音乐文件夹都会自动共享；取消同步不删除音乐。")));
+        panel.Children.Add(Note(L.T("手机选择音乐文件夹及直接保存目录。按双方确认的内容基线双向同步；单边修改/删除自动传播，真实冲突才需要选择。文件写入和删除须单独授权。开启服务自动共享全部曲库；取消同步不删除音乐。")));
         var problem = Note(service.Problem); panel.Children.Add(problem);
         var activity = Note(""); panel.Children.Add(activity);
         var sharing = Note("");
@@ -65,10 +65,31 @@ internal static class LanSyncSettings
             try { if (!int.TryParse(listenPort.Text, out var port)) throw new ArgumentException(); service.Configure(bind.Text?.Trim() ?? "", port); c.Window.Build(); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException) { problem.Text = L.T("先停止服务，再填写有效 IPv4 和 1–65535 端口。"); }
         }));
+        panel.Children.Add(Note(L.T("文件恢复备份最多 32 GiB；达到预算时延期，不自动删除。恢复/清除前先停服务；恢复不改同步基线。")));
+        var backupPanel=new StackPanel { Spacing=4 };panel.Children.Add(backupPanel);int backupOffset=0;
+        var backupStatus=Note("");panel.Children.Add(backupStatus);
+        panel.Children.Add(Action(L.T("查看 / 下一页文件恢复备份"),async ()=> {
+            try {
+                var result=await Task.Run(()=>service.FileBackups("list",offset:backupOffset));backupPanel.Children.Clear();
+                foreach(var row in result["backups"]!.AsArray().OfType<JsonObject>()) {
+                    backupPanel.Children.Add(Note(row["path"]+" · "+row["bytes"]+" bytes · "+row["state"]));
+                    foreach(var (action,title) in new[] { ("restore","恢复原文件"),("purge","删除此备份") }) {
+                        var receipt=row["receipt"]!.GetValue<string>();
+                        backupPanel.Children.Add(Action(L.T(title),async ()=> {
+                            if(!await Dialogs.Confirm(c.Window,L.T(title),L.T("只处理此已核验回执；其他文件保留。当前文件有后续修改时拒绝恢复。"),danger:action=="purge"))return;
+                            try { await Task.Run(()=>service.FileBackups(action,receipt));backupStatus.Text=L.T("已完成；刷新列表查看。"); }
+                            catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException) { backupStatus.Text=L.T("未处理：请停服务，并确认文件未改变且备份已确认。")+" "+e.GetType().Name; }
+                        }));
+                    }
+                }
+                backupOffset=result["hasMore"]!.GetValue<bool>()?result["next"]!.GetValue<int>():0;
+                backupStatus.Text=L.T("恢复备份保留字节")+": "+result["retainedBytes"];
+            }catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException) { backupStatus.Text=L.T("文件任务忙或存储不可用，请稍后重试。"); }
+        }));
         Func<JsonObject> PermissionEditor(JsonObject? grants)
         {
             var values = new Dictionary<string, CheckBox>();
-            foreach (var (key, title) in new[] { ("readMusic", "读取全部曲库"), ("writeSync", "写入用户和学习同步数据"), ("manageLearning", "管理该设备发起的学习任务"), ("downloadLearning", "允许下载学习组件（615 MB 模型及数 GB 依赖）") })
+            foreach (var (key, title) in new[] { ("readMusic", "读取全部曲库"), ("writeSync", "写入用户和学习同步数据"), ("writeFiles", "允许手机新增和更新音乐文件"), ("deleteFiles", "允许传播已建立同步基线的文件删除（保留恢复备份）"), ("manageLearning", "管理该设备发起的学习任务"), ("downloadLearning", "允许下载学习组件（615 MB 模型及数 GB 依赖）") })
             {
                 var check = new CheckBox { Content = L.T(title), IsChecked = grants?[key]?.GetValue<bool>() ?? key == "readMusic" };
                 values[key] = check; panel.Children.Add(check);
@@ -76,7 +97,7 @@ internal static class LanSyncSettings
             return () => new JsonObject(values.Select(v => new KeyValuePair<string, JsonNode?>(v.Key, JsonValue.Create(v.Value.IsChecked == true))));
         }
         panel.Children.Add(SubHeading(L.T("新邀请的设备权限")));
-        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、学习管理与组件下载须分别授权；旧设备保留读写，学习需重新授权。同步凭证长期有效，直到手动撤销或重新配对。")));
+        panel.Children.Add(Note(L.T("默认只读全部曲库。写同步、文件写入/删除、学习管理与组件下载须分别授权；旧设备保留音乐读取和元数据同步，文件写删及学习需明确授权。同步凭证长期有效，直到手动撤销或重新配对。")));
         var inviteGrants = PermissionEditor(null);
         panel.Children.Add(SubHeading(L.T("共享音乐文件夹")));
         panel.Children.Add(sharing); panel.Children.Add(guidance); panel.Children.Add(folders); panel.Children.Add(addFolders);

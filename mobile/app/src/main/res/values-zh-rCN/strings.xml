@@ -400,11 +400,11 @@
     <string name="sync_failed">同步失败：%1$s</string>
     <string name="sync_changes">已同步来自「%1$s」的 %2$d 项改动</string>
     <string name="lan_title">局域网音乐同步</string>
-    <string name="lan_intro">下载所选电脑音乐文件夹。电脑曲库为源，本地冲突保留。每个共享文件夹下载到独立文件夹。停用或移除任务保留已下载文件。</string>
+    <string name="lan_intro">将所选电脑音乐文件夹与指定目录双向同步。建立确认基线后，单边修改和已跟踪删除自动处理，真实冲突才需选择。文件写入和删除须电脑分别授权。停用或移除映射保留文件。</string>
     <string name="lan_pair">与 PC 配对</string>
     <string name="lan_pair_again">重新配对（需先移除映射）</string>
     <string name="lan_paired">安全配对成功</string>
-    <string name="lan_choose_roots">电脑共享文件夹 / 编辑下载</string>
+    <string name="lan_choose_roots">共享电脑目录 / 编辑同步映射</string>
     <string name="lan_manual">刷新已配对电脑共享的音乐文件夹，无需重新配对。</string>
     <string name="lan_invite_hint">填入 PC「设置 → 同步」生成的完整邀请，绑定 PC 证书，5 分钟有效。请保密。</string>
     <string name="lan_connect">连接</string>
@@ -414,7 +414,7 @@
     <string name="lan_clean">清理下载</string>
     <string name="lan_forget">移除任务</string>
     <string name="lan_clean_confirm">仅清理本任务拥有且内容 hash 与修改时间均未被外部修改的文件。冲突和播放中的文件保留，绝不删除 PC 文件。任务将停用。</string>
-    <string name="lan_forget_confirm">移除此映射，保留所有下载文件。如需清理，请先清理再移除，之后可与另一台 PC 配对。</string>
+    <string name="lan_forget_confirm">忘记此映射，保留全部文件和备份。新映射不会继承删除基线，之后可配对另一台电脑。</string>
     <string name="lan_start">同步 / 内容核验 / 重试</string>
     <string name="lan_verifying">正在 PC 核验全部所选内容…</string>
     <string name="lan_done">同步完成 · SHA-256 已核验</string>
@@ -425,7 +425,7 @@
     <string name="lan_folders_hint">选择的文件夹包含子文件夹，点 › 浏览。选择整个根会下载根内全部内容。仅传输选择内容和 CUE 依赖。</string>
     <string name="lan_whole_root">整个共享文件夹</string>
     <string name="lan_estimate">核验选择 / 估算大小</string>
-    <string name="lan_target">选择下载目录</string>
+    <string name="lan_target">选择最终同步目录</string>
     <string name="lan_mtime_title">保留文件修改时间</string>
     <string name="lan_mtime_permission">Android 保留精确修改时间需要可选的“所有文件访问权限”。下载仍仅使用你授权的目录。未授权时可下载文件，但会显示时间错误；授权后重试即可补正。</string>
     <string name="lan_mtime_allowed">已具备时间写入权限，下载目录仍需单独选择并授权。</string>

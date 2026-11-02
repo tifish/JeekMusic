@@ -194,6 +194,16 @@ public sealed class LibraryService : ITrackSource, IDisposable
         }
         if (changed) RebuildSnapshot();
     });
+    public async Task<bool> RefreshSyncedFilesAsync(long folderId,IReadOnlyList<string> paths) {
+        bool success=false;
+        await Enqueue(()=> {
+            if(Db.Folders().FirstOrDefault(f=>f.Id==folderId) is not { Available:true } folder)return;
+            var force=paths.Select(p=>Core.Sync.LanFiles.Relative(p).Replace('/','\\')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var dirs=force.Select(p=>p.Contains('\\')?p[..(p.LastIndexOf('\\')+1)]:"").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var result=_scanner.Scan(folder,new TrackBuilder(CurrentConfig()),dirs,false,_cts.Token,force);
+            success=result.Failed==0;if(result.Changed)RebuildSnapshot();
+        });return success;
+    }
 
     void ScanFolder(long id, IReadOnlyCollection<string>? dirs, bool full)
     {

@@ -1,0 +1,15 @@
+<resources>
+<string name="lan_mapping_reselect">Old mappings cannot run in this version. Select the destination again. Existing files stay where they are; nothing is moved or deleted.</string>
+<string name="lan_target_direct">Final destination: %1$s. Relative paths start here; no extra subfolder is created.</string>
+<string name="lan_file_summary">Checked %1$d paths · %2$d automatic actions · %3$d conflicts · %4$d deferred</string>
+<string name="lan_file_conflict_changes">Phone: %1$s · PC: %2$s. Both versions are retained until you choose.</string>
+<string name="lan_use_phone">Use phone version</string><string name="lan_use_pc">Use PC version</string>
+<string name="lan_files_access">Safe bidirectional file access</string>
+<string name="lan_files_access_allowed">All files access granted. Also select and authorize the exact sync folder.</string>
+<string name="lan_files_access_needed">Safe conditional file replacement and timestamps require All files access plus your selected SAF folder. Without both, file sync is deferred; no unsafe overwrite is used.</string>
+<string name="lan_backups">File recovery backups</string>
+<string name="lan_backup_help">At most 100 receipts are shown. Original files remain beside their targets. Only confirmed, unchanged backups can be removed. Restore requires an unchanged live result and keeps its replacement. Sync baselines stay unchanged.</string>
+<string name="lan_restore_backup">Restore original</string>
+<string name="lan_purge_backup">Delete this backup</string>
+<string name="lan_backup_confirm">Only this verified receipt will be processed. Other files are retained.</string>
+</resources>

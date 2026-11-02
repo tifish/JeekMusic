@@ -15,7 +15,7 @@ using JeekMusic.Library;
 namespace JeekMusic.Sync;
 
 /// <summary>TLS 1.2/1.3, pinned certificate + one-use invitation. Credentials never enter diagnostics/logs.</summary>
-public sealed class LanSyncService : IDisposable
+public sealed partial class LanSyncService : IDisposable
 {
     readonly AppServices _app;
     readonly object _gate = new();
@@ -26,9 +26,10 @@ public sealed class LanSyncService : IDisposable
     readonly Dictionary<string, CancellationTokenSource> _deviceLifetimes = new();
     readonly Dictionary<string, (DateTime Window, int Count, DateTime Plan, int Plans, DateTime Write, DateTime Learn)> _rates = new();
     readonly Dictionary<string, PlanJob> _jobs = new();
-    sealed class PlanJob(string device, CancellationTokenSource cancel)
+    sealed class PlanJob(string device, CancellationTokenSource cancel,string kind="plan")
     {
         public string Device = device;
+        public string Kind=kind;
         public CancellationTokenSource Cancel = cancel;
         public Task<JsonObject> Task = null!;
         public DateTime Created = DateTime.UtcNow;
@@ -38,7 +39,7 @@ public sealed class LanSyncService : IDisposable
     long _transferBytes;
     long _authFailures, _protocolFailures, _limited, _overload;
     JsonObject _invitePermissions = Permissions();
-    static JsonObject Permissions(bool write = false, bool learn = false, bool download = false) => new() { ["readMusic"] = true, ["writeSync"] = write, ["manageLearning"] = learn, ["downloadLearning"] = download };
+    static JsonObject Permissions(bool write = false, bool learn = false, bool download = false) => new() { ["readMusic"] = true, ["writeSync"] = write, ["manageLearning"] = learn, ["downloadLearning"] = download, ["writeFiles"]=false, ["deleteFiles"]=false };
     static string Stamp() => Guid.NewGuid().ToString("N");
     readonly Dictionary<string, (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files)> _plans = new();
     readonly string _configPath = Path.Combine(AppPaths.DataDir, "lan-sync.json");
@@ -74,6 +75,7 @@ public sealed class LanSyncService : IDisposable
         foreach (var d in Devices.Select(p => p.Value).OfType<JsonObject>())
         {
             if (d["permissions"] is null) { d["permissions"] = Permissions(write: true); d["permissionMigration"] = "v4-read-write-learning-requires-approval"; }
+            d["permissions"]!["writeFiles"]??=false;d["permissions"]!["deleteFiles"]??=false;
             d["generation"] ??= Stamp();
             // Legacy expiresAt is retained for rollback compatibility but is never enforced.
         }
@@ -183,10 +185,11 @@ public sealed class LanSyncService : IDisposable
     public void Revoke(string id) { lock (_gate) { Invalidate(id); Devices.Remove(id); _rates.Remove(id); _transfers.Remove(id); Save(); } Notify(); }
     static JsonObject ValidatePermissions(JsonObject permissions)
     {
-        if (permissions.Any(p => p.Key is not ("readMusic" or "writeSync" or "manageLearning" or "downloadLearning"))) throw new ArgumentException("Unknown permission");
+        if (permissions.Any(p => p.Key is not ("readMusic" or "writeSync" or "manageLearning" or "downloadLearning" or "writeFiles" or "deleteFiles"))) throw new ArgumentException("Unknown permission");
         var result = Permissions();
         foreach (var key in result.Select(p => p.Key).ToArray()) result[key] = permissions[key]?.GetValue<bool>() ?? false;
         if (result["downloadLearning"]!.GetValue<bool>() && !result["manageLearning"]!.GetValue<bool>()) throw new ArgumentException("Downloads require learning permission");
+        if(result["writeFiles"]!.GetValue<bool>() && !result["readMusic"]!.GetValue<bool>() || result["deleteFiles"]!.GetValue<bool>() && !result["writeFiles"]!.GetValue<bool>())throw new ArgumentException("File writes require readMusic; deletes additionally require writeFiles");
         return result;
     }
     public void Authorize(string id, JsonObject permissions, int credentialDays = 90)
@@ -213,6 +216,7 @@ public sealed class LanSyncService : IDisposable
     void Invalidate(string id)
     {
         if (_deviceLifetimes.Remove(id, out var lifetime)) { lifetime.Cancel(); lifetime.Dispose(); }
+        RetireFileUploads(id);
         foreach (var key in _plans.Where(p => p.Value.Device == id).Select(p => p.Key).ToArray()) _plans.Remove(key);
         foreach (var key in _jobs.Where(p => p.Value.Device == id).Select(p => p.Key).ToArray()) { RetireJob(_jobs[key]); _jobs.Remove(key); }
         _app.Preferences.Training.CancelOwned("lan:" + id);
@@ -246,6 +250,12 @@ public sealed class LanSyncService : IDisposable
     void RequireOperation(string device, string? operation)
     {
         if (operation == "capabilities") return;
+        if(operation?.StartsWith("file_",StringComparison.Ordinal)==true) {
+            Require(device,"readMusic");
+            if(operation is "file_begin" or "file_chunk" or "file_finish")Require(device,"writeFiles");
+            if(operation=="file_delete") { Require(device,"writeFiles");Require(device,"deleteFiles"); }
+            return;
+        }
         if (operation is "state" or "preference_delta") Require(device, "writeSync");
         else if (operation is "preference_training" or "preference_results")
         {
@@ -301,14 +311,14 @@ public sealed class LanSyncService : IDisposable
         var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
-            ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,
+            ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
             ["sourceBuckets"] = _admission.SourceCount, ["connectionRejected"] = _admission.Rejected,
             ["authenticationFailures"] = Interlocked.Read(ref _authFailures), ["protocolFailures"] = Interlocked.Read(ref _protocolFailures), ["rateLimited"] = Interlocked.Read(ref _limited), ["overloadRejected"] = Interlocked.Read(ref _overload),
             ["budgets"] = new JsonObject { ["handshakeSeconds"] = 5, ["authenticationSeconds"] = 5, ["requestSeconds"] = 30, ["writeSeconds"] = 15, ["connections"] = 24, ["unauthenticated"] = 8, ["authenticated"] = 16, ["largeFrames"] = 2, ["expensiveWork"] = 2, ["planConcurrency"] = 1, ["deviceRequestsPerSecond"] = 80, ["globalRequestsPerSecond"] = 320, ["plansPerDevicePerMinute"] = 4, ["deviceReadBytesPerSecond"] = 16 * 1024 * 1024, ["globalReadBytesPerSecond"] = 64 * 1024 * 1024, ["authenticationBytes"] = LanLimits.AuthFrame, ["smallFrameBytes"] = LanLimits.SmallFrame, ["largeFrameBytes"] = LanLimits.LargeFrame, ["planFiles"] = 100000, ["planBytes"] = 500L * 1024 * 1024 * 1024, ["planSeconds"] = 1800 },
             ["learningOwner"] = _app.Preferences.Training.RemoteOwner,
-            ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device, ["state"] = j.Value.Cancel.IsCancellationRequested ? "cancelled" : j.Value.Task.IsFaulted || j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result.ContainsKey("error") ? "failed" : j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
+            ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device,["kind"]=j.Value.Kind,["reason"]=j.Value.Task.IsCompletedSuccessfully?j.Value.Task.Result["reason"]?.DeepClone():null, ["state"] = j.Value.Cancel.IsCancellationRequested ? "cancelled" : j.Value.Task.IsFaulted || j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result.ContainsKey("error") ? "failed" : j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["conflict"]?.GetValue<bool>()==true?"conflict":j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["deferred"]?.GetValue<bool>()==true?"deferred":j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
             ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
             ["sharingMode"] = "library", ["libraryFolderCount"] = folders.Count,
@@ -318,20 +328,22 @@ public sealed class LanSyncService : IDisposable
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a.Address))
                 .Select(a => (JsonNode?)JsonValue.Create(a.Address.ToString())).ToArray()),
             ["roots"] = new JsonArray(Roots.Select(p => { var f = folders.FirstOrDefault(f => f.Id == p.Value!["folderId"]!.GetValue<long>() && f.Identity == p.Value["folderIdentity"]?.GetValue<string>()); return (JsonNode)new JsonObject
-                { ["rootId"] = p.Key, ["folderId"] = p.Value!["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f is { Available: true } && Directory.Exists(f.Root) }; }).ToArray()),
+                { ["rootId"] = p.Key, ["folderId"] = p.Value!["folderId"]!.DeepClone(), ["name"] = f?.DisplayName ?? p.Value["name"]?.GetValue<string>(), ["revoked"] = p.Value["revoked"]?.GetValue<bool>() ?? false, ["enabled"] = p.Value["enabled"]!.DeepClone(), ["available"] = f is { Available: true } }; }).ToArray()),
             ["devices"] = new JsonArray(Devices.Select(p => (JsonNode)new JsonObject { ["id"] = p.Key, ["name"] = p.Value!["name"]!.DeepClone(), ["permissions"] = p.Value["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked", ["migration"] = p.Value["permissionMigration"]?.DeepClone() }).ToArray())
         };
     }
     string RootPath(string id)
     {
-        ReconcileRoots();
+        LibraryFolder folder;
         lock (_gate)
         {
             if (Roots[id] is not JsonObject root || root["enabled"]?.GetValue<bool>() != true) throw new IOException("Root is not shared");
-            var folder = _app.Db.Folders().FirstOrDefault(f => f.Id == root["folderId"]!.GetValue<long>());
-            if (folder is not { Available: true } || folder.Identity != root["folderIdentity"]?.GetValue<string>() || !Directory.Exists(folder.Root)) throw new IOException("Root is offline or authorization expired; no deletions inferred");
-            return LanFiles.Resolve(folder.Root, "", true);
+            folder = _app.Db.Folders().FirstOrDefault(f => f.Id == root["folderId"]!.GetValue<long>())??throw new IOException("Root unavailable");
+            if (!folder.Available || folder.Identity != root["folderIdentity"]?.GetValue<string>())throw new IOException("Root unavailable; no deletions inferred");
         }
+        // Filesystem/driver waits never retain the service gate used by UI authorization.
+        if(!Directory.Exists(folder.Root))throw new IOException("Root offline; no deletions inferred");
+        return LanFiles.Resolve(folder.Root,"",true);
     }
     void ReconcileRoots() => ReconcileRoots(Port != 0);
     void ReconcileRoots(bool shareAll)
@@ -506,11 +518,12 @@ public sealed class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["permissions"] = Devices[device]!["permissions"]!.DeepClone(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
         }
+        if(op?.StartsWith("file_",StringComparison.Ordinal)==true)return await DispatchFile(a,cancel,modern);
         if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read")) throw new ArgumentException("Unknown operation");
         lock (_gate) _lastOperation = op;
         if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>()).Select(n => n!.DeepClone()).ToArray()) };
@@ -601,10 +614,11 @@ public sealed class LanSyncService : IDisposable
                 try
                 {
                     var entries = await LanFiles.Manifest(root, selected, workCancel.Token);
+                    var currentRoot=RootPath(rootId);
                     lock (_gate)
                     {
                         workCancel.Token.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "readMusic");
-                        if (revision != _rootAuthorizationRevision || RootPath(rootId) != root) throw new UnauthorizedAccessException();
+                        if (revision != _rootAuthorizationRevision || currentRoot != root) throw new UnauthorizedAccessException();
                         foreach (var key in _plans.Where(p => p.Value.Device == device || p.Value.Expires < DateTime.UtcNow).Select(p => p.Key).ToArray()) _plans.Remove(key);
                         if (_plans.Count >= 16 || _plans.Values.Sum(p => p.Files.Count) + entries.Count > 200_000 || _plans.Values.Sum(p => ManifestMemory(p.Files)) + ManifestMemory(entries) > 128L * 1024 * 1024) throw Busy();
                         var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries);

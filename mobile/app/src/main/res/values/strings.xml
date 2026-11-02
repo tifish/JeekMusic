@@ -409,11 +409,11 @@
     <string name="sync_failed">Sync failed: %1$s</string>
     <string name="sync_changes">Synced %2$d changes from “%1$s”</string>
     <string name="lan_title">LAN music sync</string>
-    <string name="lan_intro">Download selected PC music folders. The PC library is the source; local conflicts are kept. Each shared folder downloads into a separate folder. Pausing or forgetting keeps downloaded files.</string>
+    <string name="lan_intro">Sync selected PC music folders with the exact folder you choose. Single-side changes and tracked deletions are automatic after confirmation; only genuine conflicts need a choice. File writes and deletes require separate PC grants. Pausing or forgetting keeps files.</string>
     <string name="lan_pair">Pair with PC</string>
     <string name="lan_pair_again">Pair again (remove mappings first)</string>
     <string name="lan_paired">Paired securely</string>
-    <string name="lan_choose_roots">Shared PC folders / edit downloads</string>
+    <string name="lan_choose_roots">Shared PC folders / edit sync mapping</string>
     <string name="lan_manual">Refresh the folders shared by your paired PC. No need to pair again.</string>
     <string name="lan_invite_hint">Paste the complete invitation generated in PC Settings → Sync. It pins the PC certificate and expires in five minutes. Keep it private.</string>
     <string name="lan_connect">Connect</string>
@@ -423,7 +423,7 @@
     <string name="lan_clean">Clean downloads</string>
     <string name="lan_forget">Forget task</string>
     <string name="lan_clean_confirm">Remove only files owned by this task that still match their saved hash and modification time. Modified or playing files are kept. PC files are never deleted. The task will pause.</string>
-    <string name="lan_forget_confirm">Forget this mapping and keep all downloaded files. To remove owned downloads, clean them before forgetting. You can then pair with another PC.</string>
+    <string name="lan_forget_confirm">Forget this mapping and keep all files and backups. A new mapping starts with no deletion baseline. You can then pair with another PC.</string>
     <string name="lan_start">Sync / verify / retry</string>
     <string name="lan_verifying">Verifying all selected content on PC…</string>
     <string name="lan_done">Sync complete · SHA-256 verified</string>
@@ -434,7 +434,7 @@
     <string name="lan_folders_hint">Selected folders include subfolders. Browse with ›. Select the root to download everything in it. Only selected files and CUE dependencies are transferred.</string>
     <string name="lan_whole_root">Entire shared folder</string>
     <string name="lan_estimate">Verify selection / estimate size</string>
-    <string name="lan_target">Choose download folder</string>
+    <string name="lan_target">Choose final sync folder</string>
     <string name="lan_mtime_title">Preserve modification times</string>
     <string name="lan_mtime_permission">Android requires optional All files access to preserve exact modification times. Downloads still use only the folder you authorize. Without this permission files download with a visible timestamp error; retry after granting.</string>
     <string name="lan_mtime_allowed">Timestamp access granted. Choose and authorize a download folder separately.</string>

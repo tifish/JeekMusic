@@ -31,7 +31,7 @@ internal object LanBindings {
 
 /** Device-local settings and credentials: never exported through user-data sync. */
 @Singleton
-class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context, private val ledger: LanSyncLedger) {
+class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context, private val ledger: LanSyncLedger,private val fileDatabase: LanFileDatabase=LanFileDatabase(context)) {
     private val file = AtomicFile(File(context.filesDir, "lan-sync.json"))
     private var data = runCatching { JSONObject(file.readFully().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
     @Synchronized fun read(): JSONObject = JSONObject(data.toString())
@@ -45,6 +45,7 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
         val mappings = data.optJSONArray("mappings") ?: return null
         for (i in 0 until mappings.length()) {
             val m = mappings.getJSONObject(i)
+            if(!LanMappingTargets.isCurrent(m)) continue
             val prefix = m.optString("volume") + ":" + m.optString("relative")
             if (m.optString("relative").isNotEmpty() && trackKey.startsWith(prefix))
                 return "root:${m.getString("rootId")}/" + trackKey.removePrefix(prefix)
@@ -56,18 +57,21 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
     fun pendingFileKeys(): Set<String> {
         // read() releases the ledger monitor before mappings() takes the settings monitor.
         // An unreadable ledger aborts the scan rather than inferring a deletion.
-        val pending = ledger.read().optJSONObject("pending") ?: return emptySet()
-        val mapping = pending.optJSONObject("mapping") ?: mappings().single { it.getString("key") == pending.getString("key") }
-        return setOf(mapping.getString("volume") + ":" + mapping.getString("relative") + LanProtocol.relative(pending.getString("path")))
+        val state=ledger.read()
+        val current=mappings().filter { LanMappingTargets.isCurrent(it) }.flatMap { mapping -> fileDatabase.pendingPaths(mapping.getString("key")).map { mapping.getString("volume")+":"+mapping.getString("relative")+LanProtocol.relative(it) } }
+        return (current+listOfNotNull(state.optJSONObject("pending"),state.optJSONObject("obsoletePending")).map { pending ->
+            val mapping=pending.optJSONObject("mapping") ?: mappings().single { it.getString("key")==pending.getString("key") }
+            mapping.getString("volume")+":"+mapping.getString("relative")+LanProtocol.relative(pending.getString("path"))
+        }).toSet()
     }
     @Synchronized fun cues(fileKey: String): List<String> {
         val mappings = data.optJSONArray("mappings") ?: return emptyList()
         for (i in 0 until mappings.length()) {
             val m = mappings.getJSONObject(i)
+            if(!LanMappingTargets.isCurrent(m)) continue
             val prefix = m.getString("volume") + ":" + m.getString("relative")
             if (!fileKey.startsWith(prefix)) continue
-            val a = m.optJSONObject("cueBindings")?.optJSONArray(fileKey.removePrefix(prefix)) ?: return emptyList()
-            return List(a.length()) { m.getString("relative") + LanProtocol.relative(a.getString(it)) }
+            return fileDatabase.cues(m.getString("key"),fileKey.removePrefix(prefix)).map { m.getString("relative")+LanProtocol.relative(it) }
         }
         return emptyList()
     }

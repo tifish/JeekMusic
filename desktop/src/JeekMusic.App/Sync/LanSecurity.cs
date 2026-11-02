@@ -57,7 +57,7 @@ internal static class LanLimits
     public const int SmallFrame = 64 * 1024;
     public const int AuthFrame = 4096;
     public const int LargeFrame = 32_000_000;
-    public static int Request(string? op) => op switch { "state" => LargeFrame, "preference_delta" => 4_000_000, _ => SmallFrame };
+    public static int Request(string? op) => op switch { "state" => LargeFrame, "preference_delta" => 4_000_000, "file_chunk"=>512*1024, _ => SmallFrame };
     public static int Response(string? op) => op == "state" ? LargeFrame : 2_000_000;
     public static void Validate(JsonObject value, bool authentication)
     {
@@ -74,7 +74,7 @@ internal static class LanLimits
             else if (node is JsonValue v && v.TryGetValue<string>(out var s) && s.Length > (authentication ? 256 : 1_000_000)) throw new IOException("String too long");
         }
         Visit(value, 0);
-        foreach (var field in new[] { "op", "deviceId", "token", "invitation", "rootId", "plan", "job", "kind" })
+        foreach (var field in new[] { "op", "deviceId", "token", "invitation", "rootId", "plan", "job", "kind", "scope", "operation", "mapping" })
             if (value[field] is { } n && (n is not JsonValue v || !v.TryGetValue<string>(out var s) || s.Length > 64)) throw new IOException("Invalid control field");
     }
     public static JsonObject Parse(byte[] bytes, bool authentication)

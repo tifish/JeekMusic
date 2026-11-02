@@ -101,7 +101,11 @@ public sealed partial class PlayerService : IDisposable
     public bool IsFileInUse(Track t)
     {
         var path = _tracks.PathOf(t);
-        if (path is null || IsIdle) return false;
+        return path!=null && IsPathInUse(path);
+    }
+    public bool IsPathInUse(string path)
+    {
+        if (IsIdle) return false;
         return CurrentTrack is { } current && string.Equals(path, _tracks.PathOf(current), StringComparison.OrdinalIgnoreCase)
             || _nextEntry >= 0 && _tracks.ById(_nextTrackId) is { } next && string.Equals(path, _tracks.PathOf(next), StringComparison.OrdinalIgnoreCase);
     }

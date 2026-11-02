@@ -53,7 +53,7 @@ public sealed partial class PreferenceTraining
                 var entry=JsonNode.Parse(json)!.AsObject();
                 var artifact=entry["artifact"]!.AsObject();
                 var metadata=service.Store.Current(Dataset,"model").Where(e=>S(e["entityId"])==S(entry["candidateId"])).ToArray();
-                if(!VersionScopeValid(artifact, active:true) || !IndependentScopeValid(d) || S(entry["dependencies"])!=Dependencies(d) || S(entry["workerHash"])!=FileHash(Worker) || S(entry["contractHash"])!=Hash(HeadContract().ToJsonString()) ||
+                if(!VersionScopeValid(artifact, active:true) || !IndependentScopeValid(d) || S(entry["dependencies"])!=Dependencies(d) || !CompatibleWorker(S(entry["workerHash"])) || S(entry["contractHash"])!=Hash(HeadContract().ToJsonString()) ||
                     S(entry["version"])!=Hash(artifact.ToJsonString()) || metadata.Length!=1 || S(metadata[0]["payload"]?["state"])!="active" || S(metadata[0]["payload"]?["version"])!=S(entry["version"])) continue;
                 new PersonalHead(artifact).VerifyEquivalence(artifact["deploymentProbes"]!.AsArray());
                 next[d]=entry;

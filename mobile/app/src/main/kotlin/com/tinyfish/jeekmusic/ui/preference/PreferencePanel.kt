@@ -7,6 +7,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.selection.SelectionContainer
+import android.content.ClipData
+import android.content.ClipboardManager
+import com.tinyfish.jeekmusic.data.preference.LearningFailure
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -58,6 +62,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
         Text(stringResource(R.string.preference_learning_intro))
         Text(stringResource(R.string.preference_on_computer),style=MaterialTheme.typography.bodySmall)
         Text(learningState(desktop.optString("state")))
+        FailureReport(desktop.optJSONObject("failure") ?: if(desktop.optString("state")=="failed") JSONObject().put("code","history_unavailable").put("historical",true) else null)
         if(desktop.optInt("total")>0) Text(stringResource(R.string.preference_library_progress,desktop.optInt("processed"),desktop.optInt("total"),desktop.optInt("uncovered")))
         Button(onClick={if(desktop.optString("state")=="download_required") download=true else action()},enabled=!busy && !running) { Text(stringResource(if(desktop.optString("state") in listOf("cancelled","interrupted","incomplete")) R.string.preference_learning_resume else R.string.preference_learning_start)) }
         if(running) OutlinedButton(onClick={vm.run { vm.service.learningAction("cancel") }},enabled=!busy) { Text(stringResource(R.string.preference_learning_cancel)) }
@@ -70,6 +75,7 @@ fun PreferencePanel(vm: PreferenceViewModel=hiltViewModel()) {
                 Text(stringResource(when(d) { "MOOD"->R.string.preference_mood; "VOICE"->R.string.preference_voice; "GENRE"->R.string.preference_genre; else->R.string.preference_calmness }),style=MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.preference_learning_counts,head.optInt("available"),head.optInt("positive"),head.optInt("negative"),head.optInt("annotated")))
                 Text(learningState(head.optString("state")))
+                FailureReport(head.optJSONObject("failure") ?: if(head.optString("state")=="failed") JSONObject().put("code","history_unavailable").put("historical",true) else null)
                 if(head.optInt("missingTotal")>0) Text(stringResource(R.string.preference_learning_missing,head.optInt("missingPositive"),head.optInt("missingNegative"),head.optInt("missingTotal")),style=MaterialTheme.typography.bodySmall)
                 val material=head.optJSONObject("computerMaterial")
                 if((material?.optInt("missingLocal") ?: 0)>0) Text(stringResource(R.string.preference_learning_missing_files,material!!.optInt("missingLocal")),style=MaterialTheme.typography.bodySmall)
@@ -106,3 +112,19 @@ private fun learningState(state: String)=stringResource(when(state) {
     "invalidated"->R.string.preference_invalidated
     else->R.string.preference_idle
 })
+
+@Composable
+internal fun FailureReport(raw: JSONObject?) {
+    val safe=LearningFailure.sanitize(raw) ?: return
+    val ids=LearningFailure.resources.getValue(safe.getString("code"))
+    val context=LocalContext.current
+    var expanded by remember(safe.toString()) { mutableStateOf(false) }
+    Text(stringResource(ids.first),color=MaterialTheme.colorScheme.error)
+    Text(stringResource(ids.second),style=MaterialTheme.typography.bodySmall)
+    TextButton(onClick={expanded=!expanded}) { Text(stringResource(R.string.learning_failure_advanced)) }
+    if(expanded) {
+        val text=LearningFailure.diagnostics(safe)
+        SelectionContainer { Text(text,style=MaterialTheme.typography.bodySmall) }
+        TextButton(onClick={ (context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(ClipData.newPlainText("JeekMusic diagnostics",text)) }) { Text(stringResource(R.string.learning_failure_copy)) }
+    }
+}

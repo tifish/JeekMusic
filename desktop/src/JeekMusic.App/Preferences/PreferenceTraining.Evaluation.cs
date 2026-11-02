@@ -54,7 +54,7 @@ public sealed partial class PreferenceTraining
             string label=S(a["answer"]);
             if(!Binary(label,dimension) || S(a["basis"]) is not ("whole_recording_familiar" or "listened_full")) label="";
             var cached=service.Store.Local("vector:"+id) is { } value ? JsonNode.Parse(value):null;
-            var valid=S(cached?["extractor"])==Extractor && S(cached?["workerHash"])==FileHash(Worker) && S(cached?["contentSignature"])==S(a["contentSignature"]);
+            var valid=S(cached?["extractor"])==Extractor && CompatibleWorker(S(cached?["workerHash"])) && S(cached?["contentSignature"])==S(a["contentSignature"]);
             var track=service.FindLocal(id);
             rows.Add((JsonNode)new JsonObject { ["recordingId"]=id,["role"]=role,["label"]=label,["vector"]=valid?cached?["vector"]?.DeepClone():null,["perturbations"]=valid?cached?["perturbations"]?.DeepClone():null,
                 ["rules"]=track is null ? "ABSTAIN" : S(app.SmartTags.Explain(track)["automatic"]?[dimension]) });
@@ -97,7 +97,7 @@ public sealed partial class PreferenceTraining
             if(centers.Length!=3 || centers[1]-centers[0]<30000 || centers[2]-centers[1]<30000) continue;
             var signature=FileHash(path); if(signature!=S(item["contentSignature"])) continue;
             var cached=service.Store.Local("vector:"+id) is { } value ? JsonNode.Parse(value):null;
-            var valid=S(cached?["extractor"])==Extractor && S(cached?["workerHash"])==FileHash(Worker) && S(cached?["contentSignature"])==signature;
+            var valid=S(cached?["extractor"])==Extractor && CompatibleWorker(S(cached?["workerHash"])) && S(cached?["contentSignature"])==signature;
             if(extract && valid) continue;
             var row=new JsonObject { ["recordingId"]=id,["contentSignature"]=signature,["role"]="calibration_regression",["label"]=S(item?["answer"]),["rules"]=S(item?["baselineAtFeedback"]),["cue"]=false,["centersMs"]=new JsonArray(centers.Select(c=>(JsonNode?)JsonValue.Create(c)).ToArray()) };
             if(extract) row["path"]=path;

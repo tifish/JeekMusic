@@ -12,7 +12,7 @@ namespace JeekMusic.App.Tests;
 
 /// <summary>Isolated contract fixtures only. Receipts here simulate trusted evidence; no accuracy claim.</summary>
 [Collection("Avalonia UI")]
-public sealed class PreferenceDeploymentTests
+public sealed partial class PreferenceDeploymentTests
 {
     static async Task Run(Func<AppServices,Task> test)
     {

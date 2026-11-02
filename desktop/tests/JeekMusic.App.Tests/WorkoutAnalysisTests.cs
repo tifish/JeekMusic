@@ -10,7 +10,7 @@ public sealed class WorkoutAnalysisTests
     static (FeaturesData Data, Track Track) Candidate()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "testcases", "workout-v8.json");
-        var json = JsonNode.Parse(File.ReadAllText(path))!["cases"]![0]!["evidence"]!.ToJsonString();
+        var json = JsonNode.Parse(File.ReadAllText(path))!["cases"]!.AsArray().Single(c=>c!["name"]!.GetValue<string>()=="normal_sustained_runs_and_two_independent_pulse_witnesses")!["evidence"]!.ToJsonString();
         var e = AnalysisEvidence.Parse(json)!;
         e = e with { Contract = 5, RhythmContract = 0, RhythmState = null, Segments = e.Segments.Select(s => s with { Pulse = null }).ToArray() };
         return (FeaturesData.Of(null, e.Segments[0].Mean) with { AnalysisEvidence = e.ToJson() },

@@ -519,3 +519,13 @@ Android结果同步每次最多100页并持久化 offset/version；快照变化�
 `checkpoint_client` 现在还调用正常退出共用的 Shell.SaveWindow，保存当前窗口位置/尺寸/最大化、导航目标、目录展开/收起和分隔/歌词布局。显式 JEEKMUSIC_DATA 指向默认数据目录时与省略变量使用同一实例与 MCP 管道，避免同目录双进程；非默认夹具仍保持隔离。
 
 `lan_sync_control cancel_task` 接受 jobId（32 字符，来自 status.tasks），复用 TLS plan_cancel 的业务服务，仅取消该计划；不撤销设备或取消独立学习。tasks.state 区分 running/complete/cancelled/failed。写同步权限在协议4的大帧确认/正文分配之前检查。
+
+### 学习错误合同 v1
+
+`preference_training status` 与 `preference_data status`、设置页和已授权手机共用业务状态。头状态及 `learning` 的 `failure` 包含：`version=1`、稳定 `code`、`stage`（prepare/extract/train/evaluate/update_library/check_material/orchestrate）、可用时的 `workerPhase`、普通用户 `message` / `nextStep`、`retryable`、`dimension`、可空 `exitCode` / `workerErrorType`、可选 `expectedSamples` / `actualSamples`、`historical`、`occurredAt`。没有失败时为 null。旧参数Schema保持兼容；无额外权限或重训动作。
+
+错误码区分 dependency_missing、download_failed、download_integrity、recording_missing、decode_unsupported、decode_length、decode_nonfinite、silent_audio、recording_changed、memory_budget、time_budget、worker_exit、cancelled、interrupted、insufficient_material、validation_failed、check_material_required、local_io、disk_space、work_budget、invalidated、unexpected_failure、history_unavailable。子任务失败跨编排保留，不把执行失败解释为材料不足。高级详情只复制白名单字段，永不包含音频名、标签、文件路径、令牌、原始exception或stderr；Android再次按白名单解析并本地化。
+
+新任务私有目录保留 `diagnostics.json` 的脱敏阶段/退出码，stderr仅留本机有界worker.log（256 Ki字符）；不会上传。本次已证实的历史VOICE失败为 `decode_length` / extract / decode：FFmpeg重采样尾部使10秒输出多103采样，旧程序要求恰好480000而中止。修复用输出端aresample+atrim裁掉多余尾部，不补齐真正短音频；实际失败上下文和原成功上下文均验证前480000采样逐样本相同。历史未保存退出码，返回null。只对失败时间与维度匹配的有界本机任务记录恢复原因；缺记录时明确history_unavailable，不猜测。
+
+不会自动重训。旧worker已成功向量与已验证启用的个人头仅对本次确切解码修订保留兼容，原哈希/验证记录不重写。新候选启用仍执行当前版本和全部独立门槛。

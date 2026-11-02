@@ -37,8 +37,8 @@ public sealed partial class PreferenceTraining
                 jobTask=Task.Run(async()=> {
                     using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromHours(6));
                     try { await UpdateLibrary(deadline.Token); }
-                    catch(OperationCanceledException) { if(jobGeneration==service.Store.Generation) LearningSet(token.IsCancellationRequested?"cancelled":"incomplete","已停止学习，完成的录音分析已保存。可继续学习。"); }
-                    catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException) { if(jobGeneration==service.Store.Generation) LearningSet("failed","歌曲分析未完成，可重试并复用已完成分析。"); }
+                    catch(OperationCanceledException) { if(jobGeneration==service.Store.Generation) LearningFail(LearningFailure.Create(token.IsCancellationRequested?"cancelled":"time_budget","update_library",jobDimension),token.IsCancellationRequested?"cancelled":"incomplete"); }
+                    catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException) { if(jobGeneration==service.Store.Generation) LearningFail(LearningFailure.FromException(e,"update_library",jobDimension)); }
                     finally { lock(gate) { learning=false; cancel?.Dispose(); cancel=null; } service.Notify(); }
                 });
             }
@@ -50,12 +50,14 @@ public sealed partial class PreferenceTraining
         var saved=service.Store.Local("learning-workflow");
         var s=saved is null?new JsonObject { ["state"]="idle" }:JsonNode.Parse(saved)!.AsObject();
         lock(gate) { s["running"]=learning && cancel!=null; if(!learning && S(s["state"]) is "checking_material" or "learning" or "updating_library" or "preparing_components" or "waiting_playback") s["state"]="interrupted"; }
+        s["failure"]=WorkflowFailure(s); if(s["failure"] is { } reason) s["detail"]=LearningFailure.Summary(reason); s["stage"]=s["failure"]?["stage"]?.DeepClone() ?? s["stage"]?.DeepClone();
         s["remoteOwner"]=RemoteOwner; s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["deployment"]=DeploymentStatus();
         return s;
     }
-    void LearningSet(string status,string detail,int processed=0,int total=0,int uncovered=0)
+    void LearningSet(string status,string detail,int processed=0,int total=0,int uncovered=0,JsonObject? failure=null)
     {
-        service.Store.SetLocalForGeneration("learning-workflow",new JsonObject { ["state"]=status,["detail"]=detail,["processed"]=processed,["total"]=total,["uncovered"]=uncovered,["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }.ToJsonString(),jobGeneration);
+        failure??=FailureForState(status) is { } code?LearningFailure.Create(code,jobStage,jobDimension):null;
+        service.Store.SetLocalForGeneration("learning-workflow",new JsonObject { ["state"]=status,["detail"]=detail,["stage"]=jobStage,["failure"]=failure?.DeepClone(),["processed"]=processed,["total"]=total,["uncovered"]=uncovered,["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }.ToJsonString(),jobGeneration);
         service.Notify();
     }
     public JsonObject StartLearning(bool downloadConfirmed=false,bool automatic=false,string? owner=null,bool allowDownload=true)
@@ -66,7 +68,7 @@ public sealed partial class PreferenceTraining
             if(cancel!=null || quiescing) throw new InvalidOperationException("学习正在进行或停止，请等待或取消。");
             remoteOwner=owner;
             service.Store.SetLocal("learning-remote-owner",owner??"");
-            jobProfile=Dataset; jobGeneration=service.Store.Generation; jobDimension=service.ActiveDimension;
+            jobProfile=Dataset; jobGeneration=service.Store.Generation; jobDimension=service.ActiveDimension; jobStage="check_material";
             learning=true; cancel=new();
             if(!automatic) service.Store.SetLocal("learning-recoveries","0");
             if(!automatic) service.Store.RemoveLocal("learning-user-stopped");
@@ -117,10 +119,10 @@ public sealed partial class PreferenceTraining
             {
                 if(!downloadConfirmed) { LearningSet("download_required","首次学习需下载约615 MB公共声音模型，并安装CPU依赖，预计数GB下载及至少6 GB可用磁盘。仅用于本机学习，不上传歌曲或标注。确认后自动继续。"); return; }
                 var drive=new DriveInfo(Path.GetPathRoot(Path.GetFullPath(root))!);
-                if(drive.AvailableFreeSpace<6L*1024*1024*1024) { LearningSet("failed","磁盘空间不足，学习需要至少6 GB可用空间。"); return; }
+                if(drive.AvailableFreeSpace<6L*1024*1024*1024) { LearningFail(LearningFailure.Create("disk_space","prepare",jobDimension)); return; }
                 LearningSet("preparing_components","正在下载本地学习所需文件。完成后自动继续。");
                 await Run("prepare",jobDimension,Dataset,ct,nested:true); ct.ThrowIfCancellationRequested();
-                if(S(state["state"])!="components_ready") { LearningSet("failed","本地学习准备失败。可重试；已下载并核验的文件会复用。"); return; }
+                if(S(state["state"])!="components_ready") { LearningFail(state["failure"]?.DeepClone().AsObject()??LearningFailure.Create("worker_exit","prepare",jobDimension)); return; }
             }
             foreach(var d in eligible)
             {
@@ -128,15 +130,16 @@ public sealed partial class PreferenceTraining
                 if(Enabled(d)) continue;
                 LearningSet("learning","正在学习并自动检查。四个维度分别判断，通过后分别生效。");
                 try { await LearnHead(d,ct); }
-                catch(InvalidOperationException e) { service.Store.SetLocalForGeneration("learning-blocker:"+d,e.Message,jobGeneration); Set("check_material_required","缺少已隔离且未受自动标签影响的效果检查材料，或录音身份尚待确认。当前继续使用原有识别；无需在设置补题。"); }
+                catch(InvalidOperationException) { service.Store.SetLocalForGeneration("learning-blocker:"+d,"check_material_required",jobGeneration); Set("check_material_required","缺少已隔离且未受自动标签影响的效果检查材料，或录音身份尚待确认。当前继续使用原有识别；无需在设置补题。"); }
             }
             if(Dimensions.Any(Enabled)) await UpdateLibrary(ct);
-            else if(eligible.Any(d=>S(Status(d)["state"])=="failed")) LearningSet("failed","学习未完成。请检查本机文件或学习环境后重试，已完成分析保留。");
+            else if(eligible.Select(HeadFailure).FirstOrDefault(f=>f!=null && S(f["code"]) is not ("insufficient_material" or "check_material_required" or "validation_failed")) is { } failure) LearningFail(failure);
+            else if(eligible.Any(d=>S(Status(d)["state"])=="validation_failed")) LearningFail(LearningFailure.Create("validation_failed","evaluate"),"validation_failed");
             else LearningSet("waiting_checks","本次学习已停止。各维度缺项或检查结果见下方；尚无通过效果检查的维度，继续使用原有识别。");
         }
-        catch(OperationCanceledException) { if(jobGeneration==service.Store.Generation) LearningSet(cancel?.IsCancellationRequested==true?"cancelled":"incomplete","已停止学习，完成的录音分析已保存。可继续学习。"); }
+        catch(OperationCanceledException) { if(jobGeneration==service.Store.Generation) LearningFail(LearningFailure.Create(cancel?.IsCancellationRequested==true?"cancelled":"time_budget","orchestrate",jobDimension),cancel?.IsCancellationRequested==true?"cancelled":"incomplete"); }
         catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException)
-        { if(jobGeneration==service.Store.Generation) LearningSet("failed","学习未完成。请检查本机文件、Python 3.13+、FFmpeg和可用空间后重试。已完成的分析保留。"); }
+        { if(jobGeneration==service.Store.Generation) LearningFail(LearningFailure.FromException(e,jobStage,jobDimension)); }
         finally { lock(gate) { learning=false; cancel?.Dispose(); cancel=null; } service.Notify(); }
     }
     async Task YieldToPlayback(CancellationToken ct)
@@ -209,7 +212,7 @@ public sealed partial class PreferenceTraining
             if(S(state["state"]) is not ("development_passed" or "regression_passed" or "pass_research_gate")) return;
         }
     }
-    bool Cached(string id,string content)=>service.Store.Local("vector:"+id) is { } raw && JsonNode.Parse(raw) is { } cache && S(cache["contentSignature"])==content && S(cache["extractor"])==Extractor && S(cache["workerHash"])==FileHash(Worker);
+    bool Cached(string id,string content)=>service.Store.Local("vector:"+id) is { } raw && JsonNode.Parse(raw) is { } cache && S(cache["contentSignature"])==content && S(cache["extractor"])==Extractor && CompatibleWorker(S(cache["workerHash"]));
     async Task<JsonObject?> RecordingRow(Track t,CancellationToken ct)
     {
         if(t.IsCue || t.DurationMs<150000 || app.Library.PathOf(t) is not { } path) return null;
@@ -242,7 +245,7 @@ public sealed partial class PreferenceTraining
                 bindings.Add((t,row)); if(!Cached(S(row["recordingId"]),S(row["contentSignature"]))) rows.Add((JsonNode)row.DeepClone());
             }
             LearningSet("updating_library","正在更新全库识别。未完成或不支持的歌曲暂用原有识别。",processed,tracks.Length,uncovered);
-            if(rows.Count>0) { await Run("extract",jobDimension,Dataset,ct,new JsonObject { ["rows"]=rows },true); ct.ThrowIfCancellationRequested(); if(S(state["state"])!="extraction_complete") { LearningSet("failed","歌曲分析未完成，可重试并复用已完成分析。",processed,tracks.Length,uncovered); return; } }
+            if(rows.Count>0) { await Run("extract",jobDimension,Dataset,ct,new JsonObject { ["rows"]=rows },true); ct.ThrowIfCancellationRequested(); if(S(state["state"])!="extraction_complete") { LearningFail(state["failure"]?.DeepClone().AsObject()??LearningFailure.Create("worker_exit","extract",jobDimension),processed:processed,total:tracks.Length,uncovered:uncovered); return; } }
             foreach(var (track,row) in bindings)
             {
                 var cache=JsonNode.Parse(service.Store.Local("vector:"+S(row["recordingId"]))!)!; var heads=new JsonObject(); bool inferenceFailed=false;

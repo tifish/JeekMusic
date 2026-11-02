@@ -49,15 +49,16 @@ public sealed partial class PreferenceTraining : IDisposable
             s["componentsReady"]=File.Exists(Path.Combine(root,"ready.json")); s["computePlatform"]="windows_cpu_optional_worker";
             s["maxRecordings"]=6; s["maxThreads"]=2; s["budgetSeconds"]=240; s["maxWorkerBytes"]=2L*1024*1024*1024;
             s["modelEnabled"]=Enabled(d); s["activationBlocker"]=Enabled(d)?null:"independent_checks_and_local_deployment_receipts_required";
-            s["learning"]=LearningStatus(); return s;
+            s["failure"]=HeadFailure(d); if(s["failure"] is { } reason) s["detail"]=LearningFailure.Summary(reason); s["stage"]=s["failure"]?["stage"]?.DeepClone() ?? s["stage"]?.DeepClone(); s["learning"]=LearningStatus(); return s;
         }
     }
 
-    void Set(string status,string? detail=null)
+    void Set(string status,string? detail=null,JsonObject? failure=null)
     {
-        lock(gate) { state=new JsonObject { ["dimension"]=jobDimension,["state"]=status,["detail"]=detail??"",["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }; headStates[jobProfile+":"+jobDimension]=state; }
+        failure??=FailureForState(status) is { } code?LearningFailure.Create(code,jobStage,jobDimension):null;
+        lock(gate) { state=new JsonObject { ["dimension"]=jobDimension,["state"]=status,["detail"]=detail??"",["stage"]=jobStage,["failure"]=failure?.DeepClone(),["updatedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }; headStates[jobProfile+":"+jobDimension]=state; }
         if(jobGeneration==service.Store.Generation && jobProfile.Length>0 && service.Store.Profiles().Contains(jobProfile) && !service.Deleted(jobProfile))
-            service.Store.Append(jobProfile,"job:"+jobDimension,"model",new JsonObject { ["dimension"]=jobDimension,["category"]="job",["state"]=status,["detail"]=detail??"",["platform"]="windows_cpu",["enabled"]=false },true);
+            service.Store.Append(jobProfile,"job:"+jobDimension,"model",new JsonObject { ["dimension"]=jobDimension,["category"]="job",["state"]=status,["detail"]=detail??"",["stage"]=jobStage,["failure"]=failure?.DeepClone(),["platform"]="windows_cpu",["enabled"]=false },true);
         service.Notify();
     }
     public void Invalidate(string? dimension=null,string? profileId=null)
@@ -84,13 +85,15 @@ public sealed partial class PreferenceTraining : IDisposable
             if(cancel!=null || quiescing) throw new InvalidOperationException("Training/component job already running or stopping");
             remoteOwner=null;
             cancel=new();
-            jobDimension=selectedDimension; jobProfile=selectedProfile; jobGeneration=service.Store.Generation;
+            jobDimension=selectedDimension; jobProfile=selectedProfile; jobGeneration=service.Store.Generation; jobStage=Stage(action);
             Set(action=="prepare" ? "preparing_components" : "checking_material");
             var token=cancel.Token; jobTask=Task.Run(()=>Run(action,jobDimension,selectedProfile,token)); return Status(jobDimension);
         }
     }
     async Task Run(string action,string dimension,string profile,CancellationToken ct,JsonObject? supplied=null,bool nested=false)
     {
+        string? diagnosticJob=null; int? workerExit=null;
+        jobStage=Stage(action);
         try
         {
             Directory.CreateDirectory(root);
@@ -111,6 +114,7 @@ public sealed partial class PreferenceTraining : IDisposable
                 if(snapshot["rows"]!.AsArray().Count==0) { Set("insufficient_material","没有已核验身份、支持的本地录音或完整训练向量。训练仅接收 training 侧明确整曲答案。"); return; }
             }
             var job=Path.Combine(root,"job-"+Guid.NewGuid().ToString("N")); Directory.CreateDirectory(job);
+            diagnosticJob=job;
             var input=Path.Combine(job,"input.json"); var output=Path.Combine(job,"result.json");
             await File.WriteAllTextAsync(input,snapshot.ToJsonString(),ct);
             var before=Hash(snapshot.ToJsonString());
@@ -119,7 +123,7 @@ public sealed partial class PreferenceTraining : IDisposable
             using var process=Process.Start(start) ?? throw new IOException("Unable to start optional training worker");
             using var budget=new WorkerBudget(process);
             // Drain without retaining private paths/audio/answers in diagnostics.
-            var error=process.StandardError.ReadToEndAsync(ct); var stdout=process.StandardOutput.ReadToEndAsync(ct);
+            var error=DrainWorker(process.StandardError,ct); var stdout=DrainWorker(process.StandardOutput,ct);
             Set(action=="prepare" ? "preparing_components" : "running");
             var timer=Stopwatch.StartNew(); string? stopped=null;
             try
@@ -140,13 +144,13 @@ public sealed partial class PreferenceTraining : IDisposable
             finally { if(!process.HasExited) { process.Kill(entireProcessTree:true); await process.WaitForExitAsync(CancellationToken.None); } }
             await Task.WhenAll(error,stdout);
             await File.WriteAllTextAsync(Path.Combine(job,"worker.log"),await error,CancellationToken.None);
-            if(stopped!=null) { Set("incomplete",stopped); return; }
-            if(File.Exists(output) && process.ExitCode!=0)
+            workerExit=process.ExitCode;
+            if(stopped!=null) { Fail(LearningFailure.Create(stopped=="memory_budget_exhausted"?"memory_budget":"time_budget",jobStage,dimension,workerExit),"incomplete"); return; }
+            if(!File.Exists(output) || process.ExitCode!=0)
             {
-                var failure=JsonNode.Parse(await File.ReadAllTextAsync(output,ct));
-                if(S(failure?["errorType"]) is "TimeoutError" or "MemoryError" || S(failure?["error"]).Contains("PCA rank")) { Set("incomplete","Worker resource budget or training rank requirement unmet; no candidate committed"); return; }
+                var raw=File.Exists(output) && new FileInfo(output).Length<=65536?JsonNode.Parse(await File.ReadAllTextAsync(output,ct)):null;
+                Fail(LearningFailure.FromWorker(raw,jobStage,dimension,process.ExitCode)); return;
             }
-            if(!File.Exists(output) || process.ExitCode!=0) { Set("failed","组件准备或有界工作进程失败；检查本机私有任务日志/依赖及格式，不替换旧候选。"); return; }
             var result=JsonNode.Parse(await File.ReadAllTextAsync(output,ct))!.AsObject();
             if(snapshot["selfSelectedPilot"]?.GetValue<bool>()==true) { result["selfSelectedPilot"]=true; result["independent"]=false; result["selectionBias"]="self_selected_visible_automatic_results"; }
             if(action=="evaluate") CommitEvaluation(snapshot,result);
@@ -175,9 +179,12 @@ public sealed partial class PreferenceTraining : IDisposable
             var temp=Path.Combine(root,"last-result.json.tmp"); await File.WriteAllTextAsync(temp,result.ToJsonString(),ct); File.Move(temp,Path.Combine(root,"last-result.json"),true);
             if(action=="train" && service.Synthetic(profile)) { result["syntheticFixture"]=true; Set("synthetic_validation_complete",S(result["state"])+"; synthetic labels are not user ground truth and can never enable a head"); } else if(action=="train" && snapshot["selfSelectedPilot"]?.GetValue<bool>()==true && S(result["state"])=="training_gate_passed") Set("self_selected_candidate","自选日常标签反馈，已看自动预测；仅作有偏训练候选，不能声称独立准确率或启用。"); else Set(S(result["state"]));
         }
-        catch(OperationCanceledException) { Set("cancelled","已完成的单录音缓存保留；部分结果不提交。"); }
-        catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException) { Set("failed",e is System.ComponentModel.Win32Exception ? "需要本机 Python 3.13+ 和 FFmpeg；按需准备会创建私有运行时。" : e is IOException ? "local_io_failure; previous candidate retained; inspect private job log" : e.Message); }
-        finally { if(!nested) lock(gate) { cancel?.Dispose(); cancel=null; } service.Notify(); }
+        catch(OperationCanceledException) { Fail(LearningFailure.Create("cancelled",jobStage,dimension,workerExit),"cancelled"); }
+        catch(Exception e) when(e is IOException or InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException) { Fail(LearningFailure.FromException(e,jobStage,dimension)); }
+        finally {
+            if(diagnosticJob!=null) try { await File.WriteAllTextAsync(Path.Combine(diagnosticJob,"diagnostics.json"),new JsonObject { ["version"]=1,["stage"]=jobStage,["dimension"]=dimension,["exitCode"]=workerExit,["state"]=S(state["state"]),["failure"]=state["failure"]?.DeepClone() }.ToJsonString(),CancellationToken.None); } catch(IOException) { }
+            if(!nested) lock(gate) { cancel?.Dispose(); cancel=null; } service.Notify();
+        }
     }
     JsonObject Snapshot(string action,List<JsonObject> answers,string dimension,string profile,string? extractionRole=null)
     {
@@ -202,7 +209,7 @@ public sealed partial class PreferenceTraining : IDisposable
             if(action=="extract" && service.Store.Local("vector:"+id) is { } saved)
             {
                 var cached=JsonNode.Parse(saved);
-                if(S(cached?["extractor"])==Extractor && S(cached?["workerHash"])==FileHash(Worker) && S(cached?["contentSignature"])==S(r["contentSignature"])) continue;
+                if(S(cached?["extractor"])==Extractor && CompatibleWorker(S(cached?["workerHash"])) && S(cached?["contentSignature"])==S(r["contentSignature"])) continue;
             }
             if(!pilot && (r["identityReviewed"]?.GetValue<bool>()!=true || r["exposed"]?.GetValue<bool>()==true)) continue;
             if(pilot && (ReadStrings(r["artists"]).Length==0 || S(r["workGroup"]).Length==0 || S(r["albumGroup"]).Length==0)) continue;
@@ -223,7 +230,7 @@ public sealed partial class PreferenceTraining : IDisposable
             {
                 var cached=service.Store.Local("vector:"+id);
                 var vector=cached==null?null:JsonNode.Parse(cached);
-                if(S(vector?["workerHash"])!=FileHash(Worker) || S(vector?["extractor"])!=Extractor || S(vector?["contentSignature"])!=S(r["contentSignature"])) continue;
+                if(!CompatibleWorker(S(vector?["workerHash"])) || S(vector?["extractor"])!=Extractor || S(vector?["contentSignature"])!=S(r["contentSignature"])) continue;
                 row["vector"]=vector!["vector"]!.DeepClone(); row.Remove("path");
             }
             rows.Add((JsonNode)row); if(action=="extract" && rows.Count==6) break;

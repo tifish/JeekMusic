@@ -1,4 +1,8 @@
 using Avalonia.Controls;
+using Avalonia;
+using Avalonia.Media;
+using Avalonia.Input.Platform;
+using System.Text.Json.Nodes;
 using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using JeekMusic.UI;
@@ -24,6 +28,11 @@ public sealed class PreferenceFeature : IFeature
         var panel=new StackPanel { Spacing=12 };
         panel.Children.Add(Note(L.T("在歌曲列表修正运动、人声、古典或安静标签，即可用于学习。四个维度分别检查，通过的维度会自动生效并更新全库。你手工修正的标签始终优先。")));
         var status=Note(""); panel.Children.Add(status);
+        var failureReason=Note(""); failureReason.Name="PreferenceFailureReason"; panel.Children.Add(failureReason);
+        var diagnosticText=new TextBox { Name="PreferenceFailureDiagnostics",IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,MaxHeight=180 };
+        var diagnosticPanel=new StackPanel { Spacing=6 }; diagnosticPanel.Children.Add(diagnosticText);
+        diagnosticPanel.Children.Add(Action(L.T("复制脱敏诊断"),async()=> { if(c.Window.Clipboard is { } clipboard) await clipboard.SetTextAsync(diagnosticText.Text??""); }));
+        var diagnosticExpander=new Expander { Header=L.T("高级诊断（不含歌曲、标签或路径）"),Content=diagnosticPanel,Name="PreferenceFailureAdvanced" }; panel.Children.Add(diagnosticExpander);
         var rows=new StackPanel { Spacing=10 };
         var message=Note("");
         var start=Action(L.T("开始学习"),()=>{}); start.Name="PreferenceStartLearning";
@@ -31,7 +40,7 @@ public sealed class PreferenceFeature : IFeature
         panel.Children.Add(start); panel.Children.Add(stop);
         panel.Children.Add(message); panel.Children.Add(rows);
         bool busy=false;
-        async void Run(Func<Task> action) { if(busy) return; busy=true; try { await action(); message.Text=""; } catch(Exception e) { message.Text=e.Message; } finally { busy=false; Refresh(); } }
+        async void Run(Func<Task> action) { if(busy) return; busy=true; try { await action(); message.Text=""; } catch(Exception) { message.Text=L.T("学习操作未完成，请检查当前状态后重试。"); } finally { busy=false; Refresh(); } }
         start.Click+=(_,_)=>Run(async()=> {
             var state=s.Training.LearningStatus(); var confirm=S(state["state"])=="download_required";
             if(confirm && !await Dialogs.Confirm(c.Main,L.T("下载本地学习文件"),L.T(S(state["detail"])),L.T("下载并开始学习"))) return;
@@ -48,7 +57,12 @@ public sealed class PreferenceFeature : IFeature
         void Refresh()
         {
             var snapshot=s.Status(); var workflow=snapshot["learning"]!; var running=workflow["running"]?.GetValue<bool>()==true;
-            status.Text=StateText(S(workflow["state"]))+"\n"+L.T(S(workflow["detail"]));
+            status.Text=StateText(S(workflow["state"]));
+            var failure=workflow["failure"];
+            failureReason.IsVisible=failure!=null; diagnosticExpander.IsVisible=failure!=null;
+            failureReason.Text=failure==null?"":L.T(S(failure["message"]))+"\n"+L.T(S(failure["nextStep"]));
+            var diagnostics=failure==null?"":LearningFailure.Diagnostics(failure); if(diagnosticText.Text!=diagnostics) diagnosticText.Text=diagnostics;
+            if(failure==null) status.Text+="\n"+L.T(S(workflow["detail"]));
             if(workflow["total"]?.GetValue<int>()>0) status.Text+=L.F($"\n已处理 {workflow["processed"]} / {workflow["total"]} · 未覆盖 {workflow["uncovered"]}");
             start.IsEnabled=!busy && !running; stop.IsVisible=running;
             start.Content=L.T(S(workflow["state"])=="download_required"?"下载并开始学习":S(workflow["state"]) is "cancelled" or "interrupted" or "incomplete"?"继续学习":S(workflow["state"])=="failed"?"重试学习":"开始学习");
@@ -62,6 +76,10 @@ public sealed class PreferenceFeature : IFeature
                 box.Children.Add(SubHeading(DimensionText(d)));
                 box.Children.Add(Note(L.F($"已标 {head["annotatedCount"]} · 可用 {available} · 正向 {material["positive"]} · 反向 {material["negative"]} · 待处理分歧 {head["conflictCount"]}")));
                 box.Children.Add(Note(StateText(state)));
+                if(head["learning"]?["failure"] is { } reason) {
+                    box.Children.Add(Note(L.T(S(reason["message"]))+"\n"+L.T(S(reason["nextStep"]))));
+                    box.Children.Add(Note(S(reason["stage"])+" · "+S(reason["code"])));
+                }
                 if(material["ready"]?.GetValue<bool>()!=true) box.Children.Add(Note(L.F($"总计还需至少 {material["missingTotal"]} 条；其中正向还需 {material["missingPositive"]} 条，相反标注还需 {material["missingNegative"]} 条。在歌曲列表日常修正即可。")));
                 else if(head["enabled"]?.GetValue<bool>()!=true && state is "check_material_required" or "self_selected_candidate") box.Children.Add(Note(L.T("效果检查尚缺独立材料，当前继续使用原有识别。")));
                 if(material["missingLocal"]!.GetValue<int>()>0) box.Children.Add(Note(L.F($"有 {material["missingLocal"]} 首标注歌曲尚未在电脑找到相同录音，请连接对应音乐目录后重试。")));

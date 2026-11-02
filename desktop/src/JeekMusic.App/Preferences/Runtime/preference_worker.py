@@ -12,6 +12,9 @@ import urllib.request
 os.environ.update(OMP_NUM_THREADS="2", MKL_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
 HERE = Path(__file__).resolve().parent
 CONTRACT = json.loads((HERE / "components.json").read_text())
+WORKER_PHASE = "startup"
+# Decoder-only compatibility: previously successful vectors had exact-length finite PCM.
+PREVIOUS_VECTOR_WORKERS = ("cc9ea8a8e6daffa64cc62619c94d5a62cc2454afdc0c1743934e0e5feed1f237", "c6c7d0f8bf572afd2cb010d6dec94fb2eb95e39c44909304f991f8cea9aca181")
 EXTRACTOR = "clap-htsat-unfused@" + CONTRACT["revision"] + "/center10-rms01-v1"
 
 
@@ -39,6 +42,8 @@ def atomic(path, value):
 
 def prepare(root):
     """Explicit download action, immutable official revision + audited content hashes."""
+    global WORKER_PHASE
+    WORKER_PHASE = "download"
     model = root / "model"; model.mkdir(parents=True, exist_ok=True)
     for name, meta in CONTRACT["files"].items():
         target = model / name
@@ -51,6 +56,7 @@ def prepare(root):
             tmp.unlink(missing_ok=True); raise ValueError("Official component hash mismatch: " + name)
         os.replace(tmp, target)
     # Runtime belongs to the app's private optional components, never the system Python environment.
+    WORKER_PHASE = "install"
     venv = root / "venv"
     python = venv / "Scripts/python.exe" if os.name == "nt" else venv / "bin/python"
     if not python.exists(): subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
@@ -187,7 +193,50 @@ def evaluate_frozen(data):
     return {"state":("development_passed" if stage=="development" else "pass_research_gate") if passed else "validation_failed","metrics":metrics,"predictions":predictions,"activation":"requires_local_integrity_equivalence_and_scope_checks"}
 
 
+class WorkerFailure(ValueError):
+    def __init__(self, code, **details):
+        super().__init__(code)
+        self.code, self.details = code, details
+
+
+def decode_context(path, start_seconds, timeout):
+    """Trim resampler tail only; never pad a genuinely short or invalid recording."""
+    import numpy as np
+    if not Path(path).is_file(): raise WorkerFailure("recording_missing")
+    try:
+        pcm = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-ss", str(start_seconds), "-i", str(path), "-t", "10", "-af", "aresample=48000,atrim=end_sample=480000,asetpts=N/SR/TB", "-ac", "1", "-ar", "48000", "-f", "f32le", "pipe:1"], capture_output=True, check=True, timeout=timeout).stdout
+    except FileNotFoundError as e: raise WorkerFailure("dependency_missing") from e
+    except subprocess.CalledProcessError as e: raise WorkerFailure("decode_unsupported") from e
+    if len(pcm) % 4: raise WorkerFailure("decode_length", expectedSamples=480000, actualSamples=len(pcm)//4)
+    x = np.frombuffer(pcm, dtype="<f4").copy()
+    if len(x) != 480000: raise WorkerFailure("decode_length", expectedSamples=480000, actualSamples=len(x))
+    if not np.isfinite(x).all(): raise WorkerFailure("decode_nonfinite")
+    return x
+
+
+def failure_report(error, stage):
+    if isinstance(error, WorkerFailure): code, details = error.code, error.details
+    else:
+        details = {}
+        text = str(error)
+        if isinstance(error, (TimeoutError, subprocess.TimeoutExpired)): code = "time_budget"
+        elif isinstance(error, MemoryError): code = "memory_budget"
+        elif isinstance(error, (ImportError, ModuleNotFoundError)): code = "dependency_missing"
+        elif isinstance(error, FileNotFoundError): code = "recording_missing" if stage=="extract" else "dependency_missing"
+        elif isinstance(error, subprocess.CalledProcessError): code = "download_failed" if stage=="prepare" else "decode_unsupported"
+        elif text.startswith(("Official component hash mismatch:", "Component hash mismatch")): code = "download_integrity"
+        elif text in ("Recording changed", "Recording changed during extraction"): code = "recording_changed"
+        elif text == "Silent context": code = "silent_audio"
+        elif text in ("PCA rank below two", "Need both classes and finite recordings"): code = "insufficient_material"
+        elif stage=="prepare" and isinstance(error,OSError): code = "download_failed"
+        else: code = "worker_exit"
+    # Never persist exception text/paths in the public result. Private traceback remains local.
+    return {"version":1, "code":code, "stage":stage, "workerPhase":WORKER_PHASE, **details}
+
+
 def extract(root, rows, deadline):
+    global WORKER_PHASE
+    WORKER_PHASE = "model_load"
     import numpy as np
     import torch
     from transformers import ClapAudioConfig, ClapAudioModelWithProjection, ClapFeatureExtractor
@@ -206,11 +255,18 @@ def extract(root, rows, deadline):
     cache = root / "vectors"; cache.mkdir(exist_ok=True)
     result = []
     for row in rows:
+        WORKER_PHASE = "recording_check"
         if time.monotonic() >= deadline: raise TimeoutError("batch_budget_exhausted")
         if row.get("cue") or len(row.get("centersMs", [])) != 3: raise ValueError("Unsupported context contract")
         if sha(Path(row["path"])) != row["contentSignature"]: raise ValueError("Recording changed")
         key = hashlib.sha256((row["recordingId"] + EXTRACTOR + sha(__file__) + json.dumps(row["centersMs"])).encode()).hexdigest()
         target = cache / (key + ".json")
+        if not target.exists():
+            for previous_worker in PREVIOUS_VECTOR_WORKERS:
+                old_key = hashlib.sha256((row["recordingId"] + EXTRACTOR + previous_worker + json.dumps(row["centersMs"])).encode()).hexdigest()
+                previous = cache / (old_key + ".json")
+                if previous.exists():
+                    target = previous; break  # Preserve original provenance and bytes.
         if target.exists():
             saved = json.loads(target.read_text()); result.append({**row, "vector": saved["vector"], "perturbations": saved["perturbations"]}); continue
         perturbations = {}
@@ -219,13 +275,13 @@ def extract(root, rows, deadline):
             for center in row["centersMs"]:
                 if time.monotonic() >= deadline: raise TimeoutError("batch_budget_exhausted")
                 timeout = max(.1, deadline-time.monotonic())
-                pcm = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-ss", str((center+shift-5000)/1000), "-i", row["path"], "-t", "10", "-ac", "1", "-ar", "48000", "-f", "f32le", "pipe:1"], capture_output=True, check=True, timeout=timeout).stdout
-                x = np.frombuffer(pcm, dtype="<f4").copy()
-                if len(x) != 480000 or not np.isfinite(x).all(): raise ValueError("Incomplete 10-second audio")
+                WORKER_PHASE = "decode"
+                x = decode_context(row["path"], (center+shift-5000)/1000, timeout)
                 x *= gain
                 rms = float(np.sqrt(np.mean(x.astype(float)**2)))
                 if rms <= 1e-8: raise ValueError("Silent context")
                 x *= .1/rms
+                WORKER_PHASE = "embedding"
                 inputs = processor(x, sampling_rate=48000, return_tensors="pt", truncation="rand_trunc", padding="repeatpad")
                 with torch.inference_mode(): vector = model(**inputs).audio_embeds[0].numpy().astype(float)
                 vectors.append(unit(vector))
@@ -242,6 +298,8 @@ def extract(root, rows, deadline):
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument("action", choices=["prepare", "extract", "train", "evaluate"]); parser.add_argument("--root", type=Path, required=True); parser.add_argument("--input", type=Path); parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(); start = time.monotonic()
+    global WORKER_PHASE
+    WORKER_PHASE = args.action
     try:
         if args.action == "prepare": result = prepare(args.root)
         else:
@@ -259,7 +317,7 @@ def main():
             else: result = evaluate_frozen(data)
         result["elapsedSeconds"] = time.monotonic()-start; atomic(args.output,result)
     except Exception as error:
-        atomic(args.output, {"state": "failed", "errorType": type(error).__name__, "error": str(error)[:300], "elapsedSeconds": time.monotonic()-start}); raise
+        atomic(args.output, {"state": "failed", "errorType": type(error).__name__, "failure": failure_report(error,args.action), "elapsedSeconds": time.monotonic()-start}); raise
 
 
 if __name__ == "__main__": main()

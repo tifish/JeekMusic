@@ -31,7 +31,7 @@ def main():
                 persisted=json.loads(path.read_text()); assert persisted['devices'][old['deviceId']]['tokenHash']==hashed
                 assert persisted['devices'][old['deviceId']]['generation']=='unchanged' and persisted['port']==39843 and persisted['bindAddress']=='127.0.0.1'
                 call(c,'add_folder',path=str(music)); call(c,'lan_sync_control',action='start',port=0)
-                status=wait(lambda:(lambda s:s if s['roots'] else None)(call(c,'lan_sync_status'))); port=status['port']; root_id=status['roots'][0]['rootId']
+                status=wait(lambda:(lambda s:s if s['roots'] and s['userDataSyncReady'] else None)(call(c,'lan_sync_status'))); port=status['port']; root_id=status['roots'][0]['rootId']
                 def pair(device=None):
                     u=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1')['invitation']); pin,secret=u.path.strip('/').split('/')
                     peer=dict(port=port,pin=pin,deviceId=device or uuid.uuid4().hex)
@@ -47,7 +47,8 @@ def main():
                         assert c.call('lan_sync_control',dict(action='authorize',deviceId=peer['deviceId'],permissions=ALL))['isError']
                         assert w.request('roots')['roots'] # Rejected old command did not invalidate a valid session.
                         state=dict(format=2,device=dict(id=peer['deviceId'],name='Fixture'),written_at=0,playlists=[],deleted_playlists=[])
-                        assert 'state' in w.request('state',state=state,includeFeatures=False)
+                        response=w.request('state',state=state,includeFeatures=False)
+                        assert 'state' in response,response
                         page=dict(protocol=3,generation=hashlib.sha256(b'personal-label-learning-v3\n').hexdigest(),resetBoundary=[],events=[],nextCursor=0,hasMore=False)
                         time.sleep(.55)
                         reply=w.request('preference_delta',protocol=3,sender=peer['deviceId'],page=page,after=0)

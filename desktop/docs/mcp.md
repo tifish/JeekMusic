@@ -543,3 +543,5 @@ lan_sync_status.fileSync返回fileProtocol=1、actions/conflicts/deferred、peer
 lan_file_backups（开发与NativeAOT共用）：action=list，offset默认0，每页100；返回receipt/rootId/path/bytes/state/kind、next/hasMore和retainedBytes，无token。action=restore|purge需receipt，且先停LAN服务。restore要求当前路径仍为该事务结果，核对原备份hash并条件提交，保留被替换结果，不推进同步基线。purge仅处理已确认且未变化的单个备份；无递归删除或任意路径参数。文件工作占用时明确拒绝，重试不会绕过预算。这是本机管理员能力，未桥接到TLS端口。
 
 Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文件不搬删。当前双向合同与隔离测试见../../docs/lan-sync.md。
+
+`lan_sync_status` / TLS capabilities 的 `userDataSyncReady` 区分启动期领域合并服务尚未就绪。就绪前 state 返回 transient busy，沿用有界重试，不误报配对授权失败。配对夹具显式等待该诊断状态后检验实际 state 交换。

@@ -325,7 +325,7 @@ public sealed partial class LanSyncService : IDisposable
         var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
-            ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
+            ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
             ["sourceBuckets"] = _admission.SourceCount, ["connectionRejected"] = _admission.Rejected,
@@ -532,7 +532,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["authorizationPolicy"] = LanPairingPolicy.Mode, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
@@ -543,6 +543,7 @@ public sealed partial class LanSyncService : IDisposable
         if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>()).Select(n => n!.DeepClone()).ToArray()) };
         if (op == "state")
         {
+            if (Merge is null) throw Busy(); // Startup readiness is temporary, never a permission failure.
             var file = a["state"] as JsonObject ?? throw new ArgumentException("Missing state");
             if (file["format"]?.GetValue<int>() != 2 || file["device"]?["id"]?.GetValue<string>() != device) throw new UnauthorizedAccessException();
             if (SyncMerge.ParseFile(file.ToJsonString()) is null) throw new ArgumentException("Invalid sync state");

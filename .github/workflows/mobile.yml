@@ -54,7 +54,8 @@ jobs:
         if: env.PUBLISH == 'true' && github.event_name != 'workflow_dispatch'
         run: |
           last=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
-          if [ -n "$last" ] && [ -z "$(git diff --name-only "$last" HEAD -- . ':!docs' ':!fastlane' ':!app/src/test' ':!**.md')" ]; then
+          # Include the release pipeline itself: repairing packaging/provenance must ship a new APK.
+          if [ -n "$last" ] && [ -z "$(git diff --name-only "$last" HEAD -- ':(top)mobile' ':(top).github/workflows/mobile.yml' ':(top,exclude)mobile/docs' ':(top,exclude)mobile/fastlane' ':(top,exclude)mobile/app/src/test' ':(top,exclude,glob)mobile/**/*.md')" ]; then
             echo "自 $last 以来 App 没有变化，不发布"
             echo "PUBLISH=false" >> "$GITHUB_ENV"
           fi
@@ -96,6 +97,8 @@ jobs:
         if: env.PUBLISH == 'true'
         with:
           tag_name: v${{ env.VERSION }}
+          # A slower older run must never tag whatever main happens to point to at publish time.
+          target_commitish: ${{ github.sha }}
           name: Jeek Music ${{ env.VERSION }}
           body_path: release-notes.md
           files: JeekMusic-${{ env.VERSION }}.apk

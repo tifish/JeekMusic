@@ -52,3 +52,9 @@ Android 当前没有独立 MCP 控制端口。本任务提供签名 instrumentat
 证据保存在工作区 `output/android-update/`（不提交大文件）：`first-success/diagnostics.json`、`cancelled/diagnostics.json`、`second-success/diagnostics.json`、`final-success/diagnostics.json`、`security-and-recovery-tests.txt`、`debug-checks.log` 以及 `permission-restored/screen.png`、`confirmation-required/screen.png`、`diagnostics-dialog/screen.png`、最终220的 `final-diagnostics-ui/dialog.png` 与 `final-diagnostics-ui/copied.png`（实际点击复制后对话框关闭，关于页正常；未读取系统剪贴板）。`apk-manifest.json`记录fixture文件大小、SHA-256和最终设备版本。初次主机轮询在包替换期间遇到临时dumpsys服务失败，未把该脚本中断当作失败或成功证据；最终以重启后的应用私有会话记录、实际安装版本/来源和未点击确认的操作证据共同判定。
 
 未验收：用户手机/OEM具体系统、管理策略、厂商额外确认、API31/33/34/36/37设备矩阵；不能承诺所有厂商静默，也不能以模拟器证明用户此前那次提示的唯一原因。若需定位该手机本次仍出现的提示，只需提供“关于与更新 → 更新诊断”的一份复制结果，不需分开索要型号、来源或截图。
+
+## 发布身份修复
+
+核对实际CI时发现另一个可复现的问题：构建 `ac608848`（218）的旧任务发布时，main已前进到 `6b506450`（219）；`v1.0.218` 被创建在新HEAD上，资产仍名为218。本次219任务因此看到“当前HEAD已打标签”，误判无应用变化，跳过正式签名与发布。旧任务最终显示cancelled也不能撤回已经发出的发布API请求。
+
+`softprops/action-gh-release` 的 [target_commitish文档](https://github.com/softprops/action-gh-release#inputs)明确说明默认使用仓库默认分支。Mobile工作流现在显式绑定 `${{ github.sha }}`，并把自身workflow文件加入应用变更检测：修复发布流程也必须重建APK。已有错误标签保持原样，不移动已发布版本；以后交付必须分别核对实际run的headSha、远端tag解析SHA、APK版本/签名/摘要，不能只看版本标签或CI绿灯。该问题是发布身份错误，与系统安装确认资格分别处理。

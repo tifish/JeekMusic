@@ -204,7 +204,6 @@ private fun MainScreen(viewModel: MainViewModel) {
     ReportDrawnWhen { firstContentShown }
     LaunchedEffect(firstContentShown) { if (firstContentShown) viewModel.onFirstFrame() }
 
-    RestorePrompt()
     if (tabs.isEmpty()) return
     var dragOrder by remember { mutableStateOf<List<Tab>?>(null) }
     var draggingKey by remember { mutableStateOf<String?>(null) }

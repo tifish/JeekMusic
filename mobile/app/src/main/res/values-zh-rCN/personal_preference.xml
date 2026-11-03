@@ -24,7 +24,7 @@
     <string name="preference_export">导出学习数据</string>
     <string name="preference_delete">清除学习数据</string>
     <string name="preference_delete_confirmation">清除全部学习标注和学习结果，并同步到已配对设备。离线旧答案不会恢复；之后可重新开始标注。曲库、播放列表、日常标签与配对保持不变。确认清除？</string>
-    <string name="preference_directory_adapter">目录同步兼容（Syncthing / format 2）</string>
+    <string name="preference_directory_adapter">旧版目录交换</string>
     <string name="preference_previous">上一首</string>
     <string name="preference_next">下一首</string>
     <string name="preference_basis">作答依据</string>

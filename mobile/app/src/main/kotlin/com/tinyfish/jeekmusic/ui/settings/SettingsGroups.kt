@@ -25,7 +25,8 @@ internal enum class SettingsPage(@param:StringRes val title: Int, @param:StringR
     PREFERENCE(R.string.preference_title, R.string.preference_home_summary),
     ANALYSIS(R.string.settings_moods, R.string.settings_group_analysis_summary),
     DEVICES(R.string.settings_group_devices, R.string.settings_group_device_summary),
-    DATA(R.string.settings_group_data, R.string.settings_group_data_summary),
+    // Saved destination alias for upgrades; never shown on the overview.
+    DATA(R.string.settings_group_devices, R.string.settings_group_device_summary),
     ABOUT(R.string.settings_group_about, R.string.settings_group_about_summary),
 }
 
@@ -63,7 +64,7 @@ internal fun LazyListScope.settingsHome(
         }
     }
     item(key = "transfer") {
-        SettingsHomeGroup(R.string.settings_group_transfer, listOf(SettingsPage.DEVICES, SettingsPage.DATA), onOpen) {
+        SettingsHomeGroup(R.string.settings_group_transfer, listOf(SettingsPage.DEVICES), onOpen) {
             if (it == SettingsPage.DEVICES) deviceSummary else stringResource(it.summary)
         }
     }

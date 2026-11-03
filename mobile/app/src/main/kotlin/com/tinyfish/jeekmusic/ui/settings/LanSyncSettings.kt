@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tinyfish.jeekmusic.R
@@ -65,9 +68,8 @@ fun LanSyncSettings(lan: LanSyncService) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var forget by remember { mutableStateOf<JSONObject?>(null) }
-    var details by remember { mutableStateOf(false) }
-    var backups by remember { mutableStateOf<List<JSONObject>?>(null) }
-    var backupAction by remember { mutableStateOf<Pair<JSONObject,Boolean>?>(null) }
+    var details by rememberSaveable { mutableStateOf(false) }
+    val enabledMappings = mappings.any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }
     suspend fun refreshRoots() {
         busy = true; rootsError = null
         try { roots = lan.roots() }
@@ -76,20 +78,23 @@ fun LanSyncSettings(lan: LanSyncService) {
         finally { busy = false }
     }
     Column(Modifier.fillMaxWidth()) {
-        com.tinyfish.jeekmusic.ui.components.SectionHeader(stringResource(R.string.lan_title))
+        SettingsSectionHeader(stringResource(R.string.sync_connection))
         SettingSummary(stringResource(R.string.lan_intro), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        SettingSummary(stringResource(if(schedule.cancelled) R.string.lan_auto_cancelled else R.string.lan_auto_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_auto_status"))
-        SettingItem(stringResource(R.string.lan_files_access), summary = stringResource(if (mtimeAllowed) R.string.lan_files_access_allowed else R.string.lan_files_access_needed), onClick = {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
-        })
-        SettingItem(stringResource(R.string.lan_scan), enabled = !busy && !status.running, onClick = {
+        SettingSummary(connection?.let { stringResource(R.string.lan_paired_identity, it.optString("name", it.optString("host")), "${it.optString("host")}:${it.optInt("port")}") }
+            ?: stringResource(R.string.sync_not_paired), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_connection"))
+        SettingItem(stringResource(R.string.lan_scan), enabled = !busy && !status.running, modifier = Modifier.testTag("lan_scan"), onClick = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) scanning = true
             else cameraPermission.launch(Manifest.permission.CAMERA)
         })
-        SettingItem(stringResource(R.string.lan_pair_manual), summary = connection?.let { stringResource(R.string.lan_paired_identity, it.optString("name", it.optString("host")), "${it.optString("host")}:${it.optInt("port")}") },
+        SettingItem(stringResource(R.string.lan_pair_manual), modifier = Modifier.testTag("lan_pair_manual"),
             enabled = !busy && !status.running, onClick = { pairing = true })
         notice?.let { SettingSummary(it, Modifier.padding(horizontal = 16.dp)) }
-        if (paired) SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(R.string.lan_manual), enabled = !busy && !status.running, onClick = {
+        SettingsSectionHeader(stringResource(R.string.sync_folders))
+        SettingSummary(stringResource(R.string.sync_folders_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        SettingItem(stringResource(R.string.lan_files_access), summary = stringResource(if (mtimeAllowed) R.string.lan_files_access_allowed else R.string.lan_files_access_needed), modifier = Modifier.testTag("lan_files_access"), onClick = {
+            context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
+        })
+        SettingItem(stringResource(R.string.lan_choose_roots), summary = stringResource(if (paired) R.string.lan_manual else R.string.sync_pair_first), modifier = Modifier.testTag("lan_choose_roots"), enabled = paired && !busy && !status.running, onClick = {
             if (!busy && !status.running) { choosingRoots = true; scope.launch { refreshRoots() } }
         })
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
@@ -99,15 +104,29 @@ fun LanSyncSettings(lan: LanSyncService) {
             SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
             SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
                 checked = current && m.optBoolean("enabled", true), enabled = current,
+                modifier = Modifier.testTag("lan_mapping_enabled_${m.getString("rootId")}"),
                 onChange = { lan.setEnabled(m.getString("rootId"), it) })
             FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
             }
         }
-        if (paired) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !status.running && mappings.any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
-            OutlinedButton(enabled = status.running, onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
-            OutlinedButton(enabled=!status.running,onClick={ scope.launch { try { backups=lan.backups() }catch(e: Exception) { error=e.message } } }) { Text(stringResource(R.string.lan_backups)) }
+        SettingsSectionHeader(stringResource(R.string.sync_automation))
+        SettingSummary(stringResource(if(schedule.cancelled) R.string.lan_auto_cancelled else R.string.lan_auto_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_auto_status"))
+        SettingSummary(stringResource(when {
+            status.running -> R.string.settings_group_sync_running
+            !paired -> R.string.sync_pair_first
+            !enabledMappings -> R.string.sync_no_enabled_folders
+            schedule.cancelled -> R.string.sync_cancelled
+            schedule.backoffUntil > System.currentTimeMillis() -> R.string.sync_retry_waiting
+            schedule.watchFailed -> R.string.sync_watch_limited
+            schedule.foreground && schedule.watchDirectories > 0 -> R.string.sync_watching
+            else -> R.string.sync_waiting
+        }), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_schedule"))
+        if (schedule.lastSuccess > 0) SettingSummary(stringResource(R.string.sync_last_success,
+            java.text.DateFormat.getDateTimeInstance().format(java.util.Date(schedule.lastSuccess))), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = paired && !busy && !status.running && enabledMappings, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
+            OutlinedButton(enabled = status.running || (paired && enabledMappings && !schedule.cancelled), onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
         }
         if (status.running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
@@ -133,8 +152,8 @@ fun LanSyncSettings(lan: LanSyncService) {
         }
         for (problem in status.problems.take(20)) Text(problem, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp))
     }
-    if (pairing) AlertDialog(onDismissRequest = { if (!busy) { pairing = false; invitation = "" } }, title = { Text(stringResource(R.string.lan_pair)) },
-        text = { Column { Text(stringResource(R.string.lan_invite_hint)); OutlinedTextField(invitation, { invitation = it }, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.testTag("lan_invitation")) } },
+    if (pairing) AlertDialog(modifier = Modifier.semantics { testTagsAsResourceId = true }, onDismissRequest = { if (!busy) { pairing = false; invitation = "" } }, title = { Text(stringResource(R.string.lan_pair)) },
+        text = { Column { Text(stringResource(R.string.lan_invite_hint)); OutlinedTextField(invitation, { invitation = it }, label = { Text(stringResource(R.string.sync_invitation)) }, enabled = !busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.testTag("lan_invitation")) } },
         confirmButton = { TextButton(enabled = !busy && invitation.isNotBlank(), onClick = {
             try { candidate = LanInvitation.parse(invitation); pairing = false } catch (_: Exception) { invitation = ""; error = resources.getString(R.string.lan_invalid_invitation) }
         }) { Text(stringResource(R.string.lan_continue)) } }, dismissButton = { TextButton(enabled = !busy, onClick = { pairing = false; invitation = "" }) { Text(stringResource(R.string.cancel)) } })
@@ -162,7 +181,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             if (connected) { roots = null; choosingRoots = true; refreshRoots() }
         } }) { Text(stringResource(R.string.lan_connect)) } },
         dismissButton = { TextButton(enabled = !busy, onClick = { candidate = null; invitation = "" }) { Text(stringResource(R.string.cancel)) } }) }
-    if (choosingRoots) AlertDialog(onDismissRequest = { if (!busy) choosingRoots = false }, title = { Text(stringResource(R.string.lan_choose_roots)) },
+    if (choosingRoots) AlertDialog(modifier = Modifier.semantics { testTagsAsResourceId = true }, onDismissRequest = { if (!busy) choosingRoots = false }, title = { Text(stringResource(R.string.lan_choose_roots)) },
         text = { Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("lan_roots_loading"))
             rootsError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("lan_roots_error")) }
@@ -181,11 +200,6 @@ fun LanSyncSettings(lan: LanSyncService) {
         dismissButton = { TextButton(onClick = { forget = null }) { Text(stringResource(R.string.cancel)) } }) }
     error?.let { message -> AlertDialog(onDismissRequest = { error = null }, title = { Text(stringResource(R.string.lan_issues)) }, text = { Text(message) },
         confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.confirm)) } }) }
-    backups?.let { rows -> AlertDialog(onDismissRequest={ backups=null },title={ Text(stringResource(R.string.lan_backups)) },text={ Column(Modifier.heightIn(max=400.dp).verticalScroll(rememberScrollState())) {
-        Text(stringResource(R.string.lan_backup_help))
-        for(row in rows) { Text(row.getString("path"));FlowRow { TextButton(enabled=!busy,onClick={ backupAction=row to false }) { Text(stringResource(R.string.lan_restore_backup)) };TextButton(enabled=!busy && row.optString("state") in setOf("acknowledged","recovered"),onClick={ backupAction=row to true }) { Text(stringResource(R.string.lan_purge_backup)) } } }
-    } },confirmButton={ TextButton(onClick={ backups=null }) { Text(stringResource(R.string.close)) } }) }
-    backupAction?.let { (row,purge) -> AlertDialog(onDismissRequest={ if(!busy)backupAction=null },title={ Text(stringResource(if(purge) R.string.lan_purge_backup else R.string.lan_restore_backup)) },text={ Text(row.getString("path")+"\n"+stringResource(R.string.lan_backup_confirm)) },confirmButton={ TextButton(enabled=!busy,onClick={ scope.launch { busy=true;try { lan.maintainBackup(row.getString("operation"),purge);backupAction=null;backups=lan.backups() }catch(e: Exception) { error=e.message }finally { busy=false } } }) { Text(stringResource(R.string.confirm)) } },dismissButton={ TextButton(enabled=!busy,onClick={ backupAction=null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
 @Composable

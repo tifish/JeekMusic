@@ -218,7 +218,15 @@ lyrics_offset
 
 局域网同步新增稳定 rootId 引用与每根 SAF 目标映射，协议及安全/时间限制见 [局域网同步首版](../../docs/lan-sync.md)。既有 SyncMerge/每设备文件继续用于用户数据。
 
-### 3.1 备份与恢复（BackupManager）
+### 3.1 同步与内部恢复保护
+
+当前手机设置只有“同步”入口，按电脑连接、同步目录、自动同步与状态分组。“高级”保留设备名称和旧目录交换开关，不显示第二组立即同步。`settings_group_devices`、`lan_start`、`lan_cancel` 等原自动化 ID 保留；旧 `SettingsPage.DATA` 保存状态归入 `DEVICES` 同页。主 Activity 没有设置子页外部深链，内部 `TopRoute.Settings` 不变。每页继续用 `SaveableStateProvider` 保存滚动与展开状态。
+
+已移除仅支撑旧 JSON 导入的 `BackupManager`、`RestorePrompt`、设置文件选择器及专用资源。原自动启动直接调用幂等 `SyncService.start()`；添加目录仍等待 scanner 空闲后 `syncNow()`，不丢失原同步触发。`BackupRefs` 仍用于同步及普通播放列表的路径匹配，继续保留。播放列表被同步覆盖后才出现相关历史恢复动作；文件冲突仍在对应路径下选择双方版本。
+
+`LanSyncService.startRecovery()`、持久事务、失败回滚和恢复槽完全保留。移除文件恢复管理按钮不执行删除或清理，也不更改配对、映射、协议、文件调解或学习算法。Android 无独立 MCP 端口，Windows MCP 合同不变。真实 UI 回归：`python tools/settings_ui.py --serial emulator-5584 --package com.tinyfish.jeekmusic --output ../output/sync-settings-ui verify-sync`（仅隔离空曲库，暂改兼容偏好后还原，不提交配对或执行文件同步）。
+
+#### 历史备份设计（已退役）
 
 需求 B-1 至 B-6。
 
@@ -274,8 +282,8 @@ lyrics_offset
 | 用户选择文件夹 | SAF `ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission`（读 + 写） | 用户体验自然，支持 SD 卡 / U 盘；同时获取写权限，用于保存歌词 |
 | 发现音频文件 | **MediaStore** 查询 | 很快（直接查系统索引），而且可以监听变化 |
 | 读取音频内容（标签、播放、分析） | MediaStore content URI | 有 `READ_MEDIA_AUDIO` 权限就能访问 |
-| 读取 `.lrc`、`.cue`、封面图片和备份 | **SAF 树 URI** | 分区存储下 `READ_MEDIA_AUDIO` 读不了非媒体文件，但用户授权的树 URI 可以 |
-| 写入在线歌词 `.lrc` 和备份文件 | **SAF 树 URI**（`DocumentsContract.createDocument`） | 见 §8.5、§3.1 |
+| 读取 `.lrc`、`.cue`、封面图片和同步数据 | **SAF 树 URI** | 分区存储下 `READ_MEDIA_AUDIO` 读不了非媒体文件，但用户授权的树 URI 可以 |
+| 写入在线歌词 `.lrc` 和兼容目录交换文件 | **SAF 树 URI**（`DocumentsContract.createDocument`） | 见 §8.5、§3.1 |
 
 SAF 树 URI 转换为 MediaStore 查询条件：
 

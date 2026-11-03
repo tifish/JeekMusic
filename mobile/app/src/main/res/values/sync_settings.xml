@@ -1,0 +1,19 @@
+<resources>
+    <string name="sync_connection">Computer connection</string>
+    <string name="sync_not_paired">No computer paired</string>
+    <string name="sync_invitation">Pairing invitation</string>
+    <string name="sync_folders">Sync folders</string>
+    <string name="sync_folders_help">Your selected phone folder is the destination; no extra subfolder is created. Old mappings need the destination selected again. Disabling a mapping pauses it and keeps files.</string>
+    <string name="sync_pair_first">Pair with a computer first.</string>
+    <string name="sync_automation">Automatic sync &amp; status</string>
+    <string name="sync_no_enabled_folders">No active folders. Choose a folder or enable an existing mapping.</string>
+    <string name="sync_cancelled">Cancelled · automatic sync is held</string>
+    <string name="sync_retry_waiting">Waiting to retry · check the computer connection and issues below</string>
+    <string name="sync_watch_limited">Folder monitoring is limited; periodic checks remain scheduled.</string>
+    <string name="sync_watching">Monitoring folder changes in the foreground</string>
+    <string name="sync_waiting">Waiting for changes · Android may delay background checks</string>
+    <string name="sync_last_success">Last completed file check: %1$s</string>
+    <string name="sync_advanced">Advanced</string>
+    <string name="sync_advanced_summary">Device name and legacy folder exchange</string>
+    <string name="sync_legacy_help">Compatibility for existing setups that exchange .jeekmusic/sync/ files through another app. Your current setting is kept. Computer sync does not require it.</string>
+</resources>

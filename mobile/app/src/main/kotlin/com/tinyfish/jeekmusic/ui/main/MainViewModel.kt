@@ -20,7 +20,6 @@ import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.data.online.OnlineFetchScheduler
 import com.tinyfish.jeekmusic.data.library.EmbedDownloadedScheduler
-import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.scanner.LibraryObserver
 import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
 import com.tinyfish.jeekmusic.data.scanner.ScanState
@@ -56,7 +55,6 @@ class MainViewModel @Inject constructor(
     private val scanner: LibraryScanner,
     private val observer: LibraryObserver,
     private val player: PlayerConnection,
-    private val backups: BackupManager,
     val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
     private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
     private val analysis: AnalysisScheduler,
@@ -250,7 +248,7 @@ class MainViewModel @Inject constructor(
             observer.register()
             delay(1_000)
             scanner.requestScan()
-            backups.startAutoBackup()
+            sync.start()
             analysis.schedule()
             tags.recomputeIfRulesChanged()
             // 自动获取封面和歌词（需求 C-3、LY-8）：补上上次没联网或网络出错时漏掉的

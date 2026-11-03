@@ -1,0 +1,19 @@
+<resources>
+    <string name="sync_connection">电脑连接</string>
+    <string name="sync_not_paired">尚未配对电脑</string>
+    <string name="sync_invitation">配对邀请</string>
+    <string name="sync_folders">同步目录</string>
+    <string name="sync_folders_help">选定的手机目录就是目标，不另建子目录。旧映射需重新选择目标。停用映射即暂停，已有文件保留。</string>
+    <string name="sync_pair_first">请先配对电脑。</string>
+    <string name="sync_automation">自动同步与状态</string>
+    <string name="sync_no_enabled_folders">暂无启用的目录，请选择目录或启用已有映射。</string>
+    <string name="sync_cancelled">已取消，自动同步保持停止</string>
+    <string name="sync_retry_waiting">等待重试，请检查电脑连接和下方问题提示</string>
+    <string name="sync_watch_limited">目录监控受限，仍会按计划定期检查。</string>
+    <string name="sync_watching">正在前台监控目录变化</string>
+    <string name="sync_waiting">等待目录变化，Android 可能延迟后台检查</string>
+    <string name="sync_last_success">上次完成文件检查：%1$s</string>
+    <string name="sync_advanced">高级</string>
+    <string name="sync_advanced_summary">本机名称与旧版目录交换</string>
+    <string name="sync_legacy_help">兼容已有配置，由其他应用交换 .jeekmusic/sync/ 文件。保留当前开关状态，连接电脑同步无需开启此项。</string>
+</resources>

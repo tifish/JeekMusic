@@ -59,15 +59,8 @@ import android.os.Environment
 import android.provider.Settings as SystemSettings
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
 import com.tinyfish.jeekmusic.ui.navigation.UiMessage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.text.DateFormat
-import java.util.Date
 import com.tinyfish.jeekmusic.analysis.AnalysisScheduler
 import com.tinyfish.jeekmusic.analysis.TagRepository
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
@@ -105,7 +98,6 @@ class SettingsViewModel @Inject constructor(
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
     private val settingsRepository: SettingsRepository,
-    private val backups: BackupManager,
     val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
     val lan: com.tinyfish.jeekmusic.data.sync.LanSyncService,
     private val messages: MessageBus,
@@ -167,25 +159,6 @@ class SettingsViewModel @Inject constructor(
                 _checkingUpdate.value = false
             }
         }
-    }
-
-    val lastBackup: StateFlow<Long?> = backups.lastBackupTime
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    fun backupNow() = viewModelScope.launch {
-        val written = backups.backupNow(force = true)
-        messages.post(UiMessage(if (written > 0) R.string.backup_done else R.string.backup_failed))
-    }
-
-    /** "从备份恢复"：用户选择任意备份文件（需求 B-4）。 */
-    fun restoreFrom(uri: Uri) = viewModelScope.launch {
-        val backup = withContext(Dispatchers.IO) { backups.read(uri) }
-        if (backup == null) {
-            messages.post(UiMessage(R.string.restore_invalid))
-            return@launch
-        }
-        val report = backups.restore(backup)
-        messages.post(UiMessage(R.string.restore_done, "${report.playlists} / ${report.items} / ${report.missing}"))
     }
 
     val folders: StateFlow<List<FolderWithCount>> = library.folders
@@ -264,14 +237,10 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val addFolder = rememberAddFolder()
     val navigator = LocalNavigator.current
-    val lastBackup by viewModel.lastBackup.collectAsStateWithLifecycle()
     val pendingAnalysis by viewModel.pendingAnalysis.collectAsStateWithLifecycle()
     val coverProgress by viewModel.coverProgress.collectAsStateWithLifecycle()
     val lyricsProgress by viewModel.lyricsProgress.collectAsStateWithLifecycle()
     val sourceCheckState by viewModel.sourceCheckState.collectAsStateWithLifecycle()
-    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.restoreFrom(uri)
-    }
     var removing by remember { mutableStateOf<LibraryFolderEntity?>(null) }
     var confirmOnline by remember { mutableStateOf(false) }
     var confirmCovers by remember { mutableStateOf(false) }
@@ -287,17 +256,19 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val context = LocalContext.current
     var showLicenses by remember { mutableStateOf(false) }
 
-    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    var savedPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    // Historical data-sync saved states reopen the unified sync page.
+    val page = if (savedPage == SettingsPage.DATA) SettingsPage.DEVICES else savedPage
     val pageStates = rememberSaveableStateHolder()
-    val goBack: () -> Unit = { if (page == null) onBack() else page = null }
-    BackHandler(enabled = page != null) { page = null }
+    val goBack: () -> Unit = { if (page == null) onBack() else savedPage = null }
+    BackHandler(enabled = page != null) { savedPage = null }
     val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
     val lanStatus by viewModel.lan.status.collectAsStateWithLifecycle()
     val lanRevision by viewModel.lan.revision.collectAsStateWithLifecycle()
     val paired = remember(lanRevision) { viewModel.lan.store.read().optJSONObject("connection") != null }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).systemBarsPadding().testTag("settings")) {
-        SubScreenHeader(title = stringResource(if (page == SettingsPage.DEVICES) R.string.settings_group_device_header else page?.title ?: R.string.settings_title), onBack = goBack)
+        SubScreenHeader(title = stringResource(page?.title ?: R.string.settings_title), onBack = goBack)
         // Each page owns a saved scroll position, including when another top-level editor is opened.
         pageStates.SaveableStateProvider(page?.name ?: "home") {
             val listState = rememberLazyListState()
@@ -314,7 +285,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 contentPadding = PaddingValues(bottom = 24.dp)) {
                 if (page == null) {
                     settingsHome(
-                        onOpen = { page = it },
+                        onOpen = { savedPage = it },
                         librarySummary = librarySummary,
                         lyricsEnabled = settings.onlineLyrics,
                         coversEnabled = settings.onlineCovers,
@@ -607,29 +578,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 if (page == SettingsPage.PREFERENCE) { item { com.tinyfish.jeekmusic.ui.preference.PreferencePanel() } }
                 if (page == SettingsPage.DEVICES) {
                     item { LanSyncSettings(viewModel.lan) }
-                }
-                if (page == SettingsPage.DATA) {
-                    item { SettingsSectionHeader(stringResource(R.string.settings_group_data_sync)) }
-                    item { SettingSummary(stringResource(R.string.settings_group_data_explanation), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
                     item { SyncSettings(viewModel.sync) }
-                    item { SettingsSectionHeader(stringResource(R.string.settings_backup)) }
-                    item {
-                        SettingAction(
-                            title = stringResource(R.string.backup_now),
-                            summary = lastBackup?.let {
-                                stringResource(R.string.backup_last, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)))
-                            } ?: stringResource(R.string.backup_summary),
-                            onClick = viewModel::backupNow,
-                            modifier = Modifier.testTag("backup_now"),
-                        )
-                    }
-                    item {
-                        SettingItem(
-                            title = stringResource(R.string.restore_from_file),
-                            onClick = { pickBackup.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                            modifier = Modifier.testTag("restore_from_file"),
-                        )
-                    }
                 }
                 if (page == SettingsPage.ABOUT) {
                     item { com.tinyfish.jeekmusic.ui.main.UpdateDiagnosticsAction() }

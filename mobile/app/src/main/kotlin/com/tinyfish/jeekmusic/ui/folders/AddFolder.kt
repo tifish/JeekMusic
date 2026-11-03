@@ -23,8 +23,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.library.AddFolderResult
-import com.tinyfish.jeekmusic.data.backup.Backup
-import com.tinyfish.jeekmusic.data.backup.BackupManager
 import com.tinyfish.jeekmusic.data.library.LibraryRepository
 import com.tinyfish.jeekmusic.data.scanner.LibraryScanner
 import com.tinyfish.jeekmusic.ui.navigation.MessageBus
@@ -42,7 +40,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AddFolderViewModel @Inject constructor(
     private val library: LibraryRepository,
-    private val backups: BackupManager,
+    private val scanner: LibraryScanner,
+    private val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
 ) : ViewModel() {
 
     data class Pending(val uri: Uri, val result: AddFolderResult)
@@ -55,8 +54,9 @@ class AddFolderViewModel @Inject constructor(
             val result = library.addFolder(uri, replaceChildren)
             if (result is AddFolderResult.Added) {
                 _pending.value = null
-                // 新文件夹里有备份时，由主界面提示是否恢复（需求 B-3）
-                backups.offerIfFound(result.folder)
+                // Preserve the existing post-scan data merge without the obsolete backup wrapper.
+                scanner.busy.first { !it }
+                sync.syncNow()
             } else {
                 _pending.value = Pending(uri, result)
             }

@@ -24,7 +24,7 @@
     <string name="preference_export">Export learning data</string>
     <string name="preference_delete">Clear learning data</string>
     <string name="preference_delete_confirmation">Clear all learning corrections and results on paired devices. Old offline answers cannot return. You can start labeling again. Library, playlists, daily tags and pairing are preserved. Clear?</string>
-    <string name="preference_directory_adapter">Legacy directory sync adapter (Syncthing / format 2)</string>
+    <string name="preference_directory_adapter">Legacy folder exchange</string>
     <string name="preference_previous">Previous</string>
     <string name="preference_next">Next</string>
     <string name="preference_basis">Answer basis</string>

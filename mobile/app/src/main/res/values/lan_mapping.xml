@@ -7,11 +7,6 @@
 <string name="lan_files_access">Safe bidirectional file access</string>
 <string name="lan_files_access_allowed">All files access granted. Also select and authorize the exact sync folder.</string>
 <string name="lan_files_access_needed">Safe conditional file replacement and timestamps require All files access plus your selected SAF folder. Without both, file sync is deferred; no unsafe overwrite is used.</string>
-<string name="lan_backups">File recovery backups</string>
-<string name="lan_backup_help">At most 100 receipts are shown. Original files remain beside their targets. Only confirmed, unchanged backups can be removed. Restore requires an unchanged live result and keeps its replacement. Sync baselines stay unchanged.</string>
-<string name="lan_restore_backup">Restore original</string>
-<string name="lan_purge_backup">Delete this backup</string>
-<string name="lan_backup_confirm">Only this verified receipt will be processed. Other files are retained.</string>
 <string name="lan_change_modified">Modified</string>
 <string name="lan_change_deleted">Deleted</string>
 <string name="lan_change_created">Created</string>

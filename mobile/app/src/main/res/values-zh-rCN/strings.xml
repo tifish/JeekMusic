@@ -215,20 +215,6 @@
     <string name="legacy_charset_auto">自动（GBK）</string>
     <string name="apply_and_rebuild">应用并重建艺术家索引</string>
 
-    <string name="settings_backup">备份</string>
-    <string name="backup_now">立即备份</string>
-    <string name="backup_summary">播放列表、固定的标签和曲库规则会保存到每个音乐文件夹 .jeekmusic/sync/ 下的本机文件</string>
-    <string name="backup_last">上次备份：%s</string>
-    <string name="backup_done">已备份</string>
-    <string name="backup_failed">备份失败：没有可写入的音乐文件夹</string>
-    <string name="restore_from_file">从备份文件恢复</string>
-    <string name="restore">恢复</string>
-    <string name="restore_found_title">发现备份</string>
-    <plurals name="restore_found_message">
-        <item quantity="other">这个文件夹里有一份 %1$s 的备份，包含 %2$d 个播放列表。是否恢复？</item>
-    </plurals>
-    <string name="restore_done">已恢复（播放列表 / 歌曲 / 未找到）：%s</string>
-    <string name="restore_invalid">这不是 Jeek Music 的备份文件</string>
 
     <string name="info_analysis">音频分析</string>
     <plurals name="mood_pending">
@@ -390,8 +376,6 @@
     <string name="file_delete_message">音乐文件会移到系统的回收站，30 天内可以恢复；有“所有文件访问权限”时，同名的 .lrc、图片也一起移过去。播放列表里的条目保留，显示为不可用。</string>
     <string name="settings_sync">设备同步</string>
     <string name="sync_device_name">本机名称</string>
-    <string name="sync_now">立即同步</string>
-    <string name="sync_summary">每台设备在音乐文件夹里写入自己的数据，由文件同步工具传输。</string>
     <string name="sync_history">播放列表历史</string>
     <string name="sync_history_summary">找回 30 天内被同步覆盖的播放列表。</string>
     <string name="sync_history_empty">暂无被覆盖的播放列表。</string>
@@ -399,8 +383,7 @@
     <string name="sync_done">同步完成</string>
     <string name="sync_failed">同步失败：%1$s</string>
     <string name="sync_changes">已同步来自「%1$s」的 %2$d 项改动</string>
-    <string name="lan_title">局域网音乐同步</string>
-    <string name="lan_intro">将所选电脑音乐文件夹与指定目录双向同步。建立确认基线后，单边修改和已跟踪删除自动处理，真实冲突才需选择。配对即可访问并双向同步全部登记曲库及管理学习，无需逐项授权。停用或移除映射保留文件。</string>
+    <string name="lan_intro">与电脑同步音乐和播放列表。配对一次即可同步全部登记曲库及管理学习。</string>
     <string name="lan_pair">与 PC 配对</string>
     <string name="lan_pair_again">重新配对（需先移除映射）</string>
     <string name="lan_paired">安全配对成功</string>
@@ -414,8 +397,8 @@
     <string name="lan_clean">清理下载</string>
     <string name="lan_forget">移除任务</string>
     <string name="lan_clean_confirm">仅清理本任务拥有且内容 hash 与修改时间均未被外部修改的文件。冲突和播放中的文件保留，绝不删除 PC 文件。任务将停用。</string>
-    <string name="lan_forget_confirm">忘记此映射，保留全部文件和备份。新映射不会继承删除基线，之后可配对另一台电脑。</string>
-    <string name="lan_start">同步 / 内容核验 / 重试</string>
+    <string name="lan_forget_confirm">忘记此映射，保留全部文件及内部恢复版本。新映射不会继承删除基线，之后可配对另一台电脑。</string>
+    <string name="lan_start">立即同步</string>
     <string name="lan_verifying">正在 PC 核验全部所选内容…</string>
     <string name="lan_done">同步完成 · SHA-256 已核验</string>
     <string name="lan_issues">同步存在待处理项</string>

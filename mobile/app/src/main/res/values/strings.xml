@@ -220,21 +220,6 @@
     <string name="legacy_charset_auto">Auto (GBK)</string>
     <string name="apply_and_rebuild">Apply and rebuild artist index</string>
 
-    <string name="settings_backup">Backup</string>
-    <string name="backup_now">Back up now</string>
-    <string name="backup_summary">Playlists, pinned tabs and library rules are saved in this device’s file under .jeekmusic/sync/ in every music folder</string>
-    <string name="backup_last">Last backup: %s</string>
-    <string name="backup_done">Backup saved</string>
-    <string name="backup_failed">Backup failed: no writable music folder</string>
-    <string name="restore_from_file">Restore from backup file</string>
-    <string name="restore">Restore</string>
-    <string name="restore_found_title">Backup found</string>
-    <plurals name="restore_found_message">
-        <item quantity="one">This folder contains a backup from %1$s with %2$d playlist. Restore it?</item>
-        <item quantity="other">This folder contains a backup from %1$s with %2$d playlists. Restore it?</item>
-    </plurals>
-    <string name="restore_done">Restored (playlists / songs / not found): %s</string>
-    <string name="restore_invalid">Not a Jeek Music backup file</string>
 
     <string name="info_analysis">Audio analysis</string>
     <plurals name="mood_pending">
@@ -399,8 +384,6 @@
     <string name="file_delete_message">The music files go to the system trash and can be restored within 30 days. With “All files access”, the .lrc and image files with the same name go too. Playlist entries are kept and shown as unavailable.</string>
     <string name="settings_sync">Device sync</string>
     <string name="sync_device_name">This device</string>
-    <string name="sync_now">Sync now</string>
-    <string name="sync_summary">Each device writes its own file in the music folder. Your file sync tool transfers it.</string>
     <string name="sync_history">Playlist history</string>
     <string name="sync_history_summary">Restore versions replaced during sync within 30 days.</string>
     <string name="sync_history_empty">No replaced playlists.</string>
@@ -408,8 +391,7 @@
     <string name="sync_done">Sync complete</string>
     <string name="sync_failed">Sync failed: %1$s</string>
     <string name="sync_changes">Synced %2$d changes from “%1$s”</string>
-    <string name="lan_title">LAN music sync</string>
-    <string name="lan_intro">Sync selected PC music folders with the exact folder you choose. Single-side changes and tracked deletions are automatic after confirmation; only genuine conflicts need a choice. Pairing grants access to all registered libraries, bidirectional sync and learning management. Pausing or forgetting keeps files.</string>
+    <string name="lan_intro">Sync music and playlists with your computer. Pair once to use all registered libraries and learning capabilities.</string>
     <string name="lan_pair">Pair with PC</string>
     <string name="lan_pair_again">Pair again (remove mappings first)</string>
     <string name="lan_paired">Paired securely</string>
@@ -423,8 +405,8 @@
     <string name="lan_clean">Clean downloads</string>
     <string name="lan_forget">Forget task</string>
     <string name="lan_clean_confirm">Remove only files owned by this task that still match their saved hash and modification time. Modified or playing files are kept. PC files are never deleted. The task will pause.</string>
-    <string name="lan_forget_confirm">Forget this mapping and keep all files and backups. A new mapping starts with no deletion baseline. You can then pair with another PC.</string>
-    <string name="lan_start">Sync / verify / retry</string>
+    <string name="lan_forget_confirm">Forget this mapping and keep all files, including internal recovery versions. A new mapping starts with no deletion baseline. You can then pair with another PC.</string>
+    <string name="lan_start">Sync now</string>
     <string name="lan_verifying">Verifying all selected content on PC…</string>
     <string name="lan_done">Sync complete · SHA-256 verified</string>
     <string name="lan_issues">Sync needs attention</string>

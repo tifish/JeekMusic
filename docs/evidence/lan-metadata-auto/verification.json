@@ -1,0 +1,277 @@
+{
+  "windowsSyntheticSample": [
+    {
+      "round": 1,
+      "files": 129,
+      "sampleBytes": 33554432,
+      "elapsedMs": 253.22,
+      "metadataObservations": 132,
+      "hashBytes": 0,
+      "transferBytes": 0,
+      "sidecarParseBytes": 57
+    },
+    {
+      "round": 2,
+      "files": 129,
+      "sampleBytes": 33554432,
+      "elapsedMs": 206.9,
+      "metadataObservations": 131,
+      "hashBytes": 0,
+      "transferBytes": 0,
+      "sidecarParseBytes": 0
+    }
+  ],
+  "androidPublicNative": {
+    "tests": 11,
+    "assertedSampleBytes": 33554432,
+    "rounds": 2,
+    "hashBytes": 0,
+    "measurementLines": [
+      "bytes=33554432 rounds=2 hashBytes=0 elapsedMs=92"
+    ]
+  },
+  "automaticSync": {
+    "tests": 1,
+    "steps": [
+      {
+        "step": "startup_auto",
+        "schedule": {
+          "trigger": "mapping_or_startup",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705377578,
+          "nextReconcile": 1793706277578,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 0,
+          "lastHashBytes": 0,
+          "lastTransferBytes": 0
+        }
+      },
+      {
+        "step": "PC_watch_download",
+        "schedule": {
+          "trigger": "dirty_followup",
+          "dirty": true,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705408885,
+          "nextReconcile": 1793706308885,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 6,
+          "lastHashBytes": 192,
+          "lastTransferBytes": 64
+        }
+      },
+      {
+        "step": "phone_watch_upload",
+        "schedule": {
+          "trigger": "remote_revision",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705435910,
+          "nextReconcile": 1793706335910,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 1,
+          "lastHashBytes": 0,
+          "lastTransferBytes": 0
+        }
+      },
+      {
+        "step": "burst_coalesced",
+        "schedule": {
+          "trigger": "local_directory",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705452679,
+          "nextReconcile": 1793706352679,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 5,
+          "lastHashBytes": 128,
+          "lastTransferBytes": 64
+        }
+      },
+      {
+        "step": "cancel_resume",
+        "schedule": {
+          "trigger": "remote_revision",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705496236,
+          "nextReconcile": 1793706396236,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 1,
+          "lastHashBytes": 0,
+          "lastTransferBytes": 0
+        }
+      },
+      {
+        "step": "paused_resume",
+        "schedule": {
+          "trigger": "dirty_followup",
+          "dirty": true,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705542290,
+          "nextReconcile": 1793706442290,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 6,
+          "lastHashBytes": 576,
+          "lastTransferBytes": 64
+        }
+      },
+      {
+        "step": "phone_watch_delete",
+        "schedule": {
+          "trigger": "local_directory",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705549634,
+          "nextReconcile": 1793706449634,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 5,
+          "lastHashBytes": 0,
+          "lastTransferBytes": 0
+        }
+      },
+      {
+        "step": "remote_recreate",
+        "schedule": {
+          "trigger": "dirty_followup",
+          "dirty": true,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705559312,
+          "nextReconcile": 1793706459312,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 6,
+          "lastHashBytes": 192,
+          "lastTransferBytes": 64
+        }
+      },
+      {
+        "step": "PC_watch_delete",
+        "schedule": {
+          "trigger": "dirty_followup",
+          "dirty": true,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705565780,
+          "nextReconcile": 1793706465780,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 4,
+          "lastHashBytes": 320,
+          "lastTransferBytes": 0
+        }
+      },
+      {
+        "step": "offline_foreground_reconcile",
+        "schedule": {
+          "trigger": "dirty_followup",
+          "dirty": true,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705602620,
+          "nextReconcile": 1793706502620,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 6,
+          "lastHashBytes": 192,
+          "lastTransferBytes": 64
+        }
+      },
+      {
+        "step": "self_writes_settled",
+        "schedule": {
+          "trigger": "remote_revision",
+          "dirty": false,
+          "running": false,
+          "paused": false,
+          "cancelled": false,
+          "foreground": true,
+          "backoffUntil": 0,
+          "lastSuccess": 1793705638432,
+          "nextReconcile": 1793706538432,
+          "state": "idle",
+          "watchDirectories": 2,
+          "watchFailed": false,
+          "lastMetadataObservations": 1,
+          "lastHashBytes": 0,
+          "lastTransferBytes": 0
+        }
+      }
+    ],
+    "passed": true
+  },
+  "publicSafMatrix": {
+    "tests": 3,
+    "passed": true
+  },
+  "reopenedDatabaseLostConfirmation": {
+    "tests": 1,
+    "passed": true
+  },
+  "equalMetadataDifferentBytesPolicy": {
+    "tests": 1,
+    "passed": true
+  },
+  "limits": [
+    "Synthetic fixtures only; no production music writes/deletes",
+    "No hardware-wide/full-library performance claim",
+    "No physical-device Doze/force-stop timeliness guarantee",
+    "Watcher buffer overflow and physical storage remount fallback not fault-injected on real devices"
+  ]
+}

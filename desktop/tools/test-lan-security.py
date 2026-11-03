@@ -146,7 +146,7 @@ def main():
                 rootId=roots[0]["rootId"]
                 a0=good.request("tree",rootId=rootId,path="",offset=0);a1=good.request("tree",rootId=rootId,path="",offset=200)
                 assert len(a0["directories"])==200 and len(a1["directories"])==5
-                job=good.request("plan",rootId=rootId,selection=[""])
+                job=good.request("plan",fileProtocol=2,rootId=rootId,selection=[""])
                 plan=wait(lambda: (lambda r:None if r.get("pending") else r)(good.request("plan_status",job=job["job"])),30)
                 assert plan["total"]==205
                 completed=call(c,"lan_sync_control",action="cancel_task",jobId=job["job"]);assert completed["state"]=="complete"
@@ -188,7 +188,7 @@ def main():
                 assert replacement["token"]!=peer["token"]
                 bad=Wire(peer,auth=False);bad.send(dict(op="auth",protocol=4,deviceId=peer["deviceId"],token=peer["token"]));assert bad.receive()["code"]=="unauthorized";bad.close()
                 d=call(c,"lan_sync_status");assert d["authenticationFailures"]>0 and d["connectionRejected"]>=0 and d["protocolFailures"]>0
-                print("PASS 205-directory/manifest paging, async hashing/read, live revocation, invalid credentials, revoke and device-ID re-pair rotation",flush=True)
+                print("PASS 205-directory/manifest paging, metadata plan/read, live revocation, invalid credentials, revoke and device-ID re-pair rotation",flush=True)
                 call(c,"preference_training",action="cancel")
                 wait(lambda:call(c,"lan_sync_status")["activeConnections"]==0)
                 print("PASS no active network leases leaked; diagnostic counters redact credentials",flush=True)
@@ -210,7 +210,7 @@ def main():
                             assert cancelled.returncode==0 and "OK (1 test)" in cancelled.stdout,cancelled.stdout+cancelled.stderr
                             assert any(t["state"]=="cancelled" and t["deviceId"]==replacement["deviceId"] for t in call(c,"lan_sync_status")["tasks"])
                             time.sleep(.3)
-                            admin=Wire(replacement);job=admin.request("plan",rootId=rootId,selection=["Heavy"]);admin.close()
+                            admin=Wire(replacement);job=admin.request("plan",fileProtocol=2,rootId=rootId,selection=["Heavy"]);admin.close()
                             assert call(c,"lan_sync_control",action="cancel_task",jobId=job["job"])["state"]=="cancelled"
                             time.sleep(.3)
                             probe=Wire(replacement);assert "roots" in probe.request("roots");probe.close()

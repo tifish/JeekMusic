@@ -24,7 +24,7 @@ internal class LanLocalDeferred(val reason: String): IOException(reason)
 
 /** Real descriptor-relative transactions. Factory enforces the selected SAF tree plus OS access.
  * Root identity is a local marker, never a remote rootId or a filename namespace. */
-internal class LanLocalFiles(private val absoluteRoot: String,private val mapping: JSONObject,private val database: LanFileDatabase,allowPin: Boolean): Closeable {
+internal class LanLocalFiles(private val absoluteRoot: String,private val mapping: JSONObject,private val database: LanFileDatabase,allowPin: Boolean,private val permissionCheck: ()->Unit={}): Closeable {
     private val root=ParcelFileDescriptor.adoptFd(LanAtomicFiles.openRoot(absoluteRoot))
     private val rootIdentity=LanAtomicFiles.identity(root.fd)
     private val markerName=".jeek-sync-directory-id"
@@ -69,10 +69,13 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             val volume=context.getSystemService(StorageManager::class.java).storageVolumes.singleOrNull { it.mediaStoreVolumeName==path.volumeName }?.directory ?: throw LanLocalDeferred("storage_unavailable")
             val target=File(volume,path.relativePath.trimEnd('/'))
             require(target.canonicalPath==target.absolutePath) { "Linked destination root rejected" }
-            return LanLocalFiles(target.path,mapping,database,allowPin)
+            return LanLocalFiles(target.path,mapping,database,allowPin) {
+                if(!Environment.isExternalStorageManager() || context.contentResolver.persistedUriPermissions.none { it.isReadPermission && it.isWritePermission && it.uri==uri })throw LanLocalDeferred("saf_permission_missing")
+            }
         }
     }
     private fun currentRoot() {
+        permissionCheck()
         ParcelFileDescriptor.adoptFd(LanAtomicFiles.openRoot(absoluteRoot)).use { now ->
             val current=LanAtomicFiles.identity(now.fd);if(current[0]!=rootIdentity[0] || current[1]!=rootIdentity[1])throw LanLocalDeferred("directory_identity_changed")
         }
@@ -88,25 +91,60 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
     }
     private fun same(a: LongArray,b: LongArray)=a[0]==b[0] && a[1]==b[1]
     private fun identity(row: JSONObject,key: String)=row.optJSONArray(key)?.let { a -> LongArray(a.length()) { a.getLong(it) } }
+    private fun requireVersion(file: ParcelFileDescriptor,row: JSONObject) {
+        if(!row.has("expectedVersion"))return
+        val id=LanAtomicFiles.identity(file.fd)
+        val token=LanFileMetrics.token(id[2],Math.addExact(Math.multiplyExact(id[3],1_000_000_000),id[4]))
+        if(token!=row.optString("expectedVersion"))throw LanLocalDeferred("local_metadata_changed_before_commit")
+    }
     private suspend fun hash(file: ParcelFileDescriptor): String {
         val before=LanAtomicFiles.identity(file.fd);if(before[2]>maxBytes)throw LanLocalDeferred("file_byte_budget")
         android.system.Os.lseek(file.fileDescriptor,0,android.system.OsConstants.SEEK_SET)
         val digest=MessageDigest.getInstance("SHA-256");val buffer=ByteArray(128*1024);var bytes=0L
-        while(true) { currentCoroutineContext().ensureActive();val n=read(file,buffer);if(n<=0)break;bytes+=n;if(bytes>maxBytes)throw LanLocalDeferred("file_byte_budget");digest.update(buffer,0,n) }
+        while(true) { currentCoroutineContext().ensureActive();val n=read(file,buffer);if(n<=0)break;bytes+=n;if(bytes>maxBytes)throw LanLocalDeferred("file_byte_budget");LanFileMetrics.hashBytes.addAndGet(n.toLong());digest.update(buffer,0,n) }
         val after=LanAtomicFiles.identity(file.fd)
         if(!before.contentEquals(after) || bytes!=before[2])throw LanLocalDeferred("local_changed_during_read")
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-    suspend fun observe(path: String): JSONObject {
-        val parent=parent(path) ?: return JSONObject().put("known",true).put("hash",JSONObject.NULL)
+    suspend fun observe(path: String,verifyContent: Boolean=false): JSONObject {
+        LanFileMetrics.metadataObservations.incrementAndGet()
+        val parent=parent(path) ?: return LanFileMetrics.absent()
         return parent.use { p ->
             val fd=LanAtomicFiles.openLeaf(p.fd,path.substringAfterLast('/'),false,false)
-            if(fd<0) JSONObject().put("known",true).put("hash",JSONObject.NULL)
+            if(fd<0) LanFileMetrics.absent()
             else ParcelFileDescriptor.adoptFd(fd).use { file ->
-                val value=hash(file);val id=LanAtomicFiles.identity(file.fd)
-                JSONObject().put("known",true).put("hash",value).put("size",id[2]).put("modifiedNs",Math.addExact(Math.multiplyExact(id[3],1_000_000_000),id[4]))
+                val value=if(verifyContent)hash(file) else null;val id=LanAtomicFiles.identity(file.fd)
+                val ns=Math.addExact(Math.multiplyExact(id[3],1_000_000_000),id[4])
+                JSONObject().put("known",true).put("exists",true).put("size",id[2]).put("modifiedNs",ns).put("precisionNs",1L).put("metadataVersion",LanFileMetrics.token(id[2],ns)).also { if(verifyContent)it.put("hash",value) }
             }
         }
+    }
+    suspend fun verify(path: String,expectedVersion: String?): JSONObject {
+        if(LanFileMetrics.version(observe(path))!=expectedVersion)throw LanLocalDeferred("local_changed_before_verification")
+        return observe(path,true).also { if(LanFileMetrics.version(it)!=expectedVersion)throw LanLocalDeferred("local_changed_during_verification") }
+    }
+    /** Actual ExternalStorageProvider filesystem directories, never document URIs. Hints only. */
+    suspend fun watchDirectories(selection: List<String>): List<File> {
+        val result=linkedSetOf(File(absoluteRoot))
+        suspend fun walk(path: String,depth: Int) {
+            currentCoroutineContext().ensureActive();currentRoot()
+            if(depth>64 || result.size>=4096)throw LanLocalDeferred("watch_directory_budget")
+            val fd=LanAtomicFiles.openParent(root.fd,path,false);if(fd<0)return
+            ParcelFileDescriptor.adoptFd(fd).use { directory ->
+                result+=File(absoluteRoot,path)
+                var cookie=0L
+                while(true) {
+                    val page=LanAtomicFiles.listPage(directory.fd,cookie);cookie=page[0].toString(Charsets.US_ASCII).toLong()
+                    for(item in page.drop(1))if(item[0].toInt().toChar()=='D') {
+                        val name=Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(item,1,item.size-1)).toString()
+                        if(!name.startsWith('.'))walk(if(path.isEmpty())name else "$path/$name",depth+1)
+                    }
+                    if(page.size==1)break
+                }
+            }
+        }
+        for(path in selection.distinct()) { LanProtocol.relative(path,true);walk(path,0) }
+        return result.toList()
     }
     suspend fun scan(selection: List<String>,emit: (JSONObject)->Unit,unavailable: (String)->Unit) {
         var visited=0;var files=0;var bytes=0L
@@ -144,13 +182,22 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             ParcelFileDescriptor.adoptFd(fd).use { file ->
                 val before=LanAtomicFiles.identity(file.fd);if(before[2]>maxBytes)throw LanLocalDeferred("file_byte_budget")
                 val digest=MessageDigest.getInstance("SHA-256")
-                FileOutputStream(target).use { output -> val buffer=ByteArray(128*1024);var bytes=0L;while(true) { currentCoroutineContext().ensureActive();val n=read(file,buffer);if(n<=0)break;bytes+=n;if(bytes>maxBytes)throw LanLocalDeferred("file_byte_budget");digest.update(buffer,0,n);output.write(buffer,0,n) };output.fd.sync() }
+                FileOutputStream(target).use { output -> val buffer=ByteArray(128*1024);var bytes=0L;while(true) { currentCoroutineContext().ensureActive();val n=read(file,buffer);if(n<=0)break;bytes+=n;if(bytes>maxBytes)throw LanLocalDeferred("file_byte_budget");LanFileMetrics.hashBytes.addAndGet(n.toLong());digest.update(buffer,0,n);output.write(buffer,0,n) };output.fd.sync() }
                 if(!before.contentEquals(LanAtomicFiles.identity(file.fd)) || digest.digest().joinToString("") { "%02x".format(it) }!=expected)throw LanLocalDeferred("local_changed_before_upload")
                 before[2]
             }
         }
     }
-    private fun save(row: JSONObject,state: String) { row.put("state",state).put("updatedAt",System.currentTimeMillis());database.transaction(row) }
+    private fun save(row: JSONObject,state: String) {
+        if(state=="committed" && row.has("sourceVersion") && !row.has("localVersion")) {
+            val path=row.getString("path");val p=parent(path)
+            val identity=p?.use { LanAtomicFiles.statLeaf(it.fd,path.substringAfterLast('/')) }
+            val version=identity?.let { LanFileMetrics.token(it[2],Math.addExact(Math.multiplyExact(it[3],1_000_000_000),it[4])) }
+            row.put("localVersion",version ?: JSONObject.NULL).put("remoteVersion",row.opt("sourceVersion") ?: JSONObject.NULL)
+        }
+        if(state=="committed" && row.optString("kind")=="delete_local")row.put("localVersion",JSONObject.NULL).put("remoteVersion",JSONObject.NULL)
+        row.put("state",state).put("updatedAt",System.currentTimeMillis());database.transaction(row)
+    }
     private suspend fun prepareStage(parent: Int,part: File,row: JSONObject): ParcelFileDescriptor {
         if(database.stagingBytes(row.getString("operation"))+part.length()>16L*1024*1024*1024 || File(absoluteRoot).usableSpace<part.length()+64L*1024*1024)throw LanLocalDeferred("staging_byte_budget")
         val name=".jeek-sync-${row.getString("operation")}.new"
@@ -178,16 +225,16 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             try {
                 val fd=LanAtomicFiles.openLeaf(parent.fd,name,true,false);if(fd>=0)original=ParcelFileDescriptor.adoptFd(fd)
                 val expected=if(row.isNull("expectedHash"))null else row.getString("expectedHash")
-                val actual=original?.let { hash(it) }
-                if(actual==row.getString("hash")) { save(row,"committed");return }
+                val actual=original?.let { requireVersion(it,row);hash(it) }
+                if(actual==row.getString("hash") && !row.has("expectedVersion")) { save(row,"committed");return }
                 if(actual!=expected)throw LanLocalDeferred("local_changed_before_commit")
                 if(original!=null && database.backupBytes()+LanAtomicFiles.identity(original.fd)[2]>32L*1024*1024*1024)throw LanLocalDeferred("backup_byte_budget")
                 beforeCommit();currentCoroutineContext().ensureActive();currentRoot()
                 if(original!=null) {
-                    if(hash(original)!=expected)throw LanLocalDeferred("local_changed_before_commit")
+                    requireVersion(original,row);if(hash(original)!=expected)throw LanLocalDeferred("local_changed_before_commit")
                     val id=LanAtomicFiles.identity(original.fd);row.put("backupIdentity",JSONArray(id.toList())).put("backupBytes",id[2]);save(row,"prepared")
                     LanAtomicFiles.moveNoReplace(parent.fd,name,backupName,id[0],id[1]);moved=true;save(row,"old_moved")
-                    if(hash(original)!=expected)throw LanLocalDeferred("local_changed_during_commit")
+                    requireVersion(original,row);if(hash(original)!=expected)throw LanLocalDeferred("local_changed_during_commit")
                 }
                 val id=LanAtomicFiles.identity(stage.fd);LanAtomicFiles.moveNoReplace(parent.fd,stageName,name,id[0],id[1]);installed=true
                 if(hash(stage)!=row.getString("hash"))throw LanLocalDeferred("local_changed_during_commit")
@@ -205,13 +252,13 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         p.use { parent ->
             val name=path.substringAfterLast('/');val fd=LanAtomicFiles.openLeaf(parent.fd,name,true,false);if(fd<0) { save(row,"committed");return }
             ParcelFileDescriptor.adoptFd(fd).use { file ->
-                if(hash(file)!=row.getString("expectedHash"))throw LanLocalDeferred("local_changed_before_commit")
+                requireVersion(file,row);if(hash(file)!=row.getString("expectedHash"))throw LanLocalDeferred("local_changed_before_commit")
                 val id=LanAtomicFiles.identity(file.fd);if(database.backupBytes()+id[2]>32L*1024*1024*1024)throw LanLocalDeferred("backup_byte_budget")
                 row.put("backupIdentity",JSONArray(id.toList())).put("backupBytes",id[2]);save(row,"prepared");beforeCommit();currentCoroutineContext().ensureActive();currentRoot()
-                if(hash(file)!=row.getString("expectedHash"))throw LanLocalDeferred("local_changed_before_commit")
+                requireVersion(file,row);if(hash(file)!=row.getString("expectedHash"))throw LanLocalDeferred("local_changed_before_commit")
                 val backupName=".jeek-sync-${row.getString("operation")}.bak"
                 LanAtomicFiles.moveNoReplace(parent.fd,name,backupName,id[0],id[1])
-                if(hash(file)!=row.getString("expectedHash")) {
+                requireVersion(file,row);if(hash(file)!=row.getString("expectedHash")) {
                     runCatching { LanAtomicFiles.moveNoReplace(parent.fd,backupName,name,id[0],id[1]);row.remove("backupIdentity");row.remove("backupBytes");save(row,"interrupted") }
                     throw LanLocalDeferred("local_changed_during_commit")
                 }
@@ -272,7 +319,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             if(raw<0) { if(expected!=null)throw LanLocalDeferred("local_changed_before_commit");return }
             ParcelFileDescriptor.adoptFd(raw).use { original ->
                 val id=LanAtomicFiles.identity(original.fd)
-                if(hash(original)!=expected)throw LanLocalDeferred("local_changed_before_commit")
+                requireVersion(original,row);if(hash(original)!=expected)throw LanLocalDeferred("local_changed_before_commit")
                 if(database.backupBytes()+id[2]>32L*1024*1024*1024)throw LanLocalDeferred("backup_byte_budget")
                 row.put("backupIdentity",JSONArray(id.toList())).put("backupBytes",id[2]).put("backupHash",expected);save(row,"vault_prepared")
                 currentCoroutineContext().ensureActive();currentRoot()
@@ -285,7 +332,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
                     };throw e
                 }
                 save(row,"vault_old_moved")
-                if(hash(original)!=expected)throw LanLocalDeferred("local_changed_during_commit")
+                requireVersion(original,row);if(hash(original)!=expected)throw LanLocalDeferred("local_changed_during_commit")
             }
         }
     }
@@ -322,8 +369,8 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         p.use { directory ->
             val name=path.substringAfterLast('/');beforeCommit();currentCoroutineContext().ensureActive();currentRoot()
             if(!row.has("targetIdentity")) {
-                val observed=observe(path);val actual=if(observed.isNull("hash"))null else observed.getString("hash")
-                if(actual==row.getString("hash")) { save(row,"committed");return }
+                val observed=observe(path,true);val actual=if(observed.isNull("hash"))null else observed.getString("hash")
+                if(actual==row.getString("hash") && !row.has("expectedVersion")) { save(row,"committed");return }
                 if(actual!=if(row.isNull("expectedHash"))null else row.getString("expectedHash")) {
                     if(actual!=null || !row.has("backupIdentity") || !row.has("vaultIdentity"))throw LanLocalDeferred("local_changed_before_commit")
                 }
@@ -334,10 +381,10 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
     }
     suspend fun recover(row: JSONObject,part: File?=null): String? {
         if(row.optString("commitMode")=="conditional_copy" && row.optString("state") in setOf("vault_prepared","vault_old_moved","copying")) {
-            val path=LanProtocol.relative(row.getString("path"));val current=observe(path);val actual=if(current.isNull("hash"))null else current.getString("hash");val desired=if(row.isNull("hash"))null else row.getString("hash")
+            val path=LanProtocol.relative(row.getString("path"));val current=observe(path,true);val actual=if(current.isNull("hash"))null else current.getString("hash");val desired=if(row.isNull("hash"))null else row.getString("hash")
             if(actual==desired) { save(row,"committed");return null }
             if(desired==null && actual==row.optString("expectedHash")) { delete(path,row) {};return null }
-            if(part!=null && part.isFile && com.tinyfish.jeekmusic.data.tags.SafeTagWriter.sha256(part)==desired) {
+            if(part!=null && part.isFile && LanFileMetrics.digest(part)==desired) {
                 try { installConditional(path,part,row) {} }
                 catch(e: LanLocalDeferred) { if(e.reason !in setOf("owned_partial_changed","owned_partial_missing","target_appeared","local_changed_before_commit"))throw e;save(row,"local_changed") }
                 return null
@@ -347,7 +394,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         if(row.optString("state") !in setOf("prepared","old_moved"))return null
         val path=LanProtocol.relative(row.getString("path"));val p=parent(path) ?: return "transaction_destination_unknown"
         return p.use { parent ->
-            val name=path.substringAfterLast('/');val op=row.getString("operation");val actual=observe(path).let { if(it.isNull("hash"))null else it.getString("hash") }
+            val name=path.substringAfterLast('/');val op=row.getString("operation");val actual=observe(path,true).let { if(it.isNull("hash"))null else it.getString("hash") }
             val expected=if(row.isNull("expectedHash"))null else row.getString("expectedHash")
             val desired=if(row.isNull("hash"))null else row.getString("hash")
             if(actual==desired)save(row,"committed")
@@ -377,7 +424,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
                 val original=row.optString("backupHash",row.getString("expectedHash"))
                 if(!same(known,actual) || hash(backup)!=original)throw LanLocalDeferred("backup_changed")
                 if(purge) { if(recovery!=null)LanAtomicFiles.removeVaultOriginal(recovery.fd,actual[0],actual[1]) else LanAtomicFiles.removeOwned(parent.fd,backupName,actual[0],actual[1]);row.remove("backupIdentity");row.remove("backupBytes");database.transaction(row);return }
-                val live=observe(path);var expected=if(row.isNull("hash"))null else row.getString("hash");val present=if(live.isNull("hash"))null else live.getString("hash")
+                val live=observe(path,true);var expected=if(row.isNull("hash"))null else row.getString("hash");val present=if(live.isNull("hash"))null else live.getString("hash")
                 if(present!=expected) {
                     val pending=row.optString("state") in setOf("vault_prepared","vault_old_moved","copying")
                     val owned=identity(row,"targetIdentity");val current=LanAtomicFiles.statLeaf(parent.fd,path.substringAfterLast('/'))

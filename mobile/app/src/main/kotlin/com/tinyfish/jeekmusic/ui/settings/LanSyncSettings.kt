@@ -39,6 +39,7 @@ import org.json.JSONObject
 @Composable
 fun LanSyncSettings(lan: LanSyncService) {
     val status by lan.status.collectAsStateWithLifecycle()
+    val schedule by lan.schedule.collectAsStateWithLifecycle()
     val revision by lan.revision.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -77,6 +78,7 @@ fun LanSyncSettings(lan: LanSyncService) {
     Column(Modifier.fillMaxWidth()) {
         com.tinyfish.jeekmusic.ui.components.SectionHeader(stringResource(R.string.lan_title))
         SettingSummary(stringResource(R.string.lan_intro), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        SettingSummary(stringResource(if(schedule.cancelled) R.string.lan_auto_cancelled else R.string.lan_auto_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_auto_status"))
         SettingItem(stringResource(R.string.lan_files_access), summary = stringResource(if (mtimeAllowed) R.string.lan_files_access_allowed else R.string.lan_files_access_needed), onClick = {
             context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
         })
@@ -96,7 +98,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             val current=LanMappingTargets.isCurrent(m)
             SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
             SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
-                checked = current && m.optBoolean("enabled", true), enabled = current && !status.running,
+                checked = current && m.optBoolean("enabled", true), enabled = current,
                 onChange = { lan.setEnabled(m.getString("rootId"), it) })
             FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }

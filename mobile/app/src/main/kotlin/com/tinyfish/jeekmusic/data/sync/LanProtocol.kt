@@ -40,7 +40,7 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         for(attempt in 0..2) {
             try { return callOnce(op,args) }
             catch(e: LanRemoteException) {
-                if(e.code != "busy" || op !in setOf("roots","tree","plan","plan_status","manifest","read","file_open","file_rows","file_baseline","file_probe","file_ack","file_begin","file_chunk","file_finish","file_delete","file_upload_status","file_read","file_abort","capabilities","state","preference_delta","preference_results") || attempt == 2) throw e
+                if(e.code != "busy" || op !in setOf("roots","tree","plan","plan_status","manifest","read","file_open","file_rows","file_baseline","file_probe","file_verify","file_ack","file_begin","file_chunk","file_finish","file_delete","file_upload_status","file_read","file_abort","capabilities","state","preference_delta","preference_results") || attempt == 2) throw e
                 close(); pause(30_000)
             }
         }
@@ -72,7 +72,7 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
             }
             output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
             var result = receive(if (op == "state") 32_000_000 else 2_000_000)
-            if (op in setOf("plan","file_probe","file_ack","file_finish","file_delete")) {
+            if (op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete")) {
                 if(result.optBoolean("pending")) activePlan.set(result.getString("job"))
                 if(cancelled) cancelRemotePlan()
                 val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(31)
@@ -85,7 +85,7 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
                     result = call("plan_status", JSONObject().put("job", result.getString("job")))
                 }
             }
-            if(op in setOf("plan","file_probe","file_ack","file_finish","file_delete")) activePlan.set(null)
+            if(op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete")) activePlan.set(null)
             return result
         } catch (e: Exception) { if(cancelled) cancelRemotePlan(); close(); throw e }
     }

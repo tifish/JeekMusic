@@ -90,7 +90,7 @@ internal sealed class LanFileMutation : IDisposable
             Verify(handle,FullPath,false);
             stream=new FileStream(handle,FileAccess.Read,128*1024,isAsync:true);
             if(stream.Length>maxBytes) throw new IOException("File byte budget exceeded");
-            var hash=Convert.ToHexStringLower(await SHA256.HashDataAsync(stream,ct));
+            var hash=Convert.ToHexStringLower(await FileMetadata.Digest(stream,ct));
             ct.ThrowIfCancellationRequested();
             if(forMutation) { original=stream; stream=null; }
             return hash;
@@ -119,7 +119,7 @@ internal sealed class LanFileMutation : IDisposable
         }
         catch { candidate?.Dispose(); if(candidate is null && stage is null) h.Dispose();throw; }
         using var digest=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);var buffer=new byte[128*1024];long copied=0;int read;
-        while((read=await input.ReadAsync(buffer,ct))>0) { copied=checked(copied+read);if(copied>size) throw new IOException("Upload size changed");digest.AppendData(buffer,0,read);await stage.WriteAsync(buffer.AsMemory(0,read),ct); }
+        while((read=await input.ReadAsync(buffer,ct))>0) { copied=checked(copied+read);if(copied>size) throw new IOException("Upload size changed");Interlocked.Add(ref FileMetadata.HashBytes,read);digest.AppendData(buffer,0,read);await stage.WriteAsync(buffer.AsMemory(0,read),ct); }
         if(copied!=size || Convert.ToHexStringLower(digest.GetHashAndReset())!=expected) throw new IOException("Upload hash changed");
         await stage.FlushAsync(ct);stage.Flush(true);
     }
@@ -131,7 +131,7 @@ internal sealed class LanFileMutation : IDisposable
         try {
             Verify(handle,path,false);using var input=new FileStream(handle,FileAccess.Read,128*1024,true);
             if(input.Length>maxBytes)return null;
-            return Convert.ToHexStringLower(await SHA256.HashDataAsync(input,ct))==expected?input.Length:null;
+            return Convert.ToHexStringLower(await FileMetadata.Digest(input,ct))==expected?input.Length:null;
         } finally { handle.Dispose(); }
     }
     public void SetModified(long nanoseconds)
@@ -145,7 +145,7 @@ internal sealed class LanFileMutation : IDisposable
         if(!Guid.TryParseExact(operation,"N",out _))throw new IOException("Invalid backup identity");
         var path=Path.Combine(Path.GetDirectoryName(FullPath)!,".jeek-sync-"+operation+".bak");
         using var input=OpenPrivate(path,false);
-        if(input.Length>maxBytes || Convert.ToHexStringLower(await SHA256.HashDataAsync(input,ct))!=expected)throw new IOException("Backup changed; retained");
+        if(input.Length>maxBytes || Convert.ToHexStringLower(await FileMetadata.Digest(input,ct))!=expected)throw new IOException("Backup changed; retained");
         commit(()=>DeleteOwned(input,Identity(input)));
     }
     public void Commit(string operation,bool delete,Action<Action> authorizedCommit)

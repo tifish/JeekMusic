@@ -12,7 +12,7 @@ import javax.inject.Singleton
 
 /** Private paged scratch snapshots plus durable transaction journals; never contains a token. */
 @Singleton
-class LanFileDatabase @Inject constructor(@ApplicationContext context: Context) {
+class LanFileDatabase @Inject constructor(@ApplicationContext context: Context): java.io.Closeable {
     private var backupTotal: Long?=null
     private var stageTotal: Long?=null
     private fun backupSize(row: JSONObject?)=if(row?.has("backupIdentity")==true)row.optLong("backupBytes") else 0L
@@ -22,6 +22,7 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context) 
         SQLiteDatabase.openOrCreateDatabase(file,null).apply {
             rawQuery("PRAGMA journal_mode=DELETE",null).use { it.moveToFirst() };execSQL("PRAGMA synchronous=FULL");execSQL("PRAGMA cache_size=-8192");rawQuery("PRAGMA max_page_count=262144",null).use { it.moveToFirst() }
             execSQL("CREATE TABLE IF NOT EXISTS entries(mapping TEXT,side TEXT,path TEXT,normalized TEXT,json TEXT,PRIMARY KEY(mapping,side,path),UNIQUE(mapping,side,normalized))")
+            execSQL("CREATE TABLE IF NOT EXISTS dependency_baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS transactions(operation TEXT PRIMARY KEY,mapping TEXT,path TEXT,scope TEXT,json TEXT)")
             execSQL("CREATE INDEX IF NOT EXISTS transaction_path ON transactions(mapping,path,scope)")
@@ -47,7 +48,11 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context) 
         val path=LanProtocol.relative(row.getString("path"))
         db.execSQL("INSERT OR REPLACE INTO baseline VALUES(?,?,?)",arrayOf(mapping,path,row.toString()))
     }
-    @Synchronized fun baseline(mapping: String,path: String): JSONObject? = one("SELECT json FROM baseline WHERE mapping=? AND path=?",arrayOf(mapping,path))
+    @Synchronized fun baseline(mapping: String,path: String): JSONObject? = one("SELECT json FROM baseline WHERE mapping=? AND path=?",arrayOf(mapping,path)) ?: one("SELECT json FROM dependency_baseline WHERE mapping=? AND path=?",arrayOf(mapping,path))
+    @Synchronized fun dependencyBaseline(mapping: String,path: String,local: String,remote: String) {
+        val row=JSONObject().put("path",path).put("version","dependency").put("comparisonProtocol",2).put("localVersion",local).put("remoteVersion",remote)
+        db.execSQL("INSERT OR REPLACE INTO dependency_baseline VALUES(?,?,?)",arrayOf(mapping,path,row.toString()))
+    }
     @Synchronized fun entry(mapping: String,side: String,path: String): JSONObject? = one("SELECT json FROM entries WHERE mapping=? AND side=? AND path=?",arrayOf(mapping,side,path))
     @Synchronized fun paths(mapping: String,offset: Int): List<String> = db.rawQuery("SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=? ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,offset.toString())).use { c ->
         buildList { while(c.moveToNext())add(c.getString(0)) }
@@ -98,4 +103,5 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context) 
         try { db.execSQL("DELETE FROM cue_bindings WHERE mapping=? AND cue=?",arrayOf(mapping,cue));for(path in audio.distinct()) { LanProtocol.relative(path);db.execSQL("INSERT OR IGNORE INTO cue_bindings VALUES(?,?,?)",arrayOf(mapping,path,cue)) };db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
     private fun one(sql: String,args: Array<String>): JSONObject? = db.rawQuery(sql,args).use { if(it.moveToFirst()) JSONObject(it.getString(0)) else null }
+    @Synchronized override fun close()=db.close()
 }

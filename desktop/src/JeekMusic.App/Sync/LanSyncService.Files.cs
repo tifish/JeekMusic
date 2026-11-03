@@ -7,7 +7,7 @@ public sealed partial class LanSyncService
 {
     readonly SemaphoreSlim _fileWork=new(1);
     LanFileSyncStore? _fileStore;
-    volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=1,["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
+    volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=2,["comparison"]="size+mtime-exact",["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
     int _refreshingFiles;
     readonly HashSet<string> _retiringUploads=new();
     void RetireFileUploads(string device) {
@@ -24,7 +24,7 @@ public sealed partial class LanSyncService
                 for(var batch=0;batch<8;batch++) {
                     if(!await _fileWork.WaitAsync(TimeSpan.FromSeconds(5)))return;
                     IReadOnlyList<(string Id,string Root,string Path)> rows;
-                    try { _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));rows=_fileStore.PendingRefresh(); }finally { _fileWork.Release(); }
+                    try { _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);rows=_fileStore.PendingRefresh(); }finally { _fileWork.Release(); }
                     if(rows.Count==0)return;
                     var completed=new List<string>();
                     foreach(var group in rows.GroupBy(r=>r.Root)) {
@@ -39,11 +39,18 @@ public sealed partial class LanSyncService
             finally { Interlocked.Exchange(ref _refreshingFiles,0); }
         });
     }
-    JsonObject FileDiagnostics()=>_fileDiagnostics.DeepClone().AsObject();
+    JsonObject FileDiagnostics() {
+        var result=_fileDiagnostics.DeepClone().AsObject();
+        result["metadataObservations"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.MetadataObservations);
+        result["hashBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.HashBytes);
+        result["transferBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.TransferBytes);
+        result["sidecarParseBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.SidecarParseBytes);
+        return result;
+    }
     public async Task<JsonObject> FileBackups(string action,string? receipt=null,int offset=0) {
         if(!_fileWork.Wait(0))throw new InvalidOperationException("File work busy; retry later");
         try {
-            _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));
+            _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
             if(action=="list")return _fileStore.Backups(offset);
             if(action is not ("restore" or "purge") || receipt is null || receipt.Length!=64 || receipt.Any(c=>!char.IsAsciiHexDigitLower(c)))throw new ArgumentException("Invalid backup action/receipt");
             // Stopped service prevents remote mutation/revocation racing local administrator recovery.
@@ -56,11 +63,11 @@ public sealed partial class LanSyncService
     async Task<JsonObject> DispatchFile(JsonObject a,CancellationToken request,bool modern)
     {
         var op=a["op"]!.GetValue<string>();
-        if(!modern || a["fileProtocol"]?.GetValue<int>()!=1)return Error("upgrade_required");
-        if(op is not ("file_open" or "file_rows" or "file_baseline" or "file_probe" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort"))throw new ArgumentException("Unknown file operation");
+        if(!modern || a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
+        if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort"))throw new ArgumentException("Unknown file operation");
         if(!_fileWork.Wait(0))throw Busy();
         bool handedOff=false;
-        var independent=op is "file_probe" or "file_ack" or "file_finish" or "file_delete";
+        var independent=op is "file_verify" or "file_ack" or "file_finish" or "file_delete";
         CancellationTokenSource? lifetime=null;
         try
         {
@@ -72,7 +79,7 @@ public sealed partial class LanSyncService
             {
                 try
                 {
-                    _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));
+                    _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
                     var store=_fileStore;
                     string scope=a["scope"]?.GetValue<string>()??"";
                     string rootId=op=="file_open"?a["rootId"]!.GetValue<string>():store.Root(scope,owner);
@@ -95,24 +102,27 @@ public sealed partial class LanSyncService
                     switch(op)
                     {
                         case "file_open":result=store.Open(auth.Device,owner,rootId,a["mapping"]!.GetValue<string>(),a["selection"]!.AsArray().Select(n=>n!.GetValue<string>()).ToArray());break;
+                        case "file_revision":result=new() { ["revision"]=WatchRevision(rootId),["pollSeconds"]=30,["fallbackSeconds"]=900 };break;
+                        case "file_schedule":result=store.Schedule(scope,a);break;
                         case "file_rows":result=store.Baselines(scope,a["offset"]?.GetValue<int>()??0,a["revision"]!.GetValue<string>());break;
                         case "file_baseline":result=store.BaselineRow(scope,a["path"]!.GetValue<string>());break;
                         case "file_probe":store.PathAllowed(scope,a["path"]!.GetValue<string>());result=await store.Probe(root,a["path"]!.GetValue<string>(),token,scope);break;
-                        case "file_ack":result=await store.Ack(scope,root,a,token,Guard);break;
-                        case "file_begin":result=store.Begin(scope,a);break;
+                        case "file_verify":result=await store.Verify(scope,root,a["path"]!.GetValue<string>(),a,token);break;
+                        case "file_ack":if(!a.ContainsKey("remoteVersion"))throw new ArgumentException("Metadata acknowledgement required");result=await store.Ack(scope,root,a,token,Guard);break;
+                        case "file_begin":if(!a.ContainsKey("expectedVersion"))throw new ArgumentException("Metadata precondition required");result=store.Begin(scope,a);break;
                         case "file_chunk":TransferBudget(auth.Device,Math.Min(262144,(a["data"]?.GetValue<string>().Length??0)*3/4));result=await store.Chunk(scope,a,token);break;
                         case "file_abort":result=store.Abort(scope,a["operation"]!.GetValue<string>());break;
                         case "file_read": {
                             var path=a["path"]!.GetValue<string>();store.PathAllowed(scope,path);
                             var offset=a["offset"]!.GetValue<long>();var size=a["size"]!.GetValue<long>();
                             if(offset<0 || size<0 || size>store.MaximumFileBytes || offset>size)throw new ArgumentException("Invalid file range");
-                            await using var input=JeekMusic.Core.Sync.LanFiles.OpenRead(root,path);if(input.Length!=size)throw new LanFileDeferred("source_changed");
+                            await using var input=JeekMusic.Core.Sync.LanFiles.OpenRead(root,path);if(input.Length!=size || JeekMusic.Core.Sync.FileMetadata.Token(JeekMusic.Core.Sync.FileMetadata.Observe(root,path))!=a["sourceVersion"]?.GetValue<string>())throw new LanFileDeferred("source_changed");
                             input.Position=offset;var bytes=new byte[(int)Math.Min(262144,size-offset)];TransferBudget(auth.Device,bytes.Length);await input.ReadExactlyAsync(bytes,token);
-                            result=new JsonObject { ["data"]=Convert.ToBase64String(bytes) };break;
+                            Interlocked.Add(ref JeekMusic.Core.Sync.FileMetadata.TransferBytes,bytes.Length);result=new JsonObject { ["data"]=Convert.ToBase64String(bytes) };break;
                         }
                         case "file_upload_status":result=store.UploadStatus(scope,a["operation"]!.GetValue<string>());break;
                         case "file_finish":result=await store.Finish(scope,root,a["operation"]!.GetValue<string>(),token,MutationGuard);break;
-                        case "file_delete":result=await store.Delete(scope,root,a,token,MutationGuard);break;
+                        case "file_delete":if(!a.ContainsKey("expectedVersion"))throw new ArgumentException("Metadata precondition required");result=await store.Delete(scope,root,a,token,MutationGuard);break;
                         default:throw new ArgumentException();
                     }
                     return result;

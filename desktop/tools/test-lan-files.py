@@ -8,7 +8,7 @@ Wire,call,wait=_module.Wire,_module.call,_module.wait
 from mcp_client import McpClient
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--exe',type=Path,required=True);parser.add_argument('--android');a=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--exe',type=Path,required=True);parser.add_argument('--android');parser.add_argument('--public-saf',action='store_true');parser.add_argument('--auto',action='store_true');parser.add_argument('--benchmark',action='store_true');parser.add_argument('--case');a=parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='jeek-files-') as temp:
         work=Path(temp);data=work/'data';data.mkdir();music=work/'Music';music.mkdir()
         (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoCheckUpdate=False,language='en')))
@@ -26,7 +26,11 @@ def main():
                 def request(op,**args):
                     w=with_peer()
                     try:
-                        result=w.request(op,fileProtocol=1,**args)
+                        if op in ('file_begin','file_delete','file_ack'):
+                            observed=w.request('file_probe',fileProtocol=2,scope=args['scope'],path=args['path'])
+                            if op=='file_ack':args.update(remoteVersion=observed.get('metadataVersion'),localVersion=observed.get('metadataVersion'),decision='ack')
+                            else:args['expectedVersion']=observed.get('metadataVersion')
+                        result=w.request(op,fileProtocol=2,**args)
                         while result.get('pending'):
                             time.sleep(.05);result=w.request('plan_status',job=result['job'])
                         return result
@@ -49,16 +53,39 @@ def main():
                 assert request('file_ack',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=deletion,hash=None,localHash=None,localKnown=True,baselineVersion=ack['version'])['version']
                 assert request('file_probe',scope=scope,path='../outside.wav').get('deferred')
                 print('PASS real TLS upload, exact chunk replay, conditional delete, explicit receipt/ack and traversal rejection',flush=True)
+                if a.benchmark:
+                    sample=music/'MetadataSample';sample.mkdir()
+                    for index in range(128):
+                        with (sample/f'{index:03}.wav').open('wb') as f:f.write(b'RIFF'+bytes(4)+b'WAVE');f.truncate(256*1024)
+                    (sample/'album.cue').write_text('FILE "000.wav" WAVE\nTRACK 01 AUDIO\n INDEX 01 00:00:00\n')
+                    samples=[]
+                    for round_ in range(2):
+                        request('file_probe',scope=scope,path='MetadataSample/000.wav')
+                        before=call(c,'lan_sync_status')['fileSync'];start=time.perf_counter()
+                        plan=request('plan',rootId=root,selection=['MetadataSample'])
+                        rows=request('manifest',rootId=root,plan=plan['plan'],offset=0)['files']
+                        request('file_probe',scope=scope,path='MetadataSample/000.wav')
+                        after=call(c,'lan_sync_status')['fileSync']
+                        result=dict(round=round_+1,files=len(rows),sampleBytes=128*256*1024,elapsedMs=round((time.perf_counter()-start)*1000,2),metadataObservations=after['metadataObservations']-before['metadataObservations'],hashBytes=after['hashBytes']-before['hashBytes'],transferBytes=after['transferBytes']-before['transferBytes'],sidecarParseBytes=after['sidecarParseBytes']-before['sidecarParseBytes'])
+                        assert result['hashBytes']==0 and result['transferBytes']==0 and all('hash' not in r for r in rows)
+                        if round_:assert result['sidecarParseBytes']==0
+                        samples.append(result)
+                    print('METADATA_SAMPLE '+json.dumps(samples),flush=True)
                 if a.android:
                     adb=str(Path(os.environ.get('ANDROID_HOME','C:/Android/sdk'))/'platform-tools/adb.exe')
                     def device(*args,**kwargs):return subprocess.run([adb,'-s',a.android,*args],check=True,**kwargs)
                     device('install','-r','mobile/app/build/outputs/apk/debug/app-debug.apk',capture_output=True)
                     device('install','-r','mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk',capture_output=True)
                     device('reverse',f'tcp:{port}',f'tcp:{port}',capture_output=True)
-                    fixture=base64.b64encode(json.dumps(dict(peer,rootId=root,isolated=True,prefix='Matrix')).encode()).decode()
+                    if a.auto:
+                        invite=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1')['invitation']);writer_pin,writer_secret=invite.path.strip('/').split('/')
+                        writer=dict(host='127.0.0.1',port=port,pin=writer_pin,deviceId=uuid.uuid4().hex)
+                        wire=Wire(writer,auth=False);wire.send(dict(op='pair',deviceId=writer['deviceId'],name='Synthetic independent writer',invitation=writer_secret));writer['token']=wire.receive()['token'];wire.close();peer['writer']=writer
+                    fixture=base64.b64encode(json.dumps(dict(peer,rootId=root,isolated=True,prefix='Matrix',publicSaf=a.public_saf)).encode()).decode()
                     try:
-                        result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.LanFileSynchronizerTest','-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
-                        print(result.stdout,flush=True);assert 'OK (3 tests)' in result.stdout
+                        test_class=('LanAutoSyncTest' if a.auto else 'LanFileSynchronizerTest')+('#'+a.case if a.case else '')
+                        result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
+                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (5 tests)') in result.stdout
                     finally:device('reverse','--remove',f'tcp:{port}',capture_output=True)
                 # Administrative recovery uses the same private store and never a remote endpoint.
                 backups=call(c,'lan_file_backups',action='list')['backups'];assert backups

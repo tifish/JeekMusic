@@ -84,6 +84,8 @@ public sealed partial class LanSyncService : IDisposable
         foreach (var r in Roots.Select(p => p.Value).OfType<JsonObject>())
             if (r["folderIdentity"] is null) r["enabled"] = false;
         app.Library.SnapshotChanged += ReconcileRoots;
+        app.Library.Watcher.DirsChanged += OnFileDirectoriesChanged;
+        app.Library.Watcher.Failed += OnFileWatcherFailed;
         if (_config["enabled"]?.GetValue<bool>() == true)
             try { Start(); } catch (IOException) { /* A failed optional listener must not prevent player startup. */ }
         else if (_config["firewallManaged"]?.GetValue<bool>() == true) _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
@@ -325,7 +327,7 @@ public sealed partial class LanSyncService : IDisposable
         var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
-            ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),
+            ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),["fileWatch"]=WatchDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
             ["sourceBuckets"] = _admission.SourceCount, ["connectionRejected"] = _admission.Rejected,
@@ -532,7 +534,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=1, ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=2,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
@@ -608,6 +610,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         if (op == "plan")
         {
+            if(a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
             var selected = (a["selection"] as JsonArray ?? throw new ArgumentException("Missing selection")).Select(n => n!.GetValue<string>()).ToArray();
             if (selected.Length is < 1 or > 1000) throw new ArgumentException("Invalid selection");
             if (!_planWork.Wait(0)) throw Busy();
@@ -628,7 +631,7 @@ public sealed partial class LanSyncService : IDisposable
             {
                 try
                 {
-                    var entries = await LanFiles.Manifest(root, selected, workCancel.Token);
+                    var entries = await LanFiles.Manifest(root, selected, workCancel.Token, metadataOnly:true,cueCacheDirectory:Path.Combine(AppPaths.DataDir,"lan-cue-metadata"));
                     var currentRoot=RootPath(rootId);
                     lock (_gate)
                     {
@@ -637,7 +640,7 @@ public sealed partial class LanSyncService : IDisposable
                         foreach (var key in _plans.Where(p => p.Value.Device == device || p.Value.Expires < DateTime.UtcNow).Select(p => p.Key).ToArray()) _plans.Remove(key);
                         if (_plans.Count >= 16 || _plans.Values.Sum(p => p.Files.Count) + entries.Count > 200_000 || _plans.Values.Sum(p => ManifestMemory(p.Files)) + ManifestMemory(entries) > 128L * 1024 * 1024) throw Busy();
                         var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries);
-                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "sha256-all-selected" };
+                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact" };
                     }
                 }
                 catch (OperationCanceledException) { return BusyResponse(); }
@@ -661,7 +664,7 @@ public sealed partial class LanSyncService : IDisposable
         {
             var offset = a["offset"]?.GetValue<int>() ?? 0;
             if (offset < 0) throw new ArgumentException("Invalid offset");
-            return new JsonObject { ["files"] = new JsonArray(plan.Files.Skip(offset).Take(200).Select(e => (JsonNode)new JsonObject { ["path"] = e.Path, ["size"] = e.Size, ["modifiedNs"] = e.ModifiedNs, ["hash"] = e.Hash,
+            return new JsonObject { ["files"] = new JsonArray(plan.Files.Skip(offset).Take(200).Select(e => (JsonNode)new JsonObject { ["path"] = e.Path, ["size"] = e.Size, ["modifiedNs"] = e.ModifiedNs, ["exists"] = true, ["metadataVersion"] = FileMetadata.Version(e.Size,e.ModifiedNs), ["precisionNs"] = 100,
                 ["dependencies"] = new JsonArray((e.Dependencies ?? []).Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()) }).ToArray()) };
         }
         if (op == "read")
@@ -674,16 +677,34 @@ public sealed partial class LanSyncService : IDisposable
             try
             {
             using var input = LanFiles.OpenRead(root, relative);
-            if (input.Length != entry.Size) throw new IOException("Source changed");
+            if (input.Length != entry.Size || FileMetadata.Token(FileMetadata.Observe(root,relative))!=FileMetadata.Version(entry.Size,entry.ModifiedNs)) throw new IOException("Source changed");
             // Fixed, bounded transport chunks only; no custom block-diff algorithm or whole-file allocation.
             input.Position = offset;
             var buffer = new byte[(int)Math.Min(256 * 1024, input.Length - offset)];
             TransferBudget(device, buffer.Length);
             await input.ReadExactlyAsync(buffer, cancel);
-            lock (_gate) { _bytesServed += buffer.Length; if (DateTime.UtcNow - _lastNotify > TimeSpan.FromMilliseconds(500)) { _lastNotify = DateTime.UtcNow; Notify(); } }
+            lock (_gate) { Interlocked.Add(ref FileMetadata.TransferBytes,buffer.Length); _bytesServed += buffer.Length; if (DateTime.UtcNow - _lastNotify > TimeSpan.FromMilliseconds(500)) { _lastNotify = DateTime.UtcNow; Notify(); } }
             cancel.ThrowIfCancellationRequested();
             return new JsonObject { ["data"] = Convert.ToBase64String(buffer) };
             } finally { _work.Release(); }
+        }
+        if(op=="verify")
+        {
+            if(a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
+            var path=a["path"]?.GetValue<string>()??"";
+            var entry=plan.Files.FirstOrDefault(e=>e.Path==path)??throw new UnauthorizedAccessException();
+            if(entry.Size>8L*1024*1024*1024)throw new IOException("Verification file byte budget exceeded");
+            var expected=FileMetadata.Version(entry.Size,entry.ModifiedNs);
+            if(a["expectedVersion"]?.GetValue<string>()!=expected)throw new IOException("Source changed");
+            if(!_work.Wait(0))throw Busy();
+            try {
+                ReservePlanVerification(device,entry.Size);
+                using var input=LanFiles.OpenRead(root,path);
+                if(FileMetadata.Token(FileMetadata.Observe(root,path))!=expected)throw new IOException("Source changed");
+                var hash=Convert.ToHexStringLower(await FileMetadata.Digest(input,cancel));
+                var result=FileMetadata.Observe(root,path);if(FileMetadata.Token(result)!=expected)throw new IOException("Source changed");
+                result["hash"]=hash;return result;
+            }finally { _work.Release(); }
         }
         throw new ArgumentException("Unknown operation");
     }
@@ -730,5 +751,5 @@ public sealed partial class LanSyncService : IDisposable
         public override void Write(byte[] bytes, int offset, int count) { cancel.ThrowIfCancellationRequested(); if (Length + count > maximum) throw new IOException("Response budget exceeded; upgrade or split data"); base.Write(bytes, offset, count); }
     }
     sealed class FrameTooLargeException : IOException { }
-    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; lock (_gate) InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); if (_config["firewallManaged"]?.GetValue<bool>() == true) _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0).GetAwaiter().GetResult(); }
+    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; _app.Library.Watcher.DirsChanged -= OnFileDirectoriesChanged;_app.Library.Watcher.Failed -= OnFileWatcherFailed; lock (_gate) InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); if (_config["firewallManaged"]?.GetValue<bool>() == true) _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0).GetAwaiter().GetResult(); }
 }

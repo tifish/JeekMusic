@@ -91,7 +91,7 @@ public static partial class LanFiles
             throw new IOException("Case or Unicode path collision");
     }
 
-    public static async Task<IReadOnlyList<Entry>> Manifest(string root, IEnumerable<string> selection, CancellationToken cancel = default, Budget? budget = null)
+    public static async Task<IReadOnlyList<Entry>> Manifest(string root, IEnumerable<string> selection, CancellationToken cancel = default, Budget? budget = null, bool metadataOnly = true, string? cueCacheDirectory = null)
     {
         budget ??= new();
         long workMemory = 0;
@@ -136,14 +136,14 @@ public static partial class LanFiles
             Walk(path);
         }
         // CUE dependencies may be outside the selected subdirectory, but never outside its root.
-        foreach (var cue in paths.Where(p => p.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)).ToArray())
+        foreach (var cue in paths.Where(p => (!metadataOnly || cueCacheDirectory!=null) && p.EndsWith(".cue", StringComparison.OrdinalIgnoreCase)).ToArray())
         {
             var required = new List<string>(); dependencies[cue] = required;
             var full = Resolve(root, cue);
             if (new FileInfo(full).Length > 2_000_000) throw new IOException("CUE too large");
-            using var cueStream = OpenRead(root, cue);
-            using var cueReader = new StreamReader(cueStream, Encoding.UTF8, true);
-            var text = await cueReader.ReadToEndAsync(cancel);
+            string text;
+            if(cueCacheDirectory!=null)text=await LanCueMetadataCache.Text(cueCacheDirectory,root,cue,cancel);
+            else { using var cueStream = OpenRead(root, cue);using var cueReader = new StreamReader(cueStream, Encoding.UTF8, true);text = await cueReader.ReadToEndAsync(cancel);Interlocked.Add(ref FileMetadata.SidecarParseBytes,cueStream.Position); }
             if (text.Contains('\uFFFD')) throw new IOException("CUE encoding cannot be safely resolved; convert to UTF-8");
             if (Regex.Matches(text, @"^\s*FILE\b", RegexOptions.IgnoreCase | RegexOptions.Multiline).Count != CueFile().Matches(text).Count)
                 throw new IOException("Malformed CUE FILE declaration");
@@ -190,12 +190,13 @@ public static partial class LanFiles
         {
             cancel.ThrowIfCancellationRequested();
             var full = Resolve(root, path);
-            using var stream = OpenRead(root, path);
+            using var stream = metadataOnly ? null : OpenRead(root, path);
             var info = new FileInfo(full);
             var size = info.Length; var ticks = info.LastWriteTimeUtc.Ticks;
             bytes = checked(bytes + size);
             if (bytes > budget.Bytes) throw new IOException("Selection exceeds 500 GiB; choose smaller folders");
-            var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancel));
+            Interlocked.Increment(ref FileMetadata.MetadataObservations);
+            var hash = metadataOnly ? "" : Convert.ToHexStringLower(await FileMetadata.Digest(stream!, cancel));
             info.Refresh();
             if (info.Length != size || info.LastWriteTimeUtc.Ticks != ticks) throw new IOException("Source changed during verification; retry");
             entries.Add(new(path, size, checked((ticks - DateTime.UnixEpoch.Ticks) * 100), hash, dependencies.GetValueOrDefault(path)));

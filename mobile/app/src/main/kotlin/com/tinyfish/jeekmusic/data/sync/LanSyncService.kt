@@ -53,7 +53,35 @@ class LanSyncService @Inject constructor(
 ) {
     private val gate = Mutex()
     @Volatile private var job: Job? = null
+    @Volatile private var activeFileRoot: String? = null
     private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing) }
+    private val automation by lazy { LanAutoSync(context,scope,this) }
+    val schedule get()=automation.state
+    fun initializeAutomation()=automation.initialize()
+    internal fun isSyncRunning()=job?.isActive==true
+    internal suspend fun awaitSync() { job?.join() }
+    internal fun cancelScheduled() { job?.cancel();transport?.cancel() }
+    internal suspend fun backgroundSync()=automation.background()
+    internal suspend fun localWatchDirectories(mapping: JSONObject): List<File> = LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { io ->
+        // Only synchronization may persist a new directory pin. Watching never initializes one.
+        io.watchDirectories(mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } })
+    }
+    internal fun pollFileRevision(mapping: JSONObject): String {
+        LanProtocol(store.read().getJSONObject("connection")).use { client ->
+            val opened=client.call("file_open",JSONObject().put("fileProtocol",2).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
+            if(opened.optBoolean("deferred") || opened.optBoolean("conflict"))throw java.io.IOException("scope_unavailable")
+            return client.call("file_revision",JSONObject().put("fileProtocol",2).put("scope",opened.getString("scope"))).getString("revision")
+        }
+    }
+    internal fun reportFileSchedule(value: JSONObject) {
+        val connection=store.read().optJSONObject("connection") ?: return
+        for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) })runCatching {
+            LanProtocol(connection).use { client ->
+                val opened=client.call("file_open",JSONObject().put("fileProtocol",2).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
+                client.call("file_schedule",JSONObject().put("fileProtocol",2).put("scope",opened.getString("scope")).put("schedule",JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))))
+            }
+        }
+    }
     @Volatile private var transport: LanProtocol? = null
     private val _status = MutableStateFlow(LanStatus())
     val status = _status.asStateFlow()
@@ -89,6 +117,7 @@ class LanSyncService @Inject constructor(
             require(response.optInt("protocol") == 4) { "Upgrade the PC for LAN protocol 4" }
             connection.put("token", response.getString("token")).put("name", response.optString("name", uri.host))
             store.update { it.put("connection", connection) }; report()
+            automation.configure()
             _status.value = LanStatus(text = context.getString(R.string.lan_paired_identity, connection.getString("name"), uri.endpoint))
         }
     }
@@ -110,7 +139,7 @@ class LanSyncService @Inject constructor(
     }
     suspend fun estimate(root: String, selected: Set<String>): JSONObject = withContext(Dispatchers.IO) {
         require(selected.isNotEmpty()) { "Choose at least one folder" }
-        protocol().call("plan", JSONObject().put("rootId", root).put("selection", JSONArray(selected.toList())))
+        protocol().call("plan", JSONObject().put("fileProtocol",2).put("rootId", root).put("selection", JSONArray(selected.toList())))
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
     suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
@@ -134,21 +163,28 @@ class LanSyncService @Inject constructor(
                 .put("key", old?.getString("key") ?: java.util.UUID.randomUUID().toString()).put("enabled", true)
             old?.optString("directoryIdentity")?.takeIf { it.isNotEmpty() }?.let { mapping.put("directoryIdentity",it) }
             store.saveMapping(mapping); report()
+            automation.resume()
         }
     }
     fun setEnabled(root: String, enabled: Boolean) {
-        check(job?.isActive != true) { "Cancel sync first" }
+        if(!enabled && activeFileRoot==root)cancelScheduled()
         val mapping = store.mappings().single { it.getString("rootId") == root }; if(enabled) LanMappingTargets.requireCurrent(mapping); mapping.put("enabled", enabled); store.saveMapping(mapping); report()
+        if(enabled)automation.resume() else automation.configure()
     }
     fun forget(root: String) {
         check(job?.isActive != true) { "Cancel sync first" }
         store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root })) }; report()
+        automation.configure()
     }
-    fun cancel() { job?.cancel(); transport?.cancel() }
-    fun start() {
+    fun cancel() { automation.cancel();cancelScheduled();scope.launch(Dispatchers.IO) { reportFileSchedule(automation.state.value.json()) } }
+    fun start() { automation.hint("manual",manual=true) }
+    @Synchronized internal fun startScheduled(reason: String) {
         if (job?.isActive == true) return
+        automation.begin(reason)
         job = scope.launch(Dispatchers.IO) {
-            gate.withLock {
+            val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
+            try { gate.withLock {
+                reportFileSchedule(automation.state.value.json())
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying))
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
@@ -160,6 +196,8 @@ class LanSyncService @Inject constructor(
                     val actions=mutableMapOf<String,Int>();val conflicts=mutableListOf<JSONObject>();var deferredCount=0;var processed=0;var lastProgress=0L
                     for (mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }) {
                         ensureActive()
+                        if(store.mappings().none { it.optString("key")==mapping.getString("key") && it.optBoolean("enabled",true) })continue
+                        activeFileRoot=mapping.getString("rootId")
                         val client=protocol()
                         try {
                             val result=fileSynchronizer.synchronize(mapping,client,{ store.saveMapping(mapping);report() },{ path,progress ->
@@ -173,16 +211,19 @@ class LanSyncService @Inject constructor(
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
                             _status.value=_status.value.copy(fileActions=actions.toMap(),fileConflicts=conflicts.map { JSONObject(it.toString()) },fileDeferredCount=deferredCount,fileProcessed=processed)
-                        } finally { client.close() }
+                        } finally { client.close();activeFileRoot=null }
                         drainRefresh()
                     }
                     ensureActive()
-                    val dataClient = protocol()
-                    LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
-                    dataClient.use {
-                        val remote = dataClient.call("state", sync.exportLan())
-                        sync.acceptLan(remote)
-                        try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
+                    fileRoundCompleted=true
+                    if(reason=="manual") {
+                        val dataClient = protocol()
+                        LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
+                        dataClient.use {
+                            val remote = dataClient.call("state", sync.exportLan())
+                            sync.acceptLan(remote)
+                            try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
+                        }
                     }
                     _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {
@@ -191,8 +232,8 @@ class LanSyncService @Inject constructor(
                     // Transport exceptions can contain connection addresses, but never serialize the invitation/token.
                     _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                         else _status.value.copy(running=false,text=context.getString(R.string.lan_failed),done=done,total=total,problems=problems+problem(e),timeDetails=timeDetails,precisionNs=precisionNs)
-                } finally { transport?.close(); transport = null; report(); startRecovery() }
-            }
+                } finally { completedBytes=done;transport?.close(); transport = null; report(); startRecovery() }
+            } }finally { automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes) }
         }
     }
     /** Local recovery only; this never connects to a PC or starts a new download. */
@@ -225,7 +266,7 @@ class LanSyncService @Inject constructor(
                     for(path in queued) {
                         val update=fileDatabase.refresh(key,path) ?: continue
                         if(path.endsWith(".cue",true)) {
-                            val actual=local.observe(path);val missing=actual.isNull("hash")
+                            val actual=local.observe(path,true);val missing=!actual.optBoolean("exists")
                             if(update.optBoolean("deleted") && missing)fileDatabase.bindCue(key,path,emptyList())
                             else if(!missing && actual.getString("hash")==update.optString("hash")) {
                                 val audio=update.getJSONArray("audio");fileDatabase.bindCue(key,path,List(audio.length()) { audio.getString(it) })

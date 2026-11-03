@@ -14,6 +14,21 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class LanLocalFilesTest {
+    @Test fun publicMetadataScanAndProbeReadZeroFileContentIncludingCue()=fixture(shared=true) { root,db,mapping ->
+        File(root,"Album").mkdirs()
+        java.io.RandomAccessFile(File(root,"Album/Large.wav"),"rw").use { it.setLength(32*1024*1024) }
+        File(root,"Album/Sheet.cue").writeText("Do not open or parse this during metadata scan")
+        LanLocalFiles(root.path,mapping,db,true).use { local ->
+            val before=LanFileMetrics.hashBytes.get();val start=android.os.SystemClock.elapsedRealtime()
+            repeat(2) {
+                val rows=mutableListOf<JSONObject>();local.scan(listOf(""),{ rows+=it },{ fail("Unknown directory: $it") })
+                assertEquals(2,rows.size);assertTrue(rows.all { it.getBoolean("exists") && !it.has("hash") })
+                assertTrue(local.observe("Album/Large.wav").getBoolean("exists"));assertFalse(local.observe("Missing.wav").getBoolean("exists"))
+            }
+            assertEquals(before,LanFileMetrics.hashBytes.get())
+            println("METADATA_EVIDENCE bytes=33554432 rounds=2 hashBytes=0 elapsedMs=${android.os.SystemClock.elapsedRealtime()-start}")
+        }
+    }
     @Test fun confirmedBackupsRestoreAndPurgeOneReceiptWithoutAdvancingBaselines()=fixture { root,db,mapping ->
         val part=File(root.parentFile,"part").apply { writeText("first tone") }
         LanLocalFiles(root.path,mapping,db,true).use { local ->

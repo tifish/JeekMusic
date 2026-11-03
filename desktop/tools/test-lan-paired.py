@@ -61,7 +61,11 @@ def main():
                         def request(op,**args):
                             nonlocal w
                             for attempt in range(3):
-                                result=w.request(op,fileProtocol=1,**args)
+                                if op in ('file_begin','file_delete','file_ack'):
+                                    observed=w.request('file_probe',fileProtocol=2,scope=args['scope'],path=args['path'])
+                                    if op=='file_ack':args.update(remoteVersion=observed.get('metadataVersion'),localVersion=observed.get('metadataVersion'),decision='ack')
+                                    else:args['expectedVersion']=observed.get('metadataVersion')
+                                result=w.request(op,fileProtocol=2,**args)
                                 if result.get('code')=='busy' and attempt<2:
                                     # The background library refresh shares the bounded file-work lease.
                                     # Match the production Android retry contract; never relax the budget.

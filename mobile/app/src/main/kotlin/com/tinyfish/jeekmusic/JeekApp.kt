@@ -28,7 +28,7 @@ class JeekApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         snapshot.preload()
-        Thread({ runCatching { database.get().openHelper.writableDatabase; lanSync.get().startRecovery() } }, "db-warmup").start()
+        Thread({ runCatching { database.get().openHelper.writableDatabase; lanSync.get().startRecovery();lanSync.get().initializeAutomation() } }, "db-warmup").start()
     }
 
     override val workManagerConfiguration: Configuration

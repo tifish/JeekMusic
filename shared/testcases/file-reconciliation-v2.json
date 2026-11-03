@@ -1,0 +1,226 @@
+{
+  "cases": [
+    {
+      "name": "landed rounded pair unchanged",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:1234567899",
+      "remote": "m2:64:1000000000",
+      "action": "none",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "only local mtime changed",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:2000000000",
+      "remote": "m2:64:1000000000",
+      "action": "upload",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "only remote mtime changed",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:1234567899",
+      "remote": "m2:64:2000000000",
+      "action": "download",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "local size changed",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:65:2000000000",
+      "remote": "m2:64:1000000000",
+      "action": "upload",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "both timestamps changed differently",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:2000000000",
+      "remote": "m2:65:2000000000",
+      "action": "conflict",
+      "reason": "both_modified",
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "equal changed metadata converges",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:2000000000",
+      "remote": "m2:64:2000000000",
+      "action": "ack",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "local delete",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": null,
+      "remote": "m2:64:1000000000",
+      "action": "delete_remote",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "remote delete",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:1234567899",
+      "remote": null,
+      "action": "delete_local",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "local modify remote delete",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": "m2:64:2000000000",
+      "remote": null,
+      "action": "conflict",
+      "reason": "modified_vs_deleted",
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "remote modify local delete",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": null,
+      "remote": "m2:64:2000000000",
+      "action": "conflict",
+      "reason": "modified_vs_deleted",
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "unknown is not delete",
+      "base": [
+        "m2:64:1234567899",
+        "m2:64:1000000000"
+      ],
+      "local": null,
+      "remote": "m2:64:1000000000",
+      "action": "defer",
+      "reason": "state_unknown",
+      "known": false,
+      "migration": false
+    },
+    {
+      "name": "first exact metadata reuse",
+      "base": null,
+      "local": "m2:64:1234567899",
+      "remote": "m2:64:1234567899",
+      "action": "ack",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "first unequal no LWW",
+      "base": null,
+      "local": "m2:64:1234567899",
+      "remote": "m2:64:2000000000",
+      "action": "conflict",
+      "reason": "initial_different_content",
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "first new local",
+      "base": null,
+      "local": "m2:64:1234567899",
+      "remote": null,
+      "action": "upload",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "first new remote",
+      "base": null,
+      "local": null,
+      "remote": "m2:64:1234567899",
+      "action": "download",
+      "reason": null,
+      "known": true,
+      "migration": false
+    },
+    {
+      "name": "legacy live missing cannot delete",
+      "base": [
+        null,
+        null
+      ],
+      "local": null,
+      "remote": "m2:64:1234567899",
+      "action": "conflict",
+      "reason": "legacy_metadata_unconfirmed",
+      "known": true,
+      "migration": true
+    },
+    {
+      "name": "legacy equal can establish",
+      "base": [
+        null,
+        null
+      ],
+      "local": "m2:64:1234567899",
+      "remote": "m2:64:1234567899",
+      "action": "ack",
+      "reason": null,
+      "known": true,
+      "migration": true
+    },
+    {
+      "name": "legacy tombstone prevents resurrection delete confusion",
+      "base": [
+        null,
+        null
+      ],
+      "local": null,
+      "remote": "m2:64:1234567899",
+      "action": "download",
+      "reason": null,
+      "known": true,
+      "migration": false
+    }
+  ]
+}

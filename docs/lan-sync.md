@@ -42,7 +42,7 @@ Android从电脑根内选择全部或子目录，通过系统SAF选择本机目�
 
 前台每30秒通过短期认证请求读取 PC 根 revision（进程 epoch+watch序号+根修订），连接随请求关闭；不会占满公网槽等长连接。即便没有事件，每15分钟补元数据对账；watch失败/溢出/重挂载/重启漏事件由此补偿。网络/忙碌错误按30秒至15分钟指数退避，保持原有设备/全局限流。已有冲突以映射/路径/基线/双方元数据形成稳定标识，不反复弹窗或传输；相关版本变化或用户明确选择后重新决策。
 
-Android 后台使用正式 WorkManager：connected约束、15分钟周期（系统可推迟）、指数退避至少15分钟；离开前台时有未完成工作则安全取消前台任务并交给普通 Worker。每次后台工作最多8分钟，保留已有分块/事务恢复能力；没有借用播放服务、申请电池豁免、长期 dataSync FGS 或精确闹钟。大任务可在前台继续。强制停止、Doze、系统配额、离线期间不承诺实时持续。依据：[FileObserver](https://developer.android.com/reference/android/os/FileObserver)、[PeriodicWorkRequest](https://developer.android.com/reference/androidx/work/PeriodicWorkRequest)、[Android 15 FGS 时限](https://developer.android.com/develop/background-work/services/fgs/timeout)。
+Android 后台使用正式 WorkManager：connected约束、15分钟周期（系统可推迟）、指数退避至少15分钟；离开前台时，仅将没有系统执行保障的前台任务安全取消并交给普通 Worker；已经由 WorkManager 持有的任务继续运行，不因页面退后台而错误取消。每次后台工作最多8分钟，保留已有分块/事务恢复能力；没有借用播放服务、申请电池豁免、长期 dataSync FGS 或精确闹钟。大任务可在前台继续。强制停止、Doze、系统配额、离线期间不承诺实时持续。依据：[FileObserver](https://developer.android.com/reference/android/os/FileObserver)、[PeriodicWorkRequest](https://developer.android.com/reference/androidx/work/PeriodicWorkRequest)、[Android 15 FGS 时限](https://developer.android.com/develop/background-work/services/fgs/timeout)。
 
 “取消”中断当前工作，并持久抑制自动文件同步，直到点击“立即同步”或重新启用映射；watch/前台/重启不会立即把取消复活。暂停只作用于该文件映射，保留文件与基线，不关闭播放、学习或配对；立即同步仍跳过暂停映射。忘记映射同样保留文件。旧映射不会参与 watcher/后台自动同步，也不迁移旧目录。
 
@@ -91,3 +91,6 @@ Windows以无reparse父目录/最终句柄固定目标，独占原文件并条�
 Android公共共享目录实测不支持flock/NOREPLACE，不能用应用私有目录测试结果冒充指定SAF目录可用。其commitMode=conditional_copy明确采用：原文件移到本应用排他创建、私有日志固定目录身份的`.jeek-sync-<operation>.recovery/original`恢复槽；公共目标只能O_EXCL创建，按私有日志记录的inode复制/续传，重启仅续写与源完全相同的已有前缀，不截断公共文件。目标被其他文件抢占或已有前缀被修改时保留双方，进入延期/冲突。普通rename仅面向该内部新建恢复槽，绝不用于覆盖公共目标。这些内部目录只存恢复版本，不是音乐文件命名空间，所选目录仍直接保存音乐相对路径。
 
 条件复制期间本应用扫描器依持久事务排除未完成路径；其他不协作的应用可能看到部分目标文件，因此不宣称公共FUSE上具备整文件原子可见性。拥有本机广泛文件权限的恶意应用可破坏共享存储内部恢复槽，属于额外本机信任风险；网络协议拒绝这些点号内部路径，不能由远端选择或写入。使用完整hash/身份复核、原版本保留和条件创建限制正常并发竞争，不能据此声称抵抗已失陷本机的所有竞争。
+
+
+后台真实验证入口：`python desktop/tools/test-lan-background.py --exe <fixture EXE> --android emulator-5584 --out desktop/artifacts/<private-output>`。严格限定命名隔离 AVD、debug 包和公共 SAF 合成子目录，保存并恢复原配对/映射配置，不调用应用 start()。实际 UI 重新启用映射产生到期的 WorkManager 工作，传输期间退到后台，验证 32MiB 内容及 foreground=false/trigger=workmanager_fallback。自然15分钟周期、实体机Doze/厂商限制另列未验，不通过篡改调度数据库提前到期。

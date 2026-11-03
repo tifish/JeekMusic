@@ -33,6 +33,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var loop: Job?=null
     private var firstHint=0L
     private var failures=0
+    private var workerOwned=false
     private val watches=mutableListOf<FileObserver>()
     private val revisions=mutableMapOf<String,String>()
     private fun eligible()=service.store.read().has("connection") && service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }
@@ -67,7 +68,8 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         loop?.cancel()
         if(!value) {
             synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear();timer?.cancel() }
-            if(eligible() && !held() && (_state.value.running || _state.value.dirty)) {
+            val needsHandoff=synchronized(lock) { if(_state.value.running)!workerOwned else _state.value.dirty }
+            if(eligible() && !held() && needsHandoff) {
                 // Foreground coroutines are not a background execution entitlement.
                 service.cancelScheduled()
                 scope.launch(Dispatchers.IO) { WorkManager.getInstance(context).enqueueUniqueWork(WORK+"-handoff",ExistingWorkPolicy.KEEP,
@@ -112,7 +114,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             }
         }
     }
-    fun begin(reason: String) { synchronized(lock) { _state.value=_state.value.copy(trigger=reason,running=true,dirty=false,state="running") } }
+    fun begin(reason: String) { synchronized(lock) { workerOwned=reason=="workmanager_fallback";_state.value=_state.value.copy(trigger=reason,running=true,dirty=false,state="running") } }
     fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()

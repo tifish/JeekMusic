@@ -257,7 +257,7 @@
     "passed": true
   },
   "publicSafMatrix": {
-    "tests": 3,
+    "tests": 5,
     "passed": true
   },
   "reopenedDatabaseLostConfirmation": {
@@ -273,5 +273,31 @@
     "No hardware-wide/full-library performance claim",
     "No physical-device Doze/force-stop timeliness guarantee",
     "Watcher buffer overflow and physical storage remount fallback not fault-injected on real devices"
-  ]
+  ],
+  "backgroundWorkManager": {
+    "trigger": "Real UI re-enable registered a fresh due periodic WorkManager job; app was backgrounded during transfer",
+    "natural15MinuteTimingTested": false,
+    "appStartMethodCalled": false,
+    "foreground": false,
+    "bytes": 33554432,
+    "contentVerified": true,
+    "schedule": {
+      "trigger": "workmanager_fallback",
+      "dirty": false,
+      "running": false,
+      "paused": false,
+      "cancelled": false,
+      "foreground": false,
+      "backoffUntil": 0,
+      "lastSuccess": 1793708823039,
+      "nextReconcile": 1793709723039,
+      "state": "idle",
+      "watchDirectories": 0,
+      "watchFailed": true,
+      "lastMetadataObservations": 6,
+      "lastHashBytes": 100663296,
+      "lastTransferBytes": 33554432,
+      "reportedAt": 1793708824656
+    }
+  }
 }

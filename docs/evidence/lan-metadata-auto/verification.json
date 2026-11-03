@@ -299,5 +299,125 @@
       "lastTransferBytes": 33554432,
       "reportedAt": 1793708824656
     }
+  },
+  "delivery": {
+    "sourceSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+    "version": "1.0.233",
+    "provenance": [
+      {
+        "platform": "desktop",
+        "ci": {
+          "conclusion": "success",
+          "headSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+          "status": "completed",
+          "url": "https://github.com/tifish/JeekMusic/actions/runs/41636103631"
+        },
+        "sourceSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "tag": "desktop-v1.0.233",
+        "targetCommitish": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "tagSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "filename": "JeekMusic-desktop-1.0.233-win-x64.zip",
+        "sha256": "ac7c702c208127910b91c12d6df570950db9da68dc965ef7ff0e4d09c553d895",
+        "bytes": 41488538,
+        "url": "https://github.com/tifish/JeekMusic/releases/download/desktop-v1.0.233/JeekMusic-desktop-1.0.233-win-x64.zip"
+      },
+      {
+        "platform": "android",
+        "ci": {
+          "conclusion": "success",
+          "headSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+          "status": "completed",
+          "url": "https://github.com/tifish/JeekMusic/actions/runs/41636103656"
+        },
+        "sourceSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "tag": "v1.0.233",
+        "targetCommitish": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "tagSha": "8dacc51e19e93e47b7cec22df50b7c358e8f3615",
+        "filename": "JeekMusic-1.0.233.apk",
+        "sha256": "d3b9ac96f746a9b148bb390afb24f7c19c4466a6d29ec829f5391ec9763d9523",
+        "bytes": 24969557,
+        "url": "https://github.com/tifish/JeekMusic/releases/download/v1.0.233/JeekMusic-1.0.233.apk"
+      }
+    ],
+    "mcp": {
+      "equal": true,
+      "details": {
+        "development": {
+          "version": "1.0.233.0",
+          "dynamicCodeSupported": true,
+          "tools": 40
+        },
+        "aot": {
+          "version": "1.0.233.0",
+          "dynamicCodeSupported": false,
+          "tools": 40
+        }
+      }
+    },
+    "windowsPreservation": {
+      "nativeAot": true,
+      "processChanged": true,
+      "queueIdentityOrder": true,
+      "queueIndex": true,
+      "queueSource": true,
+      "position": true,
+      "playing": true,
+      "muted": true,
+      "volume": true,
+      "volumeReadable": true,
+      "outputSelection": true,
+      "outputEndpoint": true,
+      "songFilter": true,
+      "columns": true,
+      "pairedDeviceIds": true,
+      "tokenHashes": true,
+      "certificate": true,
+      "listenerPort": true,
+      "listenerEnabled": true,
+      "learningEvents": true,
+      "explicitDefaultMcpSameProcess": true,
+      "noSystemVolumeWrite": true,
+      "allPairedCapabilities": true,
+      "listenerBind": true,
+      "generations": true,
+      "layoutSettings": true,
+      "layoutSnapshot": true,
+      "fileBaselineKeysRetained": true
+    },
+    "baselineRowsRetained": 125,
+    "baselineRowsExactlyEqual": true,
+    "firewall": {
+      "state": "configured",
+      "ownedRuleCount": 1,
+      "activeExactRuleCount": 1,
+      "reachability": "not_verified"
+    },
+    "androidPreservation": {
+      "version": "1.0.233",
+      "pairedConfigPreserved": true,
+      "logicalDatabases": {
+        "no_backup/preferences.db": {
+          "tables": 6,
+          "allRowsEqual": true,
+          "changedTables": []
+        },
+        "no_backup/preferences.db.evaluation": {
+          "tables": 1,
+          "allRowsEqual": true,
+          "changedTables": []
+        },
+        "databases/jeek.db": {
+          "tables": 17,
+          "allRowsEqual": true,
+          "changedTables": []
+        }
+      },
+      "firstInstallPreserved": true
+    },
+    "androidMappingsBefore": {
+      "total": 0,
+      "enabledCurrent": 0,
+      "obsolete": 0
+    }
   }
 }

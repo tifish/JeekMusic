@@ -1,0 +1,220 @@
+{
+  "date": "2026-11-03",
+  "provenance": {
+    "source_sha": "1bc6359f6e1d50507cea8936904fd170574e5243",
+    "ci": "https://github.com/tifish/JeekMusic/actions/runs/41644522179",
+    "ci_success": true,
+    "tag_sha": "1bc6359f6e1d50507cea8936904fd170574e5243",
+    "release_target": "1bc6359f6e1d50507cea8936904fd170574e5243",
+    "apk_sha256": "df4d9fc443e6fccfe76a21c501d6b4c4933f5cef648bfc925b057ad12fb46d31",
+    "github_asset_digest_matched": true,
+    "release_url": "https://github.com/tifish/JeekMusic/releases/tag/v1.0.235",
+    "installed_base_apk_sha256": "df4d9fc443e6fccfe76a21c501d6b4c4933f5cef648bfc925b057ad12fb46d31",
+    "installed_bytes_equal_release_asset": true,
+    "version_name": "1.0.235",
+    "version_code": 235,
+    "certificate_sha256": "28a86a1affb4a31ed0a2a14e602b2ebed23d1c4385b366e9ccfac3eaf5a972fe",
+    "ci_tests": {
+      "tests": "120",
+      "failures": "0",
+      "skipped": "0",
+      "duration": "11.386s"
+    },
+    "ci_lint": "0 errors, 89 warnings"
+  },
+  "local_tests": {
+    "targeted_sync_and_reference_tests": 20,
+    "failures": 0,
+    "lint_errors": 0,
+    "lint_warnings": 89
+  },
+  "candidate_ui": {
+    "zh": {
+      "single_sync_entry": true,
+      "manual_pairing_reachable": true,
+      "actions_reachable": true,
+      "legacy_preference_persisted_and_restored": true,
+      "back_and_scroll_restored": true,
+      "removed_backup_controls_absent": true,
+      "music_actions_invoked": false
+    },
+    "en": {
+      "single_sync_entry": true,
+      "manual_pairing_reachable": true,
+      "actions_reachable": true,
+      "legacy_preference_persisted_and_restored": true,
+      "back_and_scroll_restored": true,
+      "removed_backup_controls_absent": true,
+      "music_actions_invoked": false
+    },
+    "offline": {
+      "offline_roots_retry_reachable": true,
+      "old_mapping_requires_reselection": true,
+      "mapping_resume_and_pause": true,
+      "sync_now_invoked_against_closed_local_port": true,
+      "cancel_persisted_across_restart": true,
+      "real_music_library_accessed": false
+    }
+  },
+  "formal_apk_ui": [
+    {
+      "locale": "en",
+      "exact_ci_apk_version": "1.0.235",
+      "single_sync_entry": true,
+      "manual_pairing_dialog_resource_id": true,
+      "primary_actions_reachable": true,
+      "original_legacy_preference_unchanged": true,
+      "header_back_scroll_preserved": true
+    },
+    {
+      "locale": "zh-CN",
+      "exact_ci_apk_version": "1.0.235",
+      "single_sync_entry": true,
+      "manual_pairing_dialog_resource_id": true,
+      "primary_actions_reachable": true,
+      "original_legacy_preference_unchanged": true,
+      "header_back_scroll_preserved": true
+    }
+  ],
+  "device": {
+    "avd": "JeekLanEmpty35",
+    "serial": "emulator-5584",
+    "api": 35,
+    "package": "com.tinyfish.jeekmusic",
+    "same_signature_install_r": true,
+    "uninstall_or_data_clear": false,
+    "physical_phone_accessed": false,
+    "mcp_device_access": "disabled; actual UI operated through ADB and UIAutomator"
+  },
+  "initial_to_final_preservation": {
+    "first_install_time_unchanged": true,
+    "pairing_byte_identical": true,
+    "changed_tables": {
+      "jeek.db": []
+    },
+    "jeek_table_count": 18,
+    "preference_files_byte_identical": {
+      "files/datastore/settings.preferences_pb": true,
+      "files/datastore/startup.preferences_pb": true,
+      "files/lan-sync.json": true
+    }
+  },
+  "formal_install_preservation": {
+    "first_install_time_unchanged": true,
+    "byte_identical": {
+      "files/datastore/settings.preferences_pb": true,
+      "files/datastore/startup.preferences_pb": true,
+      "files/lan-sync.json": true,
+      "no_backup/update-regression-marker.txt": true
+    },
+    "changed_tables": {
+      "databases/jeek.db": [],
+      "no_backup/preferences.db.evaluation": [],
+      "no_backup/lan-file-state.db": [],
+      "no_backup/preferences.db": []
+    },
+    "table_counts": {
+      "databases/jeek.db": 18,
+      "no_backup/preferences.db": 7,
+      "no_backup/preferences.db.evaluation": 1,
+      "no_backup/lan-file-state.db": 9
+    }
+  },
+  "scope": {
+    "windows_changed": false,
+    "windows_built_or_restarted": false,
+    "file_reconciliation_algorithm_changed": false,
+    "learning_algorithm_changed": false,
+    "internal_failure_recovery_retained": true,
+    "existing_recovery_files_deleted": false,
+    "real_music_sync_write_or_delete_started": false,
+    "fixture_config_restored": true
+  },
+  "screenshots": [
+    {
+      "path": "en-home.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "en-connection.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "en-pair-dialog.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "en-actions.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "en-advanced.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "en-return.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-home.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-connection.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-pair-dialog.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-actions.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-advanced.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "zh-CN-return.png",
+      "stage": "downloaded-CI-APK",
+      "version": "1.0.235"
+    },
+    {
+      "path": "offline-old-mapping.png",
+      "stage": "local-signed-source-candidate",
+      "version": "1.0.234"
+    },
+    {
+      "path": "offline-folder-error.png",
+      "stage": "local-signed-source-candidate",
+      "version": "1.0.234"
+    },
+    {
+      "path": "offline-sync-issue.png",
+      "stage": "local-signed-source-candidate",
+      "version": "1.0.234"
+    },
+    {
+      "path": "offline-cancelled.png",
+      "stage": "local-signed-source-candidate",
+      "version": "1.0.234"
+    },
+    {
+      "path": "offline-paused.png",
+      "stage": "local-signed-source-candidate",
+      "version": "1.0.234"
+    }
+  ]
+}

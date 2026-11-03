@@ -52,7 +52,7 @@ class LanFileSynchronizerTest {
             }
             client.call(op,args.put("fileProtocol",2))
         }.also { check(!it.optBoolean("conflict") && !it.optBoolean("deferred")) { it.toString() } }
-        fun scope(): String { if(otherScope==null)otherScope=call("file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",UUID.randomUUID().toString()).put("selection",JSONArray(listOf(prefix)))).getString("scope");return otherScope!! }
+        fun scope(): String { if(otherScope==null)otherScope=call("file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",UUID.nameUUIDFromBytes(("synthetic-writer:"+connection.getString("deviceId")).toByteArray()).toString()).put("selection",JSONArray(listOf("")))).getString("scope");return otherScope!! }
         fun remoteHash(): String? { val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",path));val r=call("file_verify",JSONObject().put("scope",scope()).put("path",path).put("expectedVersion",observed.opt("metadataVersion") ?: JSONObject.NULL));return if(r.isNull("hash"))null else r.getString("hash") }
         fun remote(bytes: ByteArray?) {
             val scope=scope();val before=remoteHash()

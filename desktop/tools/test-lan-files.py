@@ -71,6 +71,7 @@ def main():
                         if round_:assert result['sidecarParseBytes']==0
                         samples.append(result)
                     print('METADATA_SAMPLE '+json.dumps(samples),flush=True)
+                # Android cases share one independent writer scope per credential, retaining the production eight-scope cap.
                 if a.android:
                     adb=str(Path(os.environ.get('ANDROID_HOME','C:/Android/sdk'))/'platform-tools/adb.exe')
                     def device(*args,**kwargs):return subprocess.run([adb,'-s',a.android,*args],check=True,**kwargs)

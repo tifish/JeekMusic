@@ -28,7 +28,7 @@ acknowledgement. No production conflict was selected or deleted during diagnosis
 
 ## Validation before release
 
-- Windows LAN tests: 59 passed. Android JVM suite and lint passed.
+- Windows LAN tests: 59 passed. Android JVM 122 tests and lint passed.
 - Android device queue/publication tests: 3 passed on API35 x86_64.
 - Real isolated desktop TLS plus Android production service/reconciler test passed:
   PC choice beats queued opposing phone choice; independent status exchange works
@@ -50,5 +50,34 @@ restrictions can delay it. Actual file commits remain serialized and validated.
 Physical phone is disconnected; no physical-phone installation or conflict choice
 was attempted. No changes to conflict policy, baselines, or user music were made.
 
-Final CI, artifacts, restart preservation and further UI evidence are recorded
-after the source commit below.
+## Final delivery
+
+Source `e8e05212300a92b3a8e60edf2d1767971da2d1fa` passed both
+[Desktop CI](https://github.com/tifish/JeekMusic/actions/runs/41874967260) and
+[Mobile CI](https://github.com/tifish/JeekMusic/actions/runs/41874967345).
+Release target_commitish for both `desktop-v1.0.245` and `v1.0.245` matches it.
+
+- [Android APK](https://github.com/tifish/JeekMusic/releases/download/v1.0.245/JeekMusic-1.0.245.apk)
+  downloaded SHA-256: `f6eb2af589ffdd172d82af58da0f6946e7d59a8eb547866b724030cfb66284c0`,
+  equal to the release asset digest. Signing certificate remains
+  `28a86a1affb4a31ed0a2a14e602b2ebed23d1c4385b366e9ccfac3eaf5a972fe`.
+  API35 retained-data installation and visible release launch passed, versionCode
+  245; firstInstallTime stayed 2026-10-31 10:44:42. Actual release screenshot and
+  UI hierarchy are in `output/conflict-refresh-delivery-245/`.
+- [Windows ZIP](https://github.com/tifish/JeekMusic/releases/download/desktop-v1.0.245/JeekMusic-desktop-1.0.245-win-x64.zip)
+  published asset digest (not a local download verification):
+  `3e4d08f4bb6ad39073410e9fef1115bf5fe6c336adcefec879e0e2eccdbe0040`.
+- Production Windows uses the locally verified NativeAOT built from the same final
+  application sources with explicit version 1.0.245, not the downloaded CI ZIP.
+  PID 4136 → 38596; 1,585 queue entries/order, source, index, position, paused state,
+  volume/endpoint, filters/columns, settings/layout, pairing credentials and learning
+  events match the fresh pre-shutdown checkpoint. All 1,714 baseline rows and their
+  contents match. Single-instance default/explicit MCP confirmed; pending conflicts
+  zero, `conflictStatusProtocol=1`. Daily framework-dependent output was rebuilt too.
+- Exact new EXE/TCP39843 firewall rule verified configured. Its first helper call
+  failed before shutdown; the same scoped script retry succeeded. No global policy,
+  router or user media was changed. Local preservation evidence is under
+  `desktop/artifacts/conflict-refresh/` (private checkpoints not committed).
+
+Only this evidence document changed after the source release; no extra client
+restart or new software release is required for that documentation commit.

@@ -64,6 +64,7 @@ class SongSorter internal constructor(settings: Flow<Settings>, createSortKeys: 
     fun comparator(sort: SongSort): Comparator<TrackEntity> = when (sort) {
         SongSort.MODIFIED -> compareBy<TrackEntity> { !FileModified.isValid(it.dateModified) }
             .thenByDescending { if (FileModified.isValid(it.dateModified)) it.dateModified else 0 }
+            .thenByDescending { if (FileModified.isValid(it.dateModified)) it.modifiedNanos?.takeIf { n -> n in 0..999_999_999 } ?: 0 else 0 }
             .then(byFileName)
         SongSort.FILE_NAME -> byFileName
         SongSort.TITLE -> byTitle

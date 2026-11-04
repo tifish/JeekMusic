@@ -3,6 +3,13 @@ package com.tinyfish.jeekmusic.data.db
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/** Preserve all rows and references; ordinary incremental scans fill in file precision. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `track` ADD COLUMN `modified_nanos` INTEGER")
+    }
+}
+
 /**
  * 4 → 5（docs/design.md §6.5）：智能标签从只有"运动 / 安静"扩展为三个维度（氛围、人声、曲风）。
  * - track_features 增加 YAMNet 模型的几组得分（旧数据为 null，分析器版本提高后会重新分析）

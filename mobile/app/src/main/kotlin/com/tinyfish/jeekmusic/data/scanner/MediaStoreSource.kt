@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import com.tinyfish.jeekmusic.data.sync.LanAtomicFiles
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,6 +20,7 @@ data class MediaStoreAudio(
     val durationMs: Long,
     val mimeType: String?,
     val bitrate: Int?,
+    val modifiedNanos: Int? = null,
 ) {
     val fileKey: String get() = "$volumeName:$relativePath$fileName"
 }
@@ -63,6 +65,7 @@ class MediaStoreSource @Inject constructor(
                             relativePath = c.getString(path).orEmpty(),
                             fileName = fileName,
                             dateModified = c.getLong(modified),
+                            modifiedNanos = readModifiedNanos(contentUri(volumeName, c.getLong(id)), c.getLong(modified), c.getLong(size)),
                             size = c.getLong(size),
                             durationMs = c.getLong(duration),
                             mimeType = c.getString(mime),
@@ -76,7 +79,21 @@ class MediaStoreSource @Inject constructor(
 
     private fun Long.toIntOrNullSafe(): Int? = if (this in 1..Int.MAX_VALUE) toInt() else null
 
+    // Metadata only: no read of audio bytes and no guessed filesystem path. A stale MediaStore
+    // row must not be combined with the fractional timestamp of a different file version.
+    internal fun readModifiedNanos(uri: Uri, seconds: Long, size: Long): Int? = try {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            val identity = LanAtomicFiles.identity(descriptor.fd)
+            matchingModifiedNanos(seconds, size, identity)
+        }
+    } catch (_: java.io.IOException) { null }
+      catch (_: SecurityException) { null }
+
     companion object {
+        internal fun matchingModifiedNanos(seconds: Long, size: Long, identity: LongArray): Int? =
+            if (identity.size == 5 && identity[2] == size && identity[3] == seconds && identity[4] in 0..999_999_999L)
+                identity[4].toInt() else null
+
         fun contentUri(volumeName: String, mediaStoreId: Long): Uri =
             ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(volumeName), mediaStoreId)
 

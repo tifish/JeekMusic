@@ -66,4 +66,13 @@ class SongSorterTest {
         assertEquals(listOf(3L, 2L, 1L), sorter.albumSorted(tracks, SongSort.MODIFIED).map { it.id })
         assertEquals(listOf(3L, 2L, 1L), sorter.albumSorted(tracks, SongSort.FILE_NAME).map { it.id })
     }
+
+    @Test fun fractionalSecondsOverrideFilenameAndFallbackKeepsCueOrder() {
+        val tracks = listOf(song(1, "a.mp3", date).copy(modifiedNanos = 188764700),
+            song(2, "z.mp3", date).copy(modifiedNanos = 318915800),
+            song(3, "album.flac", date, cue = 2), song(4, "album.flac", date, cue = 1),
+            song(5, "older.mp3", date - 1).copy(modifiedNanos = 999999999),
+            song(6, "invalid.mp3", 0).copy(modifiedNanos = 999999999))
+        assertEquals(listOf(2L, 1L, 4L, 3L, 5L, 6L), sorter.sorted(tracks.reversed(), SongSort.MODIFIED) { it }.map { it.id })
+    }
 }

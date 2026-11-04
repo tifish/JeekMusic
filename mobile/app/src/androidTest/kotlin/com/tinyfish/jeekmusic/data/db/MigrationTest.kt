@@ -94,6 +94,18 @@ class MigrationTest {
         }
     }
 
+    @Test fun migrate7To8KeepsUserDataAndAddsNullablePrecision() {
+        helper.createDatabase(DB, 7).use { db ->
+            db.execSQL("INSERT INTO tag_override (track_key, dimension, value) VALUES ('song', 'VOICE', 'VOCAL')")
+            db.execSQL("INSERT INTO queue_item (position, track_key) VALUES (0, 'song')")
+        }
+        helper.runMigrationsAndValidate(DB, 8, true, MIGRATION_7_8).use { db ->
+            db.query("SELECT value FROM tag_override").use { c -> c.moveToFirst(); assertEquals("VOCAL", c.getString(0)) }
+            db.query("SELECT track_key FROM queue_item").use { c -> c.moveToFirst(); assertEquals("song", c.getString(0)) }
+            db.query("SELECT modified_nanos FROM track").close()
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

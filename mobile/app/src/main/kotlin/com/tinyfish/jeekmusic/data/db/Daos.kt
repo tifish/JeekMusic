@@ -32,6 +32,7 @@ data class TrackSignature(
     @ColumnInfo(name = "track_key") val trackKey: String,
     @ColumnInfo(name = "file_key") val fileKey: String,
     @ColumnInfo(name = "date_modified") val dateModified: Long,
+    @ColumnInfo(name = "modified_nanos") val modifiedNanos: Int?,
     val size: Long,
 )
 
@@ -68,8 +69,11 @@ interface FolderDao {
 
 @Dao
 interface TrackDao {
-    @Query("SELECT id, track_key, file_key, date_modified, size FROM track")
+    @Query("SELECT id, track_key, file_key, date_modified, modified_nanos, size FROM track")
     suspend fun signatures(): List<TrackSignature>
+
+    @Query("UPDATE track SET modified_nanos = :nanos WHERE file_key = :key AND date_modified = :seconds AND size = :size")
+    suspend fun updateModifiedPrecision(key: String, seconds: Long, size: Long, nanos: Int?)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(tracks: List<TrackEntity>): List<Long>

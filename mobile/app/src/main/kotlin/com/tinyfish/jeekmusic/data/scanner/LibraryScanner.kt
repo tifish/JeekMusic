@@ -141,6 +141,14 @@ class LibraryScanner @Inject constructor(
         // 4. 与库中记录比对
         val existing = trackDao.signatures().filter { it.fileKey !in committing && (onlyFiles == null || it.fileKey in onlyFiles) }.groupBy { it.fileKey }
         val removedIds = existing.filterKeys { it !in found }.values.flatten().map { it.id }
+        // Backfill upgraded libraries without re-reading tags, changing IDs or retraining.
+        db.withTransaction {
+            for ((audio, _) in found.values) {
+                if (existing[audio.fileKey]?.any { it.modifiedNanos != audio.modifiedNanos } == true) {
+                    trackDao.updateModifiedPrecision(audio.fileKey, audio.dateModified, audio.size, audio.modifiedNanos)
+                }
+            }
+        }
         val toParse = found.values.filter { (audio, _) ->
             val old = existing[audio.fileKey]?.firstOrNull()
             full || old == null || old.dateModified != audio.dateModified || old.size != audio.size ||

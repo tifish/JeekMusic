@@ -73,6 +73,8 @@ data class TrackEntity(
     val bitrate: Int?,
     @ColumnInfo(name = "sample_rate") val sampleRate: Int?,
     @ColumnInfo(name = "date_modified") val dateModified: Long,
+    /** Fractional second from the actual file; null when the provider cannot supply it. */
+    @ColumnInfo(name = "modified_nanos") val modifiedNanos: Int? = null,
     val size: Long,
     @ColumnInfo(name = "has_embedded_lyrics") val hasEmbeddedLyrics: Boolean,
     /** 以下三项只有 CUE 虚拟歌曲才有（docs/design.md §4.6）。 */

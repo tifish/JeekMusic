@@ -43,6 +43,7 @@ class TrackFactory(private val config: ScanConfig) {
             bitrate = tags?.bitrate ?: audio.bitrate?.div(1000),
             sampleRate = tags?.sampleRate,
             dateModified = audio.dateModified,
+            modifiedNanos = audio.modifiedNanos,
             size = audio.size,
             hasEmbeddedLyrics = tags?.hasLyrics == true,
         )
@@ -90,6 +91,7 @@ class TrackFactory(private val config: ScanConfig) {
                     bitrate = tags?.bitrate ?: audio.bitrate?.div(1000),
                     sampleRate = tags?.sampleRate,
                     dateModified = audio.dateModified,
+                    modifiedNanos = audio.modifiedNanos,
                     size = audio.size,
                     hasEmbeddedLyrics = false,
                     cueTrackNo = track.number,

@@ -14,6 +14,7 @@ internal static class LanSyncSettings
     {
         var service = c.App.LanSync;
         panel.Children.Add(SubHeading(L.T("局域网音乐同步")));
+        panel.Children.Add(Action(L.T("同步冲突"),()=>new SyncConflictsWindow(c.App).Show(c.Window)));
         panel.Children.Add(Note(L.T("手机选择音乐文件夹及直接保存目录。按双方确认的内容基线双向同步；单边修改/删除自动传播，真实冲突才需要选择。配对即可使用全部同步能力。开启服务自动共享全部曲库；取消同步不删除音乐。")));
         var problem = Note(service.Problem); panel.Children.Add(problem);
         var activity = Note(""); panel.Children.Add(activity);

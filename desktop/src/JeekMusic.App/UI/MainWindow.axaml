@@ -44,7 +44,7 @@
             <Setter Property="Cursor" Value="Hand" />
         </Style>
     </Window.Styles>
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- 工具栏：后退 / 前进、搜索、筛选 -->
         <!-- 标题栏（需求 W-7）：工具栏放在标题栏里，空白处可以拖动窗口；右边留出系统的最小化 / 最大化 / 关闭按钮 -->
         <Grid Grid.Row="0" x:Name="TitleBar" ColumnDefinitions="Auto,*,Auto,Auto,150" Margin="8,4,0,2" Background="Transparent" MinHeight="40" WindowDecorationProperties.ElementRole="TitleBar">
@@ -73,7 +73,8 @@
         </Grid>
 
         <!-- 主区：导航栏 | 艺术家栏 | 内容 | 歌词面板 -->
-        <Grid Grid.Row="1" x:Name="MainArea" ColumnDefinitions="230,Auto,*" ClipToBounds="True">
+        <Button Grid.Row="1" x:Name="SyncConflictNotice" IsVisible="False" Margin="12,4" HorizontalAlignment="Stretch" />
+        <Grid Grid.Row="2" x:Name="MainArea" ColumnDefinitions="230,Auto,*" ClipToBounds="True">
             <DockPanel Grid.Column="0" x:Name="NavPanel" ClipToBounds="True">
             <Button DockPanel.Dock="Top" x:Name="NavCollapse" Classes="icon" Content="{x:Static ui:Icons.NavPane}" HorizontalAlignment="Left" Margin="8,0,0,2"
                     AutomationProperties.Name="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" ToolTip.Tip="{ui:Tr &apos;折叠 / 展开导航栏&apos;}" />
@@ -312,7 +313,7 @@
         </Grid>
 
         <!-- 播放栏（需求 W-5） -->
-        <Border Grid.Row="2" x:Name="PlayerBar" Padding="12,8" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+        <Border Grid.Row="3" x:Name="PlayerBar" Padding="12,8" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
             <Grid ColumnDefinitions="280,*,350" DataContext="{Binding Player}" x:DataType="vm:PlayerViewModel">
                 <!-- 封面、标题、艺术家 -->
                 <Grid ColumnDefinitions="Auto,*">
@@ -374,7 +375,7 @@
         </Border>
 
         <!-- 提示 -->
-        <Border Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16" Padding="16,8" CornerRadius="6"
+        <Border Grid.Row="2" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16" Padding="16,8" CornerRadius="6"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsVisible="{Binding Toast, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding Toast}" TextWrapping="Wrap" MaxWidth="560" />
         </Border>

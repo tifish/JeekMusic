@@ -79,6 +79,19 @@ class LanFileSynchronizerTest {
         remote(null);report=run();assertEquals(0,report.conflictCount);assertNull(localBytes())
         local(b);remote(b);File(root,path).setLastModified(1_800_000_000_000L+(b.last().toLong() and 255)*1000L);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash());assertArrayEquals(b,localBytes())
     }
+    @Test fun sharedChoiceWinsAndChangedVersionsNeedAnotherDecision()=fixture {
+        val a=audio(61);val b=audio(62);val c=audio(63)
+        remote(a);run();local(b);remote(c)
+        val issue=run().conflicts.single();assertTrue(issue.getBoolean("shared"))
+        assertTrue(issue.getJSONObject("local").getBoolean("exists"));assertEquals(64,issue.getJSONObject("remote").getInt("size"))
+        call("file_conflict_choose",JSONObject().put("scope",issue.getString("scope")).put("id",issue.getString("id")).put("choice","remote"))
+        // A queued opposing phone choice cannot override the first confirmed selection.
+        sync.choose(issue.getString("id"),"local");run();assertArrayEquals(c,localBytes())
+        local(a);remote(b);val next=run().conflicts.single()
+        call("file_conflict_choose",JSONObject().put("scope",next.getString("scope")).put("id",next.getString("id")).put("choice","remote"))
+        local(c);val changed=run().conflicts.single();assertNotEquals(next.getString("id"),changed.getString("id"))
+        assertArrayEquals(c,localBytes());assertEquals(hash(b),remoteHash())
+    }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {
         val a=audio(11);val b=audio(12);val c=audio(13)
         local(a);remote(b);var report=run();assertEquals(1,report.conflictCount);assertArrayEquals(a,localBytes());assertEquals(hash(b),remoteHash())

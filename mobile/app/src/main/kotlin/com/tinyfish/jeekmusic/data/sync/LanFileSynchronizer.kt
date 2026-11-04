@@ -144,6 +144,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val report=LanFileReport();val key=mapping.getString("key")
         val startMetadata=LanFileMetrics.metadataObservations.get();val startHash=LanFileMetrics.hashBytes.get()
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==2) { "Upgrade both devices for size+mtime file sync" }
+        val sharedConflicts=capabilities.optInt("conflictProtocol")>=1
         LanProtocol.requirePairedCapabilities(capabilities)
         val scopeInfo=call(client,"","file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",key).put("selection",mapping.getJSONArray("selection")))
         val scope=scopeInfo.getString("scope");val revision=scopeInfo.getString("revision")
@@ -229,7 +230,17 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             var resolve=false
                             if(decision.action=="conflict") {
                                 val conflict=issue(mapping,scope,path,baseline,effective,local,remote,decision.reason!!,planId)
-                                val choice=db.issue(conflict.getString("id"))?.optString("choice")
+                                if(sharedConflicts) {
+                                    val shared=call(client,scope,"file_conflict",JSONObject(conflict.toString()))
+                                    val queued=db.issue(conflict.getString("id"))?.optString("choice")
+                                    if(queued in setOf("local","remote") && shared.optString("choice") !in setOf("local","remote")) {
+                                        val chosen=call(client,scope,"file_conflict_choose",JSONObject().put("id",conflict.getString("id")).put("choice",queued))
+                                        shared.put("choice",chosen.getString("choice"))
+                                    }
+                                    for(field in listOf("local","remote","choice","localChange","remoteChange","reportedAt"))conflict.put(field,shared.opt(field) ?: JSONObject.NULL)
+                                    conflict.put("shared",true);db.updateIssue(conflict)
+                                }
+                                val choice=if(sharedConflicts)conflict.optString("choice") else db.issue(conflict.getString("id"))?.optString("choice")
                                 if(choice in setOf("local","remote") && inside) { resolve=true;decision=if(choice=="local")FileReconciliation.Decision(if(meta(local)==null) "delete_remote" else "upload") else FileReconciliation.Decision(if(meta(remote)==null) "delete_local" else "download") }
                                 else { report.conflict(conflict);if(!cues)db.hold(key,path);report.processed++;continue }
                             }
@@ -288,6 +299,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             }
                             if(cues && decision.action!="none" && meta(local)!=null)beforeChange(path,remote,false)
                             if(decision.action!="none")afterChange()
+                            if(sharedConflicts && db.issueForPath(key,path)!=null)call(client,scope,"file_conflict_clear",JSONObject().put("path",path).put("localVersion",meta(local) ?: JSONObject.NULL).put("remoteVersion",meta(remote) ?: JSONObject.NULL))
                             db.resolved(key,path)
                         } catch(e: kotlinx.coroutines.CancellationException) { throw e }
                         catch(e: LanRemoteFileConflict) { report.defer("$path: ${e.reason}; refresh the snapshot");if(!cues)db.hold(key,path) }

@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_notice">%1$d 个同步冲突，点击比较并处理</string>
+    <string name="sync_conflict_title">同步冲突</string>
+    <string name="sync_conflict_phone">手机版本</string>
+    <string name="sync_conflict_pc">电脑版本</string>
+    <string name="sync_conflict_back">返回</string>
+    <string name="sync_conflict_help">选择要保留的版本。若该版本已删除，另一端的副本也会删除。两端都可选择；手机下次同步时会重新检查双方版本，再执行处理。</string>
+    <string name="sync_conflict_retry">文件版本已变化、另一端已先选择或连接失败。请同步后重试。</string>
+    <string name="sync_conflict_empty">没有同步冲突</string>
+    <string name="sync_conflict_missing">已删除／不存在</string>
+    <string name="sync_conflict_version">%1$s 字节\n修改时间：%2$s</string>
+    <string name="sync_conflict_pending">已选择：%1$s。等待手机同步并校验。</string>
+    <string name="sync_conflict_previous">上一页</string>
+    <string name="sync_conflict_next">下一页</string>
     <string name="sync_restore_title">发现同步数据</string>
     <string name="sync_restore_message">合并音乐文件夹中的播放列表、固定艺术家、标签修正和歌词偏移？</string>
     <string name="sync_merge">合并</string>

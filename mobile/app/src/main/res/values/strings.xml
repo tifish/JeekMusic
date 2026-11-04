@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_notice">%1$d sync conflicts — review versions</string>
+    <string name="sync_conflict_title">Sync conflicts</string>
+    <string name="sync_conflict_phone">Phone version</string>
+    <string name="sync_conflict_pc">PC version</string>
+    <string name="sync_conflict_back">Back</string>
+    <string name="sync_conflict_help">Choose which version to keep. If that version was deleted, the other copy will also be deleted. Either device can choose; the phone applies the choice on its next sync after checking both versions again.</string>
+    <string name="sync_conflict_retry">The versions changed, another device chose first, or the connection failed. Sync and try again.</string>
+    <string name="sync_conflict_empty">No sync conflicts</string>
+    <string name="sync_conflict_missing">Deleted / not present</string>
+    <string name="sync_conflict_version">%1$s bytes\nModified: %2$s</string>
+    <string name="sync_conflict_pending">Selected: %1$s. Waiting for the phone to sync and verify.</string>
+    <string name="sync_conflict_previous">Previous page</string>
+    <string name="sync_conflict_next">Next page</string>
     <string name="sync_restore_title">Sync data found</string>
     <string name="sync_restore_message">Merge playlists, pinned artists, tag corrections and lyric offsets from the music folders?</string>
     <string name="sync_merge">Merge</string>

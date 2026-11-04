@@ -54,10 +54,10 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         db.execSQL("INSERT OR REPLACE INTO dependency_baseline VALUES(?,?,?)",arrayOf(mapping,path,row.toString()))
     }
     @Synchronized fun entry(mapping: String,side: String,path: String): JSONObject? = one("SELECT json FROM entries WHERE mapping=? AND side=? AND path=?",arrayOf(mapping,side,path))
-    @Synchronized fun paths(mapping: String,offset: Int): List<String> = db.rawQuery("SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=? ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,offset.toString())).use { c ->
+    @Synchronized fun paths(mapping: String,offset: Int): List<String> = db.rawQuery("SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=? UNION SELECT path FROM issues WHERE mapping=? ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,mapping,offset.toString())).use { c ->
         buildList { while(c.moveToNext())add(c.getString(0)) }
     }
-    @Synchronized fun paths(mapping: String,offset: Int,cues: Boolean): List<String> = db.rawQuery("SELECT path FROM (SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=?) WHERE lower(substr(path,-4)) ${if(cues) "=" else "!="} '.cue' ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
+    @Synchronized fun paths(mapping: String,offset: Int,cues: Boolean): List<String> = db.rawQuery("SELECT path FROM (SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=? UNION SELECT path FROM issues WHERE mapping=?) WHERE lower(substr(path,-4)) ${if(cues) "=" else "!="} '.cue' ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
     @Synchronized fun requirePortableLayout(mapping: String) {
         db.rawQuery("SELECT normalized FROM entries WHERE mapping=? GROUP BY normalized HAVING MIN(path)!=MAX(path) LIMIT 1",arrayOf(mapping)).use { check(!it.moveToFirst()) { "Case or Unicode layout conflict; align the filenames before syncing" } }
     }
@@ -70,6 +70,10 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     }
     @Synchronized fun issue(id: String): JSONObject? = db.rawQuery("SELECT json,choice FROM issues WHERE id=?",arrayOf(id)).use { c -> if(c.moveToFirst())JSONObject(c.getString(0)).also { if(!c.isNull(1))it.put("choice",c.getString(1)) } else null }
     @Synchronized fun choose(id: String,choice: String) { require(choice in setOf("local","remote"));check(issue(id)!=null);db.execSQL("UPDATE issues SET choice=? WHERE id=?",arrayOf(choice,id)) }
+    @Synchronized fun updateIssue(row: JSONObject) { db.execSQL("UPDATE issues SET json=? WHERE id=?",arrayOf(row.toString(),row.getString("id"))) }
+    @Synchronized fun issueForPath(mapping: String,path: String): JSONObject? = one("SELECT json FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path))
+    @Synchronized fun issuePage(offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM issues ORDER BY mapping,path LIMIT 100 OFFSET ?",arrayOf(offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
+    @Synchronized fun issueCount(): Int = db.rawQuery("SELECT COUNT(*) FROM issues",null).use { it.moveToFirst();it.getInt(0) }
     @Synchronized fun resolved(mapping: String,path: String) { db.execSQL("DELETE FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
     @Synchronized fun issues(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM issues WHERE mapping=? ORDER BY path LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
     @Synchronized fun transaction(mapping: String,path: String,scope: String): JSONObject? = one("SELECT json FROM transactions WHERE mapping=? AND path=? AND scope=? ORDER BY rowid DESC LIMIT 1",arrayOf(mapping,path,scope))

@@ -70,6 +70,7 @@ internal sealed partial class LanFileSyncStore
         commit(()=>{});ct.ThrowIfCancellationRequested();RequireBaseline(scope,path,S(a["baselineVersion"]));
         if(FileMetadata.Token(FileMetadata.Observe(root,path))!=remote)throw Conflict("remote_changed_before_ack");
         Run("BEGIN IMMEDIATE");try {
+            ClearConflict(scope,path);
             Run("INSERT OR REPLACE INTO baseline(scope,path,hash,version,operation,metadata) VALUES($s,$p,$h,$v,$o,$m)",("$s",scope),("$p",path),("$h",Digest(a["hash"])),("$v",version),("$o",operation),("$m",metadata.ToJsonString()));
             Run("UPDATE scopes SET revision=$v WHERE id=$s",("$v",Guid.NewGuid().ToString("N")),("$s",scope));if(receipt!=null)SaveTask(scope,receipt,"acknowledged");Run("COMMIT");
         }catch { Run("ROLLBACK");throw; }

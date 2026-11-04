@@ -8,7 +8,7 @@ Wire,call,wait=_module.Wire,_module.call,_module.wait
 from mcp_client import McpClient
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--exe',type=Path,required=True);parser.add_argument('--android');parser.add_argument('--public-saf',action='store_true');parser.add_argument('--auto',action='store_true');parser.add_argument('--benchmark',action='store_true');parser.add_argument('--case');a=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--exe',type=Path,required=True);parser.add_argument('--android');parser.add_argument('--public-saf',action='store_true');parser.add_argument('--auto',action='store_true');parser.add_argument('--benchmark',action='store_true');parser.add_argument('--case');parser.add_argument('--ui',type=Path);a=parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='jeek-files-') as temp:
         work=Path(temp);data=work/'data';data.mkdir();music=work/'Music';music.mkdir()
         (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoCheckUpdate=False,language='en')))
@@ -35,7 +35,8 @@ def main():
                             time.sleep(.05);result=w.request('plan_status',job=result['job'])
                         return result
                     finally:w.close()
-                scope=request('file_open',rootId=root,mapping=str(uuid.uuid4()),selection=[''])['scope']
+                initial_mapping=str(uuid.uuid4())
+                scope=request('file_open',rootId=root,mapping=initial_mapping,selection=[''])['scope']
                 content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+b'1';digest=hashlib.sha256(content).hexdigest();operation=uuid.uuid4().hex
                 assert request('file_begin',scope=scope,operation=operation,path='Fresh/A.wav',hash=digest,size=len(content),expectedHash=None,baselineVersion='')['offset']==0
                 chunk=base64.b64encode(content).decode()
@@ -53,6 +54,31 @@ def main():
                 assert request('file_ack',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=deletion,hash=None,localHash=None,localKnown=True,baselineVersion=ack['version'])['version']
                 assert request('file_probe',scope=scope,path='../outside.wav').get('deferred')
                 print('PASS real TLS upload, exact chunk replay, conditional delete, explicit receipt/ack and traversal rejection',flush=True)
+                conflict_mapping=initial_mapping
+                conflict_scope=scope
+                (music/'Conflict.wav').write_bytes(content)
+                remote=request('file_probe',scope=conflict_scope,path='Conflict.wav')['metadataVersion']
+                local='m2:65:1234567890000000000'
+                conflict_id=hashlib.sha256('\n'.join([conflict_mapping,conflict_scope,'Conflict.wav','',local,remote]).encode()).hexdigest()
+                args=dict(scope=conflict_scope,id=conflict_id,path='Conflict.wav',baselineVersion='',localVersion=local,remoteVersion=remote,reason='initial_different_content')
+                assert request('file_conflict',**args)['local']['size']==65
+                row=next(r for r in call(c,'lan_file_conflicts',action='list')['rows'] if r['id']==conflict_id)
+                assert row['remote']['size']==64
+                if a.ui:
+                    a.ui.mkdir(parents=True,exist_ok=True)
+                    subprocess.run([str(a.exe.resolve()),'--show'],env=dict(os.environ,JEEKMUSIC_DATA=str(data.resolve())),check=True,timeout=15)
+                    time.sleep(1)
+                    ui=['powershell','-NoProfile','-File','desktop/tools/preference-ui.ps1','-AppProcess',str(pid)]
+                    subprocess.run(ui+['-Action','Dump','-Shot',str(a.ui/'desktop-notice.png')],check=True,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30)
+                    subprocess.run(ui+['-Action','Invoke','-Id','SyncConflictNotice','-Shot',str(a.ui/'desktop-conflicts.png')],check=True,text=True,timeout=30)
+                    subprocess.run(ui+['-Action','Invoke','-Name','Keep PC version','-Shot',str(a.ui/'desktop-choice.png')],check=True,text=True,timeout=30)
+                    wait(lambda:request('file_conflict',**args).get('choice')=='remote')
+                assert call(c,'lan_file_conflicts',action='choose',id=conflict_id,choice='remote')['waitingForPhone']
+                assert request('file_conflict',**args)['choice']=='remote'
+                assert request('file_conflict_choose',scope=conflict_scope,id=conflict_id,choice='local')['conflict']
+                assert (music/'Conflict.wav').read_bytes()==content
+                assert request('file_conflict_clear',scope=conflict_scope,path='Conflict.wav',localVersion=remote,remoteVersion=remote)['cleared']
+                print('PASS real TLS conflict report, desktop MCP comparison/choice, phone retrieval, concurrent choice rejection and convergence',flush=True)
                 if a.benchmark:
                     sample=music/'MetadataSample';sample.mkdir()
                     for index in range(128):
@@ -86,7 +112,7 @@ def main():
                     try:
                         test_class=('LanAutoSyncTest' if a.auto else 'LanFileSynchronizerTest')+('#'+a.case if a.case else '')
                         result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
-                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (5 tests)') in result.stdout
+                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (6 tests)') in result.stdout
                     finally:device('reverse','--remove',f'tcp:{port}',capture_output=True)
                 # Administrative recovery uses the same private store and never a remote endpoint.
                 backups=call(c,'lan_file_backups',action='list')['backups'];assert backups

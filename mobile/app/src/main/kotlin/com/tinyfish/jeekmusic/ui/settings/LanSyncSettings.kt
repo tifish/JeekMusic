@@ -131,16 +131,7 @@ fun LanSyncSettings(lan: LanSyncService) {
         if (status.running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
         if(status.fileProcessed>0) SettingSummary(stringResource(R.string.lan_file_summary,status.fileProcessed,status.fileActions.values.sum(),status.fileConflicts.size,status.fileDeferredCount),Modifier.padding(16.dp))
-        for(conflict in status.fileConflicts.take(20)) Card(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=4.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text(conflict.getString("path"),style=MaterialTheme.typography.titleSmall)
-                Text(stringResource(R.string.lan_file_conflict_changes,fileChangeLabel(conflict.optString("localChange")),fileChangeLabel(conflict.optString("remoteChange"))),style=MaterialTheme.typography.bodySmall)
-                FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    TextButton(enabled=!status.running,onClick={ lan.resolveConflict(conflict.getString("id"),"local") }) { Text(stringResource(R.string.lan_use_phone)) }
-                    TextButton(enabled=!status.running,onClick={ lan.resolveConflict(conflict.getString("id"),"remote") }) { Text(stringResource(R.string.lan_use_pc)) }
-                }
-            }
-        }
+        for(conflict in status.fileConflicts.take(20)) SyncConflictCard(conflict,!status.running) { lan.resolveConflict(conflict.getString("id"),it) }
         if (status.total > 0) Text("${status.done / 1024} / ${status.total / 1024} KiB", Modifier.padding(horizontal = 16.dp))
         if (status.precisionNs > 0) Text(stringResource(R.string.lan_precision_summary, stringResource(when (status.precisionNs) {
             1_000L -> R.string.lan_microsecond; 1_000_000L -> R.string.lan_millisecond; 1_000_000_000L -> R.string.lan_second; else -> R.string.lan_two_seconds

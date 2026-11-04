@@ -9,6 +9,24 @@ public sealed partial class LanSyncService
     LanFileSyncStore? _fileStore;
     volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=2,["comparison"]="size+mtime-exact",["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
     int _refreshingFiles;
+    public long ConflictCount { get; private set; }
+    public async Task<JsonObject> FileConflicts(string action="list",string? id=null,string? choice=null,int offset=0) {
+        await _fileWork.WaitAsync();
+        try {
+            return await Task.Run(()=> {
+                _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
+                if(action=="list") {
+                    var page=_fileStore.ConflictPage(offset);
+                    lock(_gate)foreach(var row in page["rows"]!.AsArray().OfType<JsonObject>())row["deviceName"]=Devices[row["device"]!.GetValue<string>()]?["name"]?.GetValue<string>()??"";
+                    return page;
+                }
+                if(action!="choose" || id is null || choice is null)throw new ArgumentException("Invalid conflict action");
+                var scope=_fileStore.ConflictScope(id);var owner=_fileStore.ConflictOwner(scope);
+                lock(_gate)if(Devices[owner.Device] is not JsonObject device || device["revoked"]?.GetValue<bool>()==true)throw new UnauthorizedAccessException();
+                return _fileStore.ChooseConflict(scope,RootPath(owner.Root),id,choice);
+            });
+        } finally { if(_fileStore!=null)ConflictCount=_fileStore.PendingConflictCount;_fileWork.Release();Notify(); }
+    }
     readonly HashSet<string> _retiringUploads=new();
     void RetireFileUploads(string device) {
         lock(_retiringUploads)if(!_retiringUploads.Add(device))return;
@@ -41,6 +59,7 @@ public sealed partial class LanSyncService
     }
     JsonObject FileDiagnostics() {
         var result=_fileDiagnostics.DeepClone().AsObject();
+        result["pendingConflicts"]=ConflictCount;result["conflictProtocol"]=1;
         result["metadataObservations"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.MetadataObservations);
         result["hashBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.HashBytes);
         result["transferBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.TransferBytes);
@@ -64,7 +83,7 @@ public sealed partial class LanSyncService
     {
         var op=a["op"]!.GetValue<string>();
         if(!modern || a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
-        if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort"))throw new ArgumentException("Unknown file operation");
+        if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear"))throw new ArgumentException("Unknown file operation");
         if(!_fileWork.Wait(0))throw Busy();
         bool handedOff=false;
         var independent=op is "file_verify" or "file_ack" or "file_finish" or "file_delete";
@@ -102,7 +121,10 @@ public sealed partial class LanSyncService
                     switch(op)
                     {
                         case "file_open":result=store.Open(auth.Device,owner,rootId,a["mapping"]!.GetValue<string>(),a["selection"]!.AsArray().Select(n=>n!.GetValue<string>()).ToArray());break;
-                        case "file_revision":result=new() { ["revision"]=WatchRevision(rootId),["pollSeconds"]=30,["fallbackSeconds"]=900 };break;
+                        case "file_revision":result=new() { ["revision"]=WatchRevision(rootId)+":"+store.ConflictRevision(scope),["pollSeconds"]=30,["fallbackSeconds"]=900 };break;
+                        case "file_conflict":result=store.ReportConflict(scope,root,a);break;
+                        case "file_conflict_choose":result=store.ChooseConflict(scope,root,a["id"]!.GetValue<string>(),a["choice"]!.GetValue<string>());break;
+                        case "file_conflict_clear":result=store.ClearConvergedConflict(scope,root,a);break;
                         case "file_schedule":result=store.Schedule(scope,a);break;
                         case "file_rows":result=store.Baselines(scope,a["offset"]?.GetValue<int>()??0,a["revision"]!.GetValue<string>());break;
                         case "file_baseline":result=store.BaselineRow(scope,a["path"]!.GetValue<string>());break;
@@ -132,7 +154,7 @@ public sealed partial class LanSyncService
                 catch(OperationCanceledException) { _fileStore?.RecordDeferred();return new JsonObject { ["deferred"]=true,["reason"]="cancelled_or_time_budget" }; }
                 catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or System.Text.Json.JsonException)
                 { _fileStore?.RecordDeferred();return new JsonObject { ["deferred"]=true,["reason"]=e is UnauthorizedAccessException?"authorization_changed":"file_busy_unavailable_or_invalid" }; }
-                finally { if(_fileStore!=null) { var diagnostics=_fileStore.Diagnostics();diagnostics["state"]="idle";diagnostics["lastAction"]=op;_fileDiagnostics=diagnostics; }_fileWork.Release();if(op is "file_open" or "file_finish" or "file_delete" or "file_ack")ScheduleFileRefresh(); }
+                finally { if(_fileStore!=null) { var diagnostics=_fileStore.Diagnostics();diagnostics["state"]="idle";diagnostics["lastAction"]=op;ConflictCount=_fileStore.PendingConflictCount;diagnostics["pendingConflicts"]=ConflictCount;_fileDiagnostics=diagnostics; }_fileWork.Release();if(op.StartsWith("file_conflict",StringComparison.Ordinal) || op=="file_ack")Notify();if(op is "file_open" or "file_finish" or "file_delete" or "file_ack")ScheduleFileRefresh(); }
             }
             if(!independent) { handedOff=true;using var ownedLifetime=lifetime;lifetime=null;return await Work(); }
             lock(_gate)

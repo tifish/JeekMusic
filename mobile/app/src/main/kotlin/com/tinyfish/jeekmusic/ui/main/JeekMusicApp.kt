@@ -1,4 +1,5 @@
 package com.tinyfish.jeekmusic.ui.main
+import androidx.compose.material3.TextButton
 
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -168,6 +169,7 @@ fun JeekMusicApp(viewModel: MainViewModel) {
                         entryProvider = entryProvider {
                             entry<TopRoute.Main> { MainScreen(viewModel) }
                             entry<TopRoute.Settings> { SettingsScreen(onBack = back) }
+                            entry<TopRoute.SyncConflicts> { com.tinyfish.jeekmusic.ui.settings.SyncConflictsScreen(viewModel.lan,back) }
                             entry<TopRoute.Search> { SearchScreen(onBack = back, onSourceChanged = viewModel::followSearch) }
                             entry<TopRoute.TabManager> { TabManagerScreen(viewModel, onBack = back) }
                             entry<TopRoute.ArtistSettings> { ArtistSettingsScreen(onBack = back) }
@@ -327,6 +329,10 @@ private fun MainScreen(viewModel: MainViewModel) {
                         progress = { if (running.total > 0) running.done.toFloat() / running.total else 0f },
                         modifier = Modifier.fillMaxWidth().testTag("scan_progress"),
                     )
+                }
+                val conflictCount by viewModel.lan.conflictCount.collectAsStateWithLifecycle()
+                if(conflictCount>0) TextButton(onClick={ viewModel.open(TopRoute.SyncConflicts) },modifier=Modifier.fillMaxWidth().testTag("sync_conflict_notice")) {
+                    Text(stringResource(R.string.sync_conflict_notice,conflictCount))
                 }
                 // 只组合当前页，避免固定标签很多时拖慢启动和滑动（docs/design.md §5.1）
                 HorizontalPager(state = pagerState, beyondViewportPageCount = 0, key = { tabs.getOrNull(it)?.key ?: it }) { page ->

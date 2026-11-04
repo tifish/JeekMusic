@@ -1,5 +1,21 @@
 # Windows MCP 接口
 
+## 双端文件同步冲突
+
+`lan_file_conflicts` 与 PC 主界面提示和冲突窗口共用服务：`action="list"`
+按 `offset` 分页（每页 100 条），返回 `total/rows/hasMore/next`；
+`action="open"` 打开同一个比较窗口；`action="choose"` 指定记录的 `id`
+和 `choice="local"`（手机）或 `"remote"`（电脑）。记录包含两端的存在／删除状态、
+字节大小、纳秒修改时间、相对路径、设备和已确认选择。ID 绑定双方版本及基线，
+不接受过期版本或相反的第二次选择。choose 只持久化意图，不代表已执行；手机下次
+同步重新校验后才传输或删除，完成确认后双方移除提示。离线手机需重连才能执行。
+
+LAN capabilities 新增 `conflictProtocol=1`；协议 2 增加 `file_conflict`、
+`file_conflict_choose`、`file_conflict_clear`，全部沿用设备认证和 mapping scope
+隔离。冲突选择会改变 `file_revision` 的提示版本，以触发现有自动同步轮次。
+`lan_sync_status.fileSync` 增加 `pendingConflicts/conflictProtocol`。
+开发版和 NativeAOT 均提供 41 个工具。list/choose 不读取音频内容或计算文件哈希。
+
 Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使用相同的工具、参数校验和业务服务，没有开发专用开关。播放器的窗口、托盘和 MCP 操作共享同一份播放状态、队列和曲库。
 
 ## 标注状态和当前列表

@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(app);
         DataContext = _vm;
         InitializeComponent();
+        InitSyncConflicts();
 
         Table.DoubleTapped += (_, e) => { if (e.Source is not DataGridColumnHeader && !((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any(b => b.Classes.Contains("tag-cell")) ?? false)) PlaySelected(); };
         Table.KeyDown += OnTableKeyDown;

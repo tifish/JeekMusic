@@ -69,7 +69,7 @@ def main():
             call("show_window")
             catalog=c.request("tools/list")
             a.report.with_suffix(".catalog.json").write_text(json.dumps(catalog,indent=2),encoding="utf-8")
-            assert len(catalog["tools"])==40
+            assert len(catalog["tools"])==41
             def wait(tool,predicate,**args):
                 return startup.wait_for(c,tool,predicate,**args)
             def search(state,**args):return call("search_tracks",annotation=state,**args)

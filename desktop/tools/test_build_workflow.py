@@ -88,10 +88,10 @@ class WorkflowGuards(unittest.TestCase):
                 return {"tools": [{"name": "get_diagnostics", "inputSchema": {
                     "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(tool_count - 1)]}
 
-        # Match the current 40-tool contract, and exercise failure cleanup too.
+        # Match the current 41-tool contract, and exercise failure cleanup too.
         # A fake client must never send a real signal to its invented PID, even
         # when a catalog assertion fails before graceful shutdown.
-        for tool_count in (40, 24, 39, 41):
+        for tool_count in (41, 24, 39, 40):
             calls.clear()
             with self.subTest(tool_count=tool_count), \
                  patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
@@ -102,7 +102,7 @@ class WorkflowGuards(unittest.TestCase):
                  patch.object(mcp.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as process, \
                  patch.object(mcp.wave, "open") as audio, \
                  contextlib.redirect_stdout(io.StringIO()):
-                if tool_count == 40:
+                if tool_count == 41:
                     mcp.main()
                     close.assert_called_once_with(12345)
                     kill.assert_not_called()

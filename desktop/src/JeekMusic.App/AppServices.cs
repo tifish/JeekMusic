@@ -31,6 +31,7 @@ public sealed class AppServices : IDisposable
     internal UI.ViewModels.MainViewModel? Navigation { get; set; }
     internal Online.OnlineFeature? Online { get; set; }
     internal Action? CheckpointWindow { get; set; }
+    internal Action? ShowSyncConflicts { get; set; }
     internal Func<System.Text.Json.Nodes.JsonObject>? MainLayoutDiagnostics { get; set; }
     internal Func<System.Text.Json.Nodes.JsonObject,System.Text.Json.Nodes.JsonObject>? SongColumnsControl { get; set; }
     internal Func<IReadOnlyList<Track>, IReadOnlyDictionary<Core.Analysis.TagDimension, Core.Analysis.Tag?>, string?, Task>? CorrectSmartTags { get; set; }

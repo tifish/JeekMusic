@@ -56,6 +56,7 @@ class MainViewModel @Inject constructor(
     private val observer: LibraryObserver,
     private val player: PlayerConnection,
     val sync: com.tinyfish.jeekmusic.data.sync.SyncService,
+    val lan: com.tinyfish.jeekmusic.data.sync.LanSyncService,
     private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
     private val analysis: AnalysisScheduler,
     private val onlineFetch: OnlineFetchScheduler,

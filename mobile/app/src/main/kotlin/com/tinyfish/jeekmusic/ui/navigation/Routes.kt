@@ -4,6 +4,7 @@ package com.tinyfish.jeekmusic.ui.navigation
 sealed interface TopRoute {
     data object Main : TopRoute
     data object Settings : TopRoute
+    data object SyncConflicts : TopRoute
     data object Search : TopRoute
     data object TabManager : TopRoute
     data object ArtistSettings : TopRoute

@@ -92,6 +92,50 @@ class LanSyncService @Inject constructor(
     val conflictError = _conflictError.asStateFlow()
     private fun refreshConflicts() { _conflictCount.value=fileDatabase.issueCount();val rows=fileDatabase.issuePage();_status.update { it.copy(fileConflicts=rows) };report() }
     suspend fun conflictPage(offset: Int=0): List<JSONObject> = withContext(Dispatchers.IO) { fileDatabase.issuePage(offset) }
+    private val conflictExchange=Mutex()
+    private var conflictOffset=0
+    private val missingConflictHints=mutableSetOf<String>()
+    /** Independent, bounded control connection: never closes an active file transfer. */
+    internal suspend fun exchangeConflictStatus(id: String?=null) {
+        if(!conflictExchange.tryLock())return
+        try {
+            val connection=store.read().optJSONObject("connection") ?: return
+            val enabled=store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }.map { it.getString("key") }.toSet()
+            if(enabled.isEmpty())return
+            val rows=if(id!=null)listOfNotNull(fileDatabase.issue(id)) else fileDatabase.issuePage(conflictOffset).also { conflictOffset=if(it.size<100)0 else conflictOffset+100 }
+            val current=rows.filter { it.optString("mapping") in enabled && it.optString("scope").isNotEmpty() }
+            if(current.isEmpty())return
+            LanProtocol(connection).use { client ->
+                if(client.call("capabilities").optInt("conflictStatusProtocol")<1)return
+                for((scopeId,group) in current.groupBy { it.getString("scope") }) {
+                    fun call(op: String,args: JSONObject)=client.call(op,args.put("fileProtocol",2).put("scope",scopeId))
+                    val snapshot=call("file_conflict_status",JSONObject().put("ids",JSONArray(group.map { it.getString("id") })))
+                    val shared=snapshot.getJSONArray("rows")
+                    repeat(shared.length()) { index ->
+                        var row=shared.getJSONObject(index)
+                        val key=row.getString("id")
+                        val local=fileDatabase.issue(key) ?: return@repeat
+                        val before=local.optString("choice").takeIf { !local.has("queuedChoice") }
+                        val queued=local.optString("queuedChoice")
+                        if(row.optString("choice") !in setOf("local","remote") && queued in setOf("local","remote")) {
+                            val chosen=call("file_conflict_choose",JSONObject().put("id",key).put("choice",queued))
+                            // Another device may win while this request is in flight. Read again next tick.
+                            if(chosen.optBoolean("conflict") || chosen.optBoolean("deferred"))return@repeat
+                            row=chosen
+                        }
+                        for(field in listOf("local","remote","choice","localChange","remoteChange","reportedAt"))local.put(field,row.opt(field) ?: JSONObject.NULL)
+                        fileDatabase.updateIssue(local)
+                        if(row.optString("choice") in setOf("local","remote") && before!=row.optString("choice"))automation.hint("conflict_choice")
+                    }
+                    val missing=snapshot.getJSONArray("missing")
+                    repeat(missing.length()) { index ->
+                        // Absence alone is not proof of file convergence. The reconciler must check it.
+                        if(missingConflictHints.add(missing.getString(index)))automation.hint("conflict_changed")
+                    }
+                }
+            }
+        } finally { conflictExchange.unlock() }
+    }
     private val _revision = MutableStateFlow(0)
     val revision = _revision.asStateFlow()
     private val partials = File(context.filesDir, "lan-partials").apply { mkdirs() }
@@ -105,7 +149,7 @@ class LanSyncService @Inject constructor(
         catch (e: LanLedgerException) { ledgerLoaded = false; throw e } // Recovery reloads the confirmed disk state.
     }
     private fun report() { _revision.update { it+1 } }
-    init { scope.launch(Dispatchers.IO) { refreshConflicts() } }
+    init { fileDatabase.onIssuesChanged=::refreshConflicts;scope.launch(Dispatchers.IO) { refreshConflicts() } }
     private fun problem(e: Exception): String = if(e is LanRemoteException && e.code=="unauthorized") context.getString(R.string.lan_pairing_revoked)
         else if(e is LanRemoteException && e.code=="upgrade_required") context.getString(R.string.lan_paired_upgrade)
         else if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
@@ -193,7 +237,7 @@ class LanSyncService @Inject constructor(
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
             try { gate.withLock {
                 reportFileSchedule(automation.state.value.json())
-                _status.value = LanStatus(true, context.getString(R.string.lan_verifying))
+                _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage())
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
                     val obsolete=store.mappings().count { !LanMappingTargets.isCurrent(it) }
@@ -212,14 +256,13 @@ class LanSyncService @Inject constructor(
                                 val now=android.os.SystemClock.elapsedRealtime()
                                 if(now-lastProgress>=250) {
                                     lastProgress=now
-                                    if(progress.conflictCount>0 && _conflictCount.value!=fileDatabase.issueCount())refreshConflicts()
-                                    _status.value=LanStatus(true,path,done+progress.bytes,0,problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileConflicts=(conflicts+progress.conflicts).take(100).map { JSONObject(it.toString()) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed)
+                                    _status.update { it.copy(running=true,text=path,done=done+progress.bytes,total=0,problems=problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed) }
                                 }
-                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ if(fileDatabase.refreshPaths(mapping.getString("key")).size>=200)drainRefresh() })
+                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ drainRefresh() })
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
-                            _status.value=_status.value.copy(fileActions=actions.toMap(),fileConflicts=conflicts.map { JSONObject(it.toString()) },fileDeferredCount=deferredCount,fileProcessed=processed)
+                            _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed) }
                         } finally { client.close();activeFileRoot=null }
                         drainRefresh()
                     }
@@ -309,13 +352,13 @@ class LanSyncService @Inject constructor(
         scope.launch(Dispatchers.IO) {
             try {
                 _conflictError.value=false
-                // Only persist intent here. The existing reconciler submits it with
-                // the captured conflict ID and revalidates both versions before I/O.
+                // Persist first, then promptly exchange intent independently of file I/O.
                 fileDatabase.queueChoice(id,choice)
                 refreshConflicts()
             }catch(e: CancellationException) { throw e }
             catch(_: Exception) { _conflictError.value=true;return@launch }
             start()
+            try { exchangeConflictStatus(id) }catch(e: CancellationException) { throw e }catch(_: Exception) { /* Durable choice retries on the next status tick or reconciliation. */ }
         }
     }
     suspend fun backups(): List<JSONObject> = withContext(Dispatchers.IO) { gate.withLock { store.mappings().filter { LanMappingTargets.isCurrent(it) }.flatMap { fileDatabase.backupRows(it.getString("key")) }.take(100) } }

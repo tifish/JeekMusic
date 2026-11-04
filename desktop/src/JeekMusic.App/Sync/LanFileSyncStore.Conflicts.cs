@@ -9,6 +9,18 @@ internal sealed partial class LanFileSyncStore
     void ConflictChanged(string scope) => Run("INSERT OR REPLACE INTO conflict_revisions VALUES($s,$r)",("$s",scope),("$r",Guid.NewGuid().ToString("N")));
     public string ConflictRevision(string scope) => Scalar("SELECT revision FROM conflict_revisions WHERE scope=$s",("$s",scope)) as string ?? "0";
     public long PendingConflictCount => Convert.ToInt64(Scalar("SELECT COUNT(*) FROM file_conflicts"));
+    // Read-only bounded status exchange. Never re-report or resurrect a cleared conflict.
+    public JsonObject ConflictStatus(string scope,JsonArray ids) {
+        if(ids.Count>100)throw new ArgumentException("Conflict status budget");
+        var rows=new JsonArray();var missing=new JsonArray();
+        foreach(var node in ids) {
+            var id=S(node);if(id.Length!=64 || id.Any(c=>!char.IsAsciiHexDigitLower(c)))throw new ArgumentException("Invalid conflict identity");
+            using var command=Command("SELECT json,choice FROM file_conflicts WHERE scope=$s AND id=$i",("$s",scope),("$i",id));
+            using var reader=command.ExecuteReader();
+            if(reader.Read())rows.Add((JsonNode)ConflictRow(reader.GetString(0),reader.IsDBNull(1)?null:reader.GetString(1)));else missing.Add((JsonNode)JsonValue.Create(id)!);
+        }
+        return new() { ["rows"]=rows,["missing"]=missing,["revision"]=ConflictRevision(scope) };
+    }
     static string Change(string? version,string? baseline,bool tracked) => !tracked ? version is null ? "absent" : "untracked_present" : version==baseline ? "unchanged" : version is null ? "deleted" : baseline is null ? "created" : "modified";
     static JsonObject VersionInfo(string? version) {
         if(version is null)return new() { ["exists"]=false };

@@ -65,6 +65,37 @@ class LanFileSynchronizerTest {
             call("file_finish",JSONObject().put("scope",scope).put("operation",operation))
         }
         suspend fun run(): LanFileReport=LanProtocol(connection).use { sync.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{}) }
+        suspend fun exchangeViaProductionService(issue: JSONObject,queued: String?,expected: String) {
+            check(android.os.Build.HARDWARE in setOf("ranchu","goldfish"))
+            val target=InstrumentationRegistry.getInstrumentation().targetContext
+            check(target.packageName.endsWith(".debug"))
+            val service=dagger.hilt.android.EntryPointAccessors.fromApplication(target,LanSyncWorker.Dependencies::class.java).lan()
+            service.cancel();service.awaitSync()
+            val original=service.store.read()
+            fun field(name: String)=LanSyncService::class.java.getDeclaredField(name).apply { isAccessible=true }
+            val database=field("fileDatabase").get(service) as LanFileDatabase
+            val gate=field("gate").get(service) as kotlinx.coroutines.sync.Mutex
+            val oldJob=field("job").get(service);val active=kotlinx.coroutines.Job()
+            gate.lock()
+            try {
+                field("job").set(service,active)
+                service.store.update { it.put("connection",connection).put("mappings",JSONArray().put(JSONObject(mapping.toString()).put("layoutVersion",2).put("enabled",true))) }
+                database.issue(JSONObject(issue.toString()))
+                if(queued!=null)database.queueChoice(issue.getString("id"),queued)
+                service.exchangeConflictStatus(issue.getString("id"))
+                assertTrue(gate.isLocked);assertTrue(active.isActive)
+                assertEquals(expected,database.issue(issue.getString("id"))!!.getString("choice"))
+                assertEquals(expected,service.status.value.fileConflicts.single { it.getString("id")==issue.getString("id") }.getString("choice"))
+                val rev=service.revision.value
+                database.resolved(mapping.getString("key"),path)
+                assertTrue(service.revision.value>rev)
+                assertTrue(service.status.value.fileConflicts.none { it.getString("id")==issue.getString("id") })
+            } finally {
+                active.cancel();field("job").set(service,oldJob);gate.unlock()
+                database.resolved(mapping.getString("key"),path)
+                service.store.update { saved -> saved.keys().asSequence().toList().forEach(saved::remove);original.keys().forEach { saved.put(it,original.get(it)) } }
+            }
+        }
     }
     @Test fun initialAndTrackedChangesReconcileBothDirections()=fixture {
         val a=audio(1);val b=audio(2);val c=audio(3)
@@ -85,13 +116,20 @@ class LanFileSynchronizerTest {
         val issue=run().conflicts.single();assertTrue(issue.getBoolean("shared"))
         assertTrue(issue.getJSONObject("local").getBoolean("exists"));assertEquals(64,issue.getJSONObject("remote").getInt("size"))
         call("file_conflict_choose",JSONObject().put("scope",issue.getString("scope")).put("id",issue.getString("id")).put("choice","remote"))
+        exchangeViaProductionService(issue,"local","remote") // status channel works even while the file-sync gate is held
         // A queued opposing phone choice cannot override the first confirmed selection.
         db.queueChoice(issue.getString("id"),"local");run();assertArrayEquals(c,localBytes())
         local(a);remote(b);val next=run().conflicts.single()
         call("file_conflict_choose",JSONObject().put("scope",next.getString("scope")).put("id",next.getString("id")).put("choice","remote"))
         local(c);val changed=run().conflicts.single();assertNotEquals(next.getString("id"),changed.getString("id"))
         assertArrayEquals(c,localBytes());assertEquals(hash(b),remoteHash())
-        db.queueChoice(changed.getString("id"),"local");run()
+        exchangeViaProductionService(changed,"local","local") // sends phone intent without waiting for the reconciler
+        val observed=call("file_conflict_status",JSONObject().put("scope",changed.getString("scope")).put("ids",JSONArray().put(changed.getString("id"))))
+        assertEquals("local",observed.getJSONArray("rows").getJSONObject(0).getString("choice"))
+        db.queueChoice(changed.getString("id"),"local")
+        var removalPublished=false
+        db.onIssuesChanged={ if(db.issueCount()==0)removalPublished=true }
+        LanProtocol(connection).use { sync.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{ assertTrue(removalPublished) }) }
         assertArrayEquals(c,localBytes());assertEquals(hash(c),remoteHash())
     }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {

@@ -14,7 +14,8 @@ internal sealed class SyncConflictsWindow : Window
     readonly TextBlock message=new() { TextWrapping=TextWrapping.Wrap };
     readonly Button previous=new() { Content=L.T("上一页") };
     readonly Button next=new() { Content=L.T("下一页") };
-    int offset;bool busy;
+    int offset;bool busy;bool refreshPending;bool closed;
+    async void OnSyncChanged() => await Refresh();
     public SyncConflictsWindow(AppServices app) {
         this.app=app;Title=L.T("同步冲突");Width=760;Height=620;MinWidth=480;MinHeight=400;
         var panel=new DockPanel { Margin=new Thickness(20) };
@@ -28,12 +29,17 @@ internal sealed class SyncConflictsWindow : Window
         previous.Click+=async (_,_)=> { offset=Math.Max(0,offset-100);await Refresh(); };
         next.Click+=async (_,_)=> { offset+=100;await Refresh(); };refresh.Click+=async (_,_)=>await Refresh();
         var timer=new DispatcherTimer { Interval=TimeSpan.FromSeconds(5) };timer.Tick+=async (_,_)=>await Refresh();
-        Opened+=async (_,_)=> { await Refresh();timer.Start(); };Closed+=(_,_)=>timer.Stop();
+        Opened+=async (_,_)=> { app.LanSync.Changed+=OnSyncChanged;await Refresh();timer.Start(); };
+        Closed+=(_,_)=> { closed=true;app.LanSync.Changed-=OnSyncChanged;timer.Stop(); };
     }
     async Task Refresh() {
-        if(busy)return;busy=true;
+        if(closed)return;
+        if(busy) { refreshPending=true;return; }busy=true;refreshPending=false;
         try {
-            var page=await app.LanSync.FileConflicts(offset:offset);var items=page["rows"]!.AsArray();
+            var page=await app.LanSync.FileConflicts(offset:offset);
+            if(offset>0 && page["total"]!.GetValue<long>()<=offset) { offset=Math.Max(0,((int)page["total"]!.GetValue<long>()-1)/100*100);page=await app.LanSync.FileConflicts(offset:offset); }
+            if(closed)return;
+            var items=page["rows"]!.AsArray();
             rows.Children.Clear();previous.IsEnabled=offset>0;next.IsEnabled=page["hasMore"]!.GetValue<bool>();
             if(items.Count==0)rows.Children.Add(new TextBlock { Text=L.T("没有同步冲突") });
             foreach(var item in items) {
@@ -67,6 +73,6 @@ internal sealed class SyncConflictsWindow : Window
                 body.Children.Add(buttons);rows.Children.Add(new Border { BorderThickness=new Thickness(1),BorderBrush=Brushes.Gray,CornerRadius=new CornerRadius(6),Child=body });
             }
         }catch(Exception) { message.Text=L.T("暂时无法读取冲突，请稍后刷新。"); }
-        finally { busy=false; }
+        finally { busy=false;if(refreshPending && !closed)Dispatcher.UIThread.Post(async ()=>await Refresh()); }
     }
 }

@@ -298,9 +298,9 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 report.actions[decision.action]=(report.actions[decision.action] ?: 0)+1
                             }
                             if(cues && decision.action!="none" && meta(local)!=null)beforeChange(path,remote,false)
-                            if(decision.action!="none")afterChange()
                             if(sharedConflicts && db.issueForPath(key,path)!=null)call(client,scope,"file_conflict_clear",JSONObject().put("path",path).put("localVersion",meta(local) ?: JSONObject.NULL).put("remoteVersion",meta(remote) ?: JSONObject.NULL))
                             db.resolved(key,path)
+                            if(decision.action!="none")afterChange()
                         } catch(e: kotlinx.coroutines.CancellationException) { throw e }
                         catch(e: LanRemoteFileConflict) { report.defer("$path: ${e.reason}; refresh the snapshot");if(!cues)db.hold(key,path) }
                         catch(e: LanLocalDeferred) { report.defer("$path: ${e.reason}");if(!cues)db.hold(key,path) }

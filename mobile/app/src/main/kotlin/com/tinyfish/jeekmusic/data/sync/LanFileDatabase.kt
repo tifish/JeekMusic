@@ -63,10 +63,12 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     }
     @Synchronized fun hold(mapping: String,path: String) { db.execSQL("INSERT OR IGNORE INTO held VALUES(?,?)",arrayOf(mapping,path)) }
     @Synchronized fun held(mapping: String,path: String)=db.rawQuery("SELECT 1 FROM held WHERE mapping=? AND path=?",arrayOf(mapping,path)).use { it.moveToFirst() }
+    @Volatile internal var onIssuesChanged: (() -> Unit)? = null
     @Synchronized fun issue(row: JSONObject) {
         val previous=one("SELECT json FROM issues WHERE mapping=? AND path=?",arrayOf(row.getString("mapping"),row.getString("path")))
         if(previous?.optString("id")==row.getString("id"))return
         db.execSQL("INSERT OR REPLACE INTO issues VALUES(?,?,?,?,NULL)",arrayOf(row.getString("id"),row.getString("mapping"),row.getString("path"),row.toString()))
+        onIssuesChanged?.invoke()
     }
     @Synchronized fun issue(id: String): JSONObject? = db.rawQuery("SELECT json,choice FROM issues WHERE id=?",arrayOf(id)).use { c -> if(c.moveToFirst())JSONObject(c.getString(0)).also { if(!c.isNull(1))it.put("choice",c.getString(1)) } else null }
     @Synchronized fun choose(id: String,choice: String) { require(choice in setOf("local","remote"));check(issue(id)!=null);db.execSQL("UPDATE issues SET choice=? WHERE id=?",arrayOf(choice,id)) }
@@ -78,19 +80,24 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         check(queued.isEmpty() || queued==choice) { "Conflict already queued" }
         row.remove("choice");row.put("queuedChoice",choice)
         db.execSQL("UPDATE issues SET json=?,choice=? WHERE id=?",arrayOf(row.toString(),choice,id))
+        onIssuesChanged?.invoke()
     }
     @Synchronized fun updateIssue(row: JSONObject) {
         // A user may queue a choice while the reconciler is awaiting the server.
         // Preserve it until a server-confirmed choice arrives; never lose that race.
-        val queued=issue(row.getString("id"))?.optString("queuedChoice").orEmpty()
+        val existing=one("SELECT json FROM issues WHERE id=?",arrayOf(row.getString("id"))) ?: return
+        val queued=existing.optString("queuedChoice")
+        // A delayed snapshot must not undo a server-confirmed first-writer choice.
+        if(existing.optString("choice") in setOf("local","remote"))row.put("choice",existing.getString("choice"))
         val confirmed=row.optString("choice") in setOf("local","remote")
         if(!confirmed && queued in setOf("local","remote"))row.put("queuedChoice",queued) else row.remove("queuedChoice")
         db.execSQL("UPDATE issues SET json=?,choice=? WHERE id=?",arrayOf(row.toString(),if(!confirmed && queued.isNotEmpty())queued else null,row.getString("id")))
+        if(existing.toString()!=row.toString())onIssuesChanged?.invoke()
     }
     @Synchronized fun issueForPath(mapping: String,path: String): JSONObject? = one("SELECT json FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path))
     @Synchronized fun issuePage(offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM issues ORDER BY mapping,path LIMIT 100 OFFSET ?",arrayOf(offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
     @Synchronized fun issueCount(): Int = db.rawQuery("SELECT COUNT(*) FROM issues",null).use { it.moveToFirst();it.getInt(0) }
-    @Synchronized fun resolved(mapping: String,path: String) { db.execSQL("DELETE FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
+    @Synchronized fun resolved(mapping: String,path: String) { if(db.delete("issues","mapping=? AND path=?",arrayOf(mapping,path))>0)onIssuesChanged?.invoke() }
     @Synchronized fun issues(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM issues WHERE mapping=? ORDER BY path LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
     @Synchronized fun transaction(mapping: String,path: String,scope: String): JSONObject? = one("SELECT json FROM transactions WHERE mapping=? AND path=? AND scope=? ORDER BY rowid DESC LIMIT 1",arrayOf(mapping,path,scope))
     @Synchronized fun transaction(row: JSONObject) {

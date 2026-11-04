@@ -32,12 +32,30 @@ class LanConflictChoiceQueueTest {
                 db.updateIssue(row(id).put("choice","remote")) // another device already confirmed
                 assertFalse(db.issuePage().single().has("queuedChoice"))
                 assertEquals("remote",db.issue(id)!!.getString("choice"))
+                db.updateIssue(row(id).put("choice",JSONObject.NULL)) // delayed pre-choice status reply
+                assertEquals("remote",db.issuePage().single().getString("choice"))
                 assertThrows(IllegalStateException::class.java) { db.queueChoice(id,"local") }
                 val next="b".repeat(64);db.issue(row(next))
                 assertNull(db.issue(id));assertFalse(db.issue(next)!!.has("queuedChoice"))
                 assertThrows(IllegalStateException::class.java) { db.queueChoice(id,"local") }
             }
         } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun issueObserversSeeDurableStateImmediatelyIncludingSameCountChoiceAndRemoval() {
+        val base=InstrumentationRegistry.getInstrumentation().targetContext
+        val dir=File(base.cacheDir,"choice-notify-${UUID.randomUUID()}").apply { mkdirs() }
+        val context=object: ContextWrapper(base) { override fun getNoBackupFilesDir()=dir }
+        try { LanFileDatabase(context).use { db ->
+            val counts=mutableListOf<Int>();val choices=mutableListOf<String>()
+            db.onIssuesChanged={ counts+=db.issueCount();choices+=db.issuePage().firstOrNull()?.let { it.optString("queuedChoice",it.optString("choice")) }.orEmpty() }
+            val id="c".repeat(64)
+            db.issue(row(id));db.queueChoice(id,"local");db.updateIssue(row(id).put("choice","remote"));db.resolved("queue-test","A.mp3")
+            assertEquals(listOf(1,1,1,0),counts)
+            assertEquals(listOf("","local","remote",""),choices)
+            db.updateIssue(row(id).put("choice","remote")) // stale response must not resurrect
+            assertEquals(0,db.issueCount());assertEquals(4,counts.size)
+        } } finally { dir.deleteRecursively() }
     }
 
     @Test fun productionServiceAcceptsMultipleChoicesWhileSyncOwnsGate()=runBlocking {

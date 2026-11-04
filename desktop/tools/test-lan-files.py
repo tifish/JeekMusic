@@ -77,9 +77,19 @@ def main():
                     wait(lambda:request('file_conflict',**args).get('choice')=='remote')
                 assert call(c,'lan_file_conflicts',action='choose',id=conflict_id,choice='remote')['waitingForPhone']
                 assert request('file_conflict',**args)['choice']=='remote'
+                snapshot=request('file_conflict_status',scope=conflict_scope,ids=[conflict_id])
+                assert snapshot['rows'][0]['choice']=='remote' and not snapshot['missing']
                 assert request('file_conflict_choose',scope=conflict_scope,id=conflict_id,choice='local')['conflict']
                 assert (music/'Conflict.wav').read_bytes()==content
                 assert request('file_conflict_clear',scope=conflict_scope,path='Conflict.wav',localVersion=remote,remoteVersion=remote)['cleared']
+                snapshot=request('file_conflict_status',scope=conflict_scope,ids=[conflict_id])
+                assert not snapshot['rows'] and snapshot['missing']==[conflict_id]
+                if a.ui:
+                    # Existing open window must update from a phone-side clear without manual refresh.
+                    time.sleep(.5)
+                    dump=subprocess.run(ui+['-Action','Dump','-Shot',str(a.ui/'desktop-cleared.png')],check=True,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30).stdout
+                    assert 'No sync conflicts' in dump, dump
+                    assert not call(c,'lan_file_conflicts',action='list')['rows']
                 print('PASS real TLS conflict report, desktop MCP comparison/choice, phone retrieval, concurrent choice rejection and convergence',flush=True)
                 if a.benchmark:
                     sample=music/'MetadataSample';sample.mkdir()

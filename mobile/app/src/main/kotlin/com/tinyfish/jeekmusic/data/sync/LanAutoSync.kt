@@ -31,6 +31,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var initialized=false
     private var timer: Job?=null
     private var loop: Job?=null
+    private var conflictLoop: Job?=null
     private var firstHint=0L
     private var failures=0
     private var workerOwned=false
@@ -66,6 +67,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private fun enterForeground(value: Boolean) {
         foreground=value;synchronized(lock) { _state.value=_state.value.copy(foreground=value) }
         loop?.cancel()
+        conflictLoop?.cancel()
         if(!value) {
             synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear();timer?.cancel() }
             val needsHandoff=synchronized(lock) { if(_state.value.running)!workerOwned else _state.value.dirty }
@@ -76,6 +78,14 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
                     OneTimeWorkRequestBuilder<LanSyncWorker>().setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()) }
             }
             return
+        }
+        conflictLoop=scope.launch(Dispatchers.IO) {
+            while(isActive) {
+                try { if(eligible() && !held())service.exchangeConflictStatus() }
+                catch(e: CancellationException) { throw e }
+                catch(_: Exception) { /* Offline/busy retains local intent; no full-library retry storm. */ }
+                delay(2000)
+            }
         }
         loop=scope.launch(Dispatchers.IO) {
             rebuildWatches();hint("foreground")

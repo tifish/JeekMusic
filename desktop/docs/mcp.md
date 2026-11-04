@@ -19,6 +19,16 @@ LAN capabilities 新增 `conflictProtocol=1`；协议 2 增加 `file_conflict`�
 `lan_sync_status.fileSync` 增加 `pendingConflicts/conflictProtocol`。
 开发版和 NativeAOT 均提供 41 个工具。list/choose 不读取音频内容或计算文件哈希。
 
+冲突刷新：PC 窗口订阅服务变化，`list` 不再发出无变化通知，避免刷新回环。
+`lan_sync_status.fileSync` 和 LAN capabilities 新增 `conflictStatusProtocol=1`。
+认证后的 `file_conflict_status(scope, ids)` 每次最多查询 100 个不可变 ID，返回
+`rows/missing/revision`，沿用 scope 所属设备校验、请求速率及单文件工作预算。
+只读查询不重新登记已清除的记录；`missing` 仅触发重新核对，不授权手机清除冲突。
+手机前台每 2 秒轮询一页当前冲突，选择后立即尝试独立连接提交，不中断传输。
+并发操作繁忙或离线时保留意图重试；旧 PC 不支持该能力时保留原同步路径。
+文件确认后逐条发布冲突列表和首页计数，并刷新对应歌曲，不等待全映射结束。
+MCP 工具及参数 Schema 无新增或不兼容变更；描述与两种运行时同步更新。
+
 Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使用相同的工具、参数校验和业务服务，没有开发专用开关。播放器的窗口、托盘和 MCP 操作共享同一份播放状态、队列和曲库。
 
 ## 标注状态和当前列表

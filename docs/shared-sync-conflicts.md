@@ -28,6 +28,37 @@ and the existing first-confirmed-choice rules. Queuing itself neither writes nor
 deletes an audio file. Both the dedicated conflict page and settings summary use
 the same row behavior.
 
+#### Queue delivery 1.0.243 (2026-11-05)
+
+Source `c14393a9fe671cdaa043a8e513eaacddbd940901` passed
+[Mobile CI](https://github.com/tifish/JeekMusic/actions/runs/41867259916). Release
+tag and target_commitish both match that SHA. The downloaded
+[signed APK](https://github.com/tifish/JeekMusic/releases/download/v1.0.243/JeekMusic-1.0.243.apk)
+has SHA-256 `da42c6ecd79458eb575a3fb4b5d08b74c826d1df076042274f7f94d5f67ffd6b`
+and the unchanged release certificate. Local debug/release/lint and 122 JVM tests
+passed. Two device tests passed for durable intent, concurrent report preservation,
+server precedence, stale IDs and the actual service accepting two choices while
+its sync job and mutex are busy. The busy-service fixture initially stopped at its
+isolation check because old emulator mappings existed; it was corrected to save,
+temporarily isolate and restore those configurations. No production gate was weakened.
+
+The real Android reconciler plus Windows TLS/MCP test passed with the new queue
+method: an opposing queued choice cannot override the PC's confirmed choice;
+changed versions require a fresh ID, and a fresh phone choice uploads correctly.
+The run took 163.688 seconds. Evidence: `output/conflict-queue-tls.log`.
+
+**Actual click/visual acceptance remains blocked.** The emulator displayed an
+input ANR during playback-service startup (main-thread trace in Media3
+`MediaSession.getBitmapDimensionLimit`). After restarting that emulator, Android
+System UI itself also displayed an ANR. These observations do not establish an
+app-level root cause or a successful conflict-button interaction. Screenshots and
+trace are in `output/conflict-queue-ui/`; they are not counted as passing UI tests.
+Synthetic visual rows were removed by the explicit fixture cleanup (passed).
+The downloaded release was installed without clearing data and package metadata
+confirms 1.0.243/versionCode 243; launch was requested, but visual success cannot be
+claimed in the affected environment. Physical-phone installation was not attempted.
+Windows code/MCP were unchanged and the user's desktop was not restarted.
+
 Each present version now labels its size as larger/smaller/same size and its
 modification time as newer/older/same time, relative to the other version. These
 use exact integer bytes and nanoseconds, not rounded text or inferred content

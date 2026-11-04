@@ -21,6 +21,34 @@ size/time directions; store tests cover equal and unavailable values. Android
 debug build/lint and emulator screenshots cover differences within one second,
 deleted versions and equality. Evidence: `output/conflict-comparison-ui/`.
 
+### Comparison delivery 1.0.241 (2026-11-05)
+
+Source `a81d139635c930d937cf603e43b1e9353a0e640a` is pushed. Local managed and
+NativeAOT production TLS/MCP checks passed, including the comparison fields;
+their 41-tool catalogs match. Focused store assertions cover equality and missing
+versions. Android debug/lint and minified release builds passed; actual emulator
+screenshots show subsecond differences, equality and missing files. Synthetic
+rows were removed. No live conflict choice or music file was changed.
+
+GitHub [Desktop](https://github.com/tifish/JeekMusic/actions/runs/41861853349) and
+[Mobile](https://github.com/tifish/JeekMusic/actions/runs/41861853485) remained queued
+at handoff. This delivery uses verified **local** artifacts, not claimed CI assets:
+`desktop/artifacts/delivery-1.0.241/JeekMusic-1.0.241.apk` and `windows-final/`.
+The APK matches the existing release certificate and was installed over the
+emulator release without clearing data; versionCode/name confirmed 241/1.0.241.
+Physical phone installation was not retried.
+
+The first local Windows publish retained the project's default version 1.0.0;
+it was rebuilt with explicit JeekVersion=1.0.241 and replaced before handoff.
+Final running NativeAOT version is 1.0.241, source suffix a81d139, PID 4136.
+Fresh checkpoints verified 1,585 queue entries/order, source and anchor, selection
+index, pause/position/volume/output, filters, columns/layout, pairing credentials,
+learning events and all 1,710 baseline rows unchanged through the restarts.
+The same scoped firewall script configured the final executable's TCP rule after
+an initial failed invocation; final MCP reports configured. No router/global
+firewall settings were changed. Local hashes and preservation evidence are in
+`local-provenance.json` and `restart-preservation.json` beside the artifacts.
+
 ## What is a conflict?
 
 The comparison policy is still exact size + actual mtime, with a separate

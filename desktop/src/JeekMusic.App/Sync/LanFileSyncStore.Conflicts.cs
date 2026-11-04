@@ -29,9 +29,22 @@ internal sealed partial class LanFileSyncStore
         var row=new JsonObject { ["id"]=id,["scope"]=scope,["mapping"]=mapping,["path"]=path,["baselineVersion"]=S(input["baselineVersion"]),["localVersion"]=local,["remoteVersion"]=remote,
             ["local"]=VersionInfo(local),["remote"]=VersionInfo(remote),["reason"]=reason,["reportedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             ["localChange"]=Change(local,V(baseline?["localVersion"]),baseline!=null),["remoteChange"]=Change(remote,V(baseline?["remoteVersion"]),baseline!=null) };
-        Run("INSERT OR REPLACE INTO file_conflicts(id,scope,path,json,choice) VALUES($i,$s,$p,$j,NULL)",("$i",id),("$s",scope),("$p",path),("$j",row.ToJsonString()));ConflictChanged(scope);return row;
+        Run("INSERT OR REPLACE INTO file_conflicts(id,scope,path,json,choice) VALUES($i,$s,$p,$j,NULL)",("$i",id),("$s",scope),("$p",path),("$j",row.ToJsonString()));ConflictChanged(scope);return ConflictRow(row.ToJsonString(),null);
     }
-    static JsonObject ConflictRow(string json,string? choice) { var row=JsonNode.Parse(json)!.AsObject();row["choice"]=choice;return row; }
+    static JsonObject ConflictRow(string json,string? choice) {
+        var row=JsonNode.Parse(json)!.AsObject();row["choice"]=choice;
+        var phone=row["local"]!.AsObject();var pc=row["remote"]!.AsObject();
+        foreach(var (side,other) in new[] { (phone,pc),(pc,phone) }) {
+            var comparable=side["exists"]!.GetValue<bool>() && other["exists"]!.GetValue<bool>();
+            side["sizeComparison"]=comparable ? Compare(side,other,"size","larger","smaller") : "unavailable";
+            side["modifiedComparison"]=comparable ? Compare(side,other,"modifiedNs","newer","older") : "unavailable";
+        }
+        return row;
+    }
+    static string Compare(JsonObject side,JsonObject other,string field,string greater,string less) {
+        var comparison=side[field]!.GetValue<long>().CompareTo(other[field]!.GetValue<long>());
+        return comparison>0 ? greater : comparison<0 ? less : "equal";
+    }
     public JsonObject ConflictPage(int offset=0,string? scope=null) {
         if(offset<0)throw new ArgumentException("Invalid offset");
         var rows=new JsonArray();using var command=Command("SELECT c.json,c.choice,s.device,s.root FROM file_conflicts c JOIN scopes s ON s.id=c.scope WHERE ($s IS NULL OR c.scope=$s) ORDER BY c.scope,c.path LIMIT 100 OFFSET $o",("$s",scope),("$o",offset));
@@ -49,7 +62,7 @@ internal sealed partial class LanFileSyncStore
         var previous=Scalar("SELECT choice FROM file_conflicts WHERE id=$i",("$i",id)) as string;
         if(previous!=null && previous!=choice)throw Conflict("conflict_already_chosen");
         Run("UPDATE file_conflicts SET choice=$c WHERE id=$i",("$c",choice),("$i",id));ConflictChanged(scope);
-        row["choice"]=choice;row["waitingForPhone"]=true;return row;
+        row["choice"]=choice;row["waitingForPhone"]=true;return ConflictRow(row.ToJsonString(),choice);
     }
     public void ClearConflict(string scope,string path) {
         if(Scalar("SELECT id FROM file_conflicts WHERE scope=$s AND path=$p",("$s",scope),("$p",path)) is not string)return;

@@ -30,6 +30,15 @@ public sealed class LanSharedConflictTests
                 File.WriteAllBytes(file,[9,8,7,6,5]);Assert.Throws<LanFileConflict>(()=>store.ChooseConflict(scope,root,id,"local"));
                 var current=FileMetadata.Token(FileMetadata.Observe(root,"a.mp3"));
                 store.ClearConvergedConflict(scope,root,new() { ["path"]="a.mp3",["localVersion"]=current,["remoteVersion"]=current });Assert.Equal(0,store.PendingConflictCount);
+                foreach(var local in new[] { current,null }) {
+                    var comparisonId=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n",mapping,scope,"a.mp3","",local??"",current))));
+                    var comparison=store.ReportConflict(scope,root,new() { ["id"]=comparisonId,["path"]="a.mp3",["baselineVersion"]="",["localVersion"]=local,["remoteVersion"]=current,["reason"]="initial_different_content" });
+                    foreach(var side in new[] { "local","remote" }) {
+                        Assert.Equal(local is null?"unavailable":"equal",comparison[side]!["sizeComparison"]!.GetValue<string>());
+                        Assert.Equal(local is null?"unavailable":"equal",comparison[side]!["modifiedComparison"]!.GetValue<string>());
+                    }
+                    store.ClearConvergedConflict(scope,root,new() { ["path"]="a.mp3",["localVersion"]=current,["remoteVersion"]=current });
+                }
             }
         } finally { Directory.Delete(dir,true); }
     }

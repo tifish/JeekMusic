@@ -9,6 +9,18 @@ the deletion. A confirmed choice remains visible as pending until the phone
 reconnects/syncs, rechecks both files and completes the operation. Existing
 transaction/recovery protection remains in place.
 
+Each present version now labels its size as larger/smaller/same size and its
+modification time as newer/older/same time, relative to the other version. These
+use exact integer bytes and nanoseconds, not rounded text or inferred content
+quality. If either file is absent, neither size nor time is ranked. The existing
+choice and three-way reconciliation rules are unchanged. MCP exposes the same
+comparisons in `sizeComparison` and `modifiedComparison` (see its contract).
+
+Comparison validation: actual desktop UI and loopback TLS/MCP cover opposite
+size/time directions; store tests cover equal and unavailable values. Android
+debug build/lint and emulator screenshots cover differences within one second,
+deleted versions and equality. Evidence: `output/conflict-comparison-ui/`.
+
 ## What is a conflict?
 
 The comparison policy is still exact size + actual mtime, with a separate

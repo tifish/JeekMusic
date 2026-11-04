@@ -64,6 +64,8 @@ def main():
                 assert request('file_conflict',**args)['local']['size']==65
                 row=next(r for r in call(c,'lan_file_conflicts',action='list')['rows'] if r['id']==conflict_id)
                 assert row['remote']['size']==64
+                assert row['local']['sizeComparison']=='larger' and row['remote']['sizeComparison']=='smaller'
+                assert row['local']['modifiedComparison']=='older' and row['remote']['modifiedComparison']=='newer'
                 if a.ui:
                     a.ui.mkdir(parents=True,exist_ok=True)
                     subprocess.run([str(a.exe.resolve()),'--show'],env=dict(os.environ,JEEKMUSIC_DATA=str(data.resolve())),check=True,timeout=15)

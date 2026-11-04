@@ -1,4 +1,10 @@
 {
+  "较大": "Larger",
+  "较小": "Smaller",
+  "大小相同": "Same size",
+  "较新": "Newer",
+  "较旧": "Older",
+  "时间相同": "Same time",
   "设备": "Device",
   "字节": "bytes",
   "刷新": "Refresh",

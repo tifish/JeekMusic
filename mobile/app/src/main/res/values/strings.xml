@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_larger">Larger</string>
+    <string name="sync_conflict_smaller">Smaller</string>
+    <string name="sync_conflict_equal_size">Same size</string>
+    <string name="sync_conflict_newer">Newer</string>
+    <string name="sync_conflict_older">Older</string>
+    <string name="sync_conflict_equal_time">Same time</string>
+    <string name="sync_conflict_compared_version">%1$s bytes (%2$s)\nModified: %3$s (%4$s)</string>
+
     <string name="sync_conflict_notice">%1$d sync conflicts — review versions</string>
     <string name="sync_conflict_title">Sync conflicts</string>
     <string name="sync_conflict_phone">Phone version</string>

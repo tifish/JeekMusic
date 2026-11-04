@@ -51,10 +51,14 @@ import java.time.format.DateTimeFormatter
         Text(row.getString("path"),style=MaterialTheme.typography.titleMedium)
         for((side,label) in listOf("local" to R.string.sync_conflict_phone,"remote" to R.string.sync_conflict_pc)) {
             val token=row.optString(side+"Version").takeIf { it.startsWith("m2:") }?.split(':')
+            val other=row.optString((if(side=="local")"remote" else "local")+"Version").takeIf { it.startsWith("m2:") }?.split(':')
             Text(stringResource(label),style=MaterialTheme.typography.labelLarge)
             Text(if(token==null)stringResource(R.string.sync_conflict_missing) else {
                 val time=runCatching { val ns=token[2].toLong();DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS").withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(Math.floorDiv(ns,1_000_000_000L),Math.floorMod(ns,1_000_000_000L))) }.getOrDefault("—")
-                stringResource(R.string.sync_conflict_version,token[1],time)
+                val sizeHint=if(other==null)"" else stringResource(when(token[1].toLong().compareTo(other[1].toLong())) { 1->R.string.sync_conflict_larger; -1->R.string.sync_conflict_smaller; else->R.string.sync_conflict_equal_size })
+                val timeHint=if(other==null)"" else stringResource(when(token[2].toLong().compareTo(other[2].toLong())) { 1->R.string.sync_conflict_newer; -1->R.string.sync_conflict_older; else->R.string.sync_conflict_equal_time })
+                if(other==null)stringResource(R.string.sync_conflict_version,token[1],time)
+                else stringResource(R.string.sync_conflict_compared_version,token[1],sizeHint,time,timeHint)
             })
         }
         if(choice!=null)Text(stringResource(R.string.sync_conflict_pending,stringResource(if(choice=="local")R.string.lan_use_phone else R.string.lan_use_pc)))

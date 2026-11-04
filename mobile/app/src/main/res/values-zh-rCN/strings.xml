@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_larger">较大</string>
+    <string name="sync_conflict_smaller">较小</string>
+    <string name="sync_conflict_equal_size">大小相同</string>
+    <string name="sync_conflict_newer">较新</string>
+    <string name="sync_conflict_older">较旧</string>
+    <string name="sync_conflict_equal_time">时间相同</string>
+    <string name="sync_conflict_compared_version">%1$s 字节（%2$s）\n修改时间：%3$s（%4$s）</string>
+
     <string name="sync_conflict_notice">%1$d 个同步冲突，点击比较并处理</string>
     <string name="sync_conflict_title">同步冲突</string>
     <string name="sync_conflict_phone">手机版本</string>

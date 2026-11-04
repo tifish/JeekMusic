@@ -46,7 +46,9 @@ internal sealed class SyncConflictsWindow : Window
                     else {
                         var ns=v["modifiedNs"]!.GetValue<long>();string time;
                         try { time=DateTimeOffset.FromUnixTimeMilliseconds(ns/1000000).AddTicks((ns%1000000)/100).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fffffff zzz"); }catch(ArgumentOutOfRangeException) { time="—"; }
-                        details=v["size"]+" "+L.T("字节")+" · "+L.T("修改时间")+": "+time;
+                        var sizeHint=v["sizeComparison"]?.GetValue<string>() switch { "larger"=>L.T("较大"),"smaller"=>L.T("较小"),"equal"=>L.T("大小相同"),_=>null };
+                        var timeHint=v["modifiedComparison"]?.GetValue<string>() switch { "newer"=>L.T("较新"),"older"=>L.T("较旧"),"equal"=>L.T("时间相同"),_=>null };
+                        details=v["size"]+" "+L.T("字节")+(sizeHint is null ? "" : " （"+sizeHint+"）")+"\n"+L.T("修改时间")+": "+time+(timeHint is null ? "" : " （"+timeHint+"）");
                     }
                     body.Children.Add(new TextBlock { Text=label+"\n"+details,TextWrapping=TextWrapping.Wrap });
                 }

@@ -4,6 +4,9 @@
 
 `lan_file_conflicts` 与 PC 主界面提示和冲突窗口共用服务：`action="list"`
 按 `offset` 分页（每页 100 条），返回 `total/rows/hasMore/next`；
+两端 `local/remote` 各含 `sizeComparison`（`larger/smaller/equal/unavailable`）与
+`modifiedComparison`（`newer/older/equal/unavailable`），均相对另一端，以原始整数精确比较；
+任一端不存在则为 `unavailable`，不把删除当成零大小或最旧版本。
 `action="open"` 打开同一个比较窗口；`action="choose"` 指定记录的 `id`
 和 `choice="local"`（手机）或 `"remote"`（电脑）。记录包含两端的存在／删除状态、
 字节大小、纳秒修改时间、相对路径、设备和已确认选择。ID 绑定双方版本及基线，

@@ -70,7 +70,23 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     }
     @Synchronized fun issue(id: String): JSONObject? = db.rawQuery("SELECT json,choice FROM issues WHERE id=?",arrayOf(id)).use { c -> if(c.moveToFirst())JSONObject(c.getString(0)).also { if(!c.isNull(1))it.put("choice",c.getString(1)) } else null }
     @Synchronized fun choose(id: String,choice: String) { require(choice in setOf("local","remote"));check(issue(id)!=null);db.execSQL("UPDATE issues SET choice=? WHERE id=?",arrayOf(choice,id)) }
-    @Synchronized fun updateIssue(row: JSONObject) { db.execSQL("UPDATE issues SET json=? WHERE id=?",arrayOf(row.toString(),row.getString("id"))) }
+    @Synchronized fun queueChoice(id: String,choice: String) {
+        require(choice in setOf("local","remote"))
+        val row=issue(id) ?: error("Conflict changed")
+        val queued=row.optString("queuedChoice")
+        check(row.optString("choice") !in setOf("local","remote") || queued==choice) { "Conflict already chosen" }
+        check(queued.isEmpty() || queued==choice) { "Conflict already queued" }
+        row.remove("choice");row.put("queuedChoice",choice)
+        db.execSQL("UPDATE issues SET json=?,choice=? WHERE id=?",arrayOf(row.toString(),choice,id))
+    }
+    @Synchronized fun updateIssue(row: JSONObject) {
+        // A user may queue a choice while the reconciler is awaiting the server.
+        // Preserve it until a server-confirmed choice arrives; never lose that race.
+        val queued=issue(row.getString("id"))?.optString("queuedChoice").orEmpty()
+        val confirmed=row.optString("choice") in setOf("local","remote")
+        if(!confirmed && queued in setOf("local","remote"))row.put("queuedChoice",queued) else row.remove("queuedChoice")
+        db.execSQL("UPDATE issues SET json=?,choice=? WHERE id=?",arrayOf(row.toString(),if(!confirmed && queued.isNotEmpty())queued else null,row.getString("id")))
+    }
     @Synchronized fun issueForPath(mapping: String,path: String): JSONObject? = one("SELECT json FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path))
     @Synchronized fun issuePage(offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM issues ORDER BY mapping,path LIMIT 100 OFFSET ?",arrayOf(offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
     @Synchronized fun issueCount(): Int = db.rawQuery("SELECT COUNT(*) FROM issues",null).use { it.moveToFirst();it.getInt(0) }

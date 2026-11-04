@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_queued">Queued: %1$s. Sync will submit this choice and check both versions before applying it. Other conflicts can still be selected.</string>
     <string name="sync_conflict_larger">Larger</string>
     <string name="sync_conflict_smaller">Smaller</string>
     <string name="sync_conflict_equal_size">Same size</string>

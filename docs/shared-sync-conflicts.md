@@ -9,6 +9,25 @@ the deletion. A confirmed choice remains visible as pending until the phone
 reconnects/syncs, rechecks both files and completes the operation. Existing
 transaction/recovery protection remains in place.
 
+### Choosing while Android is synchronizing
+
+An active sync no longer disables every conflict action. A phone choice is first
+saved atomically in the private issue database as `queuedChoice` with the immutable
+conflict ID. Only that row is disabled and explicitly shows that it is queued;
+other conflicts remain selectable. The existing reconciler submits the queued
+choice during a safe reconciliation step and rechecks both metadata versions.
+The sync scheduler requests a follow-up round if the current round has already
+passed the chosen file. No current transfer is cancelled or transport replaced by
+the UI action. Queued choices survive process restarts.
+
+A stale server response without a confirmed choice preserves concurrently queued
+intent. A server-confirmed choice still wins, including an opposing PC choice;
+changed file identities replace the issue and invalidate the old queued choice.
+No new Windows MCP or wire operation is needed: this reuses `file_conflict_choose`
+and the existing first-confirmed-choice rules. Queuing itself neither writes nor
+deletes an audio file. Both the dedicated conflict page and settings summary use
+the same row behavior.
+
 Each present version now labels its size as larger/smaller/same size and its
 modification time as newer/older/same time, relative to the other version. These
 use exact integer bytes and nanoseconds, not rounded text or inferred content

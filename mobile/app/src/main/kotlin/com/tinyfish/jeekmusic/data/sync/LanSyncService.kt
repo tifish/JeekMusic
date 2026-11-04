@@ -20,6 +20,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -89,7 +90,7 @@ class LanSyncService @Inject constructor(
     val conflictCount = _conflictCount.asStateFlow()
     private val _conflictError = MutableStateFlow(false)
     val conflictError = _conflictError.asStateFlow()
-    private fun refreshConflicts() { _conflictCount.value=fileDatabase.issueCount();report() }
+    private fun refreshConflicts() { _conflictCount.value=fileDatabase.issueCount();val rows=fileDatabase.issuePage();_status.update { it.copy(fileConflicts=rows) };report() }
     suspend fun conflictPage(offset: Int=0): List<JSONObject> = withContext(Dispatchers.IO) { fileDatabase.issuePage(offset) }
     private val _revision = MutableStateFlow(0)
     val revision = _revision.asStateFlow()
@@ -103,7 +104,7 @@ class LanSyncService @Inject constructor(
         try { ledgerStore.write(ledger) }
         catch (e: LanLedgerException) { ledgerLoaded = false; throw e } // Recovery reloads the confirmed disk state.
     }
-    private fun report() { _revision.value++ }
+    private fun report() { _revision.update { it+1 } }
     init { scope.launch(Dispatchers.IO) { refreshConflicts() } }
     private fun problem(e: Exception): String = if(e is LanRemoteException && e.code=="unauthorized") context.getString(R.string.lan_pairing_revoked)
         else if(e is LanRemoteException && e.code=="upgrade_required") context.getString(R.string.lan_paired_upgrade)
@@ -305,23 +306,15 @@ class LanSyncService @Inject constructor(
     @Deprecated("Bidirectional sync has no local-only cleanup")
     suspend fun clean(root: String): Unit=throw IllegalStateException("Remove the mapping to keep files. Ordinary tracked deletions propagate during sync.")
     fun resolveConflict(id: String,choice: String) {
-        check(job?.isActive!=true) { "Cancel sync first" }
         scope.launch(Dispatchers.IO) {
-            if(!gate.tryLock())return@launch
             try {
                 _conflictError.value=false
-                val row=fileDatabase.issue(id) ?: error("Conflict changed")
-                if(row.optBoolean("shared")) {
-                    protocol().use { client ->
-                        val result=client.call("file_conflict_choose",JSONObject().put("fileProtocol",2).put("scope",row.getString("scope")).put("id",id).put("choice",choice))
-                        check(!result.optBoolean("conflict") && !result.optBoolean("deferred"))
-                        row.put("choice",result.getString("choice"));fileDatabase.updateIssue(row)
-                    }
-                } else fileSynchronizer.choose(id,choice)
+                // Only persist intent here. The existing reconciler submits it with
+                // the captured conflict ID and revalidates both versions before I/O.
+                fileDatabase.queueChoice(id,choice)
                 refreshConflicts()
             }catch(e: CancellationException) { throw e }
             catch(_: Exception) { _conflictError.value=true;return@launch }
-            finally { gate.unlock() }
             start()
         }
     }

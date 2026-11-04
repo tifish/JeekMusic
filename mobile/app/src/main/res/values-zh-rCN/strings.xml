@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_conflict_queued">已排队：%1$s。同步会提交此选择，校验双方版本后执行。其他冲突仍可继续选择。</string>
     <string name="sync_conflict_larger">较大</string>
     <string name="sync_conflict_smaller">较小</string>
     <string name="sync_conflict_equal_size">大小相同</string>

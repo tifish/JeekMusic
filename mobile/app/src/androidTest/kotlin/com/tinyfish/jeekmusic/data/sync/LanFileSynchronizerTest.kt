@@ -86,11 +86,13 @@ class LanFileSynchronizerTest {
         assertTrue(issue.getJSONObject("local").getBoolean("exists"));assertEquals(64,issue.getJSONObject("remote").getInt("size"))
         call("file_conflict_choose",JSONObject().put("scope",issue.getString("scope")).put("id",issue.getString("id")).put("choice","remote"))
         // A queued opposing phone choice cannot override the first confirmed selection.
-        sync.choose(issue.getString("id"),"local");run();assertArrayEquals(c,localBytes())
+        db.queueChoice(issue.getString("id"),"local");run();assertArrayEquals(c,localBytes())
         local(a);remote(b);val next=run().conflicts.single()
         call("file_conflict_choose",JSONObject().put("scope",next.getString("scope")).put("id",next.getString("id")).put("choice","remote"))
         local(c);val changed=run().conflicts.single();assertNotEquals(next.getString("id"),changed.getString("id"))
         assertArrayEquals(c,localBytes());assertEquals(hash(b),remoteHash())
+        db.queueChoice(changed.getString("id"),"local");run()
+        assertArrayEquals(c,localBytes());assertEquals(hash(c),remoteHash())
     }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {
         val a=audio(11);val b=audio(12);val c=audio(13)

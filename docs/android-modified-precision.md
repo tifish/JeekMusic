@@ -50,3 +50,28 @@ The new comparator retains their chronological order, independently of filename.
   Only isolated emulator fixture files were created; they were removed afterwards.
 - Windows and its MCP were unchanged; no desktop restart or production library
   file write was required. Formal signed package delivery is recorded separately.
+
+## Signed delivery
+
+- Source commit: `640ca4fc876bca81060e1bdc181efe3d14b166f7`, version `1.0.237`.
+- Local minified signed APK: `output/mtime-precision/JeekMusic-1.0.237.apk`.
+  SHA-256: `6379b68b1c1be468a7570f3ac9667fb7fe7ac30b63075c1764cd83155cd544a9`.
+- Signing certificate SHA-256:
+  `28a86a1affb4a31ed0a2a14e602b2ebed23d1c4385b366e9ccfac3eaf5a972fe` (unchanged).
+- Same-signature `install -r` on the API35 emulator succeeded. The formal app was
+  stopped and started, its Chinese home screen was inspected, and original first
+  install time remained 2026-10-31 10:44:42. No uninstall or clear-data operation.
+- The connected physical phone rejected the ADB installation with
+  `INSTALL_FAILED_ABORTED: User rejected permissions`. It remains at 1.0.235 with
+  its original last-update time. No bypass was attempted; ARM/OEM execution of
+  this new version is therefore not verified. The user can install through the
+  existing in-app update flow or use the signed APK.
+- [Mobile CI](https://github.com/tifish/JeekMusic/actions/runs/41847466400)
+  completed successfully at the source SHA above. `v1.0.237` and the release
+  `target_commitish` both resolve to that SHA.
+- [Published APK](https://github.com/tifish/JeekMusic/releases/download/v1.0.237/JeekMusic-1.0.237.apk)
+  SHA-256: `54ffc80a8d4764dc3bc069b820d7bb963dcdcf1e584a1409b21787e31371403b`.
+  Downloaded bytes match GitHub's asset digest; package/version and unchanged
+  release certificate were verified. This CI APK also completed emulator
+  `install -r` and cold start. Local and CI builds are recorded separately;
+  they are not claimed byte-identical.

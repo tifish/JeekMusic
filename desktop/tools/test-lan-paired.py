@@ -62,10 +62,10 @@ def main():
                             nonlocal w
                             for attempt in range(3):
                                 if op in ('file_begin','file_delete','file_ack'):
-                                    observed=w.request('file_probe',fileProtocol=2,scope=args['scope'],path=args['path'])
+                                    observed=w.request('file_probe',fileProtocol=3,scope=args['scope'],path=args['path'])
                                     if op=='file_ack':args.update(remoteVersion=observed.get('metadataVersion'),localVersion=observed.get('metadataVersion'),decision='ack')
                                     else:args['expectedVersion']=observed.get('metadataVersion')
-                                result=w.request(op,fileProtocol=2,**args)
+                                result=w.request(op,fileProtocol=3,**args)
                                 if result.get('code')=='busy' and attempt<2:
                                     # The background library refresh shares the bounded file-work lease.
                                     # Match the production Android retry contract; never relax the budget.
@@ -74,12 +74,12 @@ def main():
                                 assert 'error' not in result,result
                                 return result
                         scope=request('file_open',rootId=root_id,mapping=str(uuid.uuid4()),selection=[''])['scope']
-                        name=f'Fixture{index}.wav'; content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+bytes([index]); digest=hashlib.sha256(content).hexdigest(); operation=uuid.uuid4().hex
-                        request('file_begin',scope=scope,operation=operation,path=name,hash=digest,size=len(content),expectedHash=None,baselineVersion='')
+                        name=f'Fixture{index}.wav'; content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+bytes([index]); modified=1_800_000_000_000_000_000;stamp=f"m2:{len(content)}:{modified}"; operation=uuid.uuid4().hex
+                        request('file_begin',scope=scope,operation=operation,path=name,stamp=stamp,modifiedNs=modified,size=len(content),expectedStamp=None,baselineVersion='')
                         request('file_chunk',scope=scope,operation=operation,offset=0,data=base64.b64encode(content).decode())
                         assert request('file_finish',scope=scope,operation=operation)['committed']
-                        ack=request('file_ack',scope=scope,path=name,operation=uuid.uuid4().hex,mutationOperation=operation,hash=digest,localHash=digest,localKnown=True,baselineVersion='')
-                        assert request('file_delete',scope=scope,path=name,operation=uuid.uuid4().hex,expectedHash=digest,baselineVersion=ack['version'])['committed']
+                        ack=request('file_ack',scope=scope,path=name,operation=uuid.uuid4().hex,mutationOperation=operation,stamp=stamp,localKnown=True,baselineVersion='')
+                        assert request('file_delete',scope=scope,path=name,operation=uuid.uuid4().hex,expectedStamp=stamp,baselineVersion=ack['version'])['committed']
                         assert not (music/name).exists()
                         assert request('file_probe',scope=scope,path='../Outside.wav')['deferred']
                     finally: w.close()

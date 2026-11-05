@@ -24,7 +24,7 @@ public sealed class LanMetadataTests
             var ack=await store.Ack(scope,root,a,default,x=>x());
             Assert.Equal(a["localVersion"]!.GetValue<string>(),ack["localVersion"]!.GetValue<string>());
             Assert.Equal(ack["version"]!.GetValue<string>(),(await store.Ack(scope,root,a,default,x=>x()))["version"]!.GetValue<string>());
-            var upload=new JsonObject { ["path"]="large.wav",["deviceId"]="phone",["operation"]=Guid.NewGuid().ToString("N"),["size"]=32*1024*1024,["hash"]=new string('a',64),["expectedHash"]=new string('b',64),["expectedVersion"]=FileMetadata.Token(observed),["modifiedNs"]=ns,["baselineVersion"]=ack["version"]!.DeepClone() };
+            var upload=new JsonObject { ["path"]="large.wav",["deviceId"]="phone",["operation"]=Guid.NewGuid().ToString("N"),["size"]=32*1024*1024,["stamp"]=FileMetadata.Token(observed),["expectedStamp"]=FileMetadata.Token(observed),["expectedVersion"]=FileMetadata.Token(observed),["modifiedNs"]=ns,["baselineVersion"]=ack["version"]!.DeepClone() };
             store.Begin(scope,upload);upload["modifiedNs"]=ns+100;
             Assert.ThrowsAny<IOException>(()=>store.Begin(scope,upload));
             Assert.Equal(before,Interlocked.Read(ref FileMetadata.HashBytes));
@@ -46,7 +46,7 @@ public sealed class LanMetadataTests
             Assert.Equal("legacy_metadata_unconfirmed",migrated.BaselineRow(scope,"alive.wav")["migration"]!.GetValue<string>());
             Assert.Equal(2,migrated.BaselineRow(scope,"deleted.wav")["comparisonProtocol"]!.GetValue<int>());
             Assert.Equal("v2",migrated.BaselineRow(scope,"deleted.wav")["version"]!.GetValue<string>());
-            var deletion=new JsonObject { ["path"]="alive.wav",["operation"]=Guid.NewGuid().ToString("N"),["expectedHash"]=new string('a',64),["expectedVersion"]="m2:64:100",["baselineVersion"]="v1" };
+            var deletion=new JsonObject { ["path"]="alive.wav",["operation"]=Guid.NewGuid().ToString("N"),["expectedStamp"]="m2:64:100",["expectedVersion"]="m2:64:100",["baselineVersion"]="v1" };
             await Assert.ThrowsAsync<LanFileConflict>(()=>migrated.Delete(scope,dir,deletion,default,x=>x()));
         }finally { Directory.Delete(dir,true); }
     }

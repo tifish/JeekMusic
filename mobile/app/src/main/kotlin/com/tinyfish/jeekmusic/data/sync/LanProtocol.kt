@@ -76,12 +76,13 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
                 if(result.optBoolean("pending")) activePlan.set(result.getString("job"))
                 if(cancelled) cancelRemotePlan()
                 val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(31)
+                var pollDelay=50L
                 while (result.optBoolean("pending")) {
                     if (System.nanoTime() > deadline) {
                         call("plan_cancel", JSONObject().put("job", result.getString("job")))
                         throw java.io.IOException("Plan exceeded time budget; select smaller folders")
                     }
-                    pause(500)
+                    pause(pollDelay);pollDelay=minOf(500L,pollDelay*2)
                     result = call("plan_status", JSONObject().put("job", result.getString("job")))
                 }
             }

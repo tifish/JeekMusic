@@ -27,31 +27,31 @@ def main():
                     w=with_peer()
                     try:
                         if op in ('file_begin','file_delete','file_ack'):
-                            observed=w.request('file_probe',fileProtocol=2,scope=args['scope'],path=args['path'])
+                            observed=w.request('file_probe',fileProtocol=3,scope=args['scope'],path=args['path'])
                             if op=='file_ack':args.update(remoteVersion=observed.get('metadataVersion'),localVersion=observed.get('metadataVersion'),decision='ack')
                             else:args['expectedVersion']=observed.get('metadataVersion')
-                        result=w.request(op,fileProtocol=2,**args)
+                        result=w.request(op,fileProtocol=3,**args)
                         while result.get('pending'):
                             time.sleep(.05);result=w.request('plan_status',job=result['job'])
                         return result
                     finally:w.close()
                 initial_mapping=str(uuid.uuid4())
                 scope=request('file_open',rootId=root,mapping=initial_mapping,selection=[''])['scope']
-                content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+b'1';digest=hashlib.sha256(content).hexdigest();operation=uuid.uuid4().hex
-                assert request('file_begin',scope=scope,operation=operation,path='Fresh/A.wav',hash=digest,size=len(content),expectedHash=None,baselineVersion='')['offset']==0
+                content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+b'1';modified=1_800_000_000_000_000_000;stamp=f"m2:{len(content)}:{modified}";operation=uuid.uuid4().hex
+                assert request('file_begin',scope=scope,operation=operation,path='Fresh/A.wav',stamp=stamp,modifiedNs=modified,size=len(content),expectedStamp=None,baselineVersion='')['offset']==0
                 chunk=base64.b64encode(content).decode()
                 assert request('file_chunk',scope=scope,operation=operation,offset=0,data=chunk)['offset']==len(content)
                 assert request('file_chunk',scope=scope,operation=operation,offset=0,data=chunk)['offset']==len(content)
                 assert request('file_finish',scope=scope,operation=operation)['committed'];assert (music/'Fresh/A.wav').read_bytes()==content
                 assert request('file_baseline',scope=scope,path='Fresh/A.wav')['version']==''
-                acknowledgement=dict(scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=operation,hash=digest,localHash=digest,localKnown=True,baselineVersion='')
+                acknowledgement=dict(scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=operation,stamp=stamp,localKnown=True,baselineVersion='')
                 ack=request('file_ack',**acknowledgement);assert ack['version'];assert request('file_ack',**acknowledgement)['version']==ack['version']
                 assert request('file_upload_status',scope=scope,operation=operation)['state']=='acknowledged'
-                assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,expectedHash=digest,baselineVersion='')['deferred']
+                assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,expectedStamp=stamp,baselineVersion='')['deferred']
                 deletion=uuid.uuid4().hex
-                assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=deletion,expectedHash=digest,baselineVersion=ack['version'])['committed']
+                assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=deletion,expectedStamp=stamp,baselineVersion=ack['version'])['committed']
                 assert not (music/'Fresh/A.wav').exists();assert len(list((music/'Fresh').glob('.jeek-sync-*.bak')))==1
-                assert request('file_ack',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=deletion,hash=None,localHash=None,localKnown=True,baselineVersion=ack['version'])['version']
+                assert request('file_ack',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=deletion,stamp=None,localKnown=True,baselineVersion=ack['version'])['version']
                 assert request('file_probe',scope=scope,path='../outside.wav').get('deferred')
                 print('PASS real TLS upload, exact chunk replay, conditional delete, explicit receipt/ack and traversal rejection',flush=True)
                 conflict_mapping=initial_mapping
@@ -132,7 +132,8 @@ def main():
                 row=next(r for r in backups if r['path']=='Fresh/A.wav')
                 assert call(c,'lan_file_backups',action='restore',receipt=row['receipt'])['restored'];assert (music/'Fresh/A.wav').read_bytes()==content
                 assert call(c,'lan_file_backups',action='purge',receipt=row['receipt'])['purged']
-                print('PASS local administrator verified backup restore/cleanup; baselines unchanged',flush=True)
+                assert call(c,'lan_sync_status')['fileSync']['hashBytes']==0
+                print('PASS local administrator metadata-verified backup restore/cleanup; baselines unchanged; all-operation hashBytes=0',flush=True)
             finally:
                 call(c,'lan_sync_control',action='stop');subprocess.run(['taskkill','/pid',str(pid),'/f'],capture_output=True)
                 time.sleep(.5)

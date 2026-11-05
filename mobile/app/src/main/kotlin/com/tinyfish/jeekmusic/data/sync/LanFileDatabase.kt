@@ -3,6 +3,7 @@ package com.tinyfish.jeekmusic.data.sync
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.Normalizer
@@ -33,8 +34,33 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
             execSQL("CREATE TABLE IF NOT EXISTS issues(id TEXT UNIQUE,mapping TEXT,path TEXT,json TEXT,choice TEXT,PRIMARY KEY(mapping,path))")
         }
     }
-    @Synchronized fun resetSnapshots(mapping: String) {
+    // Only scratch snapshot writes are grouped. Durable mutation/choice journals remain independent.
+    private fun snapshotBatch(write: ()->Unit) {
+        check(!db.inTransaction()) { "Snapshot batch must not contain another transaction" }
+        db.beginTransaction()
+        try { write();db.setTransactionSuccessful() } finally { db.endTransaction() }
+    }
+    @Synchronized fun resetSnapshots(mapping: String) = snapshotBatch {
         db.execSQL("DELETE FROM held WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM entries WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM baseline WHERE mapping=?",arrayOf(mapping))
+    }
+    /** The caller buffers at most one 200-row page, never holding a transaction over I/O. */
+    @Synchronized fun entries(mapping: String,side: String,rows: List<JSONObject>) {
+        require(rows.size<=200) { "Snapshot page exceeds 200 rows" }
+        if(rows.isEmpty())return
+        snapshotBatch { for(row in rows)entry(mapping,side,row) }
+    }
+    @Synchronized fun baselines(mapping: String,rows: List<JSONObject>) {
+        require(rows.size<=200) { "Snapshot page exceeds 200 rows" }
+        if(rows.isEmpty())return
+        snapshotBatch { for(row in rows)baseline(mapping,row) }
+    }
+    @Synchronized fun entries(mapping: String,side: String,rows: JSONArray) {
+        require(rows.length()<=200) { "Snapshot page exceeds 200 rows" }
+        entries(mapping,side,List(rows.length()) { rows.getJSONObject(it) })
+    }
+    @Synchronized fun baselines(mapping: String,rows: JSONArray) {
+        require(rows.length()<=200) { "Snapshot page exceeds 200 rows" }
+        baselines(mapping,List(rows.length()) { rows.getJSONObject(it) })
     }
     @Synchronized fun entry(mapping: String,side: String,row: JSONObject) {
         val path=LanProtocol.relative(row.getString("path"))
@@ -99,7 +125,26 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     @Synchronized fun issueCount(): Int = db.rawQuery("SELECT COUNT(*) FROM issues",null).use { it.moveToFirst();it.getInt(0) }
     @Synchronized fun resolved(mapping: String,path: String) { if(db.delete("issues","mapping=? AND path=?",arrayOf(mapping,path))>0)onIssuesChanged?.invoke() }
     @Synchronized fun issues(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM issues WHERE mapping=? ORDER BY path LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
-    @Synchronized fun transaction(mapping: String,path: String,scope: String): JSONObject? = one("SELECT json FROM transactions WHERE mapping=? AND path=? AND scope=? ORDER BY rowid DESC LIMIT 1",arrayOf(mapping,path,scope))
+    private fun metadataTransaction(row: JSONObject): JSONObject {
+        if(!row.has("expectedStamp") && row.has("expectedHash")) {
+            val old=row.optJSONArray("backupIdentity")
+            val expected=if(row.isNull("expectedHash"))JSONObject.NULL else row.opt("expectedVersion")
+                ?: old?.let { LanFileMetrics.stamp(LongArray(it.length()) { i -> it.getLong(i) }) }
+                ?: throw LanLocalDeferred("legacy_transaction_metadata_missing")
+            row.put("expectedStamp",expected)
+        }
+        if(!row.has("stamp") && row.has("hash")) {
+            val value=if(row.isNull("hash"))JSONObject.NULL else row.opt("sourceVersion")
+                ?: if(row.has("modifiedNs") && row.has("size"))LanFileMetrics.token(row.getLong("size"),row.getLong("modifiedNs"))
+                else row.opt("localVersion") ?: throw LanLocalDeferred("legacy_transaction_metadata_missing")
+            row.put("stamp",value)
+        }
+        if(!row.has("backupStamp") && row.has("backupHash")) {
+            row.optJSONArray("backupIdentity")?.let { row.put("backupStamp",LanFileMetrics.stamp(LongArray(it.length()) { i -> it.getLong(i) })) }
+        }
+        return row
+    }
+    @Synchronized fun transaction(mapping: String,path: String,scope: String): JSONObject? = one("SELECT json FROM transactions WHERE mapping=? AND path=? AND scope=? ORDER BY rowid DESC LIMIT 1",arrayOf(mapping,path,scope))?.let(::metadataTransaction)
     @Synchronized fun transaction(row: JSONObject) {
         val existing=one("SELECT json FROM transactions WHERE operation=?",arrayOf(row.getString("operation")))
         if(existing==null) {
@@ -110,9 +155,9 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         backupTotal=backupTotal?.let { Math.addExact(it-backupSize(existing),backupSize(row)) }
         stageTotal=stageTotal?.let { Math.addExact(it-stageSize(existing),stageSize(row)) }
     }
-    @Synchronized fun transactions(mapping: String,offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? ORDER BY operation LIMIT 200 OFFSET ?",arrayOf(mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
-    @Synchronized fun backupRows(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? AND json_type(json,'$.backupIdentity')='array' ORDER BY operation LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
-    @Synchronized fun receipt(operation: String): JSONObject?=one("SELECT json FROM transactions WHERE operation=?",arrayOf(operation))
+    @Synchronized fun transactions(mapping: String,offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? ORDER BY operation LIMIT 200 OFFSET ?",arrayOf(mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(metadataTransaction(JSONObject(c.getString(0)))) } }
+    @Synchronized fun backupRows(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? AND json_type(json,'$.backupIdentity')='array' ORDER BY operation LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(metadataTransaction(JSONObject(c.getString(0)))) } }
+    @Synchronized fun receipt(operation: String): JSONObject?=one("SELECT json FROM transactions WHERE operation=?",arrayOf(operation))?.let(::metadataTransaction)
     @Synchronized fun pendingPaths(mapping: String): List<String> = db.rawQuery("SELECT path FROM transactions WHERE mapping=? AND json_extract(json,'$.state') IN ('prepared','old_moved','vault_prepared','vault_old_moved','copying') LIMIT 4097",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext()) { check(size<4096) { "Pending file work budget exceeded" };add(c.getString(0)) } } }
     @Synchronized fun backupBytes(): Long { if(backupTotal==null)backupTotal=db.rawQuery("SELECT json FROM transactions",null).use { c -> var size=0L;while(c.moveToNext())size=Math.addExact(size,backupSize(JSONObject(c.getString(0))));size };return backupTotal!! }
     @Synchronized fun stagingBytes(excluding: String): Long { if(stageTotal==null)stageTotal=db.rawQuery("SELECT json FROM transactions",null).use { c -> var size=0L;while(c.moveToNext())size=Math.addExact(size,stageSize(JSONObject(c.getString(0))));size };return stageTotal!!-stageSize(one("SELECT json FROM transactions WHERE operation=?",arrayOf(excluding))) }

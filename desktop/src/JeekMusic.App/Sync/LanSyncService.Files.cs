@@ -7,7 +7,7 @@ public sealed partial class LanSyncService
 {
     readonly SemaphoreSlim _fileWork=new(1);
     LanFileSyncStore? _fileStore;
-    volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=2,["comparison"]="size+mtime-exact",["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
+    volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=3,["comparison"]="size+mtime-exact",["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
     int _refreshingFiles;
     public long ConflictCount { get; private set; }
     public async Task<JsonObject> FileConflicts(string action="list",string? id=null,string? choice=null,int offset=0) {
@@ -15,7 +15,7 @@ public sealed partial class LanSyncService
         var previousCount=ConflictCount;
         try {
             return await Task.Run(()=> {
-                _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
+                _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));
                 if(action=="list") {
                     var page=_fileStore.ConflictPage(offset);
                     lock(_gate)foreach(var row in page["rows"]!.AsArray().OfType<JsonObject>())row["deviceName"]=Devices[row["device"]!.GetValue<string>()]?["name"]?.GetValue<string>()??"";
@@ -43,7 +43,7 @@ public sealed partial class LanSyncService
                 for(var batch=0;batch<8;batch++) {
                     if(!await _fileWork.WaitAsync(TimeSpan.FromSeconds(5)))return;
                     IReadOnlyList<(string Id,string Root,string Path)> rows;
-                    try { _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);rows=_fileStore.PendingRefresh(); }finally { _fileWork.Release(); }
+                    try { _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));rows=_fileStore.PendingRefresh(); }finally { _fileWork.Release(); }
                     if(rows.Count==0)return;
                     var completed=new List<string>();
                     foreach(var group in rows.GroupBy(r=>r.Root)) {
@@ -70,7 +70,7 @@ public sealed partial class LanSyncService
     public async Task<JsonObject> FileBackups(string action,string? receipt=null,int offset=0) {
         if(!_fileWork.Wait(0))throw new InvalidOperationException("File work busy; retry later");
         try {
-            _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
+            _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));
             if(action=="list")return _fileStore.Backups(offset);
             if(action is not ("restore" or "purge") || receipt is null || receipt.Length!=64 || receipt.Any(c=>!char.IsAsciiHexDigitLower(c)))throw new ArgumentException("Invalid backup action/receipt");
             // Stopped service prevents remote mutation/revocation racing local administrator recovery.
@@ -83,11 +83,12 @@ public sealed partial class LanSyncService
     async Task<JsonObject> DispatchFile(JsonObject a,CancellationToken request,bool modern)
     {
         var op=a["op"]!.GetValue<string>();
-        if(!modern || a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
+        if(!modern || a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
         if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
         if(!_fileWork.Wait(0))throw Busy();
         bool handedOff=false;
-        var independent=op is "file_verify" or "file_ack" or "file_finish" or "file_delete";
+        // Metadata checks and acknowledgements no longer require a background content pass.
+        var independent=op is "file_finish" or "file_delete";
         CancellationTokenSource? lifetime=null;
         try
         {
@@ -99,7 +100,7 @@ public sealed partial class LanSyncService
             {
                 try
                 {
-                    _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"),hashAdmission:_hashAdmission);
+                    _fileStore??=new LanFileSyncStore(Path.Combine(AppPaths.DataDir,"lan-file-sync"));
                     var store=_fileStore;
                     string scope=a["scope"]?.GetValue<string>()??"";
                     string rootId=op=="file_open"?a["rootId"]!.GetValue<string>():store.Root(scope,owner);

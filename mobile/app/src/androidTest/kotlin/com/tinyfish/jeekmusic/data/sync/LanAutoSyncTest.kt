@@ -39,18 +39,18 @@ class LanAutoSyncTest {
             .put("selection",JSONArray(listOf(prefix))).put("treeUri","content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FJeekLanFinalDirect").put("documentId","primary:Documents/JeekLanFinalDirect").put("volume","external_primary").put("relative","Documents/JeekLanFinalDirect/").put("enabled",false)
         val otherMapping=UUID.randomUUID().toString()
         var otherScope=""
-        fun call(op: String,args: JSONObject=JSONObject()): JSONObject=LanProtocol(config.getJSONObject("writer")).use { it.call(op,args.put("fileProtocol",2)) }.also { check(!it.optBoolean("deferred") && !it.optBoolean("conflict")) { it.toString() } }
+        fun call(op: String,args: JSONObject=JSONObject()): JSONObject=LanProtocol(config.getJSONObject("writer")).use { it.call(op,args.put("fileProtocol",3)) }.also { check(!it.optBoolean("deferred") && !it.optBoolean("conflict")) { it.toString() } }
         fun remote(): JSONObject=call("file_probe",JSONObject().put("scope",otherScope).put("path",path))
         fun remoteBytes(bytes: ByteArray?) {
             val current=remote();val token=LanFileMetrics.version(current)
             val verified=call("file_verify",JSONObject().put("scope",otherScope).put("path",path).put("expectedVersion",token ?: JSONObject.NULL))
-            val hash=if(verified.isNull("hash"))null else verified.getString("hash")
+            val hash=if(verified.isNull("stamp"))null else verified.getString("stamp")
             val baseline=call("file_baseline",JSONObject().put("scope",otherScope).put("path",path))
             val ack=call("file_ack",JSONObject().put("scope",otherScope).put("path",path).put("operation",id()).put("baselineVersion",baseline.optString("version")).put("remoteVersion",token ?: JSONObject.NULL).put("localVersion",token ?: JSONObject.NULL).put("localKnown",true).put("decision","ack"))
-            val args=JSONObject().put("scope",otherScope).put("path",path).put("operation",id()).put("baselineVersion",ack.optString("version")).put("expectedHash",hash ?: JSONObject.NULL).put("expectedVersion",token ?: JSONObject.NULL)
+            val args=JSONObject().put("scope",otherScope).put("path",path).put("operation",id()).put("baselineVersion",ack.optString("version")).put("expectedStamp",hash ?: JSONObject.NULL).put("expectedVersion",token ?: JSONObject.NULL)
             if(bytes==null)call("file_delete",args)
             else {
-                args.put("hash",LanProtocol.sha(bytes)).put("size",bytes.size).put("modifiedNs",1_800_000_000_000_000_000L+bytes.last()*1_000_000_000L).put("resolve",true)
+                args.put("stamp",LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+bytes.last()*1_000_000_000L)).put("size",bytes.size).put("modifiedNs",1_800_000_000_000_000_000L+bytes.last()*1_000_000_000L).put("resolve",true)
                 call("file_begin",args);call("file_chunk",JSONObject().put("scope",otherScope).put("operation",args.getString("operation")).put("offset",0).put("data",Base64.encodeToString(bytes,Base64.NO_WRAP)));call("file_finish",JSONObject().put("scope",otherScope).put("operation",args.getString("operation")))
             }
         }

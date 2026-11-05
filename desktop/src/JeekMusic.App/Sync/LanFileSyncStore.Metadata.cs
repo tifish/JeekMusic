@@ -19,7 +19,7 @@ internal sealed partial class LanFileSyncStore
     static JsonObject WithMetadata(JsonObject row,string? metadata)
     {
         if(metadata!=null)foreach(var pair in JsonNode.Parse(metadata)!.AsObject())row[pair.Key]=pair.Value?.DeepClone();
-        else if(row["hash"] is null) { row["comparisonProtocol"]=2;row["localVersion"]=null;row["remoteVersion"]=null;row["migration"]="legacy_tombstone"; }
+        else if(row["stamp"] is null) { row["comparisonProtocol"]=2;row["localVersion"]=null;row["remoteVersion"]=null;row["migration"]="legacy_tombstone"; }
         else row["migration"]="legacy_metadata_unconfirmed";
         return row;
     }
@@ -40,11 +40,11 @@ internal sealed partial class LanFileSyncStore
     {
         PathAllowed(scope,path);var before=FileMetadata.Observe(root,path);
         if(FileMetadata.Token(before)!=V(args["expectedVersion"]))throw Conflict("source_changed_before_verification");
-        using var file=new LanFileMutation(root,path,false);ReserveHash(scope,file.FullPath);
-        var hash=await file.Observe(limits.FileBytes,ct);
+        using var file=new LanFileMutation(root,path,false);
+        var stamp=await file.Observe(limits.FileBytes,ct);
         var after=FileMetadata.Observe(root,path);
         if(FileMetadata.Token(before)!=FileMetadata.Token(after))throw Conflict("source_changed_during_verification");
-        after["hash"]=hash;return after;
+        after["stamp"]=stamp;return after;
     }
     async Task<JsonObject> AckMetadata(string scope,string root,JsonObject a,CancellationToken ct,Action<Action> commit)
     {
@@ -58,7 +58,7 @@ internal sealed partial class LanFileSyncStore
         var receiptId=S(a["mutationOperation"]);JsonObject? receipt=null;
         if(receiptId.Length>0) {
             receipt=Task(scope,Operation(receiptId))??throw new IOException("Unknown mutation receipt");
-            if(S(receipt["path"])!=path || S(receipt["state"]) is not ("committed" or "acknowledged") || Digest(receipt["hash"])!=Digest(a["hash"]))throw new IOException("Mutation receipt does not match acknowledgement");
+            if(S(receipt["path"])!=path || S(receipt["state"]) is not ("committed" or "acknowledged") || Stamp(receipt["stamp"])!=Stamp(a["stamp"]))throw new IOException("Mutation receipt does not match acknowledgement");
         }
         if(local!=remote && (local is null || remote is null || local.Split(':')[1]!=remote.Split(':')[1] || S(a["decision"]) is not ("download" or "upload" or "ack")))throw new IOException("Invalid landing version mapping");
         var observed=FileMetadata.Observe(root,path);
@@ -71,11 +71,11 @@ internal sealed partial class LanFileSyncStore
         if(FileMetadata.Token(FileMetadata.Observe(root,path))!=remote)throw Conflict("remote_changed_before_ack");
         Run("BEGIN IMMEDIATE");try {
             ClearConflict(scope,path);
-            Run("INSERT OR REPLACE INTO baseline(scope,path,hash,version,operation,metadata) VALUES($s,$p,$h,$v,$o,$m)",("$s",scope),("$p",path),("$h",Digest(a["hash"])),("$v",version),("$o",operation),("$m",metadata.ToJsonString()));
+            Run("INSERT OR REPLACE INTO baseline(scope,path,hash,version,operation,metadata) VALUES($s,$p,$h,$v,$o,$m)",("$s",scope),("$p",path),("$h",Stamp(a["stamp"])),("$v",version),("$o",operation),("$m",metadata.ToJsonString()));
             Run("UPDATE scopes SET revision=$v WHERE id=$s",("$v",Guid.NewGuid().ToString("N")),("$s",scope));if(receipt!=null)SaveTask(scope,receipt,"acknowledged");Run("COMMIT");
         }catch { Run("ROLLBACK");throw; }
         if(previous is null) { baselineCount++;scopeCounts[scope]=scopeCounts.GetValueOrDefault(scope)+1; }
         var decision=S(a["decision"]);if(decision.Length>0)confirmations[decision]=confirmations.GetValueOrDefault(decision)+1;
-        metadata["version"]=version;metadata["hash"]=a["hash"]?.DeepClone();return metadata;
+        metadata["version"]=version;metadata["stamp"]=a["stamp"]?.DeepClone();return metadata;
     }
 }

@@ -69,17 +69,17 @@ class LanSyncService @Inject constructor(
     }
     internal fun pollFileRevision(mapping: JSONObject): String {
         LanProtocol(store.read().getJSONObject("connection")).use { client ->
-            val opened=client.call("file_open",JSONObject().put("fileProtocol",2).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
+            val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
             if(opened.optBoolean("deferred") || opened.optBoolean("conflict"))throw java.io.IOException("scope_unavailable")
-            return client.call("file_revision",JSONObject().put("fileProtocol",2).put("scope",opened.getString("scope"))).getString("revision")
+            return client.call("file_revision",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope"))).getString("revision")
         }
     }
     internal fun reportFileSchedule(value: JSONObject) {
         val connection=store.read().optJSONObject("connection") ?: return
         for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) })runCatching {
             LanProtocol(connection).use { client ->
-                val opened=client.call("file_open",JSONObject().put("fileProtocol",2).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
-                client.call("file_schedule",JSONObject().put("fileProtocol",2).put("scope",opened.getString("scope")).put("schedule",JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))))
+                val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
+                client.call("file_schedule",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope")).put("schedule",JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))))
             }
         }
     }
@@ -108,7 +108,7 @@ class LanSyncService @Inject constructor(
             LanProtocol(connection).use { client ->
                 if(client.call("capabilities").optInt("conflictStatusProtocol")<1)return
                 for((scopeId,group) in current.groupBy { it.getString("scope") }) {
-                    fun call(op: String,args: JSONObject)=client.call(op,args.put("fileProtocol",2).put("scope",scopeId))
+                    fun call(op: String,args: JSONObject)=client.call(op,args.put("fileProtocol",3).put("scope",scopeId))
                     val snapshot=call("file_conflict_status",JSONObject().put("ids",JSONArray(group.map { it.getString("id") })))
                     val shared=snapshot.getJSONArray("rows")
                     repeat(shared.length()) { index ->
@@ -191,7 +191,7 @@ class LanSyncService @Inject constructor(
     }
     suspend fun estimate(root: String, selected: Set<String>): JSONObject = withContext(Dispatchers.IO) {
         require(selected.isNotEmpty()) { "Choose at least one folder" }
-        protocol().call("plan", JSONObject().put("fileProtocol",2).put("rootId", root).put("selection", JSONArray(selected.toList())))
+        protocol().call("plan", JSONObject().put("fileProtocol",3).put("rootId", root).put("selection", JSONArray(selected.toList())))
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
     suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
@@ -305,7 +305,7 @@ class LanSyncService @Inject constructor(
     private fun queueRefresh(mapping: JSONObject,path: String,entry: JSONObject?=null,deleted: Boolean=false) {
         val paths=linkedSetOf(LanProtocol.relative(path));val audio=entry?.let(::audioDependencies).orEmpty()
         if(path.endsWith(".cue",true)) { paths.addAll(fileDatabase.cueAudio(mapping.getString("key"),path));paths.addAll(audio) }
-        fileDatabase.queueRefresh(mapping.getString("key"),path,JSONObject().put("hash",entry?.optString("hash")).put("deleted",deleted).put("audio",JSONArray(audio.toList())).put("paths",JSONArray(paths.toList())))
+        fileDatabase.queueRefresh(mapping.getString("key"),path,JSONObject().put("stamp",entry?.optString("stamp")).put("deleted",deleted).put("audio",JSONArray(audio.toList())).put("paths",JSONArray(paths.toList())))
     }
     private suspend fun drainRefresh() {
         // Legacy refresh entries are inert, just like legacy file transactions.
@@ -320,7 +320,7 @@ class LanSyncService @Inject constructor(
                         if(path.endsWith(".cue",true)) {
                             val actual=local.observe(path,true);val missing=!actual.optBoolean("exists")
                             if(update.optBoolean("deleted") && missing)fileDatabase.bindCue(key,path,emptyList())
-                            else if(!missing && actual.getString("hash")==update.optString("hash")) {
+                            else if(!missing && actual.getString("stamp")==update.optString("stamp")) {
                                 val audio=update.getJSONArray("audio");fileDatabase.bindCue(key,path,List(audio.length()) { audio.getString(it) })
                             }
                         }
@@ -367,7 +367,7 @@ class LanSyncService @Inject constructor(
         val row=fileDatabase.receipt(operation) ?: error("Backup receipt missing")
         val mapping=store.mappings().single { it.optString("key")==row.getString("mapping") }
         val part=File(context.cacheDir,"lan-restore-${java.util.UUID.randomUUID()}.part")
-        try { LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { it.maintainBackup(row,purge,part) };if(!purge) { queueRefresh(mapping,row.getString("path"),JSONObject().put("hash",row.getString("expectedHash")));drainRefresh() };report() }finally { part.delete() }
+        try { LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { it.maintainBackup(row,purge,part) };if(!purge) { queueRefresh(mapping,row.getString("path"),JSONObject().put("stamp",row.getString("expectedStamp")));drainRefresh() };report() }finally { part.delete() }
     } }
     private suspend fun refresh(m: JSONObject, paths: List<String>) {
         if (paths.isEmpty()) return

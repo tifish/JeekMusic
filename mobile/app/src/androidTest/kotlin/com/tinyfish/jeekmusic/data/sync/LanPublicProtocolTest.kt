@@ -25,7 +25,7 @@ class LanPublicProtocolTest {
             fun args() = JSONObject().put("rootId", root).put("path", "")
             assertEquals(200, client.call("tree", args().put("offset",0)).getJSONArray("directories").length())
             assertEquals(5, client.call("tree", args().put("offset",200)).getJSONArray("directories").length())
-            val plan = client.call("plan",args().put("fileProtocol",2).put("selection",JSONArray(listOf(""))))
+            val plan = client.call("plan",args().put("fileProtocol",3).put("selection",JSONArray(listOf(""))))
             assertEquals(205,plan.getInt("total"))
             fun page(offset: Int) = client.call("manifest",args().put("plan",plan.getString("plan")).put("offset",offset)).getJSONArray("files")
             val files=page(0); assertEquals(200,files.length()); assertEquals(5,page(200).length())
@@ -57,7 +57,7 @@ class LanPublicProtocolTest {
         val client=LanProtocol(connection)
         val executor=java.util.concurrent.Executors.newSingleThreadExecutor()
         try {
-            val future=executor.submit<JSONObject> { client.call("plan",JSONObject().put("fileProtocol",2).put("rootId",fixture.getString("rootId")).put("selection",JSONArray(listOf("Heavy")))) }
+            val future=executor.submit<JSONObject> { client.call("plan",JSONObject().put("fileProtocol",3).put("rootId",fixture.getString("rootId")).put("selection",JSONArray(listOf("Heavy")))) }
             val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
             while(client.pendingPlanJobId==null && !future.isDone && System.nanoTime()<deadline) Thread.sleep(5)
             assertNotNull(client.pendingPlanJobId)

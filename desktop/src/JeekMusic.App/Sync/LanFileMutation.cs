@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text;
 using JeekMusic.Core.Sync;
 using Microsoft.Win32.SafeHandles;
@@ -90,15 +89,17 @@ internal sealed class LanFileMutation : IDisposable
             Verify(handle,FullPath,false);
             stream=new FileStream(handle,FileAccess.Read,128*1024,isAsync:true);
             if(stream.Length>maxBytes) throw new IOException("File byte budget exceeded");
-            var hash=Convert.ToHexStringLower(await FileMetadata.Digest(stream,ct));
+            await Task.CompletedTask;var stamp=FileMetadata.Stamp(stream.SafeFileHandle);
             ct.ThrowIfCancellationRequested();
             if(forMutation) { original=stream; stream=null; }
-            return hash;
+            return stamp;
         }
         finally { if(stream!=null) stream.Dispose(); else if(original is null) handle.Dispose(); }
     }
-    public async Task Stage(string source,string expected,long size,string operation,CancellationToken ct)
+    public async Task Stage(string source,string expected,long size,string operation,CancellationToken ct,string? savedIdentity=null,string? savedStamp=null,Action<string,string>? checkpoint=null)
     {
+        var parts=expected.Split(':');
+        if(parts.Length!=3 || parts[0]!="m2" || !long.TryParse(parts[1],out var expectedSize) || expectedSize!=size || !long.TryParse(parts[2],out _))throw new IOException("Invalid staging metadata");
         if(!parentExists || stage!=null || !Guid.TryParseExact(operation,"N",out _)) throw new IOException("Invalid staging state");
         stagePath=Path.Combine(Path.GetDirectoryName(FullPath)!,".jeek-sync-"+operation+".new");
         await using var input=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.Read,128*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
@@ -109,19 +110,21 @@ internal sealed class LanFileMutation : IDisposable
         FileStream? candidate=null;
         try {
             Verify(h,stagePath,false); candidate=new FileStream(h,FileAccess.ReadWrite,128*1024,isAsync:true);
-            if(resumed) {
-                if(candidate.Length>size) throw new IOException("Staging conflict; retained");
-                var left=new byte[128*1024];var right=new byte[left.Length];long remaining=candidate.Length;
-                while(remaining>0) { var n=(int)Math.Min(left.Length,remaining);await candidate.ReadExactlyAsync(left.AsMemory(0,n),ct);await input.ReadExactlyAsync(right.AsMemory(0,n),ct);if(!left.AsSpan(0,n).SequenceEqual(right.AsSpan(0,n))) throw new IOException("Staging conflict; retained");remaining-=n; }
-                candidate.Position=0;input.Position=0;
-            }
+            if(resumed && (candidate.Length>size || savedIdentity!=Identity(candidate) || savedStamp!=FileMetadata.Stamp(candidate.SafeFileHandle)))
+                throw new IOException("Staging metadata changed; retained");
+            input.Position=candidate.Length;candidate.Position=candidate.Length;
+            checkpoint?.Invoke(Identity(candidate),FileMetadata.Stamp(candidate.SafeFileHandle));
             stage=candidate; candidate=null;
         }
         catch { candidate?.Dispose(); if(candidate is null && stage is null) h.Dispose();throw; }
-        using var digest=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);var buffer=new byte[128*1024];long copied=0;int read;
-        while((read=await input.ReadAsync(buffer,ct))>0) { copied=checked(copied+read);if(copied>size) throw new IOException("Upload size changed");Interlocked.Add(ref FileMetadata.HashBytes,read);digest.AppendData(buffer,0,read);await stage.WriteAsync(buffer.AsMemory(0,read),ct); }
-        if(copied!=size || Convert.ToHexStringLower(digest.GetHashAndReset())!=expected) throw new IOException("Upload hash changed");
-        await stage.FlushAsync(ct);stage.Flush(true);
+        var before=FileMetadata.Stamp(input.SafeFileHandle);var buffer=new byte[1024*1024];long copied=stage.Length,checkpointAt=copied;var checkpointTime=System.Diagnostics.Stopwatch.GetTimestamp();int read;
+        while((read=await input.ReadAsync(buffer,ct))>0) { copied=checked(copied+read);if(copied>size) throw new IOException("Upload size changed");Interlocked.Add(ref FileMetadata.TransferBytes,read);await stage.WriteAsync(buffer.AsMemory(0,read),ct);
+            if(copied-checkpointAt>=8L*1024*1024 || System.Diagnostics.Stopwatch.GetElapsedTime(checkpointTime).TotalSeconds>=2) {
+                await stage.FlushAsync(ct);stage.Flush(true);checkpoint?.Invoke(Identity(stage),FileMetadata.Stamp(stage.SafeFileHandle));checkpointAt=copied;checkpointTime=System.Diagnostics.Stopwatch.GetTimestamp();
+            }
+        }
+        if(copied!=size || FileMetadata.Stamp(input.SafeFileHandle)!=before) throw new IOException("Upload metadata changed");
+        await stage.FlushAsync(ct);stage.Flush(true);SetModified(long.Parse(expected.Split(':')[2]));checkpoint?.Invoke(Identity(stage),FileMetadata.Stamp(stage.SafeFileHandle));
     }
     public async Task<long?> VerifiedBackup(string operation,string expected,long maxBytes,CancellationToken ct)
     {
@@ -131,7 +134,7 @@ internal sealed class LanFileMutation : IDisposable
         try {
             Verify(handle,path,false);using var input=new FileStream(handle,FileAccess.Read,128*1024,true);
             if(input.Length>maxBytes)return null;
-            return Convert.ToHexStringLower(await FileMetadata.Digest(input,ct))==expected?input.Length:null;
+            await Task.CompletedTask;ct.ThrowIfCancellationRequested();return FileMetadata.Stamp(input.SafeFileHandle)==expected?input.Length:null;
         } finally { handle.Dispose(); }
     }
     public void SetModified(long nanoseconds)
@@ -145,7 +148,7 @@ internal sealed class LanFileMutation : IDisposable
         if(!Guid.TryParseExact(operation,"N",out _))throw new IOException("Invalid backup identity");
         var path=Path.Combine(Path.GetDirectoryName(FullPath)!,".jeek-sync-"+operation+".bak");
         using var input=OpenPrivate(path,false);
-        if(input.Length>maxBytes || Convert.ToHexStringLower(await FileMetadata.Digest(input,ct))!=expected)throw new IOException("Backup changed; retained");
+        await Task.CompletedTask;ct.ThrowIfCancellationRequested();if(input.Length>maxBytes || FileMetadata.Stamp(input.SafeFileHandle)!=expected)throw new IOException("Backup changed; retained");
         commit(()=>DeleteOwned(input,Identity(input)));
     }
     public void Commit(string operation,bool delete,Action<Action> authorizedCommit)

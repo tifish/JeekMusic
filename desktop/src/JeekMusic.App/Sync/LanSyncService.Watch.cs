@@ -10,11 +10,6 @@ public sealed partial class LanSyncService
     long _watchEvents;
     void OnFileDirectoriesChanged(long folder,IReadOnlyCollection<string> directories)=>FilesChanged(folder,"directory_change_or_overflow");
     void OnFileWatcherFailed(long folder)=>FilesChanged(folder,"watch_unavailable");
-    readonly JeekMusic.Core.Sync.LanHashBudget _hashAdmission=new();
-    void ReservePlanVerification(string device,long bytes)
-    {
-        if(!_hashAdmission.Reserve(FileOwner(device),bytes))throw Busy();
-    }
     void FilesChanged(long folder,string reason)
     {
         lock(_gate) { _folderChanges[folder]=_folderChanges.GetValueOrDefault(folder)+1;_watchReason=reason;_watchEvents++; }

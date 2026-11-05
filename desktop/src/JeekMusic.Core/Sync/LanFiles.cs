@@ -190,13 +190,12 @@ public static partial class LanFiles
         {
             cancel.ThrowIfCancellationRequested();
             var full = Resolve(root, path);
-            using var stream = metadataOnly ? null : OpenRead(root, path);
             var info = new FileInfo(full);
             var size = info.Length; var ticks = info.LastWriteTimeUtc.Ticks;
             bytes = checked(bytes + size);
             if (bytes > budget.Bytes) throw new IOException("Selection exceeds 500 GiB; choose smaller folders");
             Interlocked.Increment(ref FileMetadata.MetadataObservations);
-            var hash = metadataOnly ? "" : Convert.ToHexStringLower(await FileMetadata.Digest(stream!, cancel));
+            var hash = ""; // Compatibility field: file synchronization never calculates content hashes.
             info.Refresh();
             if (info.Length != size || info.LastWriteTimeUtc.Ticks != ticks) throw new IOException("Source changed during verification; retry");
             entries.Add(new(path, size, checked((ticks - DateTime.UnixEpoch.Ticks) * 100), hash, dependencies.GetValueOrDefault(path)));

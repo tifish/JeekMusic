@@ -534,7 +534,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=2,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
@@ -610,7 +610,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         if (op == "plan")
         {
-            if(a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
+            if(a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
             var selected = (a["selection"] as JsonArray ?? throw new ArgumentException("Missing selection")).Select(n => n!.GetValue<string>()).ToArray();
             if (selected.Length is < 1 or > 1000) throw new ArgumentException("Invalid selection");
             if (!_planWork.Wait(0)) throw Busy();
@@ -690,7 +690,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         if(op=="verify")
         {
-            if(a["fileProtocol"]?.GetValue<int>()!=2)return Error("upgrade_required");
+            if(a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
             var path=a["path"]?.GetValue<string>()??"";
             var entry=plan.Files.FirstOrDefault(e=>e.Path==path)??throw new UnauthorizedAccessException();
             if(entry.Size>8L*1024*1024*1024)throw new IOException("Verification file byte budget exceeded");
@@ -698,12 +698,10 @@ public sealed partial class LanSyncService : IDisposable
             if(a["expectedVersion"]?.GetValue<string>()!=expected)throw new IOException("Source changed");
             if(!_work.Wait(0))throw Busy();
             try {
-                ReservePlanVerification(device,entry.Size);
                 using var input=LanFiles.OpenRead(root,path);
                 if(FileMetadata.Token(FileMetadata.Observe(root,path))!=expected)throw new IOException("Source changed");
-                var hash=Convert.ToHexStringLower(await FileMetadata.Digest(input,cancel));
                 var result=FileMetadata.Observe(root,path);if(FileMetadata.Token(result)!=expected)throw new IOException("Source changed");
-                result["hash"]=hash;return result;
+                result["stamp"]=FileMetadata.Token(result);return result;
             }finally { _work.Release(); }
         }
         throw new ArgumentException("Unknown operation");

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 
 namespace JeekMusic.Core.Sync;
@@ -8,6 +7,8 @@ public static class FileMetadata
 {
     public const int Protocol = 2;
     public static string Version(long size, long modifiedNs) => $"m2:{size}:{modifiedNs}";
+    public static string Stamp(Microsoft.Win32.SafeHandles.SafeFileHandle handle) => Version(
+        RandomAccess.GetLength(handle),checked((File.GetLastWriteTimeUtc(handle).Ticks-DateTime.UnixEpoch.Ticks)*100));
     public static JsonObject Observe(string root, string relative)
     {
         Interlocked.Increment(ref MetadataObservations);
@@ -32,16 +33,4 @@ public static class FileMetadata
     }
     public static string? Token(JsonNode? row) => row?["metadataVersion"]?.GetValue<string>();
     public static long MetadataObservations, HashBytes, TransferBytes, SidecarParseBytes;
-    public static async Task<byte[]> Digest(Stream stream, CancellationToken cancel)
-    {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[128 * 1024];
-        int n;
-        while ((n = await stream.ReadAsync(buffer, cancel)) > 0)
-        {
-            Interlocked.Add(ref HashBytes, n);
-            hash.AppendData(buffer, 0, n);
-        }
-        return hash.GetHashAndReset();
-    }
 }

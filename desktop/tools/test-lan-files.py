@@ -23,11 +23,12 @@ def main():
                 peer=dict(host='127.0.0.1',port=port,pin=pin,deviceId=uuid.uuid4().hex)
                 w=Wire(peer,auth=False);w.send(dict(op='pair',deviceId=peer['deviceId'],name='Synthetic file fixture',invitation=secret));peer['token']=w.receive()['token'];w.close()
                 with_peer=lambda:Wire(peer)
-                def request(op,**args):
+                def request_once(op,**args):
                     w=with_peer()
                     try:
                         if op in ('file_begin','file_delete','file_ack'):
                             observed=w.request('file_probe',fileProtocol=3,scope=args['scope'],path=args['path'])
+                            if observed.get('code')=='busy':return observed
                             if op=='file_ack':args.update(remoteVersion=observed.get('metadataVersion'),localVersion=observed.get('metadataVersion'),decision='ack')
                             else:args['expectedVersion']=observed.get('metadataVersion')
                         result=w.request(op,fileProtocol=3,**args)
@@ -35,6 +36,25 @@ def main():
                             time.sleep(.05);result=w.request('plan_status',job=result['job'])
                         return result
                     finally:w.close()
+                def request(op,**args):
+                    # Production may briefly hold its file gate during a refresh. Retry only the
+                    # explicit pre-dispatch busy response, never a conflict/deferred/other error.
+                    deadline=time.monotonic()+5
+                    while True:
+                        result=request_once(op,**args)
+                        if result.get('code')!='busy':return result
+                        assert time.monotonic()<deadline,(op,result)
+                        time.sleep(.1)
+                # Exercise retry against the real request limiter, without relaxing its policy.
+                w=with_peer()
+                try:
+                    for _ in range(400):
+                        limited=w.request('capabilities')
+                        if limited.get('code')=='busy':break
+                    else:raise AssertionError('Fixture did not reach the request limiter')
+                finally:w.close()
+                assert request('capabilities')['fileProtocol']==3
+                print('PASS explicit busy response recovers with bounded retry; production limits unchanged',flush=True)
                 initial_mapping=str(uuid.uuid4())
                 scope=request('file_open',rootId=root,mapping=initial_mapping,selection=[''])['scope']
                 content=b'RIFF'+bytes(4)+b'WAVE'+bytes(51)+b'1';modified=1_800_000_000_000_000_000;stamp=f"m2:{len(content)}:{modified}";operation=uuid.uuid4().hex
@@ -79,7 +99,8 @@ def main():
                 assert request('file_conflict',**args)['choice']=='remote'
                 snapshot=request('file_conflict_status',scope=conflict_scope,ids=[conflict_id])
                 assert snapshot['rows'][0]['choice']=='remote' and not snapshot['missing']
-                assert request('file_conflict_choose',scope=conflict_scope,id=conflict_id,choice='local')['conflict']
+                rejected=request('file_conflict_choose',scope=conflict_scope,id=conflict_id,choice='local')
+                assert rejected.get('conflict') and rejected.get('reason')=='conflict_already_chosen',rejected
                 assert (music/'Conflict.wav').read_bytes()==content
                 assert request('file_conflict_clear',scope=conflict_scope,path='Conflict.wav',localVersion=remote,remoteVersion=remote)['cleared']
                 snapshot=request('file_conflict_status',scope=conflict_scope,ids=[conflict_id])

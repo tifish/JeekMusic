@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using Avalonia.Headless;
+using Avalonia.Threading;
 using JeekMusic.Automation;
 using JeekMusic.Library;
 using JeekMusic.Playback;
@@ -20,6 +21,8 @@ public sealed class LanLifecycleTests
         internal TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal bool Allowed = true;
         internal bool Removed;
+        internal TaskCompletionSource? RemovalRelease;
+        internal bool Closed;
         public async Task<JsonObject> Query(LanFirewallRequest request)
         {
             Entered.TrySetResult();
@@ -27,11 +30,49 @@ public sealed class LanLifecycleTests
             return new() { ["satisfied"] = Allowed, ["state"] = Allowed ? "configured" : "repair_required" };
         }
         public Task<int> Apply(LanFirewallRequest request) => Task.FromResult(5);
-        public Task<JsonObject> Remove(LanFirewallRequest request)
+        public async Task<JsonObject> Remove(LanFirewallRequest request)
         {
             Removed = true;
-            return Task.FromResult(new JsonObject { ["satisfied"] = true, ["state"] = "not_required" });
+            if (RemovalRelease is not null) await RemovalRelease.Task;
+            return new JsonObject { ["satisfied"] = true, ["state"] = "not_required" };
         }
+        public Task CloseAsync() { Closed = true; return Task.CompletedTask; }
+    }
+
+    [Fact]
+    public async Task ClientExitYieldsDispatcherUntilVerifiedCleanupAndHelperCloseFinish()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
+        await session.Dispatch(async () =>
+        {
+            var root = Path.Combine(Path.GetTempPath(), "jeek-exit-" + Guid.NewGuid());
+            Directory.CreateDirectory(root);
+            var backend = new DelayedFirewall { RemovalRelease = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+            backend.Release.TrySetResult();
+            var firewall = new LanFirewall(backend, new string('a', 64), @"C:\fixture\JeekMusic.exe", () => { });
+            var app = new AppServices(new SettingsStore(Path.Combine(root, "settings.json")), new LibraryDb(":memory:"),
+                source => new PlayerService(source, o => new OutputModeSwitchTests.FakeEngine(o), new OutputModeSwitchTests.FakeEndpointVolume()),
+                owner => new LanSyncService(owner, firewall, Path.Combine(root, "lan.json"), false));
+            using var rsa = RSA.Create(2048);
+            var cert = new CertificateRequest("CN=Async exit fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+                .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            typeof(LanSyncService).GetField("_certificate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app.LanSync, cert);
+            app.LanSync.Configure("0.0.0.0", 39843);
+            await app.LanSync.StartAsync(0);
+            var stop = app.DisposeAsync().AsTask();
+            try
+            {
+                Assert.False(stop.IsCompleted);
+                Assert.False(backend.Closed);
+                bool dispatcherRan = false;
+                await Dispatcher.UIThread.InvokeAsync(() => dispatcherRan = true, DispatcherPriority.Background);
+                Assert.True(dispatcherRan);
+            }
+            finally { backend.RemovalRelease.TrySetResult(); await stop.WaitAsync(TimeSpan.FromSeconds(5)); }
+            Assert.True(backend.Removed);
+            Assert.True(backend.Closed);
+            return 0;
+        }, CancellationToken.None);
     }
 
     [Theory]

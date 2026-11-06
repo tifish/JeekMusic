@@ -10,7 +10,7 @@ namespace JeekMusic;
 /// <summary>
 /// 组合根（设计 §2）：不用依赖注入容器，启动时按顺序创建各个服务。重的东西（mpv、ONNX Runtime、HttpClient）在第一次用到时才创建。
 /// </summary>
-public sealed class AppServices : IDisposable
+public sealed class AppServices : IDisposable, IAsyncDisposable
 {
     public static AppServices Current { get; private set; } = null!;
 
@@ -51,7 +51,7 @@ public sealed class AppServices : IDisposable
     public AppServices() : this(null, null, null) { }
 
     // 窗口集成测试注入临时数据库和模拟音频设备，避免修改真实曲库或系统音量。
-    internal AppServices(SettingsStore? settings, LibraryDb? db, Func<ITrackSource, PlayerService>? createPlayer)
+    internal AppServices(SettingsStore? settings, LibraryDb? db, Func<ITrackSource, PlayerService>? createPlayer, Func<AppServices, Sync.LanSyncService>? createLan = null)
     {
         Current = this;
         TagReader.Configure();
@@ -69,14 +69,13 @@ public sealed class AppServices : IDisposable
         SleepTimer = new SleepTimer(Player);
         Lyrics = new LyricsService(Library);
         Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
-        LanSync = new Sync.LanSyncService(this);
+        LanSync = createLan?.Invoke(this) ?? new Sync.LanSyncService(this);
         Mcp = new Automation.McpServer(new Automation.McpTools(this));
         LifecycleTimings.Mark("startup.servicesReady");
     }
 
-    public void Dispose()
+    Task StopServices()
     {
-        using var total = LifecycleTimings.Measure("shutdown.total");
         Mcp.Dispose();
         // Close the listener now and overlap verified rule cleanup with local persistence.
         var lanStopped = LanSync.StopForExit();
@@ -89,9 +88,30 @@ public sealed class AppServices : IDisposable
         Settings.WriteNow();
         using (LifecycleTimings.Measure("shutdown.library")) Library.Dispose();
         Db.Dispose();
-        using (LifecycleTimings.Measure("shutdown.firewallWait")) lanStopped.GetAwaiter().GetResult();
+        return lanStopped;
+    }
+
+    void FinishShutdown()
+    {
         Instance?.Dispose();
         Log.Flush();
+    }
+
+    public void Dispose()
+    {
+        using var total = LifecycleTimings.Measure("shutdown.total");
+        var lanStopped = StopServices();
+        using (LifecycleTimings.Measure("shutdown.firewallWait")) lanStopped.GetAwaiter().GetResult();
+        FinishShutdown();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        using var total = LifecycleTimings.Measure("shutdown.total");
+        var lanStopped = StopServices();
+        // Keep dispatcher/menus responsive; the single-instance mutex is released back on its UI owner.
+        using (LifecycleTimings.Measure("shutdown.firewallWait")) await lanStopped;
+        FinishShutdown();
     }
 
     public event Action? OnExit;

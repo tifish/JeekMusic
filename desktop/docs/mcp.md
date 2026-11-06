@@ -15,10 +15,19 @@
 `firewall.durationMs` 是最后一次防火墙检查/清理的耗时。现有工具和参数 Schema 保持兼容，
 开发版、正式 NativeAOT 版使用同一实现。正常退出关闭监听并等待所属规则清理验证，不跳过保存。
 
+`lifecycle.shutdownState` 为 running/requested/cleaning；日志中的 `shutdown.uiHidden`
+是退出请求到主窗口隐藏的毫秒数，独立于完整清理耗时。托盘菜单点击先返回，随后关闭窗口并
+异步等待规则清理，不在菜单回调中同步等待 PowerShell。辅助进程通过私有 stdio 复用固定嵌入脚本，
+避免每次退出重启 PowerShell/重新加载 NetSecurity；进程在无操作时等待 stdin，保留模块内存。
+`firewall.helper` 返回 reuse、processId（关闭后为 0）、starts 和 requests。
+辅助进程权限与客户端原有权限一致，不缓存额外的管理员授权；需要 UAC 时仍调用原有的单次固定助手。
+正常退出验证清理后关闭助手，父进程退出导致 stdin EOF 也会关闭助手。没有新增网络端点或命令执行工具。
+
 真实客户端测量脚本（Windows PowerShell 5.1/7）：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-lifecycle.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-lifecycle.ps1 -ExitViaTray -Runs 1
 ```
 
 脚本使用独立数据目录、无配对设备的临时端口、真实后台窗口和 PrintWindow 截图，

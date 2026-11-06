@@ -23,6 +23,8 @@ internal sealed record LanFirewallRequest(string Owner, string Program, string B
 
 internal interface ILanFirewallBackend
 {
+    Task CloseAsync() => Task.CompletedTask;
+    JsonObject Diagnostics() => new();
     Task<JsonObject> Query(LanFirewallRequest request);
     Task<JsonObject> Query(LanFirewallRequest request, CancellationToken cancel) => Query(request).WaitAsync(cancel);
     Task<int> Apply(LanFirewallRequest request);
@@ -54,7 +56,12 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
         var owner = LanFirewallRequest.Hash(sid + "|" + Path.GetFullPath(AppPaths.DataDir).TrimEnd('\\').ToUpperInvariant());
         return new(new WindowsLanFirewall(), owner, Environment.ProcessPath ?? throw new InvalidOperationException("Executable unavailable"), changed);
     }
-    internal JsonObject Status() { lock (gate) return status.DeepClone().AsObject(); }
+    internal JsonObject Status() { lock (gate) { var result = status.DeepClone().AsObject(); result["helper"] = backend.Diagnostics(); return result; } }
+    internal async Task CloseAsync()
+    {
+        try { await Wait().ConfigureAwait(false); }
+        finally { await backend.CloseAsync().ConfigureAwait(false); }
+    }
     internal Task Set(string bind, int port)
     {
         LanFirewallRequest.Validate(owner, bind, port);
@@ -113,6 +120,78 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
 
 internal sealed class WindowsLanFirewall : ILanFirewallBackend
 {
+    readonly SemaphoreSlim workerGate = new(1);
+    Process? worker;
+    Task<string>? workerError;
+    int workerPid, workerStarts, workerRequests;
+    public JsonObject Diagnostics() => new() { ["processId"] = Volatile.Read(ref workerPid), ["starts"] = Volatile.Read(ref workerStarts), ["requests"] = Volatile.Read(ref workerRequests), ["reuse"] = true };
+
+    static string WorkerCommand()
+    {
+        using var stream = typeof(WindowsLanFirewall).Assembly.GetManifestResourceStream("JeekMusic.LanFirewall.ps1") ?? throw new IOException("Missing firewall helper");
+        using var reader = new StreamReader(stream);
+        var script = Convert.ToBase64String(Encoding.UTF8.GetBytes(reader.ReadToEnd()));
+        // Only the embedded fixed rule manager is executable. stdin carries serialized data.
+        var source = "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " +
+            "Import-Module (Join-Path $PSHOME 'Modules\\NetSecurity\\NetSecurity.psd1') -ErrorAction Stop; " +
+            "$manager=[scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + script + "'))); " +
+            "while($null -ne ($line=[Console]::ReadLine())) { $frame=$line|ConvertFrom-Json; $request=$frame.request; $apply=[bool]$frame.apply; $result=& $manager; [Console]::Out.WriteLine([string]$result); [Console]::Out.Flush() }";
+        return Convert.ToBase64String(Encoding.Unicode.GetBytes(source));
+    }
+
+    async Task<JsonObject> RunWarm(LanFirewallRequest request, bool apply, CancellationToken cancel = default)
+    {
+        await workerGate.WaitAsync(cancel).ConfigureAwait(false);
+        try
+        {
+            if (worker is null || worker.HasExited)
+            {
+                await CloseWorker().ConfigureAwait(false);
+                var start = new ProcessStartInfo(PowerShell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8 };
+                foreach (var arg in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", WorkerCommand() }) start.ArgumentList.Add(arg);
+                worker = Process.Start(start) ?? throw new IOException("Firewall helper could not start");
+                workerError = worker.StandardError.ReadToEndAsync();
+                Volatile.Write(ref workerPid, worker.Id); Interlocked.Increment(ref workerStarts);
+            }
+            var frame = new JsonObject { ["request"] = request.Json(), ["apply"] = apply };
+            await worker.StandardInput.WriteLineAsync(frame.ToJsonString().AsMemory(), cancel).ConfigureAwait(false);
+            await worker.StandardInput.FlushAsync(cancel).ConfigureAwait(false);
+            Interlocked.Increment(ref workerRequests);
+            var line = await worker.StandardOutput.ReadLineAsync(cancel).AsTask().WaitAsync(TimeSpan.FromSeconds(45), cancel).ConfigureAwait(false);
+            return line is null ? throw new IOException("Firewall helper disconnected") : JsonNode.Parse(line)?.AsObject() ?? throw new IOException("Firewall helper returned no result");
+        }
+        catch
+        {
+            await CloseWorker(kill: true).ConfigureAwait(false);
+            throw;
+        }
+        finally { workerGate.Release(); }
+    }
+
+    async Task CloseWorker(bool kill = false)
+    {
+        var child = worker; worker = null; Volatile.Write(ref workerPid, 0);
+        if (child is null) return;
+        try
+        {
+            if (!child.HasExited)
+            {
+                if (kill) child.Kill(entireProcessTree: true);
+                else child.StandardInput.Close(); // EOF also closes the helper if the player crashes.
+                try { await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+                catch (TimeoutException) { if (!child.HasExited) child.Kill(entireProcessTree: true); await child.WaitForExitAsync().ConfigureAwait(false); }
+            }
+            if (workerError is not null) await workerError.ConfigureAwait(false);
+        }
+        finally { child.Dispose(); workerError = null; }
+    }
+
+    public async Task CloseAsync()
+    {
+        await workerGate.WaitAsync().ConfigureAwait(false);
+        try { await CloseWorker().ConfigureAwait(false); }
+        finally { workerGate.Release(); }
+    }
     static string PowerShell => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     static string Encoded(LanFirewallRequest request, bool apply)
     {
@@ -137,9 +216,7 @@ internal sealed class WindowsLanFirewall : ILanFirewallBackend
     public Task<JsonObject> Query(LanFirewallRequest request) => Query(request, CancellationToken.None);
     public async Task<JsonObject> Query(LanFirewallRequest request, CancellationToken cancel)
     {
-        var result = await Run(request, false, cancel);
-        if (result.Exit != 0) throw new IOException("Windows firewall query failed");
-        return JsonNode.Parse(result.Output)?.AsObject() ?? throw new IOException("Windows firewall query returned no result");
+        return await RunWarm(request, false, cancel).ConfigureAwait(false);
     }
     public async Task<JsonObject> Remove(LanFirewallRequest request)
     {
@@ -147,9 +224,7 @@ internal sealed class WindowsLanFirewall : ILanFirewallBackend
         // Non-elevated callers retain the exact-rule query and fixed UAC helper.
         if (new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
         {
-            var result = await Run(request, true);
-            if (result.Exit != 0) throw new IOException("Windows firewall cleanup failed");
-            return JsonNode.Parse(result.Output)?.AsObject() ?? throw new IOException("Windows firewall cleanup returned no result");
+            return await RunWarm(request, true).ConfigureAwait(false);
         }
         var current = await Query(request);
         if (current["satisfied"]?.GetValue<bool>() == true) return current;
@@ -160,7 +235,7 @@ internal sealed class WindowsLanFirewall : ILanFirewallBackend
     }
     public async Task<int> Apply(LanFirewallRequest request)
     {
-        if (new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator)) return (await Run(request, true)).Exit;
+        if (new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator)) return (await RunWarm(request, true).ConfigureAwait(false))["satisfied"]?.GetValue<bool>() == true ? 0 : 1;
         // Elevate only this fixed helper, never the player. No script path, command, output file or executable path is accepted.
         var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
         foreach (var arg in new[] { "--lan-firewall-helper", request.Owner, request.Bind, request.Port.ToString(System.Globalization.CultureInfo.InvariantCulture) }) start.ArgumentList.Add(arg);

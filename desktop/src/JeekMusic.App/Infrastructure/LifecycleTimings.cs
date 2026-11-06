@@ -8,6 +8,8 @@ internal static class LifecycleTimings
 {
     static readonly Lock Gate = new();
     static readonly Dictionary<string, long> Stages = new();
+    static Stopwatch? shutdownWatch;
+    static string shutdownState = "running";
     static readonly DateTime Started = Process.GetCurrentProcess().StartTime.ToUniversalTime();
 
     internal static void Mark(string stage)
@@ -18,6 +20,17 @@ internal static class LifecycleTimings
     }
 
     internal static IDisposable Measure(string stage) => new Measurement(stage);
+
+    internal static void RequestShutdown()
+    {
+        lock (Gate) { shutdownWatch = Stopwatch.StartNew(); shutdownState = "requested"; }
+    }
+
+    internal static void ShutdownUiHidden()
+    {
+        lock (Gate) { Stages["shutdown.uiHidden"] = shutdownWatch?.ElapsedMilliseconds ?? 0; shutdownState = "cleaning"; }
+        Log.Info("lifecycle", $"shutdown.uiHidden: {shutdownWatch?.ElapsedMilliseconds ?? 0} ms after exit request");
+    }
 
     sealed class Measurement(string stage) : IDisposable
     {
@@ -34,6 +47,7 @@ internal static class LifecycleTimings
         lock (Gate) return new JsonObject
         {
             ["units"] = "milliseconds",
+            ["shutdownState"] = shutdownState,
             ["startup"] = new JsonObject(Stages.Where(p => p.Key.StartsWith("startup.")).Select(p => KeyValuePair.Create<string, JsonNode?>(p.Key[8..], JsonValue.Create(p.Value)))),
             ["shutdown"] = new JsonObject(Stages.Where(p => p.Key.StartsWith("shutdown.")).Select(p => KeyValuePair.Create<string, JsonNode?>(p.Key[9..], JsonValue.Create(p.Value))))
         };

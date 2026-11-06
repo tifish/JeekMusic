@@ -92,8 +92,8 @@ public sealed class McpTools
 
     static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0, bool openWorld = false)
     {
-        if (name == "get_diagnostics") description += " lifecycle reports startup servicesReady/windowOpened/libraryReady milliseconds since process creation and measured shutdown stage durations; shutdown totals are recorded in get_logs after exit. No arguments.";
-        if (name is "lan_sync_status" or "lan_sync_control") description += " Automatic startup is asynchronous: starting=true with enabled=false/port=0 means firewall verification is pending; the UI, MCP and local playback remain available. start waits asynchronously for the same verified listener; stop cancels pending startup. firewall.durationMs measures the last reconciliation. No new inputs.";
+        if (name == "get_diagnostics") description += " lifecycle reports startup servicesReady/windowOpened/libraryReady milliseconds since process creation, shutdownState running/requested/cleaning and measured shutdown stage durations. shutdown.uiHidden measures exit request to window hiding after the menu callback returns; shutdown totals are recorded in get_logs after exit. No arguments.";
+        if (name is "lan_sync_status" or "lan_sync_control") description += " Automatic startup is asynchronous: starting=true with enabled=false/port=0 means firewall verification is pending; the UI, MCP and local playback remain available. start waits asynchronously for the same verified listener; stop cancels pending startup. firewall.durationMs measures the last reconciliation. firewall.helper reports reuse, current processId (0 when closed), starts and requests of the fixed embedded rule manager. This private stdio helper is reused at the player's existing privilege, closes after verified exit cleanup or parent pipe EOF, and accepts no arbitrary commands; UAC repair remains a separate one-shot helper. No new inputs.";
         var tool = new JsonObject
         {
             ["name"] = name, ["description"] = description,

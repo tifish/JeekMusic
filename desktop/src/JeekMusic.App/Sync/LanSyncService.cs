@@ -131,7 +131,7 @@ public sealed partial class LanSyncService : IDisposable
     }
 
     void Save() => SyncFeature.AtomicWrite(_configPath, _config.ToJsonString());
-    void Notify() => Dispatcher.UIThread.Post(() => Changed?.Invoke());
+    void Notify() => Dispatcher.UIThread.Post(() => { if (!_disposed) Changed?.Invoke(); });
     public Task StartAsync(int? port = null)
     {
         if (_starting is { IsCompleted: false }) return _starting;
@@ -807,9 +807,17 @@ public sealed partial class LanSyncService : IDisposable
             _app.Library.Watcher.Failed -= OnFileWatcherFailed;
             InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null;
             _certificate?.Dispose();
-            return _shutdown = _config["firewallManaged"]?.GetValue<bool>() == true
-                ? _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0) : Task.CompletedTask;
+            return _shutdown = FinishShutdown();
         }
+    }
+    async Task FinishShutdown()
+    {
+        try
+        {
+            if (_config["firewallManaged"]?.GetValue<bool>() == true)
+                await _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0).ConfigureAwait(false);
+        }
+        finally { await _firewall.CloseAsync().ConfigureAwait(false); }
     }
     public void Dispose() => StopForExit().GetAwaiter().GetResult();
 }

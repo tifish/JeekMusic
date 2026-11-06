@@ -158,6 +158,7 @@ public sealed partial class Shell
         _app.Settings.Changed += c => { if (c == "hotkeys") ApplyHotkeys(); };
         DispatcherTimer.RunOnce(() =>
         {
+            if (_exiting) return;
             _app.Player.EnsureEngine();
             AttachSystemMedia();
             _app.Taskbar.Attach(_app.Messages.Hwnd, _app.Messages);
@@ -175,6 +176,7 @@ public sealed partial class Shell
 
     void OnSnapshotApplied()
     {
+        if (_exiting) return;
         // 自动测试：曲库到了之后播放当前视图的第一首
         if (_app.Args.Contains("--autoplay") && _main.ViewModel.Rows.FirstOrDefault(r => r.Track is not null)?.Track is { } first)
         {
@@ -310,6 +312,7 @@ public sealed partial class Shell
 
     public void ShowMainWindow()
     {
+        if (_exiting) return;
         HideMiniPlayer();
         if (!_main.IsVisible) _main.Show();
         if (_main.WindowState == WindowState.Minimized) _main.WindowState = WindowState.Normal;
@@ -346,6 +349,7 @@ public sealed partial class Shell
 
     void OnInstanceArgs(string[] args)
     {
+        if (_exiting) return;
         var files = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToList();
         if (files.Count > 0) OpenFiles(files);
         else if (!args.Contains("--background")) ShowMainWindow();
@@ -360,12 +364,22 @@ public sealed partial class Shell
     {
         if (_exiting) return;
         _exiting = true;
+        LifecycleTimings.RequestShutdown();
+        // Return from the native menu callback before disposing its tray/menu or saving state.
+        Dispatcher.UIThread.Post(ExitAfterMenu, DispatcherPriority.Background);
+    }
+
+    async void ExitAfterMenu()
+    {
         _main.ExitRequested = true;
         SaveWindow();
         BeforeExit();
+        foreach (var window in _desktop.Windows.ToArray())
+            if (!ReferenceEquals(window, _main)) window.Close();
         _tray?.Dispose();
         _main.Hide();
-        _app.Dispose();
+        LifecycleTimings.ShutdownUiHidden();
+        await _app.DisposeAsync();
         _desktop.Shutdown();
     }
 

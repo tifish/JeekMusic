@@ -3,7 +3,8 @@ param(
     [string]$Evidence = "$PSScriptRoot\..\artifacts\lifecycle",
     [string]$Seed = "$PSScriptRoot\..\..\bin\data",
     [int]$Runs = 2,
-    [int]$SettleSeconds = 12
+    [int]$SettleSeconds = 12,
+    [switch]$ExitViaTray
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -17,6 +18,10 @@ public static class LifecycleWindow {
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p,IntPtr l);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h,System.Text.StringBuilder s,int n);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string cls,string title);
+ public static IntPtr[] TrayWindows(uint pid) { var result=new System.Collections.Generic.List<IntPtr>();EnumWindows((h,l)=> {uint p;GetWindowThreadProcessId(h,out p);if(p==pid&&!IsWindowVisible(h))result.Add(h);return true;},IntPtr.Zero);IntPtr next=IntPtr.Zero;while((next=FindWindowEx(new IntPtr(-3),next,null,null))!=IntPtr.Zero){uint p;GetWindowThreadProcessId(next,out p);if(p==pid)result.Add(next);}return result.ToArray(); }
+ public static IntPtr[] Windows(uint pid) { var windows=new System.Collections.Generic.List<IntPtr>();EnumWindows((h,l)=>{uint p;GetWindowThreadProcessId(h,out p);if(p==pid&&IsWindowVisible(h))windows.Add(h);return true;},IntPtr.Zero);return windows.ToArray(); }
  public static IntPtr Find(uint pid) { IntPtr result=IntPtr.Zero; EnumWindows((h,l)=> { uint p; GetWindowThreadProcessId(h,out p); if(p==pid && IsWindowVisible(h)) { result=h; return false; } return true; },IntPtr.Zero); return result; }
  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L,T,R,B; }
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
@@ -27,6 +32,7 @@ public static class LifecycleWindow {
 '@
 [LifecycleWindow]::SetProcessDPIAware() | Out-Null
 $results = @()
+if ($ExitViaTray) { Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes }
 function Rpc($bridge, $request) {
     $bridge.StandardInput.WriteLine(($request | ConvertTo-Json -Depth 30 -Compress))
     $bridge.StandardInput.Flush()
@@ -96,10 +102,61 @@ for ($run = 1; $run -le $Runs; $run++) {
         try { if (-not [LifecycleWindow]::PrintWindow($window,$dc,2)) { throw 'PrintWindow failed' } }
         finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
         $bitmap.Save("$Evidence\run-$run.png"); $bitmap.Dispose()
-        $watch.Restart()
-        [LifecycleWindow]::PostMessage($window,0x10,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+        $helper = $null
+        if ($SettleSeconds -gt 0 -and $ready.structuredContent.firewall.helper.processId -gt 0) {
+            $helper = Get-Process -Id $ready.structuredContent.firewall.helper.processId
+            if ($ready.structuredContent.firewall.helper.starts -ne 1) { throw 'Expected one reused firewall helper' }
+        }
+        $menuGoneMs = $null
+        if ($ExitViaTray) {
+            $trayWindows = [LifecycleWindow]::TrayWindows($process.Id)
+            if ($trayWindows.Count -eq 0) { throw 'Native tray callback window not found' }
+            # Avalonia's real notification-area context-menu callback (WM_USER + 1024).
+            foreach ($tray in $trayWindows) { [LifecycleWindow]::PostMessage($tray,0x800,[IntPtr]1,[IntPtr]0x205) | Out-Null }
+            Start-Sleep -Milliseconds 250
+            $exitItem = $null; $menuWindow = [IntPtr]::Zero
+            foreach ($candidate in [LifecycleWindow]::Windows($process.Id)) {
+                $root = [System.Windows.Automation.AutomationElement]::FromHandle($candidate)
+                foreach ($label in @(([string][char]0x9000 + [char]0x51fa),'Exit')) {
+                    $condition=[System.Windows.Automation.AndCondition]::new([System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$label),[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::MenuItem))
+                    $exitItem=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
+                    if ($exitItem) { $menuWindow=$candidate; break }
+                }
+                if ($exitItem) { break }
+            }
+            if (-not $exitItem) {
+                $dump = foreach ($candidate in [LifecycleWindow]::Windows($process.Id)) {
+                    $class=New-Object Text.StringBuilder 256
+                    [LifecycleWindow]::GetClassName($candidate,$class,256) | Out-Null
+                    'window '+$candidate+' '+$class
+                    $root=[System.Windows.Automation.AutomationElement]::FromHandle($candidate)
+                    foreach($node in $root.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition)) { $node.Current.ControlType.ProgrammaticName+' | '+$node.Current.Name }
+                }
+                $dump | Set-Content -Encoding UTF8 "$Evidence\menu-not-found.txt"
+                throw 'Exit item not found in the real tray menu'
+            }
+            $menuRect=New-Object LifecycleWindow+RECT
+            [LifecycleWindow]::GetWindowRect($menuWindow,[ref]$menuRect) | Out-Null
+            $menuImage=New-Object Drawing.Bitmap ($menuRect.R-$menuRect.L),($menuRect.B-$menuRect.T)
+            $menuGraphics=[Drawing.Graphics]::FromImage($menuImage); $menuDc=$menuGraphics.GetHdc()
+            try { [LifecycleWindow]::PrintWindow($menuWindow,$menuDc,2) | Out-Null } finally { $menuGraphics.ReleaseHdc($menuDc); $menuGraphics.Dispose() }
+            $menuImage.Save("$Evidence\run-$run-menu-open.png"); $menuImage.Dispose()
+            $watch.Restart()
+            $exitItem.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+            while ([LifecycleWindow]::IsWindowVisible($menuWindow) -and $watch.ElapsedMilliseconds -lt 5000) { Start-Sleep -Milliseconds 2 }
+            $menuGoneMs=$watch.ElapsedMilliseconds
+            if ([LifecycleWindow]::IsWindowVisible($menuWindow)) { throw 'Tray menu stayed visible after exit' }
+            $after=New-Object Drawing.Bitmap ($menuRect.R-$menuRect.L),($menuRect.B-$menuRect.T)
+            $afterGraphics=[Drawing.Graphics]::FromImage($after)
+            try { $afterGraphics.CopyFromScreen($menuRect.L,$menuRect.T,0,0,$after.Size) } finally { $afterGraphics.Dispose() }
+            $after.Save("$Evidence\run-$run-menu-dismissed.png"); $after.Dispose()
+        } else {
+            $watch.Restart()
+            [LifecycleWindow]::PostMessage($window,0x10,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+        }
         if (-not $process.WaitForExit(30000)) { throw 'Client failed to exit normally within 30 seconds' }
-        $result = [pscustomobject]@{ run=$run; windowMs=$windowMs; exitMs=$watch.ElapsedMilliseconds; exitCode=$process.ExitCode; mcpResponsive=$true; startingWhenQueried=$pending.structuredContent.starting; data=$data }
+        if ($helper -and -not $helper.WaitForExit(3000)) { throw 'Firewall helper was left running' }
+        $result = [pscustomobject]@{ run=$run; windowMs=$windowMs; exitMs=$watch.ElapsedMilliseconds; menuGoneMs=$menuGoneMs; helperStopped=($null -eq $helper -or $helper.HasExited); exitCode=$process.ExitCode; mcpResponsive=$true; startingWhenQueried=$pending.structuredContent.starting; data=$data }
         $results += $result; $result | ConvertTo-Json -Compress
     } finally {
         if ($bridge) { if (-not $bridge.HasExited) { $bridge.StandardInput.Close(); if (-not $bridge.WaitForExit(3000)) { $bridge.Kill() } }; $bridge.Dispose() }

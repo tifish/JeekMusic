@@ -23,6 +23,16 @@
 辅助进程权限与客户端原有权限一致，不缓存额外的管理员授权；需要 UAC 时仍调用原有的单次固定助手。
 正常退出验证清理后关闭助手，父进程退出导致 stdin EOF 也会关闭助手。没有新增网络端点或命令执行工具。
 
+启动优化兼容增加 `lifecycle.startup.mainEntered/platformStarting/themeReady/rowsReady` 等累计毫秒数，
+以及 `startupWork`（主题、设置、数据库、设备偏好、主窗口构造/恢复、托盘等阶段的单独耗时）。
+`compositeImagePresent` 仅表示运行目录存在 `JeekMusic.r2r.dll`，不代表清空了 Windows 文件缓存。
+日常版使用 Release Composite ReadyToRun，正式 NativeAOT 使用相同的启动逻辑和 MCP。
+窗口出现前只恢复输出设备偏好，不访问音频硬件；首次播放前不创建 libmpv 或预加载暂停歌曲。
+队列/顺序/手动标志、当前歌曲和位置仍恢复，`engineReady=false`、`idle=true`、`outputState=idle`
+在首次播放前为正常状态；暂停状态跳转保留位置，首次播放仍先验证设备和音量安全。
+音量只读监测在窗口显示后启动；`volumeState.endpointReadPending=true` 时显示“正在读取设备音量”，
+滑块暂不可调，不把尚未读取当作失败。输入参数 Schema 和工具集合不变，不安装常驻预启动程序。
+
 真实客户端测量脚本（Windows PowerShell 5.1/7）：
 
 ```powershell

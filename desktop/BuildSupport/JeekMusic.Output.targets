@@ -30,4 +30,22 @@
                    WindowsGraphicalUserInterface="true" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(TargetDir).&quot; -Launcher &quot;$(MSBuildProjectDirectory)\$(_JeekDailyLauncher)&quot; $(_JeekDataMigration)" />
   </Target>
+
+  <!-- The daily launcher can also stage an explicitly requested precompiled managed publish. -->
+  <Target Name="StageJeekDailyPublish" AfterTargets="Publish"
+          Condition="'$(JeekStageDailyPublish)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'false' or '$(PublishReadyToRun)' != 'true' or '$(PublishReadyToRunComposite)' != 'true' or '$(Configuration)' != 'Release'"
+           Text="Daily publishing requires Release -r win-x64 --self-contained true -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true." />
+    <PropertyGroup>
+      <_JeekDailyPublishLauncher>$(IntermediateOutputPath)daily\JeekMusic.exe</_JeekDailyPublishLauncher>
+      <_JeekPublishMigration Condition="'$(JeekMigrateLegacyData)' == 'true'">-MigrateLegacyData</_JeekPublishMigration>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)daily" />
+    <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)"
+                   AppHostDestinationPath="$(_JeekDailyPublishLauncher)"
+                   AppBinaryName="runtime/JeekMusic.dll"
+                   IntermediateAssembly="@(IntermediateAssembly->'%(FullPath)')"
+                   WindowsGraphicalUserInterface="true" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(PublishDir).&quot; -Launcher &quot;$(MSBuildProjectDirectory)\$(_JeekDailyPublishLauncher)&quot; $(_JeekPublishMigration)" />
+  </Target>
 </Project>

@@ -118,6 +118,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     public bool VolumeAvailable => _player.VolumeAvailable;
     public string VolumeTip => _player.VolumeTip;
     public string VolumeState => _player.OutputPending && _player.OutputBlockReason is not null ? _player.OutputSafetyMessage
+        : _player.EndpointReadPending ? L.T("正在读取设备音量")
         : _player.EndpointVolumeValue is null ? L.T("设备音量读取失败")
         : _player.Exclusive && _player.HardwareVolume == false ? L.T("请使用硬件旋钮")
         : _player.EndpointMuted == true ? L.T("系统设备已静音")

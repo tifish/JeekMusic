@@ -77,6 +77,7 @@ public sealed partial class PlayerService : IDisposable
     public double? SessionVolume => _endpoint?.SessionVolume;
     public bool? SessionMuted => _endpoint?.SessionMuted;
     public string? VolumeDiagnostic { get; private set; }
+    public bool EndpointReadPending { get; private set; } = true;
     public string? OutputBlockReason { get; private set; }
     public bool OutputPending => _restoringOutput && CurrentTrack is not null;
     public bool HardwareVolumeConfirmationRequired => Exclusive &&
@@ -174,9 +175,20 @@ public sealed partial class PlayerService : IDisposable
 
     public bool EngineReady => _mpv is not null;
 
+    /// <summary>Restore only the selected device name; actual hardware is read when first initializing playback.</summary>
+    internal void RestoreDevice(string? device)
+    {
+        if (_mpv is not null || _boundDeviceId is not null) throw new InvalidOperationException("Output has already been initialized");
+        Device = device is "auto" ? null : device;
+        _outputMonitor.Stop();
+    }
+
+    internal void StartOutputMonitoring() => _outputMonitor.Start();
+
     public void EnsureEngine()
     {
         if (_mpv is not null) return;
+        _outputMonitor.Start();
         if (!ReadEndpoint(Device, bind: true)) { BlockOutputRestore("endpoint-read-failed"); return; }
         _restoringOutput = true;
         _outputFileLoaded = _outputRestoreFailed = false;
@@ -688,7 +700,7 @@ public sealed partial class PlayerService : IDisposable
         _ => L.T("无法确认输出设备或音量，已保持暂停和本播放器静音。请检查设备后按播放重试。")
     };
 
-    public string VolumeTip => VolumeDiagnostic is not null && _endpoint?.Volume is null
+    public string VolumeTip => EndpointReadPending ? L.T("正在读取设备音量") : VolumeDiagnostic is not null && _endpoint?.Volume is null
         ? L.T("无法读取当前设备音量，请检查设备连接。")
         : Exclusive && HardwareVolume == false
             ? L.T("独占模式音量不可调，请使用设备硬件旋钮；显示的端点软件音量不影响独占输出。")
@@ -739,6 +751,7 @@ public sealed partial class PlayerService : IDisposable
 
     bool ReadEndpoint(string? device, bool bind = false)
     {
+        EndpointReadPending = false;
         _endpoint = _endpointVolume?.Capture(device);
         if (bind) _boundDeviceId = _endpoint?.DeviceId;
         Volume = _endpoint?.Volume ?? 0;
@@ -769,6 +782,7 @@ public sealed partial class PlayerService : IDisposable
     /// <summary>250ms 只读同步（含托盘状态）；从不因通知写回。auto 的实际输出固定为解析后的端点。</summary>
     internal void RefreshOutput(bool forceRateRefresh = false)
     {
+        EndpointReadPending = false;
         var previous = _endpoint;
         var diagnostic = VolumeDiagnostic;
         if (Device is null)
@@ -818,6 +832,7 @@ public sealed partial class PlayerService : IDisposable
         Queue.Restore(items, index, shuffle, repeat, context, sourceAnchorIndex);
         _restorePosition = position;
         CurrentTrack = Queue.Current is { } c ? _tracks.ById(c.TrackId) : null;
+        _pausedOutputReleased = CurrentTrack is not null;
         TrackChanged?.Invoke(CurrentTrack);
         StateChanged?.Invoke();
     }

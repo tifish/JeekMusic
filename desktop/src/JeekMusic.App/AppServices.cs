@@ -54,23 +54,30 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     internal AppServices(SettingsStore? settings, LibraryDb? db, Func<ITrackSource, PlayerService>? createPlayer, Func<AppServices, Sync.LanSyncService>? createLan = null)
     {
         Current = this;
-        TagReader.Configure();
-        Settings = settings ?? new SettingsStore();
-        L.Initialize(Settings.Current.Language);
-        Db = db ?? new LibraryDb(AppPaths.Database);
+        using (LifecycleTimings.Measure("startupWork.tagReader")) TagReader.Configure();
+        using (LifecycleTimings.Measure("startupWork.settings"))
+        {
+            Settings = settings ?? new SettingsStore();
+            L.Initialize(Settings.Current.Language);
+        }
+        using (LifecycleTimings.Measure("startupWork.libraryDb")) Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
         SmartTags = new Analysis.SmartTagService(Library);
         Playlists = new PlaylistService(Library);
-        Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
+        using (LifecycleTimings.Measure("startupWork.player")) Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
         var s = Settings.Current;
-        OutputSettingsBinding.Attach(Player, Settings);
-        Player.SetDevice(s.OutputDevice);
+        using (LifecycleTimings.Measure("startupWork.outputSettings"))
+        {
+            OutputSettingsBinding.Attach(Player, Settings);
+            if (Player.EngineReady || Player.ActualDeviceId is not null) Player.SetDevice(s.OutputDevice);
+            else Player.RestoreDevice(s.OutputDevice);
+        }
         QueuePersistence = new QueuePersistence(Db, Player);
         SleepTimer = new SleepTimer(Player);
         Lyrics = new LyricsService(Library);
-        Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
-        LanSync = createLan?.Invoke(this) ?? new Sync.LanSyncService(this);
-        Mcp = new Automation.McpServer(new Automation.McpTools(this));
+        using (LifecycleTimings.Measure("startupWork.preferences")) Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
+        using (LifecycleTimings.Measure("startupWork.lan")) LanSync = createLan?.Invoke(this) ?? new Sync.LanSyncService(this);
+        using (LifecycleTimings.Measure("startupWork.mcp")) Mcp = new Automation.McpServer(new Automation.McpTools(this));
         LifecycleTimings.Mark("startup.servicesReady");
     }
 

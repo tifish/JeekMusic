@@ -10,6 +10,7 @@
     <_JeekRid>portable</_JeekRid>
     <_JeekRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_JeekRid>
     <_JeekDeployment>aot-$(PublishAot)_sc-$(SelfContained)_psc-$(PublishSelfContained)</_JeekDeployment>
+    <_JeekDeployment Condition="'$(PublishReadyToRun)' == 'true'">$(_JeekDeployment)_r2r-true_composite-$(PublishReadyToRunComposite)</_JeekDeployment>
     <BaseIntermediateOutputPath>obj\$(_JeekOperation)\$(_JeekRid)\$(_JeekDeployment)\</BaseIntermediateOutputPath>
     <BaseOutputPath>bin\$(_JeekOperation)\$(_JeekRid)\$(_JeekDeployment)\</BaseOutputPath>
     <!-- Changing Base* must not let old obj/bin trees become default source items. -->

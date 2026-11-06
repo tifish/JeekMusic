@@ -461,6 +461,7 @@
   "独占模式音量不可调，请使用设备硬件旋钮；显示的端点软件音量不影响独占输出。": "Volume is not adjustable in exclusive mode. Use the hardware knob; the displayed software endpoint volume does not affect exclusive output.",
   "当前输出设备的主音量；共享模式下也影响同设备的其他程序。": "Current output endpoint master volume; in shared mode this also affects other apps on the same device.",
   "设备音量读取失败": "Device volume unreadable",
+  "正在读取设备音量": "Reading device volume",
   "请使用硬件旋钮": "Use the hardware knob",
   "系统设备已静音": "System endpoint muted",
   "Windows 合成器已静音 Jeek Music": "Jeek Music muted in Windows mixer",

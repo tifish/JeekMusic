@@ -66,6 +66,14 @@ for ($run = 1; $run -le $Runs; $run++) {
         do { Start-Sleep -Milliseconds 20; $window = [LifecycleWindow]::Find($process.Id) } while ($window -eq [IntPtr]::Zero -and -not $process.HasExited -and $watch.Elapsed.TotalSeconds -lt 40)
         if ($process.HasExited -or $window -eq [IntPtr]::Zero) { throw 'Client did not open a window' }
         $windowMs = $watch.ElapsedMilliseconds
+        $firstRect=New-Object LifecycleWindow+RECT
+        [LifecycleWindow]::GetWindowRect($window,[ref]$firstRect) | Out-Null
+        $firstImage=New-Object Drawing.Bitmap ($firstRect.R-$firstRect.L),($firstRect.B-$firstRect.T)
+        $firstGraphics=[Drawing.Graphics]::FromImage($firstImage); $firstDc=$firstGraphics.GetHdc()
+        try { if(-not [LifecycleWindow]::PrintWindow($window,$firstDc,2)){throw 'First window capture failed'} }
+        finally { $firstGraphics.ReleaseHdc($firstDc); $firstGraphics.Dispose() }
+        $firstFrameCaptureMs=$watch.ElapsedMilliseconds
+        $firstImage.Save("$Evidence\run-$run-first-window.png"); $firstImage.Dispose()
         $bridgeStart = New-Object Diagnostics.ProcessStartInfo ([IO.Path]::GetFullPath($Exe))
         $bridgeStart.UseShellExecute=$false; $bridgeStart.CreateNoWindow=$true; $bridgeStart.Arguments='--mcp'
         $bridgeStart.RedirectStandardInput=$true; $bridgeStart.RedirectStandardOutput=$true; $bridgeStart.RedirectStandardError=$true
@@ -76,6 +84,8 @@ for ($run = 1; $run -le $Runs; $run++) {
         $diagnostics = Rpc $bridge @{jsonrpc='2.0';id=2;method='tools/call';params=@{name='get_diagnostics';arguments=@{}}}
         $diagnostics.structuredContent | ConvertTo-Json -Depth 60 | Set-Content -Encoding UTF8 "$Evidence\run-$run-diagnostics.json"
         if ($null -eq $diagnostics.structuredContent.lifecycle.startup.windowOpened) { throw 'Missing production lifecycle diagnostics' }
+        $catalog = Rpc $bridge @{jsonrpc='2.0';id=5;method='tools/list';params=@{}}
+        $catalog | ConvertTo-Json -Depth 70 | Set-Content -Encoding UTF8 "$Evidence\run-$run-catalog.json"
         $pending = Rpc $bridge @{jsonrpc='2.0';id=3;method='tools/call';params=@{name='lan_sync_status';arguments=@{}}}
         $startupDeadline = [DateTime]::UtcNow.AddSeconds(10)
         while (-not $pending.structuredContent.starting -and -not $pending.structuredContent.enabled -and [DateTime]::UtcNow -lt $startupDeadline) {
@@ -156,7 +166,7 @@ for ($run = 1; $run -le $Runs; $run++) {
         }
         if (-not $process.WaitForExit(30000)) { throw 'Client failed to exit normally within 30 seconds' }
         if ($helper -and -not $helper.WaitForExit(3000)) { throw 'Firewall helper was left running' }
-        $result = [pscustomobject]@{ run=$run; windowMs=$windowMs; exitMs=$watch.ElapsedMilliseconds; menuGoneMs=$menuGoneMs; helperStopped=($null -eq $helper -or $helper.HasExited); exitCode=$process.ExitCode; mcpResponsive=$true; startingWhenQueried=$pending.structuredContent.starting; data=$data }
+        $result = [pscustomobject]@{ run=$run; windowMs=$windowMs; firstFrameCaptureMs=$firstFrameCaptureMs; exitMs=$watch.ElapsedMilliseconds; menuGoneMs=$menuGoneMs; helperStopped=($null -eq $helper -or $helper.HasExited); exitCode=$process.ExitCode; mcpResponsive=$true; startingWhenQueried=$pending.structuredContent.starting; data=$data }
         $results += $result; $result | ConvertTo-Json -Compress
     } finally {
         if ($bridge) { if (-not $bridge.HasExited) { $bridge.StandardInput.Close(); if (-not $bridge.WaitForExit(3000)) { $bridge.Kill() } }; $bridge.Dispose() }

@@ -36,7 +36,7 @@ Both output modes control the current endpoint master volume; in shared mode thi
 
 ## 开发与验证
 
-日常运行入口是仓库根目录的 `bin/JeekMusic.exe`。双击根目录 `build-and-run.cmd`：先退出本仓库新旧日常客户端，再构建 Windows x64 自包含版本，最后启动新版本。编译需要 .NET 10 SDK；运行和复制该版本无需安装 .NET，也无需安装软件或管理员权限。失败时保留错误信息，不启动旧产物。
+日常运行入口是仓库根目录的 `bin/JeekMusic.exe`。双击根目录 `build-and-run.cmd`：先退出本仓库新旧日常客户端，再发布 Release Windows x64 自包含的 Composite ReadyToRun 预编译版本，最后启动新版本。预编译缩短打开时的即时编译等待，首次构建更久，`runtime/JeekMusic.r2r.dll` 占用额外磁盘空间。编译需要 .NET 10 SDK；运行和复制该版本无需安装 .NET，也无需安装软件或管理员权限。失败时保留错误信息，不启动旧产物。
 
 `bin/` 是完整绿色软件目录，可以整体复制到其他可写目录：
 
@@ -57,13 +57,13 @@ Both output modes control the current endpoint master volume; in shared mode thi
 日常构建的等价命令（先退出客户端）：
 
 ```powershell
-dotnet build desktop/src/JeekMusic.App -r win-x64 --self-contained true -p:PublishAot=false -p:JeekStageDailyBuild=true -p:JeekMigrateLegacyData=true
+dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 --self-contained true -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true -p:JeekStageDailyPublish=true -p:JeekMigrateLegacyData=true
 ./bin/JeekMusic.exe
 ```
 
-普通 `dotnet build`、`dotnet test`、带 RID 的其他构建和所有 publish 都不会更新根 `bin/`；只有显式 `JeekStageDailyBuild=true` 的 Windows x64 自包含 build 会同步完整日常目录，包括增量构建。直接将 `-o`、`OutputPath` 或 `PublishDir` 指向根 `bin/` 或其子目录会被拒绝。
+普通 `dotnet build`、`dotnet test` 和 publish 不会更新根 `bin/`。上述显式 `JeekStageDailyPublish=true` 在预编译完成后同步日常目录；只接受 Release、win-x64、自包含、PublishAot=false 和两项 ReadyToRun=true。调试时仍可使用 `dotnet build ... -p:JeekStageDailyBuild=true` 的旧入口，包括增量构建。直接将 `-o`、`OutputPath` 或 `PublishDir` 指向根 `bin/` 或其子目录会被拒绝。
 
-编译和还原的中间产物继续保存在各工程自己的 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/`，编译结果保存在对应工程的 `bin/` 下；它们与仓库根目录的绿色 `bin/` 完全分离。开发日志、截图、测试夹具和迁移备份统一放 `desktop/artifacts/`，不放日常运行目录。同步脚本拒绝重解析点，过期运行依赖仅按上次清单移到 artifacts 备份，不通配删除 DLL，不修改用户数据或未知文件。
+编译和还原的中间产物继续保存在各工程自己的 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/`；ReadyToRun 另加 `_r2r-true_composite-<PublishReadyToRunComposite>` 后缀，避免还原/预编译缓存混用。编译结果保存在对应工程的 `bin/` 下；它们与仓库根目录的绿色 `bin/` 完全分离。开发日志、截图、测试夹具和迁移备份统一放 `desktop/artifacts/`，不放日常运行目录。同步脚本拒绝重解析点，过期运行依赖仅按上次清单移到 artifacts 备份，不通配删除 DLL，不修改用户数据或未知文件。
 
 正式发布仍使用 NativeAOT，需 Git Bash 和 Visual Studio C++ 链接工具，发布目录与日常目录分离。正式包使用同一绿色数据规则和同一套 MCP；NativeAOT 无需托管运行时，其原生 DLL 保留发布器要求的相对位置：
 
@@ -81,6 +81,7 @@ python desktop/tools/collect-licenses.py desktop/artifacts/publish --assets $ass
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-runtime-layout.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-startup-build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Relocate
 python desktop/tools/test_build_workflow.py
 python desktop/tools/test-build-isolation.py

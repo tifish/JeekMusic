@@ -48,6 +48,8 @@ internal static class LifecycleTimings
         {
             ["units"] = "milliseconds",
             ["shutdownState"] = shutdownState,
+            ["compositeImagePresent"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "JeekMusic.r2r.dll")),
+            ["startupWork"] = new JsonObject(Stages.Where(p => p.Key.StartsWith("startupWork.")).Select(p => KeyValuePair.Create<string, JsonNode?>(p.Key[12..], JsonValue.Create(p.Value)))),
             ["startup"] = new JsonObject(Stages.Where(p => p.Key.StartsWith("startup.")).Select(p => KeyValuePair.Create<string, JsonNode?>(p.Key[8..], JsonValue.Create(p.Value)))),
             ["shutdown"] = new JsonObject(Stages.Where(p => p.Key.StartsWith("shutdown.")).Select(p => KeyValuePair.Create<string, JsonNode?>(p.Key[9..], JsonValue.Create(p.Value))))
         };

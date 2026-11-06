@@ -1,5 +1,16 @@
 # 实现与验证记录
 
+## 2026-11-07：预编译日常版本与按需音频初始化
+
+- 启动分段测量确认托管 Debug 的主题加载、主窗口构造与即时编译是主要前台开销。日常 `build-and-run.cmd` 改用 Release 自包含 Composite ReadyToRun publish，显式 `JeekStageDailyPublish=true` 在预编译结束后沿用既有绿色目录同步。普通 build/test/publish 不替换日常版本，旧 `JeekStageDailyBuild` 调试入口保留。R2R 与 composite 的 obj/bin/assets graph 另加后缀隔离；代价是更长的首次构建和额外 **136376320 字节**预编译映像，不安装常驻预启动程序。
+- 窗口出现前只恢复设备偏好，停止过早的设备轮询；显示窗口后启动只读音量监测，托盘与关联显示名称刷新后移。保存的队列/手动项/顺序/当前歌曲/进度在内存恢复，保持暂停与输出空闲，首次播放才创建 libmpv；首次播放仍验证设备和音量安全。恢复后的暂停跳转与 CUE 偏移保留，未读设备显示“正在读取设备音量”（中英），不显示读取失败或写历史音量。首次播放需要承担延后的引擎初始化开销。
+- 最终真实根 `bin/JeekMusic.exe`，日常曲库/队列的隔离副本、常规负载下连续三次：窗口可见 **666 / 661 / 690 ms**；MCP 记录窗口 Opened **639 / 641 / 681 ms**、151 行 Rows 就绪 **719 / 712 / 761 ms**。PrintWindow 首张抓图完成 **1136 / 1085 / 1210 ms**，已目检导航、实际歌曲表格、保存进度和待读取音量状态；抓图时间包含 PrintWindow 自身耗时，不冒充实际首帧呈现时间。未清空 Windows 文件缓存、未重启电脑；另两次与构建任务相邻的样本为 787/1114 ms，不宣称任意冷启动都瞬开。
+- 真实托盘菜单验收两轮，菜单 **63 / 51 ms** 消失、进程 **1593 / 1488 ms** 正常结束且助手已退出。正式 NativeAOT 空曲库隔离客户端：窗口 **377 ms**、菜单 **65 ms** 消失、退出 **1043 ms**，截图/MCP 通过；未据此覆盖先前大曲库 Skia 首次启动的未定位问题。日常与 NativeAOT 的 **41 项 MCP 工具描述、Schema 完全一致**。
+- 增加启动恢复不访问设备/不创建引擎、auto/指定设备选择、首播才检查读失败、CUE 暂停跳转及队列/进度/音量安全回归。全量 App **755 通过、2 项既有真实设备测试跳过**；随后待读取音量状态补充的定向 Output/Startup/TemporaryDeviceFormat/MCP/Layout **144 通过、0 失败/跳过**。`test-startup-build.ps1` 通过真实 MSBuild 评估验证 managed/R2R/composite 的输出与 assets 分离、无效日常 publish 先于同步拒绝；`test-runtime-layout.ps1` 验证迁移、数据保留、过期依赖隔离和链接保护通过。实际日常 publish/同步通过，正式 NativeAOT 发布通过（第三方既有 IL2104/IL3053）。
+- MCP 兼容增加 `lifecycle.startupWork`、更多累计启动阶段、`compositeImagePresent`、`volumeState.endpointReadPending`，明确首次播放前 engineReady=false/idle=true 是正常行为；无新输入、开发专用工具或功能开关。README、构建命令、参数说明和测量脚本同步维护。
+- 预编译日常绿色包完整复制到带空格的新目录后，真实客户端通过路径/MCP 校验以及限时合成 WAV 的原生解码与 ONNX 模型诊断（不播放音频），证据 `desktop/artifacts/portable-check-dfe63d48350c43f8bf337e4b9ef3d1a4/`。
+- 证据仅存本机忽略目录 `desktop/artifacts/startup-*`：分段日志、初始/就绪窗口与菜单截图、两种产物的完整工具目录、TRX 和构建布局记录。本轮测试继续关闭在线获取/嵌入和自动分析，未触发真实媒体写入；重启前通过当前客户端 checkpoint 保存队列、设置和布局。
+
 ## 2026-11-06：托盘退出菜单即时响应
 
 - 用户复测仍看到托盘菜单停顿：退出回调内直接销毁托盘并同步等待清理，菜单消息尚未返回。现在退出请求只排入 Background 调度，回调返回后保存布局、关闭其他窗口/托盘、隐藏主窗，再异步等待防火墙清理。单实例互斥量回到 UI 所属线程释放；清理期间屏蔽 LAN 迟到通知和窗口重新显示，保留全部保存与规则验证。

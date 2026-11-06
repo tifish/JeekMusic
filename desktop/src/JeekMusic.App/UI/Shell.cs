@@ -13,7 +13,7 @@ namespace JeekMusic.UI;
 
 /// <summary>
 /// 把服务和界面连起来（设计 §8、§12）：主窗口、托盘、任务栏、SMTC、全局快捷键、单实例、退出。
-/// 启动顺序：读快照 → 后台读曲库 → 显示窗口 → 首帧之后创建 mpv、SMTC、任务栏按钮 → 曲库到了恢复上次的队列。
+/// 启动顺序：读快照 → 后台读曲库 → 显示窗口 → 恢复队列并挂接系统媒体/任务栏；首次播放时才创建 mpv。
 /// </summary>
 public sealed partial class Shell
 {
@@ -44,15 +44,13 @@ public sealed partial class Shell
         // 曲库在后台读，窗口先显示出来
         _ = _app.Library.StartAsync();
 
-        _main = new MainWindow(_app);
-        RestoreWindow();
+        using (LifecycleTimings.Measure("startupWork.windowConstruction")) _main = new MainWindow(_app);
+        using (LifecycleTimings.Measure("startupWork.windowRestore")) RestoreWindow();
         _app.CheckpointWindow = SaveWindow;
         _main.ViewModel.InitialTarget = InitialTarget();
         _main.Opened += (_, _) => OnFirstShown();
         _main.ViewModel.SnapshotApplied += OnSnapshotApplied;
         _main.TrayHint += () => _main.ViewModel.ShowToast(L.T("Jeek Music 仍在后台播放，可以从任务栏右下角的托盘图标退出"));
-        CreateTray();
-
         _app.Instance?.Received += args => Dispatcher.UIThread.Post(() => OnInstanceArgs(args));
         _app.Instance?.Listen();
 
@@ -156,17 +154,22 @@ public sealed partial class Shell
         _app.Hotkeys.Pressed += OnHotkey;
         ApplyHotkeys();
         _app.Settings.Changed += c => { if (c == "hotkeys") ApplyHotkeys(); };
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_exiting) return;
+            using (LifecycleTimings.Measure("startupWork.tray")) CreateTray();
+            Platform.FileAssociations.RefreshRegisteredDisplayNames();
+        }, DispatcherPriority.Background);
         DispatcherTimer.RunOnce(() =>
         {
             if (_exiting) return;
-            _app.Player.EnsureEngine();
+            _app.Player.StartOutputMonitoring();
             AttachSystemMedia();
             _app.Taskbar.Attach(_app.Messages.Hwnd, _app.Messages);
             _app.Taskbar.PlayPauseClicked += _app.Player.PlayPause;
             _app.Taskbar.PreviousClicked += _app.Player.Previous;
             _app.Taskbar.NextClicked += _app.Player.Next;
             UpdateSystemMedia();
-            if (_restored) _app.Player.PrepareRestored();
             AfterStartup();
         }, TimeSpan.FromMilliseconds(300));
     }
@@ -187,7 +190,6 @@ public sealed partial class Shell
         _restored = true;
         LifecycleTimings.Mark("startup.libraryReady");
         _app.QueuePersistence.Restore(_app.Library.Snapshot);
-        if (_app.Player.EngineReady) _app.Player.PrepareRestored();
         // 只有曲库和保存的队列就绪后才接受外部控制，避免启动恢复覆盖 MCP 命令。
         _app.Mcp.Start();
     }

@@ -21,6 +21,7 @@ static class Program
         if (args.Length >= 3 && args[0] == "--apply-update") return Update.Updater.ApplyUpdate(args[1], args[2]);
         // MCP 子进程只转发标准输入输出，不创建窗口，也不触发单实例窗口激活。
         if (args is ["--mcp"]) return Automation.McpBridge.RunAsync().GetAwaiter().GetResult();
+        LifecycleTimings.Mark("startup.mainEntered");
 
         // 单实例（需求 PC-7）：已经在运行时把参数交给它，然后退出
         Instance = new SingleInstance();
@@ -34,6 +35,7 @@ static class Program
         TaskScheduler.UnobservedTaskException += (_, e) => { Log.Error("app", "未观察的任务异常", e.Exception); e.SetObserved(); };
         Log.Info("app", $"启动 {typeof(Program).Assembly.GetName().Version} {string.Join(' ', args)}");
         Online.TagWriteRecovery.RecoverBeforeScan(); // before library startup/scanner can delete a temporarily absent path
+        LifecycleTimings.Mark("startup.platformStarting");
         try
         {
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnExplicitShutdown);

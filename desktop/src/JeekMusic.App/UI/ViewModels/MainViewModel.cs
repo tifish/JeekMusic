@@ -452,6 +452,7 @@ public sealed partial class MainViewModel : ObservableObject
                 if (!_firstContentLogged && rows.Count > 0)
                 {
                     _firstContentLogged = true;
+                    Infrastructure.LifecycleTimings.Mark("startup.rowsReady");
                     Infrastructure.Log.Info("startup", $"{rows.Count} rows ready after {(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds:F0} ms");
                 }
                 var available = rows.Count(r => r.Available);

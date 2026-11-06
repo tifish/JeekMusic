@@ -42,10 +42,12 @@ try {
             New-NetFirewallRule -PolicyStore PersistentStore -Name $name -DisplayName 'JeekMusic music sync (managed)' -Group $group -Description $marker -Program $request.program -Direction Inbound -Action Allow -Enabled True -Protocol TCP -LocalPort $request.port -RemotePort Any -LocalAddress $local -RemoteAddress Any -Profile Any -EdgeTraversalPolicy Block | Out-Null
         }
     }
-    $owned = @(Rules 'PersistentStore' | Where-Object { Owned $_ })
-    $active = @(Rules 'ActiveStore' | Where-Object { Exact $_ })
+    if ($apply) { $owned = @(Rules 'PersistentStore' | Where-Object { Owned $_ }) }
+    # A stopped listener only requires verifying removal of our owned rules.
+    # Active policy/profile enumeration cannot affect that result.
+    $active = @(if ($needed) { Rules 'ActiveStore' | Where-Object { Exact $_ } })
     $satisfied = if ($needed) { $owned.Count -eq 1 -and @($owned | Where-Object { Exact $_ }).Count -eq 1 -and $active.Count -eq 1 } else { $owned.Count -eq 0 }
-    $profiles = @(Get-NetFirewallProfile -PolicyStore ActiveStore | Select-Object Name,Enabled,AllowInboundRules,AllowLocalFirewallRules)
+    $profiles = @(if ($needed) { Get-NetFirewallProfile -PolicyStore ActiveStore | Select-Object Name,Enabled,AllowInboundRules,AllowLocalFirewallRules })
     $policyBlocked = $needed -and @($profiles | Where-Object { $_.Enabled -and ($_.AllowInboundRules -eq 'False' -or $_.AllowLocalFirewallRules -eq 'False') }).Count -gt 0
     if ($policyBlocked) { $satisfied = $false }
     $state = if ($policyBlocked) { 'policy_blocked' } elseif ($satisfied -and $needed) { 'configured' } elseif ($satisfied) { 'not_required' } else { 'repair_required' }

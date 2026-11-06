@@ -1,5 +1,15 @@
 # 实现与验证记录
 
+## 2026-11-06：启动与退出阻塞
+
+- 根因：AppServices 构造时同步恢复 LAN，窗口显示前等待 PowerShell/NetSecurity 防火墙检查；退出清理按 query/apply/query 连续启动 helper，且与本地保存串行。移至异步自动恢复，等待期间不持有 UI 线程或服务锁；监听仍在精确规则验证成功后开放。停止/退出使旧启动结果失效并释放端口预留，取消过期只读检查；规则写入仍串行完成。
+- 合并已提权进程的规则删除及验证为一次 helper，关闭监听不查询无关的 ActiveStore/Profile；只读启动检查移除重复 PersistentStore 查询。退出立即隐藏主窗口，规则清理与队列/设置/数据库保存重叠，进程仍等待清理验证结束。未省略数据保存或防火墙验证。
+- 日常 Windows x64 自包含版本真实窗口实测（相同曲库/队列的隔离副本、临时 LAN 端口，单次样本，不代表冷启动分位数）：修改前窗口 **9570 ms**、正常退出 **7345 ms**；最终 MCP 验收窗口 **1542 ms**、正常退出 **2556 ms**。检查未完成时提前退出：窗口 **1387 ms**、退出 **2313 ms**。MCP 实际读到 starting=true、enabled=false、port=0、firewall=pending，并能读取完整诊断；正常轮随后确认 enabled=true、firewall=configured。实际 WM_CLOSE 正常退出，exitCode=0；已目检真实 PrintWindow 截图的曲库、队列恢复与视觉状态。
+- 全量 Core **118 通过**；App **749 通过、2 跳过**（既有显式真实音频设备测试）。之后补充过期只读检查取消回归，最终 LanLifecycle/LanFirewall/McpSession 定向 **74 通过、0 失败/跳过**，覆盖延迟防火墙期间诊断可用、未验证不监听、停止/退出/立即重启/拒绝规则与既有输入协议。日常构建 0 警告/错误；NativeAOT 发布成功，保留第三方 DataGrid IL2104/IL3053 警告。
+- **NativeAOT 真实 UI 完整验收未通过**：两个新隔离目录启动出现 libSkiaSharp.dll 0xc0000005（偏移 0x2a0934，Windows Application Error）；其中一个目录随后成功启动并正常退出，但不据此宣称正式包验收通过。该图形崩溃未定位，日常托管自包含版的上述真实验收通过。
+- MCP `get_diagnostics.lifecycle`、LAN `starting` 与 `firewall.durationMs` 为兼容的只读返回字段，无新增参数/开发专用工具；工具描述和使用文档同步更新。真实证据均在本机忽略目录 `desktop/artifacts/lifecycle-*`，含最终 MCP 诊断、截图、日志及测试 TRX；失败测试残留的三个测试数据目录所属防火墙规则已按精确身份清理。
+- **验收副作用记录**：早期脚本把已完成嵌入标志错误重置为 false，触发现有缓存歌词嵌入，导致真实曲库一首歌写入缓存歌词；生产日志的音频/其他元数据保留校验通过，但没有完整原文件备份，未宣称恢复原始标签。已向用户说明。最终脚本改为 AppCache/HiddenFolder 并保留已完成标志，关闭在线获取/自动分析，后续验收未再写入媒体。私有歌曲名及路径仅留在本机 artifacts，不提交。
+
 ## 2026-11-06：bin 绿色运行目录
 
 - 日常入口改为根 `bin/JeekMusic.exe`，主程序以相对路径加载 `runtime/JeekMusic.dll`；依赖和自包含 .NET 放 `runtime/`，模型、分析脚本、许可证分别放 `Models/`、`Preferences/`、`licenses/`，用户状态放 `data/`。PDB、链接库、构建缓存、测试结果和同步清单均留在工程输出或 `desktop/artifacts/`。普通 build/test/publish 不更新日常目录。

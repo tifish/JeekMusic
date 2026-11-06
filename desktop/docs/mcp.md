@@ -1,5 +1,30 @@
 # Windows MCP 接口
 
+## 启动、退出耗时诊断
+
+`get_diagnostics` 无参数，兼容增加 `lifecycle`：`units="milliseconds"`，
+`startup.servicesReady/windowOpened/libraryReady` 是从进程创建到对应阶段的累计毫秒数；
+`shutdown` 是本进程已完成退出阶段的单独耗时。退出后通过日志读取
+`[lifecycle] shutdown.preferences/player/library/firewallWait/total`，也可以用
+`get_logs` 在下次启动后查看上次退出记录。时间诊断不包含歌曲名、凭据或音频数据。
+
+局域网自动恢复异步执行，`lan_sync_status.starting=true` 且 `enabled=false/port=0`
+表示正在检查防火墙，主窗口、MCP 和本地播放可以继续使用。只有精确规则验证成功才开始监听。
+`lan_sync_control action="start"` 仍在监听就绪或失败后返回；等待期间不占用 UI 线程或服务锁。
+`action="stop"` 可取消尚未完成的启动，旧结果不会重新打开服务；配置监听地址前仍须先停止服务。
+`firewall.durationMs` 是最后一次防火墙检查/清理的耗时。现有工具和参数 Schema 保持兼容，
+开发版、正式 NativeAOT 版使用同一实现。正常退出关闭监听并等待所属规则清理验证，不跳过保存。
+
+真实客户端测量脚本（Windows PowerShell 5.1/7）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-lifecycle.ps1
+```
+
+脚本使用独立数据目录、无配对设备的临时端口、真实后台窗口和 PrintWindow 截图，
+通过 WM_CLOSE 测量正常退出，证据写入 `desktop/artifacts/lifecycle/`。
+复制日常曲库和队列用于恢复验证，关闭在线获取、自动分析和歌词/封面嵌入；不修改日常设置。
+
 ## 双端文件同步冲突
 
 `lan_file_conflicts` 与 PC 主界面提示和冲突窗口共用服务：`action="list"`

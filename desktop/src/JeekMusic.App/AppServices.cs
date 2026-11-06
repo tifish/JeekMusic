@@ -71,21 +71,25 @@ public sealed class AppServices : IDisposable
         Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
         LanSync = new Sync.LanSyncService(this);
         Mcp = new Automation.McpServer(new Automation.McpTools(this));
+        LifecycleTimings.Mark("startup.servicesReady");
     }
 
     public void Dispose()
     {
+        using var total = LifecycleTimings.Measure("shutdown.total");
         Mcp.Dispose();
-        LanSync.Dispose();
-        Preferences.Dispose();
+        // Close the listener now and overlap verified rule cleanup with local persistence.
+        var lanStopped = LanSync.StopForExit();
+        using (LifecycleTimings.Measure("shutdown.preferences")) Preferences.Dispose();
         if (OnExit is { } handlers)
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception e) { Log.Warn("app", "停止后台服务失败", e); }
         try { QueuePersistence.SaveQueue(); } catch (Exception e) { Log.Warn("app", "保存队列失败", e); }
-        Player.Dispose();
+        using (LifecycleTimings.Measure("shutdown.player")) Player.Dispose();
         Settings.WriteNow();
-        Library.Dispose();
+        using (LifecycleTimings.Measure("shutdown.library")) Library.Dispose();
         Db.Dispose();
+        using (LifecycleTimings.Measure("shutdown.firewallWait")) lanStopped.GetAwaiter().GetResult();
         Instance?.Dispose();
         Log.Flush();
     }

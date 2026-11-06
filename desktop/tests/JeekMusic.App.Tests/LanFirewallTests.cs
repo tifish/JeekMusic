@@ -5,6 +5,26 @@ namespace JeekMusic.App.Tests;
 
 public sealed class LanFirewallTests
 {
+    sealed class PendingQuery : ILanFirewallBackend
+    {
+        internal TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<JsonObject> Query(LanFirewallRequest request) { Entered.TrySetResult(); return new TaskCompletionSource<JsonObject>().Task; }
+        public Task<int> Apply(LanFirewallRequest request) => throw new InvalidOperationException();
+        public Task<JsonObject> Remove(LanFirewallRequest request) => Task.FromResult(new JsonObject { ["satisfied"] = true, ["state"] = "not_required" });
+    }
+
+    [Fact]
+    public async Task StopCancelsStaleReadWithoutWaitingForItsTimeout()
+    {
+        var backend = new PendingQuery();
+        var firewall = new LanFirewall(backend, new string('a', 64), @"C:\app\JeekMusic.exe", () => { });
+        var start = firewall.Set("0.0.0.0", 40000);
+        await backend.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firewall.Set("0.0.0.0", 0).WaitAsync(TimeSpan.FromSeconds(2));
+        await start.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal("not_required", firewall.Status()["state"]!.GetValue<string>());
+    }
+
     sealed class Fake : ILanFirewallBackend
     {
         internal List<LanFirewallRequest> Applied = [];

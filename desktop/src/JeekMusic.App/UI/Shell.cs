@@ -146,6 +146,7 @@ public sealed partial class Shell
     {
         if (_firstShown) return;
         _firstShown = true;
+        LifecycleTimings.Mark("startup.windowOpened");
         Log.Info("startup", $"Window opened after {(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds:F0} ms");
         // 窗口句柄：隐藏启动时也要有（快捷键、任务栏消息都发给它）
         _app.Messages.Attach(_main);
@@ -182,6 +183,7 @@ public sealed partial class Shell
         }
         if (_restored) return;
         _restored = true;
+        LifecycleTimings.Mark("startup.libraryReady");
         _app.QueuePersistence.Restore(_app.Library.Snapshot);
         if (_app.Player.EngineReady) _app.Player.PrepareRestored();
         // 只有曲库和保存的队列就绪后才接受外部控制，避免启动恢复覆盖 MCP 命令。
@@ -362,6 +364,7 @@ public sealed partial class Shell
         SaveWindow();
         BeforeExit();
         _tray?.Dispose();
+        _main.Hide();
         _app.Dispose();
         _desktop.Shutdown();
     }

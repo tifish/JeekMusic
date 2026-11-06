@@ -24,7 +24,17 @@ internal sealed record LanFirewallRequest(string Owner, string Program, string B
 internal interface ILanFirewallBackend
 {
     Task<JsonObject> Query(LanFirewallRequest request);
+    Task<JsonObject> Query(LanFirewallRequest request, CancellationToken cancel) => Query(request).WaitAsync(cancel);
     Task<int> Apply(LanFirewallRequest request);
+    async Task<JsonObject> Remove(LanFirewallRequest request)
+    {
+        var result = await Query(request);
+        if (result["satisfied"]?.GetValue<bool>() == true) return result;
+        var exit = await Apply(request);
+        result = await Query(request);
+        if (exit != 0) { result["satisfied"] = false; result["helperExitCode"] = exit; }
+        return result;
+    }
 }
 
 /// <summary>One serialized desired state per current-user data directory. No general command endpoint.</summary>
@@ -36,6 +46,7 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
     Task pending = Task.CompletedTask;
     JsonObject status = new() { ["state"] = "not_checked", ["message"] = "Windows firewall has not been checked.", ["reachability"] = "not_verified" };
     long revision;
+    CancellationTokenSource readCancel = new();
 
     internal static LanFirewall Create(Action changed)
     {
@@ -49,15 +60,18 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
         LanFirewallRequest.Validate(owner, bind, port);
         lock (gate)
         {
+            readCancel.Cancel(); readCancel.Dispose(); readCancel = new();
             desired = new(owner, program, bind, port); var version = ++revision;
             status = desired.Json(); status["state"] = "pending"; status["reachability"] = "not_verified";
-            pending = Task.Run(() => Reconcile(version)); return pending;
+            var cancel = readCancel.Token;
+            pending = Task.Run(() => Reconcile(version, cancel)); return pending;
         }
     }
     internal Task Wait() { lock (gate) return pending; }
-    async Task Reconcile(long version)
+    async Task Reconcile(long version, CancellationToken cancel)
     {
-        await serial.WaitAsync();
+        try { await serial.WaitAsync(cancel); }
+        catch (OperationCanceledException) { return; }
         try
         {
             LanFirewallRequest request;
@@ -65,13 +79,14 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
             JsonObject result;
             try
             {
-                result = await backend.Query(request);
-                if (result["satisfied"]?.GetValue<bool>() != true)
+                var watch = Stopwatch.StartNew();
+                result = request.Needed ? await backend.Query(request, cancel) : await backend.Remove(request);
+                if (request.Needed && result["satisfied"]?.GetValue<bool>() != true)
                 {
                     lock (gate) { if (version != revision) return; status["state"] = "configuring"; status["message"] = "Updating the application TCP rule; Windows may request administrator consent."; }
                     changed();
                     var exit = await backend.Apply(request);
-                    result = await backend.Query(request);
+                    result = await backend.Query(request, cancel);
                     if (exit != 0 || result["satisfied"]?.GetValue<bool>() != true)
                     {
                         result["state"] = result["state"]?.GetValue<string>() == "policy_blocked" ? "policy_blocked" : exit == 1223 ? "uac_cancelled" : exit == 5 ? "access_denied" : "configuration_failed";
@@ -79,7 +94,10 @@ internal sealed class LanFirewall(ILanFirewallBackend backend, string owner, str
                         result["helperExitCode"] = exit;
                     }
                 }
+                result["durationMs"] = watch.ElapsedMilliseconds;
+                Log.Info("lifecycle", $"Firewall {(request.Needed ? "start" : "cleanup")}: {watch.ElapsedMilliseconds} ms ({result["state"]})");
             }
+            catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
             catch (Exception e) when (e is IOException or Win32Exception or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException or TimeoutException)
             {
                 result = new() { ["state"] = "check_failed", ["message"] = "Windows firewall status could not be verified: " + e.GetType().Name };
@@ -105,21 +123,40 @@ internal sealed class WindowsLanFirewall : ILanFirewallBackend
         var source = "$request=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + data + "'))|ConvertFrom-Json; $apply=$" + (apply ? "true" : "false") + ";\n" + reader.ReadToEnd();
         return Convert.ToBase64String(Encoding.Unicode.GetBytes(source));
     }
-    static async Task<(int Exit, string Output)> Run(LanFirewallRequest request, bool apply)
+    static async Task<(int Exit, string Output)> Run(LanFirewallRequest request, bool apply, CancellationToken cancel = default)
     {
         var start = new ProcessStartInfo(PowerShell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var arg in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Encoded(request, apply) }) start.ArgumentList.Add(arg);
         using var child = Process.Start(start) ?? throw new IOException("Firewall query could not start");
         var output = child.StandardOutput.ReadToEndAsync(); var error = child.StandardError.ReadToEndAsync();
-        try { await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(45)); }
+        try { await child.WaitForExitAsync(cancel).WaitAsync(TimeSpan.FromSeconds(45), cancel); }
         catch (TimeoutException) { child.Kill(entireProcessTree: true); throw; }
+        catch (OperationCanceledException) { if (!child.HasExited) child.Kill(entireProcessTree: true); await child.WaitForExitAsync(); throw; }
         await error; return (child.ExitCode, await output);
     }
-    public async Task<JsonObject> Query(LanFirewallRequest request)
+    public Task<JsonObject> Query(LanFirewallRequest request) => Query(request, CancellationToken.None);
+    public async Task<JsonObject> Query(LanFirewallRequest request, CancellationToken cancel)
     {
-        var result = await Run(request, false);
+        var result = await Run(request, false, cancel);
         if (result.Exit != 0) throw new IOException("Windows firewall query failed");
         return JsonNode.Parse(result.Output)?.AsObject() ?? throw new IOException("Windows firewall query returned no result");
+    }
+    public async Task<JsonObject> Remove(LanFirewallRequest request)
+    {
+        // With an existing elevated token, remove and verify in one helper process.
+        // Non-elevated callers retain the exact-rule query and fixed UAC helper.
+        if (new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
+        {
+            var result = await Run(request, true);
+            if (result.Exit != 0) throw new IOException("Windows firewall cleanup failed");
+            return JsonNode.Parse(result.Output)?.AsObject() ?? throw new IOException("Windows firewall cleanup returned no result");
+        }
+        var current = await Query(request);
+        if (current["satisfied"]?.GetValue<bool>() == true) return current;
+        var exit = await Apply(request);
+        current = await Query(request);
+        if (exit != 0) { current["state"] = exit == 1223 ? "uac_cancelled" : "configuration_failed"; current["satisfied"] = false; current["helperExitCode"] = exit; }
+        return current;
     }
     public async Task<int> Apply(LanFirewallRequest request)
     {

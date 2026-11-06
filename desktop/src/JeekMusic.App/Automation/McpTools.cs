@@ -92,6 +92,8 @@ public sealed class McpTools
 
     static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0, bool openWorld = false)
     {
+        if (name == "get_diagnostics") description += " lifecycle reports startup servicesReady/windowOpened/libraryReady milliseconds since process creation and measured shutdown stage durations; shutdown totals are recorded in get_logs after exit. No arguments.";
+        if (name is "lan_sync_status" or "lan_sync_control") description += " Automatic startup is asynchronous: starting=true with enabled=false/port=0 means firewall verification is pending; the UI, MCP and local playback remain available. start waits asynchronously for the same verified listener; stop cancels pending startup. firewall.durationMs measures the last reconciliation. No new inputs.";
         var tool = new JsonObject
         {
             ["name"] = name, ["description"] = description,
@@ -136,6 +138,11 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "start")
+        {
+            await app.LanSync.StartAsync(a["port"]?.GetValue<int>());
+            return app.LanSync.Diagnostics();
+        }
         if(name=="lan_file_conflicts") {
             if(Required(a,"action").GetValue<string>()=="open") { await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(()=> { if(app.ShowSyncConflicts is null)throw new InvalidOperationException("Main window not ready");app.ShowSyncConflicts(); });return new JsonObject { ["opened"]=true }; }
             return await app.LanSync.FileConflicts(Required(a,"action").GetValue<string>(),a["id"]?.GetValue<string>(),a["choice"]?.GetValue<string>(),a["offset"]?.GetValue<int>()??0);
@@ -269,7 +276,7 @@ public sealed class McpTools
                 switch (Required(a, "action").GetValue<string>())
                 {
                     case "firewall_repair": throw new InvalidOperationException("Use asynchronous firewall repair");
-                    case "start": app.LanSync.Start(a["port"]?.GetValue<int>()); break;
+                    case "start": throw new InvalidOperationException("Use asynchronous LAN start");
                     case "stop": app.LanSync.Stop(); break;
                     case "share": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), true);
                     case "unshare": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), false);
@@ -462,6 +469,7 @@ public sealed class McpTools
                     ["version"] = typeof(McpTools).Assembly.GetName().Version?.ToString(), ["protocolVersion"] = McpSession.ProtocolVersion,
                     ["processId"] = Environment.ProcessId, ["dataDirectory"] = Path.GetFullPath(AppPaths.DataDir),
                     ["processPath"] = Environment.ProcessPath,
+                    ["lifecycle"] = LifecycleTimings.Diagnostics(),
                     ["frameworkDescription"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                     ["processArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
                     ["dynamicCodeSupported"] = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported,

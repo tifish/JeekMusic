@@ -47,6 +47,11 @@ public sealed partial class LanSyncService : IDisposable
     JsonObject _config;
     TcpListener? _listener;
     int _firewallPendingPort;
+    long _listenerRevision;
+    bool _disposed;
+    Task? _starting;
+    Socket? _reservation;
+    public bool Starting => _starting is { IsCompleted: false };
     CancellationTokenSource? _stop;
     string? _invitation;
     DateTime _invitationUntil;
@@ -64,10 +69,13 @@ public sealed partial class LanSyncService : IDisposable
     JsonObject Roots => _config["roots"]!.AsObject();
     JsonObject Devices => _config["devices"]!.AsObject();
 
-    public LanSyncService(AppServices app)
+    public LanSyncService(AppServices app) : this(app, null, null, true) { }
+
+    internal LanSyncService(AppServices app, LanFirewall? firewall, string? configPath, bool autoStart)
     {
         _app = app;
-        _firewall = LanFirewall.Create(Notify);
+        _firewall = firewall ?? LanFirewall.Create(Notify);
+        if (configPath is not null) _configPath = configPath;
         try { _config = JsonNode.Parse(File.ReadAllText(_configPath))!.AsObject(); }
         catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { _config = new(); }
         _config["bindAddress"] ??= _config["port"] is null ? "127.0.0.1" : "0.0.0.0";
@@ -86,9 +94,14 @@ public sealed partial class LanSyncService : IDisposable
         app.Library.SnapshotChanged += ReconcileRoots;
         app.Library.Watcher.DirsChanged += OnFileDirectoriesChanged;
         app.Library.Watcher.Failed += OnFileWatcherFailed;
-        if (_config["enabled"]?.GetValue<bool>() == true)
-            try { Start(); } catch (IOException) { /* A failed optional listener must not prevent player startup. */ }
-        else if (_config["firewallManaged"]?.GetValue<bool>() == true) _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
+        // Optional network setup must not delay construction of the main window.
+        if (autoStart) Dispatcher.UIThread.Post(async () =>
+        {
+            if (_disposed) return;
+            if (_config["enabled"]?.GetValue<bool>() == true)
+                try { await StartAsync(); } catch (IOException) { /* Player remains usable. */ }
+            else if (_config["firewallManaged"]?.GetValue<bool>() == true) await _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
+        }, DispatcherPriority.Background);
     }
 
     X509Certificate2 Certificate()
@@ -119,33 +132,57 @@ public sealed partial class LanSyncService : IDisposable
 
     void Save() => SyncFeature.AtomicWrite(_configPath, _config.ToJsonString());
     void Notify() => Dispatcher.UIThread.Post(() => Changed?.Invoke());
-    public void Start(int? port = null)
+    public Task StartAsync(int? port = null)
     {
+        if (_starting is { IsCompleted: false }) return _starting;
+        return _starting = StartCoreAsync(port);
+    }
+
+    async Task StartCoreAsync(int? port)
+    {
+        long revision;
+        IPAddress bind;
+        int actualPort;
+        Socket? reservation = null;
+        Task firewall = Task.CompletedTask;
         lock (_gate)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_listener is not null) { _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), Port); return; }
-            try
+            revision = ++_listenerRevision;
+            bind = IPAddress.Parse(_config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0");
+            actualPort = port ?? _config["port"]?.GetValue<int>() ?? 39843;
+        }
+        try
+        {
+            lock (_gate)
             {
                 Certificate(); // Only provision a private key when the user enables LAN sharing.
                 ReconcileRoots(shareAll: true);
-                var bind = IPAddress.Parse(_config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0");
-                var actualPort = port ?? _config["port"]?.GetValue<int>() ?? 39843;
                 if (!IPAddress.IsLoopback(bind))
                 {
                     // Reserve the actual port without listening, so the precise rule exists before
                     // Windows sees an inbound listener. Port 0 never becomes an all-ports rule.
-                    using var reservation = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    _reservation = reservation = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                     reservation.Bind(new IPEndPoint(bind, actualPort));
                     actualPort = ((IPEndPoint)reservation.LocalEndPoint!).Port;
                     _config["firewallManaged"] = true; Save();
                     _firewallPendingPort = actualPort;
-                    _firewall.Set(bind.ToString(), actualPort).GetAwaiter().GetResult();
-                    if (_firewall.Status()["state"]?.GetValue<string>() != "configured")
-                    {
-                        Problem = "Windows firewall setup needs attention; the network listener was not started. See firewall status and repair.";
-                        throw new IOException(Problem);
-                    }
+                    firewall = _firewall.Set(bind.ToString(), actualPort);
                 }
+            }
+            // The service gate and UI dispatcher stay available during the helper/UAC wait.
+            Notify();
+            await firewall;
+            lock (_gate)
+            {
+                if (_disposed || revision != _listenerRevision) return;
+                if (!IPAddress.IsLoopback(bind) && _firewall.Status()["state"]?.GetValue<string>() != "configured")
+                {
+                    Problem = "Windows firewall setup needs attention; the network listener was not started. See firewall status and repair.";
+                    throw new IOException(Problem);
+                }
+                reservation?.Dispose(); reservation = null; _reservation = null;
                 _listener = new TcpListener(bind, actualPort); _listener.Start(32);
                 _stop = new CancellationTokenSource();
                 if (!IPAddress.IsLoopback(bind)) _config["firewallManaged"] = true;
@@ -154,15 +191,23 @@ public sealed partial class LanSyncService : IDisposable
                 _firewallPendingPort = 0;
                 if (IPAddress.IsLoopback(bind)) _ = _firewall.Set(bind.ToString(), Port);
             }
-            catch (SocketException) { _listener?.Stop(); _listener = null; _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0); Problem = "Cannot listen on LAN port. Check port use or local network permissions. Firewall status is reported separately."; throw new IOException(Problem); }
-            catch (Exception e) when (e is CryptographicException or UnauthorizedAccessException or IOException)
-            { _listener?.Stop(); _listener = null; if (_firewall.Status()["state"]?.GetValue<string>() == "configured") _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0); if (!Problem.StartsWith("Windows firewall", StringComparison.Ordinal)) Problem = "Cannot start LAN sharing: certificate storage or configuration is unavailable. Player remains usable."; throw new IOException(Problem); }
         }
-        Notify();
+        catch (Exception e) when (e is SocketException or CryptographicException or UnauthorizedAccessException or IOException)
+        {
+            lock (_gate)
+            {
+                if (_disposed || revision != _listenerRevision) return;
+                _listener?.Stop(); _listener = null;
+                if (e is SocketException || _firewall.Status()["state"]?.GetValue<string>() == "configured") _ = _firewall.Set(bind.ToString(), 0);
+                if (!Problem.StartsWith("Windows firewall", StringComparison.Ordinal)) Problem = "Cannot start LAN sharing: port, certificate storage or configuration is unavailable. Player remains usable.";
+                throw new IOException(Problem, e);
+            }
+        }
+        finally { reservation?.Dispose(); Notify(); }
     }
     public void Stop()
     {
-        lock (_gate) { _firewallPendingPort = 0; InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear(); _config["enabled"] = false; Save(); }
+        lock (_gate) { _listenerRevision++; _starting = null; _reservation?.Dispose(); _reservation = null; _firewallPendingPort = 0; InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear(); _config["enabled"] = false; Save(); }
         _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
         Notify();
     }
@@ -170,7 +215,7 @@ public sealed partial class LanSyncService : IDisposable
     {
         if (_firewallPendingPort > 0)
         {
-            try { Start(_firewallPendingPort); } catch (IOException) { }
+            try { await StartAsync(_firewallPendingPort); } catch (IOException) { }
             return Diagnostics();
         }
         Task pending; lock (_gate) pending = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), Port);
@@ -224,7 +269,7 @@ public sealed partial class LanSyncService : IDisposable
         if (!IPAddress.TryParse(bindAddress, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork || port is < 1 or > 65535 || (!ip.Equals(IPAddress.Any) && (ip.GetAddressBytes()[0] == 0 || ip.GetAddressBytes()[0] >= 224)) || ip.Equals(IPAddress.Broadcast)) throw new ArgumentException("IPv4 bind and port 1–65535 required");
         lock (_gate)
         {
-            if (Port != 0) throw new InvalidOperationException("Stop service before configuring listener");
+            if (Port != 0 || Starting) throw new InvalidOperationException("Stop service before configuring listener");
             _config["bindAddress"] = ip.ToString(); _config["port"] = port; Save();
         }
         Notify();
@@ -327,6 +372,7 @@ public sealed partial class LanSyncService : IDisposable
         var folders = _app.Db.Folders();
         lock (_gate) return new JsonObject
         {
+            ["starting"] = Starting,
             ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),["fileWatch"]=WatchDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
@@ -749,5 +795,21 @@ public sealed partial class LanSyncService : IDisposable
         public override void Write(byte[] bytes, int offset, int count) { cancel.ThrowIfCancellationRequested(); if (Length + count > maximum) throw new IOException("Response budget exceeded; upgrade or split data"); base.Write(bytes, offset, count); }
     }
     sealed class FrameTooLargeException : IOException { }
-    public void Dispose() { _app.Library.SnapshotChanged -= ReconcileRoots; _app.Library.Watcher.DirsChanged -= OnFileDirectoriesChanged;_app.Library.Watcher.Failed -= OnFileWatcherFailed; lock (_gate) InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _certificate?.Dispose(); if (_config["firewallManaged"]?.GetValue<bool>() == true) _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0).GetAwaiter().GetResult(); }
+    Task? _shutdown;
+    internal Task StopForExit()
+    {
+        lock (_gate)
+        {
+            if (_shutdown is not null) return _shutdown;
+            _disposed = true; _listenerRevision++; _reservation?.Dispose(); _reservation = null;
+            _app.Library.SnapshotChanged -= ReconcileRoots;
+            _app.Library.Watcher.DirsChanged -= OnFileDirectoriesChanged;
+            _app.Library.Watcher.Failed -= OnFileWatcherFailed;
+            InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null;
+            _certificate?.Dispose();
+            return _shutdown = _config["firewallManaged"]?.GetValue<bool>() == true
+                ? _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0) : Task.CompletedTask;
+        }
+    }
+    public void Dispose() => StopForExit().GetAwaiter().GetResult();
 }

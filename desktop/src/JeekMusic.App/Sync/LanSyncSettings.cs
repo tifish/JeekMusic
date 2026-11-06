@@ -50,16 +50,16 @@ internal static class LanSyncSettings
             addFolders.IsVisible = status["libraryFolderCount"]!.GetValue<int>() == 0;
             if (inviteButton is not null) inviteButton.IsEnabled = service.Port != 0;
             refreshing = true;
-            try { if (enabledSwitch is not null) enabledSwitch.IsChecked = service.Port != 0; }
+            try { if (enabledSwitch is not null) enabledSwitch.IsChecked = service.Port != 0 || service.Starting; }
             finally { refreshing = false; }
         }
         service.Changed += Refresh;
         c.App.Library.SnapshotChanged += Refresh;
         panel.DetachedFromVisualTree += (_, _) => { service.Changed -= Refresh; c.App.Library.SnapshotChanged -= Refresh; };
-        enabledSwitch = Toggle(L.T("启用局域网服务"), service.Port != 0, enabled =>
+        enabledSwitch = Toggle(L.T("启用局域网服务"), service.Port != 0 || service.Starting, async enabled =>
         {
             if (refreshing) return;
-            try { if (enabled) service.Start(); else service.Stop(); c.Window.Build(); }
+            try { if (enabled) await service.StartAsync(); else service.Stop(); c.Window.Build(); }
             catch (Exception) { Refresh(); problem.Text = L.T("无法监听端口。请检查端口占用及网络权限；防火墙结果单独显示。"); }
         });
         panel.Children.Add(enabledSwitch);

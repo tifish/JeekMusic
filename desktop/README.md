@@ -40,6 +40,8 @@ Both output modes control the current endpoint master volume; in shared mode thi
 
 日常测试直接编译并运行仓库根目录的 `output/JeekMusic.exe`，需要系统已安装 x64 .NET 10 运行时。普通无 RID 的框架依赖 build 成功后会自动把完整运行文件同步到这里；Debug 和 Release 最后一次编译覆盖测试入口，包括增量构建。复制测试版本时请复制整个 `output/`。正在运行时，先退出客户端再重新编译。
 
+双击仓库根目录的 `build-and-run.cmd` 可自动退出该 `output/` 中运行的旧客户端、编译并启动新版本；需要 .NET 10 SDK，失败时窗口会保留错误信息。也可以手动执行：
+
 ```powershell
 dotnet build desktop/src/JeekMusic.App
 ./output/JeekMusic.exe

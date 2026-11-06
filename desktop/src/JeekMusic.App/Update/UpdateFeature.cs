@@ -114,7 +114,7 @@ public sealed class UpdateFeature : IFeature
             L.T("ONNX Runtime：MIT；YAMNet 模型：Apache 2.0\n") +
             L.T("拼音、繁简对照表：由 ICU 数据生成（Unicode License）")));
         panel.Children.Add(SettingsWindow.Note("Ude.NetStandard: MPL 1.1"));
-        panel.Children.Add(SettingsWindow.Action(L.T("查看完整许可证"), () => Open(System.IO.Path.Combine(AppContext.BaseDirectory, "licenses"))));
+        panel.Children.Add(SettingsWindow.Action(L.T("查看完整许可证"), () => Open(System.IO.Path.Combine(JeekMusic.Infrastructure.AppPaths.AppDir, "licenses"))));
         panel.Children.Add(SettingsWindow.SubHeading(L.T("数据")));
         panel.Children.Add(SettingsWindow.Row(SettingsWindow.Action(L.T("打开数据目录"), () => Open(AppPaths.DataDir)),
             SettingsWindow.Action(L.T("打开日志目录"), () => Open(AppPaths.LogsDir))));

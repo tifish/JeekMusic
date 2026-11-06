@@ -1,15 +1,30 @@
 namespace JeekMusic.Infrastructure;
 
-/// <summary>程序的数据目录 %LOCALAPPDATA%\JeekMusic（设计 §4.1）。测试时可以用 JEEKMUSIC_DATA 环境变量换到别处。</summary>
+/// <summary>绿色包的数据保存在程序旁的 data/；JEEKMUSIC_DATA 始终优先。旧平铺版本兼容本地应用数据。</summary>
 public static class AppPaths
 {
+    public static string AppDir { get; } = ResolveAppDirectory(AppContext.BaseDirectory);
+    public static bool IsPortable { get; } = File.Exists(Path.Combine(AppDir, "portable.json"));
+    public static string DataDirectorySource => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("JEEKMUSIC_DATA"))
+        ? "environment" : IsPortable ? "portable" : "localAppData";
     public static string DataDir { get; } = Init();
+
+    internal static string ResolveAppDirectory(string baseDirectory)
+    {
+        var directory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDirectory));
+        var parent = Path.GetDirectoryName(directory);
+        return Path.GetFileName(directory).Equals("runtime", StringComparison.OrdinalIgnoreCase) &&
+            parent is not null && File.Exists(Path.Combine(parent, "portable.json")) ? parent : directory;
+    }
+
+    internal static string ResolveDataDirectory(string appDirectory, string? configuredDirectory, string legacyDirectory) =>
+        Path.GetFullPath(!string.IsNullOrEmpty(configuredDirectory) ? configuredDirectory :
+            File.Exists(Path.Combine(appDirectory, "portable.json")) ? Path.Combine(appDirectory, "data") : legacyDirectory);
 
     static string Init()
     {
-        var dir = Environment.GetEnvironmentVariable("JEEKMUSIC_DATA");
-        if (string.IsNullOrEmpty(dir))
-            dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JeekMusic");
+        var dir = ResolveDataDirectory(AppDir, Environment.GetEnvironmentVariable("JEEKMUSIC_DATA"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JeekMusic"));
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -22,9 +37,6 @@ public static class AppPaths
     public static string LyricsCacheDir => Ensure(Path.Combine(DataDir, "lyrics"));
     public static string LogsDir => Ensure(Path.Combine(DataDir, "logs"));
     public static string UpdateDir => Path.Combine(DataDir, "update");
-
-    /// <summary>程序所在目录（libmpv、模型文件都在这里）。</summary>
-    public static string AppDir { get; } = AppContext.BaseDirectory;
 
     static string Ensure(string dir)
     {

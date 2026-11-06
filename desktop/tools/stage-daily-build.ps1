@@ -1,72 +1,155 @@
-# Called automatically after a portable framework-dependent App build.
+﻿# Stage only runtime files. Build products and migration backups stay in artifacts/.
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Source)
+param(
+    [Parameter(Mandatory)][string]$Source,
+    [Parameter(Mandatory)][string]$Launcher,
+    [switch]$MigrateLegacyData
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $sourcePath = [IO.Path]::GetFullPath($Source).TrimEnd('\')
-$bin = [IO.Path]::GetFullPath((Join-Path $repo 'desktop\src\JeekMusic.App\bin'))
-$output = [IO.Path]::GetFullPath((Join-Path $repo 'output'))
-$artifacts = [IO.Path]::GetFullPath((Join-Path $repo 'desktop\artifacts'))
-if (-not $sourcePath.StartsWith($bin + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Daily staging source must be inside $bin; got $sourcePath"
+$buildRoot = [IO.Path]::GetFullPath((Join-Path $repo 'desktop\src\JeekMusic.App\bin'))
+$destination = Join-Path $repo 'bin'
+$legacy = Join-Path $repo 'output'
+$artifacts = Join-Path $repo 'desktop\artifacts'
+if (-not $sourcePath.StartsWith($buildRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Daily staging source must be inside $buildRoot; got $sourcePath"
+}
+$launcherPath = [IO.Path]::GetFullPath($Launcher)
+$intermediateRoot = Join-Path $repo 'desktop\src\JeekMusic.App\obj'
+if (-not $launcherPath.StartsWith($intermediateRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Daily launcher must be inside $intermediateRoot; got $launcherPath"
 }
 
+$checkedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 function Assert-NoReparsePoint([string]$Path) {
-    $current = $Path
-    while ($current -and $current.StartsWith($repo, [StringComparison]::OrdinalIgnoreCase)) {
-        if (Test-Path -LiteralPath $current) {
-            if ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Refusing to stage through a reparse point: $current"
-            }
+    $current = [IO.Path]::GetFullPath($Path)
+    while ($current) {
+        if ($checkedPaths.Contains($current)) { break }
+        if ((Test-Path -LiteralPath $current) -and
+            ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Refusing to stage through a reparse point: $current"
         }
+        if (Test-Path -LiteralPath $current) { [void]$checkedPaths.Add($current) }
         $current = [IO.Path]::GetDirectoryName($current)
     }
 }
 
-# Never delete output/ or unknown files: it can contain a user's own files.
-# Only these exact .NET runtime names are migrated from the old shared output.
-$runtimeFiles = @('hostfxr.dll', 'hostpolicy.dll', 'coreclr.dll', 'System.Private.CoreLib.dll',
-    'clrjit.dll', 'clrgc.dll', 'clretwrc.dll', 'mscordaccore.dll', 'mscordbi.dll',
-    'mscorrc.dll', 'createdump.exe', 'Microsoft.DiaSymReader.Native.amd64.dll')
-Assert-NoReparsePoint $sourcePath
-Assert-NoReparsePoint $output
-Assert-NoReparsePoint $artifacts
-$config = Get-Content -LiteralPath (Join-Path $sourcePath 'JeekMusic.runtimeconfig.json') -Raw | ConvertFrom-Json
-if (-not ($config.runtimeOptions.PSObject.Properties.Name -contains 'framework') -and
-    -not ($config.runtimeOptions.PSObject.Properties.Name -contains 'frameworks')) {
-    throw 'Daily staging requires a framework-dependent runtimeconfig.'
-}
-foreach ($name in $runtimeFiles) {
-    if (Test-Path -LiteralPath (Join-Path $sourcePath $name)) {
-        throw "Daily staging source contains a self-contained runtime: $name"
+function Copy-TreePreserving([string]$From, [string]$To, [string]$Exclude = '(?!)') {
+    if (-not (Test-Path -LiteralPath $From -PathType Container)) { return }
+    Assert-NoReparsePoint $From
+    Assert-NoReparsePoint $To
+    $entries = [Collections.Generic.List[IO.FileSystemInfo]]::new()
+    $pending = [Collections.Generic.Queue[string]]::new()
+    $pending.Enqueue($From)
+    while ($pending.Count) {
+        foreach ($entry in @(Get-ChildItem -LiteralPath $pending.Dequeue() -Force)) {
+            $relative = $entry.FullName.Substring($From.Length + 1)
+            if ($relative -match $Exclude) { continue }
+            Assert-NoReparsePoint $entry.FullName
+            $entries.Add($entry)
+            if ($entry.PSIsContainer) { $pending.Enqueue($entry.FullName) }
+        }
+    }
+    foreach ($entry in $entries) {
+        Assert-NoReparsePoint $entry.FullName
+        Assert-NoReparsePoint (Join-Path $To $entry.FullName.Substring($From.Length + 1))
+    }
+    [IO.Directory]::CreateDirectory($To) | Out-Null
+    foreach ($entry in $entries) {
+        $target = Join-Path $To $entry.FullName.Substring($From.Length + 1)
+        if ($entry.PSIsContainer) { [IO.Directory]::CreateDirectory($target) | Out-Null }
+        elseif (-not (Test-Path -LiteralPath $target)) {
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
+            [IO.File]::Copy(('\\?\' + $entry.FullName), ('\\?\' + $target))
+        }
     }
 }
-$files = @(Get-ChildItem -LiteralPath $sourcePath -File -Recurse -Force)
-# Preflight every destination before any migration/copy, including nested symlinks.
-foreach ($file in $files) {
-    Assert-NoReparsePoint $file.FullName
-    $relative = $file.FullName.Substring($sourcePath.Length + 1)
-    Assert-NoReparsePoint (Join-Path $output $relative)
-}
-foreach ($name in $runtimeFiles) { Assert-NoReparsePoint (Join-Path $output $name) }
 
-$backup = Join-Path $artifacts ('legacy-output-runtime-' + [Guid]::NewGuid().ToString('N'))
-if (-not ([IO.Path]::GetFullPath($backup)).StartsWith($artifacts + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Invalid runtime migration destination.'
+foreach ($path in @($sourcePath, $launcherPath, $destination, $legacy, $artifacts)) { Assert-NoReparsePoint $path }
+if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) { throw 'Daily launcher is missing.' }
+$files = @(Get-ChildItem -LiteralPath $sourcePath -File -Recurse -Force | Where-Object {
+    $_.Extension -notin @('.pdb', '.lib', '.xml') -and $_.Name -ne 'JeekMusic.exe'
+})
+$plan = foreach ($file in $files) {
+    $relative = $file.FullName.Substring($sourcePath.Length + 1)
+    if ($relative -notmatch '^(Models|Preferences|licenses)\\' -and $relative -notin @('portable.json', 'LICENSE.txt')) {
+        $relative = 'runtime\' + $relative
+    }
+    $target = Join-Path $destination $relative
+    Assert-NoReparsePoint $file.FullName
+    Assert-NoReparsePoint $target
+    [pscustomobject]@{ Source = $file.FullName; Target = $target; Relative = $relative }
 }
-foreach ($name in $runtimeFiles) {
-    $old = Join-Path $output $name
-    if (Test-Path -LiteralPath $old -PathType Leaf) {
-        [IO.Directory]::CreateDirectory($backup) | Out-Null
-        Move-Item -LiteralPath $old -Destination (Join-Path $backup $name)
-        Write-Host "Migrated legacy runtime: $old -> $backup"
+Assert-NoReparsePoint (Join-Path $destination 'JeekMusic.exe')
+
+# Preserve downloaded assets, then archive the entire old mixed directory.
+# Unknown files are retained in the archive, never deleted or copied into the player.
+if (Test-Path -LiteralPath $legacy -PathType Container) {
+    foreach ($entry in @(Get-ChildItem -LiteralPath $legacy -Recurse -Force)) { Assert-NoReparsePoint $entry.FullName }
+    foreach ($name in @('Models', 'Preferences', 'licenses')) {
+        Copy-TreePreserving (Join-Path $legacy $name) (Join-Path $destination $name)
+    }
+    $backup = [IO.Path]::GetFullPath((Join-Path $artifacts ('legacy-output-' + [guid]::NewGuid().ToString('N'))))
+    if ($legacy -ne (Join-Path $repo 'output') -or -not $backup.StartsWith($artifacts + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Invalid legacy archive paths.'
+    }
+    [IO.Directory]::CreateDirectory($artifacts) | Out-Null
+    Move-Item -LiteralPath $legacy -Destination $backup
+    Write-Host "Archived old output at $backup"
+}
+
+# Only the explicit build-and-run workflow imports the previous data.
+# Never overwrite portable data; retain the original as backup.
+$data = Join-Path $destination 'data'
+if ($MigrateLegacyData -and -not $env:JEEKMUSIC_DATA -and -not (Test-Path -LiteralPath $data)) {
+    $oldData = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'JeekMusic'
+    if (Test-Path -LiteralPath $oldData -PathType Container) {
+        $pendingData = Join-Path $artifacts ('portable-data-' + [guid]::NewGuid().ToString('N'))
+        # Python virtual environments and in-flight jobs contain machine-specific
+        # absolute paths. Reinstall those on demand; preserve learned models/vectors.
+        $exclude = '^preference-components\\(venv|job-[^\\]+)(\\|$)|^preference-components\\(ready|runtime-install|torch-install)\.json$'
+        Copy-TreePreserving $oldData $pendingData $exclude
+        Assert-NoReparsePoint $data
+        Move-Item -LiteralPath $pendingData -Destination $data
+        Write-Host "Imported existing data into $data (original retained)."
     }
 }
-foreach ($file in $files) {
-    $destination = Join-Path $output $file.FullName.Substring($sourcePath.Length + 1)
-    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
-    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+
+# Move only obsolete files recorded by our previous staging into a backup.
+# Also removes a self-contained host when switching to a framework-dependent build.
+$manifest = Join-Path $artifacts 'daily-runtime-files.json'
+Assert-NoReparsePoint $manifest
+$oldManifest = Join-Path $destination 'runtime\staged-files.json'
+Assert-NoReparsePoint $oldManifest
+if (Test-Path -LiteralPath $oldManifest -PathType Leaf) {
+    [IO.Directory]::CreateDirectory($artifacts) | Out-Null
+    Move-Item -LiteralPath $oldManifest -Destination $manifest -Force
 }
-Write-Host "Daily framework-dependent build staged at $output\JeekMusic.exe"
+if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+    $previous = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+    $retired = Join-Path $artifacts ('retired-runtime-' + [guid]::NewGuid().ToString('N'))
+    foreach ($relative in $previous) {
+        $old = [IO.Path]::GetFullPath((Join-Path $destination $relative))
+        if (-not $old.StartsWith((Join-Path $destination 'runtime') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Invalid staged runtime path: $relative"
+        }
+        if ($relative -notin @($plan.Relative) -and (Test-Path -LiteralPath $old -PathType Leaf)) {
+            Assert-NoReparsePoint $old
+            $backup = Join-Path $retired $relative
+            Assert-NoReparsePoint $backup
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($backup)) | Out-Null
+            Move-Item -LiteralPath $old -Destination $backup
+        }
+    }
+}
+foreach ($item in $plan) {
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($item.Target)) | Out-Null
+    Copy-Item -LiteralPath $item.Source -Destination $item.Target -Force
+}
+Copy-Item -LiteralPath $launcherPath -Destination (Join-Path $destination 'JeekMusic.exe') -Force
+[IO.Directory]::CreateDirectory($artifacts) | Out-Null
+@($plan.Relative | Where-Object { $_.StartsWith('runtime\') }) | ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding UTF8
+Write-Host "Daily player staged at $destination\JeekMusic.exe"

@@ -36,7 +36,7 @@ public sealed class UpdateService(SettingsStore settings)
     public static string CurrentVersionName => $"1.0.{CurrentVersion}";
 
     /// <summary>程序目录（更新时替换这里的文件）；不可写时（放在 Program Files）只能手动更新。</summary>
-    public static string AppDir => AppContext.BaseDirectory;
+    public static string AppDir => AppPaths.AppDir;
 
     /// <summary>该自动检查了：开关打开、距上次超过 24 小时。</summary>
     public bool DueForAutoCheck =>
@@ -147,7 +147,7 @@ public sealed class UpdateService(SettingsStore settings)
     /// <summary>新版本启动后清理 update\。</summary>
     public static void CleanUp()
     {
-        try { if (Directory.Exists(AppPaths.UpdateDir) && !AppContext.BaseDirectory.StartsWith(AppPaths.UpdateDir, StringComparison.OrdinalIgnoreCase)) Directory.Delete(AppPaths.UpdateDir, true); }
+        try { if (Directory.Exists(AppPaths.UpdateDir) && !AppDir.StartsWith(AppPaths.UpdateDir, StringComparison.OrdinalIgnoreCase)) Directory.Delete(AppPaths.UpdateDir, true); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }

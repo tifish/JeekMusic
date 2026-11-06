@@ -15,8 +15,9 @@ on:
       - "!desktop/spike-audio/**"
       - "shared/**"
       - ".github/workflows/desktop.yml"
+      - "build-and-run.cmd"
   pull_request:
-    paths: ["desktop/**", "shared/**", ".github/workflows/desktop.yml"]
+    paths: ["desktop/**", "shared/**", "build-and-run.cmd", ".github/workflows/desktop.yml"]
   workflow_dispatch: # 在 Actions 页面手动运行（也会发布）
 
 concurrency:
@@ -75,7 +76,7 @@ jobs:
           assets=$(dotnet msbuild desktop/src/JeekMusic.App/JeekMusic.App.csproj -nologo \
             -p:_IsPublishing=true -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -getProperty:ProjectAssetsFile | tr -d '\r')
           python desktop/tools/collect-licenses.py publish/JeekMusic --assets "$assets"
-          rm -f publish/JeekMusic/*.pdb
+          rm -f publish/JeekMusic/*.pdb publish/JeekMusic/*.lib
           ls -la publish/JeekMusic
 
       - name: Isolated loopback TLS security regression
@@ -88,8 +89,13 @@ jobs:
         # Hosted Windows VMs need not have a WASAPI endpoint; still launch every EXE.
         run: |
           python desktop/tools/test-build-isolation.py --startup-only --published-exe publish/JeekMusic/JeekMusic.exe
-          python desktop/tools/test-smart-tags-mcp.py --exe output/JeekMusic.exe
+          python desktop/tools/test-smart-tags-mcp.py --exe bin/JeekMusic.exe
           python desktop/tools/test-smart-tags-mcp.py --exe publish/JeekMusic/JeekMusic.exe
+
+      - name: Portable package relocation and model loading
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Relocate
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Exe publish/JeekMusic/JeekMusic.exe -Relocate
 
       - name: Package
         run: |

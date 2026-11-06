@@ -36,16 +36,36 @@ Both output modes control the current endpoint master volume; in shared mode thi
 
 ## 开发与验证
 
-需要 Windows、.NET 10 SDK、Git Bash，以及 Native AOT 链接所需的 Visual Studio C++ 工具。
+日常运行入口是仓库根目录的 `bin/JeekMusic.exe`。双击根目录 `build-and-run.cmd`：先退出本仓库新旧日常客户端，再构建 Windows x64 自包含版本，最后启动新版本。编译需要 .NET 10 SDK；运行和复制该版本无需安装 .NET，也无需安装软件或管理员权限。失败时保留错误信息，不启动旧产物。
 
-日常测试直接编译并运行仓库根目录的 `output/JeekMusic.exe`，需要系统已安装 x64 .NET 10 运行时。普通无 RID 的框架依赖 build 成功后会自动把完整运行文件同步到这里；Debug 和 Release 最后一次编译覆盖测试入口，包括增量构建。复制测试版本时请复制整个 `output/`。正在运行时，先退出客户端再重新编译。
+`bin/` 是完整绿色软件目录，可以整体复制到其他可写目录：
 
-双击仓库根目录的 `build-and-run.cmd` 可自动退出该 `output/` 中运行的旧客户端、编译并启动新版本；需要 .NET 10 SDK，失败时窗口会保留错误信息。也可以手动执行：
+| 路径 | 用途 |
+| --- | --- |
+| `JeekMusic.exe` | 唯一启动入口，可从任意工作目录启动 |
+| `runtime/` | 应用程序集、托管及原生依赖、随包 .NET 运行时；不存 PDB、链接库、编译缓存或测试报告 |
+| `Models/` | YAMNet 模型及已有的附加模型 |
+| `Preferences/Runtime/` | 随包分析脚本与组件描述 |
+| `licenses/`、`LICENSE.txt` | 第三方许可与项目许可证 |
+| `portable.json` | 绿色包布局标记，随包保留 |
+| `data/` | 用户设置、曲库、队列、学习组件与模型、封面/歌词缓存、运行日志和更新下载；后续构建不会覆盖 |
+
+首次执行脚本时，旧 `output/` 中的 `Models/`、`Preferences/`、`licenses/` 迁入新目录；其余内容连同完整旧目录保存在 `desktop/artifacts/legacy-output-<唯一ID>/`。如果 `bin/data/` 尚不存在，会复制 `%LOCALAPPDATA%/JeekMusic` 的现有状态，原数据保留作备份；之后只使用 `bin/data/`。迁移保留学习模型与向量，但不复制带本机绝对路径的 Python 虚拟环境、临时训练任务及其就绪标记；可选学习环境会按需重新准备。已有 `bin/data/` 不会被旧数据覆盖。复制整个绿色目录会同时携带用户数据；只分发程序时应在客户端退出后去掉 `data/`，下次启动会创建新数据。音乐文件仍在用户选择的曲库文件夹，不自动打包；跨电脑需重新指定曲库位置。Windows 的文件关联、防火墙授权和受用户密钥保护的配对信息不能随目录自动迁移。
+
+`JEEKMUSIC_DATA` 始终优先于绿色包的数据目录，用于隔离测试。旧版没有 `portable.json` 的包继续使用 `%LOCALAPPDATA%/JeekMusic`。单实例和 MCP 按实际数据目录隔离。
+
+日常构建的等价命令（先退出客户端）：
 
 ```powershell
-dotnet build desktop/src/JeekMusic.App
-./output/JeekMusic.exe
+dotnet build desktop/src/JeekMusic.App -r win-x64 --self-contained true -p:PublishAot=false -p:JeekStageDailyBuild=true -p:JeekMigrateLegacyData=true
+./bin/JeekMusic.exe
 ```
+
+普通 `dotnet build`、`dotnet test`、带 RID 的其他构建和所有 publish 都不会更新根 `bin/`；只有显式 `JeekStageDailyBuild=true` 的 Windows x64 自包含 build 会同步完整日常目录，包括增量构建。直接将 `-o`、`OutputPath` 或 `PublishDir` 指向根 `bin/` 或其子目录会被拒绝。
+
+编译和还原的中间产物继续保存在各工程自己的 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/`，编译结果保存在对应工程的 `bin/` 下；它们与仓库根目录的绿色 `bin/` 完全分离。开发日志、截图、测试夹具和迁移备份统一放 `desktop/artifacts/`，不放日常运行目录。同步脚本拒绝重解析点，过期运行依赖仅按上次清单移到 artifacts 备份，不通配删除 DLL，不修改用户数据或未知文件。
+
+正式发布仍使用 NativeAOT，需 Git Bash 和 Visual Studio C++ 链接工具，发布目录与日常目录分离。正式包使用同一绿色数据规则和同一套 MCP；NativeAOT 无需托管运行时，其原生 DLL 保留发布器要求的相对位置：
 
 ```powershell
 & 'C:/Program Files/Git/bin/bash.exe' desktop/tools/get-libmpv.sh --lgpl
@@ -55,37 +75,26 @@ $assets = dotnet msbuild desktop/src/JeekMusic.App -nologo -p:_IsPublishing=true
 python desktop/tools/collect-licenses.py desktop/artifacts/publish --assets $assets
 ```
 
-编译与还原不直接使用 `output/`。App 工程的中间产物与 NuGet assets 位于 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/<Configuration>/<TFM>/`（SDK 可再追加 RID）；`bin/` 使用相同层级。空开关值表示 SDK 默认值；NuGet assets 位于配置子目录之前。操作、RID 和显式部署开关在 SDK 导入前隔离，避免还原缓存和编译文件混用。Core 是 RID 无关的类库，SDK 构建项目引用时会移除其 RID/SelfContained，故 Core 和测试工程保留 SDK 默认 `obj/`、`bin/<Configuration>/<TFM>/`；单元测试从各自 `bin/` 加载引用。
+发布须使用完整 `dotnet publish`，不要用 `publish --no-build` 复用普通 build 缓存。AOT 找不到 `vswhere` 时，仅为当前终端补入 `$env:PATH += ';C:\Program Files (x86)\Microsoft Visual Studio\Installer'`。许可证收集使用与 publish 相同配置的 `ProjectAssetsFile`。发布包保留 `Models/`、`Preferences/`、`licenses/`、`portable.json` 和原生 DLL。LGPL DLL 的源码和参数随 [libmpv Release](https://github.com/tifish/JeekMusic/releases/tag/libmpv-lgpl-0.41.0-20261021-3) 提供。
 
-带 RID、自包含 build 和所有 publish 均保留在自己的目录，不覆盖日常入口。NativeAOT 发布仍默认启用，正式包自包含、不依赖机器上的 .NET；默认 publish 目录在隔离的 `bin/` 下，也可使用上例的 `desktop/artifacts/publish`。`-o output`、`PublishDir=output` 及其子目录被拒绝，不能将发布包直接写进日常入口；测试发布包应运行发布目录内的 EXE。AOT 链接找不到 `vswhere` 时，仅为当前终端补入 `$env:PATH += ';C:\Program Files (x86)\Microsoft Visual Studio\Installer'`。
-
-build 和 publish 的缓存也相互隔离，发布请使用完整 `dotnet publish`，不能在普通 build 后用 `publish --no-build` 复用另一种操作的缓存。
-
-从旧版混用的 `output/` 迁移会自动发生：普通 build 按明确名单将 `hostfxr.dll`、`hostpolicy.dll`、`coreclr.dll`、`System.Private.CoreLib.dll` 等核心 .NET 运行时文件移至 `desktop/artifacts/legacy-output-runtime-<唯一ID>/`，然后同步框架依赖产物。脚本验证绝对源/目标路径并拒绝重解析点；不删除整个目录，不扫描曲库或正式数据目录，不按 `*.dll` 通配删除。旧版遗留的其他无害文件保留，完整旧目录备份也保留。不要手工把运行时或发布包合并进 `output/`。
-
-构建回归（先退出日常客户端，需要 AOT 工具链；默认仍会多次启动客户端）：
+构建与目录迁移回归（所有证据写入 `desktop/artifacts/`）：
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-runtime-layout.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Relocate
+python desktop/tools/test_build_workflow.py
 python desktop/tools/test-build-isolation.py
 ```
 
-它验证 Debug → 自包含 RID build → 普通 Release → RID 框架依赖 build → NativeAOT publish → Debug → Release，默认仅用各自 EXE/MCP 做启动/只读诊断、28 个工具描述和 Schema 比较、退出检查，不播放音频或切换输出。它还重建本地 hostfxr 污染并验证自动迁移、未知文件保留和禁止路径覆盖。负向 EXE 子进程单独禁用 .NET 错误弹窗并记录 host trace、stdout/stderr 与退出码。临时数据与用户曲库隔离，日志保存在 `desktop/artifacts/build-isolation-<时间>/`。CI 使用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe`，发布包路径仍为 `publish/JeekMusic`。
+`test-runtime-layout.ps1` 使用独立模拟仓库验证资源迁移、完整归档、数据保留、过期依赖和路径保护，不启动客户端。`test-portable-package.ps1 -Relocate` 将包复制到 artifacts 下带空格的路径，使用新数据启动真实客户端，通过 MCP 验证绿色路径，并对合成 WAV 做限时模型/原生解码诊断，不播放音频；`-Exe` 可指定正式包。构建回归默认实际启动各版本 EXE 并通过 MCP 比较工具与 Schema，不播放音频；`--build-only` 跳过全部客户端启动。仅 `--audio` 显式测试真实共享输出，`--audio --exclusive` 额外占用独占设备；静音不等于不占设备。CI 可用 `--startup-only --published-exe publish/JeekMusic/JeekMusic.exe` 复用 AOT 产物。
 
-`--build-only` 跳过全部客户端启动（包括负向 apphost 诊断），仅编译/发布及静态检查，输出明确列出跳过项。`--audio` 才启用真实共享 WASAPI 静音 WAV 播放/设备切换，`--audio --exclusive` 才额外打开独占端点。**无声音、静音 WAV 和应用静音不等于不占音频设备；独占测试能让游戏和其他程序失声。** 游戏期间或要求禁止启动客户端时，连默认模式、`--startup-only`、`mcp_client.py` 都不要运行；它们仍启动真实客户端并读取系统音频状态。不能把“只读 MCP”当成“不会冷启动”。
-
-`python desktop/tools/test_build_workflow.py` 使用模拟客户端和模拟进程验证这些选项边界，不启动 Jeek Music 或访问真实音频。
-
-发布包需包含 `licenses/`、`Models/yamnet.onnx` 和原生 DLL。`collect-licenses.py` 从已还原的 NuGet 包收集许可证，不发送网络请求。LGPL DLL 的对应源码和编译参数随 [libmpv Release](https://github.com/tifish/JeekMusic/releases/tag/libmpv-lgpl-0.41.0-20261021-3) 提供；桌面 CI 下载失败时会停止，不能回退到 GPL 内核。
-
-后台运行测试使用独立的临时数据目录：
+真实客户端截图验证使用独立测试数据，默认 EXE 为 `bin/JeekMusic.exe`：
 
 ```powershell
 pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -GracefulExit
 ```
 
-测试脚本默认运行 `output/JeekMusic.exe`；验证发布包时可用 `-Exe desktop/artifacts/publish/JeekMusic.exe` 指定程序。
-
-`--background` 不激活窗口，截图通过 PrintWindow 获取；测试脚本检测到抢占焦点会失败。`JEEKMUSIC_DATA` 覆盖数据目录，单实例通信也按此目录隔离。正式数据默认放在 `%LOCALAPPDATA%/JeekMusic`。
+`--background` 不激活窗口，截图通过 PrintWindow 获取；该脚本需 PowerShell 7，发布包可用 `-Exe desktop/artifacts/publish/JeekMusic.exe` 指定。不要将截图、测试数据或构建日志写到根 `bin/`。
 
 ## 修正智能标签
 

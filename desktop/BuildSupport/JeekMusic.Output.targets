@@ -1,22 +1,33 @@
 <Project>
   <PropertyGroup>
-    <_JeekTestOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'output'))</_JeekTestOutput>
+    <_JeekTestOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'bin'))</_JeekTestOutput>
   </PropertyGroup>
 
-  <!-- -o / OutputPath / PublishDir must not bypass the managed-only staging boundary. -->
+  <!-- Only the staging target may write into the portable daily directory. -->
   <Target Name="ValidateJeekOutputPaths" BeforeTargets="PrepareForBuild;PrepareForPublish">
     <PropertyGroup>
       <_JeekActualOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutputPath)'))</_JeekActualOutput>
       <_JeekActualPublish>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_JeekActualPublish>
     </PropertyGroup>
     <Error Condition="$(_JeekActualOutput.StartsWith('$(_JeekTestOutput)', System.StringComparison.OrdinalIgnoreCase)) Or $(_JeekActualPublish.StartsWith('$(_JeekTestOutput)', System.StringComparison.OrdinalIgnoreCase))"
-           Text="Repository output/ is reserved for framework-dependent daily builds. Use an isolated build/publish directory (for example desktop/artifacts/publish), then run that directory's JeekMusic.exe." />
+           Text="Repository bin/ is reserved for the staged daily player. Use an isolated build/publish directory (for example desktop/artifacts/publish), then run that directory's JeekMusic.exe." />
   </Target>
 
-  <!-- Always copy, including incremental builds and Debug/Release switches. RID and
-       publish builds never replace the user's daily test entry point. -->
+  <!-- Explicit daily builds always stage, including incremental builds. Ordinary
+       builds/tests and publishing never replace the user's running daily player. -->
   <Target Name="StageJeekDailyBuild" AfterTargets="Build"
-          Condition="'$(JeekStageDailyBuild)' != 'false' and '$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true' and '$(RuntimeIdentifier)' == '' and '$(SelfContained)' != 'true'">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(TargetDir).&quot;" />
+          Condition="'$(JeekStageDailyBuild)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true'">
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'true'" Text="Daily player staging requires -r win-x64 --self-contained true." />
+    <PropertyGroup>
+      <_JeekDailyLauncher>$(IntermediateOutputPath)daily\JeekMusic.exe</_JeekDailyLauncher>
+      <_JeekDataMigration Condition="'$(JeekMigrateLegacyData)' == 'true'">-MigrateLegacyData</_JeekDataMigration>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)daily" />
+    <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)"
+                   AppHostDestinationPath="$(_JeekDailyLauncher)"
+                   AppBinaryName="runtime/JeekMusic.dll"
+                   IntermediateAssembly="@(IntermediateAssembly->'%(FullPath)')"
+                   WindowsGraphicalUserInterface="true" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\stage-daily-build.ps1&quot; -Source &quot;$(TargetDir).&quot; -Launcher &quot;$(MSBuildProjectDirectory)\$(_JeekDailyLauncher)&quot; $(_JeekDataMigration)" />
   </Target>
 </Project>

@@ -9,7 +9,7 @@ import subprocess
 import threading
 
 
-DEFAULT_EXE = Path(__file__).resolve().parents[2] / "output" / "JeekMusic.exe"
+DEFAULT_EXE = Path(__file__).resolve().parents[2] / "bin" / "JeekMusic.exe"
 
 
 class McpClient:

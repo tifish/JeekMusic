@@ -18,10 +18,12 @@ public static partial class Updater
             {
                 try { Process.GetProcessById(pid).WaitForExit(15000); } catch (ArgumentException) { }
             }
-            var source = AppContext.BaseDirectory;
+            var source = AppPaths.AppDir;
             foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(source, file);
+                // An update must never ship or overwrite portable user data.
+                if (!IsPayloadFile(rel)) continue;
                 var target = Path.Combine(appDir, rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 for (var attempt = 0; ; attempt++)
@@ -40,4 +42,7 @@ public static partial class Updater
             return 1;
         }
     }
+
+    internal static bool IsPayloadFile(string relativePath) =>
+        !relativePath.Replace('\\', '/').StartsWith("data/", StringComparison.OrdinalIgnoreCase);
 }

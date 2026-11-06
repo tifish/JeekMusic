@@ -11,7 +11,7 @@ public static partial class FileAssociations
     internal const string ProgId = "JeekMusic.Audio";
     internal const string Capabilities = @"Software\JeekMusic\Capabilities";
     internal const string ApplicationKey = @"Software\Classes\Applications\JeekMusic.exe";
-    static string Executable => Path.Combine(AppContext.BaseDirectory, "JeekMusic.exe");
+    static string Executable => Path.Combine(JeekMusic.Infrastructure.AppPaths.AppDir, "JeekMusic.exe");
 
     public static bool Registered
     {

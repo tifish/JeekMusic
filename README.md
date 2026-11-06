@@ -18,6 +18,8 @@
 
 两端各自独立构建和发布：`.github/workflows/mobile.yml` 只在 `mobile/` 有改动时运行。
 
+Windows 日常版本：双击根目录 `build-and-run.cmd` 编译并启动 `bin/JeekMusic.exe`；整个 `bin/` 可复制运行，目录布局与数据迁移见 [桌面端开发说明](desktop/README.md#开发与验证)。
+
 ## 许可证
 
 [MIT](LICENSE)

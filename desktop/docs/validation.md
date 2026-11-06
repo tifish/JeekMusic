@@ -1,5 +1,15 @@
 # 实现与验证记录
 
+## 2026-11-06：bin 绿色运行目录
+
+- 日常入口改为根 `bin/JeekMusic.exe`，主程序以相对路径加载 `runtime/JeekMusic.dll`；依赖和自包含 .NET 放 `runtime/`，模型、分析脚本、许可证分别放 `Models/`、`Preferences/`、`licenses/`，用户状态放 `data/`。PDB、链接库、构建缓存、测试结果和同步清单均留在工程输出或 `desktop/artifacts/`。普通 build/test/publish 不更新日常目录。
+- 原 `output/` 完整归档至本机 `desktop/artifacts/legacy-output-c05c2116e4e84b489f59df68189d592d/`，有效模型/组件/许可证已迁入 bin。旧本地用户数据保留原件并复制到 `bin/data/`；学习模型和向量保留，含本机绝对路径的 Python venv、临时训练任务及其就绪标记不复制，按需重新准备。后续构建不覆盖用户数据与附加模型。
+- 71 项 AppPaths、更新数据保护、MCP、文件关联与单实例定向 .NET 测试通过；7 项工作流守卫通过。独立模拟仓库验证含空格路径、完整归档、附加模型与既有数据保留、过期依赖清单迁移、目录越界与 junction 拒绝，全部通过。
+- `test-build-isolation.py --startup-only --published-exe desktop/artifacts/portable-native-publish/JeekMusic.exe` 全程通过：Debug/Release 自包含日常包、普通 framework-dependent build、两种 RID 部署、NativeAOT、增量构建切换、禁止直接 build/publish 到 bin。所有真实 EXE/MCP 往返成功，41 个工具、描述及严格输入 Schema 一致；未播放音频或切换音频输出。
+- 日常包及 NativeAOT 包分别复制到带空格的新目录、使用新数据启动；通过真实 MCP 完成合成 WAV 的限时原生解码和 ONNX 模型诊断，模型哈希匹配。日常包 host trace 确认加载复制目录内的 `runtime/hostfxr.dll` 与 `runtime/coreclr.dll`。NativeAOT 发布成功，保留既有 DataGrid IL2104/IL3053 警告；定向测试有既有 xUnit 分析警告。
+- 最终 `build-and-run.cmd` 编译 0 警告/错误并启动真实日常客户端。代理通过原生窗口句柄、UI Automation 与 2908×1649 PrintWindow 截图检查新版窗口，曲库、封面和中文界面正常；截图保存在本机忽略的 `desktop/artifacts/portable-daily-client.png`。SQLite quick_check 通过，原/新库的歌曲、分析特征、标签、覆盖、播放列表及列表项计数一致；checkpoint 对比确认队列数量/索引、当前曲、进度、暂停状态、随机/循环、静音及曲库数量保留。含私有曲库的诊断和 checkpoint 仅存本机 artifacts，不提交。
+- MCP `get_diagnostics` 增加实际应用/运行时/模型/组件目录、portable 标记和数据目录来源；无新参数或开发专用接口。更新使用包根目录并跳过 `data/`，文件关联和许可证入口指向包根目录。
+
 ## 2026-11-01：四维手工铅笔与标注后继续选择
 
 - 1.0.208：仅桌面主列表四列（MOOD/VOICE/GENRE/CALMNESS）的有效 MANUAL 值右侧增加 11 DIP 前景继承矢量铅笔，手工与自动同值也显示，AUTO/未识别不显示；整个单元格仍是原按钮。中英文 tooltip/无障碍来源为“手工标注 / Manually annotated”。四列显示、宽度和顺序持久化不变，无新增文字列/字体图标/颜色语义。

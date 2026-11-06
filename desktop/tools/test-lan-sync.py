@@ -50,7 +50,7 @@ def audio(path, seconds=2, tone=0):
     os.utime(path,ns=(1_600_000_000_123456700,)*2)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument("--interactive",action="store_true");p.add_argument("--exe",type=Path,default=ROOT/"output/JeekMusic.exe");a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument("--interactive",action="store_true");p.add_argument("--exe",type=Path,default=ROOT/"bin/JeekMusic.exe");a=p.parse_args()
     ARTIFACTS.mkdir(parents=True,exist_ok=True)
     library=ARTIFACTS/"source/Music"
     audio(library/"Karajan/Album/Artist - First.wav")

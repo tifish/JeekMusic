@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using JeekMusic.Core.Analysis;
 using JeekMusic.Library;
+using JeekMusic.Infrastructure;
 
 namespace JeekMusic.Analysis;
 
@@ -77,7 +78,7 @@ public static class AnalysisDiagnostics
         return new JsonObject {
             ["contract"] = "analysis_diagnostics_v1", ["analyzerVersion"] = AnalysisVersions.AnalyzerVersion, ["rulesVersion"] = AnalysisVersions.RulesVersion,
             ["cacheCompatible"] = false, ["writesAudio"] = false, ["writesFeaturesOrTags"] = false,
-            ["modelSha256"] = Hash(Path.Combine(AppContext.BaseDirectory, "Models", "yamnet.onnx")),
+            ["modelSha256"] = Hash(Path.Combine(AppPaths.AppDir, "Models", "yamnet.onnx")),
             ["classMapSha256"] = "b03d48f9ebe23f69ea825193de7e736934086a12410f0af47babe897b78bc0d3",
             ["classNames"] = new JsonArray(Names.Value.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             ["energyIds"] = Numbers(YamnetScores.EnergyIds.ToArray().Select(x => (double)x)),

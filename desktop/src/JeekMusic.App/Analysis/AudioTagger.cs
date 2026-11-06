@@ -14,7 +14,7 @@ public sealed class AudioTagger : IDisposable
         using var options = new SessionOptions { IntraOpNumThreads = 1, InterOpNumThreads = 1 };
         options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
         options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
-        _session = new InferenceSession(Path.Combine(AppContext.BaseDirectory, "Models", "yamnet.onnx"), options);
+        _session = new InferenceSession(Path.Combine(JeekMusic.Infrastructure.AppPaths.AppDir, "Models", "yamnet.onnx"), options);
         _inputs = _session.InputNames.ToArray(); _outputs = _session.OutputNames.ToArray();
     }
 

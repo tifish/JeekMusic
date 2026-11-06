@@ -19,6 +19,7 @@ keystore.properties
 
 # Generated
 /output/
+/bin/
 *.apk
 *.aab
 *.hprof

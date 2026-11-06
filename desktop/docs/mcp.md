@@ -63,7 +63,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 {
   "mcpServers": {
     "jeekmusic": {
-      "command": "D:\\MyOpenSource\\JeekMusic\\output\\JeekMusic.exe",
+      "command": "D:\\MyOpenSource\\JeekMusic\\bin\\JeekMusic.exe",
       "args": ["--mcp"]
     }
   }
@@ -72,7 +72,9 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 发布包使用解压后的 `JeekMusic.exe` 路径；保留其旁边的 DLL、模型等完整文件。接口不需要 Python、Node.js、管理员权限或额外安装服务。
 
-日常 `output/JeekMusic.exe` 由普通无 RID build 自动同步，为依赖系统 x64 .NET 10 的版本；RID/自包含构建和 NativeAOT 发布不会覆盖它。验证发布版本时显式指定发布目录的 EXE，不合并目录。产物隔离和旧 hostfxr 自动迁移规则见 [开发说明](../README.md#开发与验证)。
+日常入口为 `bin/JeekMusic.exe`，通过根目录 `build-and-run.cmd` 构建 Windows x64 自包含绿色包，无需系统 .NET。根目录保留入口，运行依赖在 `runtime/`，模型/组件/许可证在各自子目录；默认数据在 `bin/data/`，`JEEKMUSIC_DATA` 优先。普通 build/test 和 publish 不覆盖日常目录。整包复制时保留 `portable.json` 及全部子目录。旧 output 归档和数据迁移规则见 [开发说明](../README.md#开发与验证)。
+
+只读 `get_diagnostics` 兼容增加 `runtimeDirectory`、`modelsDirectory`、`preferencesDirectory`、`portable` 和 `dataDirectorySource`（portable/environment/localAppData）。`appDirectory` 始终指向包根目录，`processPath` 指向启动入口；`dataDirectory` 和 `logsDirectory` 报告实际路径。输入仍为无参数严格对象，无新增工具或开发开关。开发和 NativeAOT 使用相同描述与 Schema。
 
 `--mcp` 启动轻量 stdio 转发进程，通过命名管道连接当前 Windows 用户的播放器。播放器没有启动时，会自动以 `--tray --background` 启动；默认不激活窗口。曲库及上次队列恢复后接受连接，连接超时为 30 秒。多个软件可同时连接，命令在播放器 UI 线程串行执行。关闭 MCP 的 stdin 会结束转发进程。若希望断开后持续播放，建议先正常启动播放器：部分 MCP 宿主在结束连接时会终止它启动的整个进程树，包括自动启动的播放器。
 
@@ -296,7 +298,7 @@ Headless 模拟验证直接调用内存 McpTools；禁止客户端启动期间�
 上一首/下一首的限定模拟回归位于 `TrackNavigationTests`：使用注入的 FakeEngine、FakeEndpointVolume、临时空文件及 Headless 窗口，内存调用 MCP，不启动客户端或 MCP 服务，不解码音频、不访问真实音频设备。覆盖暂停/播放中切歌、3 秒阈值、CUE、随机/循环和边界、加载/seek 失败、连续切歌事件及输出门控。全局快捷键和 SMTC 的真实系统分发仍需在允许客户端及音频测试时验收。
 
 ```powershell
-# RID 构建避免向正在使用的根 output/ 执行日常 staging；只运行指定模拟类。
+# RID 构建避免向正在使用的根 bin/ 执行日常 staging；只运行指定模拟类。
 $env:JEEKMUSIC_DATA = Join-Path $env:TEMP ('jeek-navigation-tests-' + [guid]::NewGuid().ToString('N'))
 dotnet build desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj -r win-x64 -p:SelfContained=false -p:PublishAot=false
 dotnet test desktop/tests/JeekMusic.App.Tests/JeekMusic.App.Tests.csproj --no-build --no-restore -r win-x64 -p:SelfContained=false -p:PublishAot=false --filter FullyQualifiedName~JeekMusic.App.Tests.TrackNavigationTests
@@ -416,7 +418,7 @@ python desktop/tools/test-build-isolation.py --build-only
 # 独立只读诊断，不启动客户端、不改变格式：
 python desktop/tools/read-audio-format.py
 # 显式真实硬件验证：共享 48/16 → 48/24 → 44.1/24 源（按驱动确认精度回退）→ 48/24 → 44.1/16，含暂停恢复完整基线/原位续播、关闭开关及独占返回：
-python desktop/tools/test-sample-rates.py --exe output/JeekMusic.exe --audio --exclusive
+python desktop/tools/test-sample-rates.py --exe bin/JeekMusic.exe --audio --exclusive
 ```
 
 脚本使用零值 PCM 和临时曲库，客户端/MCP结果与独立 Python Core Audio/PKEY 读取交叉核验。结束先关闭自己的流，检查客户端已恢复完整原端点/混音快照；失败清理仅在没有其他 Jeek Music 客户端且格式仍等于测试最后一次成功应用值时恢复，未知外部变更与新客户端均拒绝覆盖。结果在 desktop/artifacts/sample-rate-verification/wasapi.json。静音仍占设备；禁止音频测试时不得运行。可另用 JEEKMUSIC_TEST_REAL_AUDIO=1 显式执行受相同其他客户端运行检查约束的真实端点单元测试。常规 dotnet test 不修改设备。

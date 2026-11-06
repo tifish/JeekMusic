@@ -10,20 +10,20 @@ if errorlevel 1 (
 )
 
 echo Stopping the previous daily client...
-powershell.exe -NoProfile -Command "$ErrorActionPreference = 'Stop'; $exe = Join-Path (Get-Location) 'output\JeekMusic.exe'; Get-Process | Where-Object { $_.ProcessName -eq 'JeekMusic' -and $_.Path -eq $exe } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction Stop; $_.WaitForExit() }"
+powershell.exe -NoProfile -Command "$ErrorActionPreference = 'Stop'; $root = (Get-Location).Path; $clients = @((Join-Path $root 'bin\JeekMusic.exe'), (Join-Path $root 'output\JeekMusic.exe')); Get-Process | Where-Object { $_.ProcessName -eq 'JeekMusic' -and $_.Path -in $clients } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction Stop; $_.WaitForExit() }"
 if errorlevel 1 goto :failed
 
 echo Building Jeek Music...
-dotnet build "desktop\src\JeekMusic.App"
+dotnet build "desktop\src\JeekMusic.App" -r win-x64 --self-contained true -p:PublishAot=false -p:JeekStageDailyBuild=true -p:JeekMigrateLegacyData=true
 if errorlevel 1 goto :failed
 
-if not exist "output\JeekMusic.exe" (
-    echo Build output is missing: output\JeekMusic.exe
+if not exist "bin\JeekMusic.exe" (
+    echo Build output is missing: bin\JeekMusic.exe
     goto :failed
 )
 
 echo Starting Jeek Music...
-start "" "%CD%\output\JeekMusic.exe"
+start "" "%CD%\bin\JeekMusic.exe"
 if errorlevel 1 goto :failed
 popd
 exit /b 0

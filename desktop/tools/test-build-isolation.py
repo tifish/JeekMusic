@@ -70,7 +70,7 @@ def daily_signature():
 
 
 def daily_build(label, configuration):
-    build(label, "-c", configuration, "-r", "win-x64", "--self-contained", "true",
+    build(label, "-c", configuration, "-r", "win-x64", "--self-contained", "false",
           "-p:PublishAot=false", "-p:JeekStageDailyBuild=true")
 
 

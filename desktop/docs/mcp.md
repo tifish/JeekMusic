@@ -27,6 +27,12 @@
 以及 `startupWork`（主题、设置、数据库、设备偏好、主窗口构造/恢复、托盘等阶段的单独耗时）。
 `compositeImagePresent` 仅表示运行目录存在 `JeekMusic.r2r.dll`，不代表清空了 Windows 文件缓存。
 日常版使用 Release Composite ReadyToRun，正式 NativeAOT 使用相同的启动逻辑和 MCP。
+日常托管版依赖系统 .NET 10 x64，不附带运行时。`get_diagnostics.dotnetRuntime` 返回
+`kind`（framework-dependent/self-contained/native-aot）、实际 CLR `directory`（NativeAOT 为 null）
+和 `version`；原有 `runtimeDirectory` 继续表示应用依赖目录，保持兼容。
+例如 `runtimeDirectory` 为包内 `runtime/` 时，`dotnetRuntime.directory` 可指向系统
+`dotnet/shared/Microsoft.NETCore.App/10.0.x/`。应用必需的 `System.Numerics.Tensors.dll`
+是独立 NuGet 依赖，保留在应用目录，不属于附带的共享框架。
 窗口出现前只恢复输出设备偏好，不访问音频硬件；首次播放前不创建 libmpv 或预加载暂停歌曲。
 队列/顺序/手动标志、当前歌曲和位置仍恢复，`engineReady=false`、`idle=true`、`outputState=idle`
 在首次播放前为正常状态；暂停状态跳转保留位置，首次播放仍先验证设备和音量安全。

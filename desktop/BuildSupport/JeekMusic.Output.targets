@@ -17,7 +17,7 @@
        builds/tests and publishing never replace the user's running daily player. -->
   <Target Name="StageJeekDailyBuild" AfterTargets="Build"
           Condition="'$(JeekStageDailyBuild)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(_IsPublishing)' != 'true'">
-    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'true'" Text="Daily player staging requires -r win-x64 --self-contained true." />
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'false' or '$(PublishAot)' != 'false'" Text="Daily player staging requires -r win-x64 --self-contained false -p:PublishAot=false." />
     <PropertyGroup>
       <_JeekDailyLauncher>$(IntermediateOutputPath)daily\JeekMusic.exe</_JeekDailyLauncher>
       <_JeekDataMigration Condition="'$(JeekMigrateLegacyData)' == 'true'">-MigrateLegacyData</_JeekDataMigration>
@@ -34,8 +34,8 @@
   <!-- The daily launcher can also stage an explicitly requested precompiled managed publish. -->
   <Target Name="StageJeekDailyPublish" AfterTargets="Publish"
           Condition="'$(JeekStageDailyPublish)' == 'true' and '$(DesignTimeBuild)' != 'true'">
-    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'false' or '$(PublishReadyToRun)' != 'true' or '$(PublishReadyToRunComposite)' != 'true' or '$(Configuration)' != 'Release'"
-           Text="Daily publishing requires Release -r win-x64 --self-contained true -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true." />
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(SelfContained)' != 'false' or '$(PublishAot)' != 'false' or '$(PublishReadyToRun)' != 'true' or '$(PublishReadyToRunComposite)' != 'true' or '$(Configuration)' != 'Release'"
+           Text="Daily publishing requires Release -r win-x64 --self-contained false -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true." />
     <PropertyGroup>
       <_JeekDailyPublishLauncher>$(IntermediateOutputPath)daily\JeekMusic.exe</_JeekDailyPublishLauncher>
       <_JeekPublishMigration Condition="'$(JeekMigrateLegacyData)' == 'true'">-MigrateLegacyData</_JeekPublishMigration>

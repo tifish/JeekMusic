@@ -92,6 +92,7 @@ public sealed class McpTools
 
     static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0, bool openWorld = false)
     {
+        if (name == "get_diagnostics") description += " dotnetRuntime reports kind (framework-dependent/self-contained/native-aot), actual CLR directory (null for NativeAOT) and version. runtimeDirectory remains the application/dependency folder. The daily managed package uses installed .NET 10 x64; required NuGet/native dependencies remain bundled.";
         if (name == "get_diagnostics") description += " Startup restores queue/track/position in released-pause idle state without initializing libmpv; engineReady=false is expected until first playback. First play still validates the endpoint and output safety. lifecycle.startup includes mainEntered/platformStarting/themeReady/servicesReady/windowOpened/libraryReady/rowsReady cumulative ms, startupWork contains per-phase durations, compositeImagePresent reports the managed precompiled composite image on disk (not a claim that OS caches are cold). No persistent background player is installed.";
         if (name == "get_diagnostics") description += " lifecycle reports startup servicesReady/windowOpened/libraryReady milliseconds since process creation, shutdownState running/requested/cleaning and measured shutdown stage durations. shutdown.uiHidden measures exit request to window hiding after the menu callback returns; shutdown totals are recorded in get_logs after exit. No arguments.";
         if (name is "lan_sync_status" or "lan_sync_control") description += " Automatic startup is asynchronous: starting=true with enabled=false/port=0 means firewall verification is pending; the UI, MCP and local playback remain available. start waits asynchronously for the same verified listener; stop cancels pending startup. firewall.durationMs measures the last reconciliation. firewall.helper reports reuse, current processId (0 when closed), starts and requests of the fixed embedded rule manager. This private stdio helper is reused at the player's existing privilege, closes after verified exit cleanup or parent pipe EOF, and accepts no arbitrary commands; UAC repair remains a separate one-shot helper. No new inputs.";
@@ -472,6 +473,7 @@ public sealed class McpTools
                     ["processPath"] = Environment.ProcessPath,
                     ["lifecycle"] = LifecycleTimings.Diagnostics(),
                     ["frameworkDescription"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                    ["dotnetRuntime"] = DotnetRuntime(),
                     ["processArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
                     ["dynamicCodeSupported"] = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported,
                     ["tagWriting"] = Online.TagWriter.Diagnostics(),
@@ -500,6 +502,14 @@ public sealed class McpTools
     }
 
     void OnError(string message) => _lastPlayerError = message;
+
+    static JsonObject DotnetRuntime()
+    {
+        var dynamicCode = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported;
+        var directory = dynamicCode ? Path.TrimEndingDirectorySeparator(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory()) : null;
+        var kind = !dynamicCode ? "native-aot" : string.Equals(directory, Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), StringComparison.OrdinalIgnoreCase) ? "self-contained" : "framework-dependent";
+        return new JsonObject { ["kind"] = kind, ["directory"] = directory, ["version"] = Environment.Version.ToString() };
+    }
 
     JsonObject FetchResources(JsonObject a)
     {

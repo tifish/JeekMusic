@@ -36,14 +36,14 @@ Both output modes control the current endpoint master volume; in shared mode thi
 
 ## 开发与验证
 
-日常运行入口是仓库根目录的 `bin/JeekMusic.exe`。双击根目录 `build-and-run.cmd`：先退出本仓库新旧日常客户端，再发布 Release Windows x64 自包含的 Composite ReadyToRun 预编译版本，最后启动新版本。预编译缩短打开时的即时编译等待，首次构建更久，`runtime/JeekMusic.r2r.dll` 占用额外磁盘空间。编译需要 .NET 10 SDK；运行和复制该版本无需安装 .NET，也无需安装软件或管理员权限。失败时保留错误信息，不启动旧产物。
+日常运行入口是仓库根目录的 `bin/JeekMusic.exe`。双击根目录 `build-and-run.cmd`：先退出本仓库新旧日常客户端，再发布 Release Windows x64 依赖系统 .NET 的 Composite ReadyToRun 预编译版本，最后启动新版本。预编译缩短打开时的即时编译等待，首次构建更久，`runtime/JeekMusic.r2r.dll` 占用额外磁盘空间。编译需要 .NET 10 SDK；运行需要系统已安装 **.NET 10 x64 Runtime**（包含该运行时的 SDK 也可），程序不再附带 .NET 运行时。失败时保留错误信息，不启动旧产物。
 
-`bin/` 是完整绿色软件目录，可以整体复制到其他可写目录：
+`bin/` 按绿色目录保存程序和数据，可以整体复制到其他可写目录；目标电脑需要已安装 .NET 10 x64 Runtime：
 
 | 路径 | 用途 |
 | --- | --- |
 | `JeekMusic.exe` | 唯一启动入口，可从任意工作目录启动 |
-| `runtime/` | 应用程序集、托管及原生依赖、随包 .NET 运行时；不存 PDB、链接库、编译缓存或测试报告 |
+| `runtime/` | 应用程序集、必要的托管及原生依赖；不附带 .NET 运行时，不存 PDB、链接库、编译缓存或测试报告 |
 | `Models/` | YAMNet 模型及已有的附加模型 |
 | `Preferences/Runtime/` | 随包分析脚本与组件描述 |
 | `licenses/`、`LICENSE.txt` | 第三方许可与项目许可证 |
@@ -57,11 +57,11 @@ Both output modes control the current endpoint master volume; in shared mode thi
 日常构建的等价命令（先退出客户端）：
 
 ```powershell
-dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 --self-contained true -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true -p:JeekStageDailyPublish=true -p:JeekMigrateLegacyData=true
+dotnet publish desktop/src/JeekMusic.App -c Release -r win-x64 --self-contained false -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true -p:JeekStageDailyPublish=true -p:JeekMigrateLegacyData=true
 ./bin/JeekMusic.exe
 ```
 
-普通 `dotnet build`、`dotnet test` 和 publish 不会更新根 `bin/`。上述显式 `JeekStageDailyPublish=true` 在预编译完成后同步日常目录；只接受 Release、win-x64、自包含、PublishAot=false 和两项 ReadyToRun=true。调试时仍可使用 `dotnet build ... -p:JeekStageDailyBuild=true` 的旧入口，包括增量构建。直接将 `-o`、`OutputPath` 或 `PublishDir` 指向根 `bin/` 或其子目录会被拒绝。
+普通 `dotnet build`、`dotnet test` 和 publish 不会更新根 `bin/`。上述显式 `JeekStageDailyPublish=true` 在预编译完成后同步日常目录；只接受 Release、win-x64、SelfContained=false、PublishAot=false 和两项 ReadyToRun=true。调试入口使用 `dotnet build ... -r win-x64 --self-contained false -p:PublishAot=false -p:JeekStageDailyBuild=true`，包括增量构建。两种日常入口均拒绝附带运行时；旧包中清单记录的过期框架文件迁入 artifacts 备份，保留必需的 NuGet/原生依赖，不按 `System.*` 名称通配删除。直接将 `-o`、`OutputPath` 或 `PublishDir` 指向根 `bin/` 或其子目录会被拒绝。
 
 编译和还原的中间产物继续保存在各工程自己的 `obj/<build或publish>/<RID或portable>/aot-<PublishAot>_sc-<SelfContained>_psc-<PublishSelfContained>/`；ReadyToRun 另加 `_r2r-true_composite-<PublishReadyToRunComposite>` 后缀，避免还原/预编译缓存混用。编译结果保存在对应工程的 `bin/` 下；它们与仓库根目录的绿色 `bin/` 完全分离。开发日志、截图、测试夹具和迁移备份统一放 `desktop/artifacts/`，不放日常运行目录。同步脚本拒绝重解析点，过期运行依赖仅按上次清单移到 artifacts 备份，不通配删除 DLL，不修改用户数据或未知文件。
 

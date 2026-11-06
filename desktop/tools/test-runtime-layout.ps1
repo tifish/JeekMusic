@@ -17,6 +17,9 @@ Put $script ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'stage-daily-build.
 Put (Join-Path $source 'JeekMusic.exe') 'original launcher'
 Put (Join-Path $source 'JeekMusic.dll') 'application'
 Put (Join-Path $source 'hostfxr.dll') 'runtime'
+Put (Join-Path $source 'System.Private.CoreLib.dll') 'runtime core library'
+Put (Join-Path $source 'System.Runtime.dll') 'runtime framework library'
+Put (Join-Path $source 'System.Numerics.Tensors.dll') 'required package dependency'
 Put (Join-Path $source 'JeekMusic.pdb') 'debug symbols'
 Put (Join-Path $source 'native.lib') 'linking library'
 Put (Join-Path $source 'portable.json') '{}'
@@ -42,13 +45,20 @@ Check ($archive.Count -eq 1) 'Missing archive.'
 Check (Test-Path -LiteralPath (Join-Path $archive[0].FullName 'unknown-user-file.txt')) 'Unknown legacy file lost.'
 Check (-not (Test-Path -LiteralPath (Join-Path $bin 'debug-build.log'))) 'Build log leaked into bin.'
 Put (Join-Path $bin 'runtime\unknown.dll') 'unmanaged user file'
+Put (Join-Path $bin 'runtime\System.UserFile.dll') 'unknown user file'
 
 # Source removal simulates an obsolete dependency. Only manifest-owned files move.
-$obsolete = [IO.Path]::GetFullPath((Join-Path $source 'hostfxr.dll'))
-Check ($obsolete.StartsWith($fixture + '\', [StringComparison]::OrdinalIgnoreCase)) 'Unsafe test removal.'
-Remove-Item -LiteralPath $obsolete
+foreach ($name in @('hostfxr.dll','System.Private.CoreLib.dll','System.Runtime.dll')) {
+    $obsolete = [IO.Path]::GetFullPath((Join-Path $source $name))
+    Check ($obsolete.StartsWith($fixture + '\', [StringComparison]::OrdinalIgnoreCase)) 'Unsafe test removal.'
+    Remove-Item -LiteralPath $obsolete
+}
 & $script -Source $source -Launcher $launcher -MigrateLegacyData
 Check (-not (Test-Path -LiteralPath (Join-Path $bin 'runtime\hostfxr.dll'))) 'Obsolete runtime survived.'
+Check (-not (Test-Path -LiteralPath (Join-Path $bin 'runtime\System.Private.CoreLib.dll'))) 'Bundled core library survived the framework-dependent switch.'
+Check (-not (Test-Path -LiteralPath (Join-Path $bin 'runtime\System.Runtime.dll'))) 'Bundled framework library survived the switch.'
+Check ([IO.File]::ReadAllText((Join-Path $bin 'runtime\System.Numerics.Tensors.dll')) -eq 'required package dependency') 'Required System-prefixed package removed.'
+Check ([IO.File]::ReadAllText((Join-Path $bin 'runtime\System.UserFile.dll')) -eq 'unknown user file') 'Unknown System-prefixed file removed.'
 Check (Test-Path -LiteralPath (Join-Path $bin 'runtime\unknown.dll')) 'Unknown runtime file removed.'
 Check ([IO.File]::ReadAllText((Join-Path $bin 'data\settings.json')) -eq 'portable user settings') 'Existing data overwritten.'
 Check ([IO.File]::ReadAllText((Join-Path $bin 'Models\downloaded.onnx')) -eq 'downloaded model') 'Extra model overwritten.'

@@ -14,7 +14,7 @@ powershell.exe -NoProfile -Command "$ErrorActionPreference = 'Stop'; $root = (Ge
 if errorlevel 1 goto :failed
 
 echo Building precompiled Jeek Music for fast startup...
-dotnet publish "desktop\src\JeekMusic.App" -c Release -r win-x64 --self-contained true -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true -p:JeekStageDailyPublish=true -p:JeekMigrateLegacyData=true
+dotnet publish "desktop\src\JeekMusic.App" -c Release -r win-x64 --self-contained false -p:PublishAot=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true -p:JeekStageDailyPublish=true -p:JeekMigrateLegacyData=true
 if errorlevel 1 goto :failed
 
 if not exist "bin\JeekMusic.exe" (

@@ -1,5 +1,14 @@
 # 实现与验证记录
 
+## 2026-11-07：日常版使用系统 .NET 运行时
+
+- 按用户要求，日常 Release Composite ReadyToRun 改为 `--self-contained false`，保留预编译。publish 和旧的 debug 日常同步入口都拒绝 SelfContained=true，防止重建重新带入共享框架；普通独立 build/publish 和正式 NativeAOT 仍各自隔离。构建命令、README 和构建隔离回归同步维护。目标电脑需 .NET 10 x64 Runtime；本机实际使用已安装的 Microsoft.NETCore.App **10.0.14**。
+- 根 `bin/runtime/` 的 coreclr/hostfxr/hostpolicy/System.Private.CoreLib 等随包运行时已按上一轮同步清单迁入 `desktop/artifacts/retired-runtime-86d7978628d54abd81639ad44dd0a10c/`（187 个旧文件），保留用户数据和必要依赖。runtime 文件从 **238 / 267732355 字节**变为 **51 / 113572083 字节**；System.* 从 166 个变为 1 个，剩余 `System.Numerics.Tensors.dll` 为应用所需 NuGet 依赖。Composite 映像保留，FDD 版本 **23703552 字节**。未通配删除 System.*、未更改已安装的系统 .NET。
+- `test-startup-build.ps1` 通过真实 MSBuild 验证 FDD/普通 R2R/Composite/自包含四组输出和 assets 隔离、拒绝自包含日常 build/publish；`test-runtime-layout.ps1` 新增自包含→FDD 框架文件移除、必要 System.Numerics.Tensors/未知 System.* 文件保留断言，全部通过。McpSession **61 通过、0 失败/跳过**；本轮业务代码未改变，未重复全量音频测试。
+- **真实日常客户端验收通过**：根入口隔离曲库/队列，窗口可见 **712 ms**、托盘菜单 **67 ms** 消失、正常退出 **1208 ms**，exitCode=0/辅助进程已结束；已目检首张真实窗口及菜单截图。MCP `dotnetRuntime.kind=framework-dependent`，实际 CLR 目录为 `C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.14`，runtimeconfig 使用 framework 而非 includedFrameworks。预编译包复制到带空格目录后，通过路径/MCP/限时合成 WAV 原生解码和 ONNX 模型验证，不播放音频。
+- 新增兼容只读诊断 `get_diagnostics.dotnetRuntime`（kind/directory/version），原有 runtimeDirectory 保持应用依赖目录语义；描述和使用文档同步更新，无新工具或输入。正式 NativeAOT 发布成功（第三方既有 IL2104/IL3053）；空曲库真实窗口/菜单/退出验收通过，dotnetRuntime.kind=native-aot/directory=null。日常 FDD 与 NativeAOT 的 **41 项工具描述和 Schema 完全一致**。
+- 私有证据均在本机忽略目录 `desktop/artifacts/framework-dependent-*` 与 `portable-check-172b8ad492a949c2a0534047dece58aa/`；本轮隔离测试关闭在线获取/嵌入和自动分析，未写入真实媒体。替换前调用当前客户端 checkpoint 保存队列、设置、窗口布局。
+
 ## 2026-11-07：预编译日常版本与按需音频初始化
 
 - 启动分段测量确认托管 Debug 的主题加载、主窗口构造与即时编译是主要前台开销。日常 `build-and-run.cmd` 改用 Release 自包含 Composite ReadyToRun publish，显式 `JeekStageDailyPublish=true` 在预编译结束后沿用既有绿色目录同步。普通 build/test/publish 不替换日常版本，旧 `JeekStageDailyBuild` 调试入口保留。R2R 与 composite 的 obj/bin/assets graph 另加后缀隔离；代价是更长的首次构建和额外 **136376320 字节**预编译映像，不安装常驻预启动程序。

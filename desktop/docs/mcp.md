@@ -1,5 +1,19 @@
 # Windows MCP 接口
 
+## 关联打开与临时目录
+
+`open_files` 接受 `paths`（1–1000 个现存的绝对音频文件路径，不接受目录），复用文件关联和命令行打开的同一服务。先提交播放请求，再在后台读取第一个成功打开文件的所在目录，在“文件夹”导航下显示标为“临时”的目录项及同目录支持的音频文件。只读直接子文件，不递归、不注册曲库、不启动目录同步，临时项在退出后消失。多个文件仍按传入顺序播放；从临时列表点播歌曲后，列表才成为播放队列来源，沿用排序、筛选和连续播放。原队列手工插入项沿用播放器规则。
+
+```json
+{"paths":["D:\\Music\\Album\\song.flac"]}
+```
+
+工具返回 queued 仅表示已接受，且不激活窗口；需要显示时单独调用 `show_window`。`get_diagnostics.externalFiles` 返回 `state`（idle/opening/loading/ready/failed）、`directory`、`trackCount`、`failedFiles`、`generation`、`policy="play-before-directory-read"`、`recursive=false`、`persisted=false`。`song_filter` 的 status 可分页读取完整临时列表，`get_track` / `play_tracks` / `edit_queue` 可使用其会话内 trackId，`get_status` 读实际播放状态。`loading` 时列表可能先显示显式打开的歌曲；目录读取失败保留播放和初始列表。连续打开以后一次为准；后台结果不会抢走用户已切换的浏览页面。临时来源编码为 `temporary-folder`，不在下次启动恢复；开发版和正式版提供同一工具、严格 Schema 和行为。工具目录现为 42 个。
+
+`ExternalFileOpenTests` 验证播放先于目录枚举、空曲库、同目录点播、不递归、不入库、多文件顺序、迟到结果、连续打开及 MCP 错误输入。真实客户端另以外部进程参数转发和实际列表双击、截图验收；Headless 验证不能代替该步骤。
+
+`python desktop/tools/test-external-open.py --exe bin/JeekMusic.exe --report desktop/artifacts/<new-name> --ui` 使用独立数据目录、120 秒静音 WAV、播放器静音和关闭自动设备格式写入，验证真实启动参数、单实例转发、生产 MCP、同目录歌曲右键播放、切换浏览后 Ctrl+L 定位返回及重启后清除临时目录；通过 Windows UI Automation 和窗口输入操作实际客户端，并保存截图和 JSON 报告，不改用户曲库。该验证仍会打开共享音频输出。
+
 ## 启动、退出耗时诊断
 
 `get_diagnostics` 无参数，兼容增加 `lifecycle`：`units="milliseconds"`，
@@ -196,7 +210,8 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 | `list_playlists` | 支持分页。播放列表 ID、UID、名称和时间戳 |
 | `get_playlist` | `playlistId`，支持分页。按手动顺序返回条目，保留不可用条目 |
 | `edit_playlist` | `action`：`create` 需 `name`；其余需 `playlistId`。`rename` 需 `name`，`delete` 删除列表，`add` 需 `trackIds`，`remove` 需 `positions`，`move` 需 `positions` 和 `target`（移动前的目标位置，可等于条目数）。触发正常持久化及同步事件，不删除音频文件 |
-| `list_folders` | 无参数。曲库文件夹 ID、名称、完整路径和可用状态 |
+| `open_files` | `paths` 为 1–1000 个现存绝对音频路径；先播放，再异步显示第一个成功打开文件所在的临时目录。不注册曲库，返回仅表示排队；状态见 `get_diagnostics.externalFiles` |
+| `list_folders` | 无参数。曲库文件夹 ID、名称、完整路径和可用状态（不含临时目录） |
 | `add_folder` | `path` 为存在的绝对目录；如果包含已添加的子目录，需显式提供 `replaceChildren: true` 才会替换。添加后排队扫描 |
 | `remove_folder` | `folderId`。排队移出曲库，保留音频文件 |
 | `rescan_library` | 可选 `full`，默认增量扫描；`true` 重建曲库 |

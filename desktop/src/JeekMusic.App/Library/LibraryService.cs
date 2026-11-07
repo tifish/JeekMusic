@@ -244,6 +244,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
     // ── ITrackSource ──
 
     readonly System.Collections.Concurrent.ConcurrentDictionary<long, (Track track, string path)> _external = new();
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, Track> _externalByPath = new(StringComparer.OrdinalIgnoreCase);
     long _externalId;
 
     /// <summary>直接打开的文件仅放在临时队列，不自动把整个目录加入曲库。</summary>
@@ -253,8 +254,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
         if (!Scanner.AudioExtensions.Contains(Path.GetExtension(full))) throw new NotSupportedException("不支持的音频格式");
         var known = Snapshot.Tracks.FirstOrDefault(t => !t.IsCue && string.Equals(Snapshot.PathOf(t), full, StringComparison.OrdinalIgnoreCase));
         if (known is not null) return known;
-        foreach (var entry in _external.Values)
-            if (entry.path.Equals(full, StringComparison.OrdinalIgnoreCase)) return entry.track;
+        if (_externalByPath.TryGetValue(full, out var cached)) return cached;
         var info = new FileInfo(full);
         var directory = info.DirectoryName!;
         var (volume, relative) = Volumes.Locate(directory);
@@ -263,8 +263,24 @@ public sealed class LibraryService : ITrackSource, IDisposable
         try { tags = TagReader.Read(full); }
         catch (Exception e) { Log.Warn("open", "标签读取失败，仍尝试播放", e); }
         var t = new TrackBuilder(CurrentConfig()).Build(new AudioFile(folder, "", info.Name, info.LastWriteTimeUtc.Ticks, info.Length), tags, Interlocked.Decrement(ref _externalId));
+        t = _externalByPath.GetOrAdd(full, t);
         _external[t.Id] = (t, full);
         return t;
+    }
+
+    /// <summary>Only enumerate the opened file's immediate directory, after playback has been requested.</summary>
+    internal IReadOnlyList<Track> ReadExternalDirectory(string directory, CancellationToken token)
+    {
+        var tracks = new List<Track>();
+        foreach (var path in Directory.EnumerateFiles(directory))
+        {
+            token.ThrowIfCancellationRequested();
+            if (!Scanner.AudioExtensions.Contains(Path.GetExtension(path))) continue;
+            try { tracks.Add(OpenExternal(path)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+            { Log.Warn("open", "无法读取同目录歌曲", e); }
+        }
+        return tracks;
     }
 
     public Track? ById(long id) => Snapshot.ById.GetValueOrDefault(id) ?? (_external.TryGetValue(id, out var e) ? e.track : null);

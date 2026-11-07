@@ -4,7 +4,7 @@ using JeekMusic.Library;
 
 namespace JeekMusic.UI.ViewModels;
 
-public enum NavKind { Folders, Folder, Artists, Playlists, Playlist, PinnedArtist }
+public enum NavKind { Folders, Folder, Artists, Playlists, Playlist, PinnedArtist, TemporaryFolder }
 
 /// <summary>
 /// 左侧导航栏的一项（需求 W-2、W-3）：内置的"文件夹 / 艺术家 / 播放列表"，文件夹树的节点，播放列表，固定的艺术家。
@@ -38,6 +38,7 @@ public sealed partial class NavNode : ObservableObject
     public string Key => Kind switch
     {
         NavKind.Folder => $"folder:{FolderId}:{Dir}",
+        NavKind.TemporaryFolder => $"temporary-folder:{Dir}",
         NavKind.Playlist => $"playlist:{PlaylistId}",
         NavKind.PinnedArtist => $"artist:{ArtistKey}",
         _ => Kind.ToString(),

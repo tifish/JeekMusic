@@ -17,6 +17,9 @@ public abstract record QueueSource
 
     public sealed record Search(string Query) : QueueSource;
 
+    /// <summary>A session-only directory opened through a file association; never a registered library root.</summary>
+    public sealed record TemporaryFolder(string Path) : QueueSource;
+
     const char Separator = '\u001F';
 
     public string Encode() => string.Join(Separator, this switch
@@ -26,6 +29,7 @@ public abstract record QueueSource
         Album a => ["album", a.AlbumKey],
         Playlist p => ["playlist", p.PlaylistId.ToString()],
         Search s => new[] { "search", s.Query },
+        TemporaryFolder f => new[] { "temporary-folder", f.Path },
         _ => throw new InvalidOperationException(),
     });
 

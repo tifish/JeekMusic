@@ -18,6 +18,7 @@ public abstract record NavTarget
     public sealed record Playlist(long PlaylistId) : NavTarget;
     public sealed record Album(string AlbumKey) : NavTarget;
     public sealed record Search(string Query) : NavTarget;
+    public sealed record TemporaryFolder(string Path) : NavTarget;
 }
 
 public enum ContentKind { Welcome, Songs, Hint }
@@ -35,6 +36,7 @@ public sealed partial class MainViewModel : ObservableObject
     CancellationTokenSource? _computeCts;
     readonly Stack<NavTarget> _back = new();
     readonly Stack<NavTarget> _forward = new();
+    readonly Dictionary<string, IReadOnlyList<Track>> _temporaryFolders = new(StringComparer.OrdinalIgnoreCase);
     bool _navigating;
     bool _firstContentLogged;
     long? _pendingSourceRevision;
@@ -76,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject
                 if (value.Children.FirstOrDefault() is { } first) SelectedNav = first;
                 break;
             case NavKind.Folder: Navigate(new NavTarget.Folder(value.FolderId, value.Dir)); break;
+            case NavKind.TemporaryFolder: Navigate(new NavTarget.TemporaryFolder(value.Dir)); break;
             case NavKind.Artists: Navigate(new NavTarget.Artists(SelectedArtist?.NameKey)); break;
             case NavKind.Playlists:
                 value.IsExpanded = true;
@@ -100,6 +103,7 @@ public sealed partial class MainViewModel : ObservableObject
     void RebuildNav()
     {
         var selectedKey = SelectedNav?.Key;
+        var temporaryGroupExpanded = Current is NavTarget.TemporaryFolder ? Nav.FirstOrDefault(n => n.Kind == NavKind.Folders)?.IsExpanded : null;
         var expanded = Nav.SelectMany(Flatten).Where(n => n.Kind is not (NavKind.Folders or NavKind.Folder) && n.IsExpanded).Select(n => n.Key).ToHashSet();
         var filter = ListBuilder.FilterOf(Snapshot, S.TagFilter);
         _navigating = true;
@@ -114,6 +118,13 @@ public sealed partial class MainViewModel : ObservableObject
                         var folders = new NavNode { Kind = NavKind.Folders, Title = L.T("文件夹"), Icon = Icons.Folder, Item = item };
                         foreach (var root in Snapshot.Roots)
                             if (FolderNode(root, filter) is { } n) folders.Children.Add(n);
+                        foreach (var (path, tracks) in _temporaryFolders)
+                            folders.Children.Add(new NavNode
+                            {
+                                Kind = NavKind.TemporaryFolder, Dir = path, Icon = Icons.Folder,
+                                Title = L.F($"{(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } directoryName ? directoryName : path)}（临时）"),
+                                CountText = tracks.Count(t => filter is null || filter(t)).ToString("N0"),
+                            });
                         Nav.Add(folders);
                         break;
                     case "ARTISTS":
@@ -134,6 +145,7 @@ public sealed partial class MainViewModel : ObservableObject
             foreach (var n in Nav.SelectMany(Flatten))
             {
                 _app.FolderExpansion.Apply(n);
+                if (n.Kind == NavKind.Folders && temporaryGroupExpanded is { } temporaryExpanded) n.IsExpanded = temporaryExpanded;
                 if (expanded.Contains(n.Key)) n.IsExpanded = true;
             }
             SelectedNav = selectedKey is null ? null : Nav.SelectMany(Flatten).FirstOrDefault(n => n.Key == selectedKey);
@@ -166,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject
         var key = target switch
         {
             NavTarget.Folder f => $"folder:{f.FolderId}:{f.Dir}",
+            NavTarget.TemporaryFolder f => $"temporary-folder:{f.Path}",
             NavTarget.Playlist p => $"playlist:{p.PlaylistId}",
             NavTarget.PinnedArtist a => $"artist:{a.ArtistKey}",
             NavTarget.Artists => nameof(NavKind.Artists),
@@ -199,7 +212,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     internal void RevealCurrentFolderPath()
     {
-        if (Current is NavTarget.Folder) SelectNavFor(Current, revealFolderPath: true);
+        if (Current is NavTarget.Folder or NavTarget.TemporaryFolder) SelectNavFor(Current, revealFolderPath: true);
+    }
+
+    internal NavTarget? FolderTarget(Track track)
+    {
+        if (Snapshot.Node(track.FolderId, track.Dir) is not null) return new NavTarget.Folder(track.FolderId, track.Dir);
+        var directory = _library.PathOf(track) is { } path ? Path.GetDirectoryName(path) : null;
+        return directory is not null && _temporaryFolders.ContainsKey(directory) ? new NavTarget.TemporaryFolder(directory) : null;
     }
 
     // ── 艺术家栏（需求 W-4）──
@@ -299,10 +319,10 @@ public sealed partial class MainViewModel : ObservableObject
     public bool CanGoForward => _forward.Count > 0;
 
     /// <summary>切换内容区；<paramref name="history"/> 为 false 时不记入历史（后退、前进、刷新）。</summary>
-    public void Navigate(NavTarget target, bool history = true)
+    public void Navigate(NavTarget target, bool history = true, bool preservePlayback = false)
     {
         ViewRevision++;
-        var playbackIntent = Current is not null && Current != target;
+        var playbackIntent = !preservePlayback && Current is not null && Current != target;
         if (history && Current is not null && Current != target)
         {
             _back.Push(Current);
@@ -330,6 +350,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>换了内容（表格要回到顶部或恢复位置）。</summary>
     public event Action? Navigated;
+
+    internal void ShowTemporaryFolder(string path, IReadOnlyList<Track> tracks, bool navigate)
+    {
+        _temporaryFolders[path] = tracks;
+        RebuildNav();
+        if (navigate)
+        {
+            Navigate(new NavTarget.TemporaryFolder(path), preservePlayback: true);
+            SelectNavFor(Current!, revealFolderPath: true);
+        }
+        else if (Current is NavTarget.TemporaryFolder f && string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)) Recompute();
+    }
 
     [RelayCommand]
     void GoBack()
@@ -366,7 +398,7 @@ public sealed partial class MainViewModel : ObservableObject
         RowsGeneration++;
         ComputingRows = false;
         RowsInvalidated?.Invoke();
-        if (Snapshot.Folders.Count == 0) { Show(ContentKind.Welcome, "", ""); return; }
+        if (Snapshot.Folders.Count == 0 && Current is not NavTarget.TemporaryFolder) { Show(ContentKind.Welcome, "", ""); return; }
         var target = Current;
         if (target is null) return;
         IsPlaylistView = target is NavTarget.Playlist;
@@ -376,6 +408,10 @@ public sealed partial class MainViewModel : ObservableObject
         string title;
         switch (target)
         {
+            case NavTarget.TemporaryFolder f:
+                title = L.F($"{f.Path}（临时）");
+                source = new QueueSource.TemporaryFolder(f.Path);
+                break;
             case NavTarget.Folder f:
                 var node = Snapshot.Node(f.FolderId, f.Dir);
                 title = node is null ? L.T("文件夹") : (f.Dir.Length == 0 ? node.Name : node.Folder.DisplayName + "\\" + f.Dir.TrimEnd('\\'));
@@ -425,7 +461,8 @@ public sealed partial class MainViewModel : ObservableObject
         // Playlist membership is captured once through the existing repository before either computation.
         // Neither the Next/EOF fallback nor the worker re-queries it; all other sources use the library snapshot.
         var entries = playlistId is { } pid ? _playlists.Entries(pid) : null;
-        var compute = ListBuilder.Capture(snapshot, source, settings, entries);
+        var compute = ListBuilder.Capture(snapshot, source, settings, entries,
+            target is NavTarget.TemporaryFolder temporary ? _temporaryFolders.GetValueOrDefault(temporary.Path) : null);
         var ordered = settings.SortFor(orderedView: true) == SongSort.FileName && !settings.SortDescending;
         var unfiltered = settings.TagFilter.Count == 0;
         List<Track> ComputeTracks()

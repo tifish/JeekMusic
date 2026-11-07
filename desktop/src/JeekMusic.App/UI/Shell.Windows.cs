@@ -110,32 +110,16 @@ public sealed partial class Shell
     partial void OpenFiles(IReadOnlyList<string> files)
     {
         if (!_app.Args.Contains("--background")) ShowMainWindow();
-        _ = OpenFilesAsync(files);
-    }
-
-    int _openGeneration;
-
-    async Task OpenFilesAsync(IReadOnlyList<string> files)
-    {
-        var generation = ++_openGeneration;
-        var ids = new List<long>();
-        var failed = 0;
-        foreach (var path in files)
-        {
-            if (Directory.Exists(path)) { _ = _main.AddFolder(path); continue; }
-            try { ids.Add((await Task.Run(() => _app.Library.OpenExternal(path))).Id); }
-            catch (Exception e) { failed++; Infrastructure.Log.Warn("open", "无法打开文件", e); }
-        }
-        if (generation != _openGeneration) return;
-        if (ids.Count > 0) { _restored = true; _app.Player.Play(null, ids, 0, shuffle: false); }
-        if (failed > 0) _main.ViewModel.ShowToast(L.F($"有 {failed} 个文件无法打开"));
+        foreach (var path in files.Where(Directory.Exists)) _ = _main.AddFolder(path);
+        var audio = files.Where(path => !Directory.Exists(path)).ToArray();
+        if (audio.Length > 0) _ = _app.ExternalFiles!.OpenAsync(audio);
     }
 
     public void Open(IReadOnlyList<string> files) => OpenFiles(files);
 
     partial void BeforeExit()
     {
-        _openGeneration++;
+        _app.ExternalFiles?.Dispose();
         _mini?.Close();
         _desktopLyrics?.Close();
         if (_desktopLyrics is not null) _ui.LyricsBarWidth = _desktopLyrics.Width;

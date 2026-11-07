@@ -52,13 +52,18 @@ public static class ListBuilder
 
     /// <summary>Capture immutable source/settings input once. The returned computation uses memory only,
     /// so an immediate Next/EOF can resolve the same list without waiting on the Rows worker or querying storage.</summary>
-    internal static Func<List<Track>> Capture(LibrarySnapshot snapshot, QueueSource source, AppSettings settings, IReadOnlyList<PlaylistEntry>? playlistEntries)
+    internal static Func<List<Track>> Capture(LibrarySnapshot snapshot, QueueSource source, AppSettings settings, IReadOnlyList<PlaylistEntry>? playlistEntries, IReadOnlyList<Track>? temporaryTracks = null)
     {
         var filter = FilterOf(snapshot, settings.TagFilter.ToArray());
         Func<IEnumerable<Track>> items;
         ListKind kind;
         switch (source)
         {
+            case QueueSource.TemporaryFolder:
+                var temporary = temporaryTracks?.ToArray() ?? [];
+                items = () => temporary;
+                kind = ListKind.Folder;
+                break;
             case QueueSource.Folder f:
                 var node = snapshot.Node(f.FolderId, f.Dir);
                 items = () => node is null ? [] : f.Recursive ? node.AllTracks() : node.Tracks;

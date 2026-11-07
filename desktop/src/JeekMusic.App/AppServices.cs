@@ -29,6 +29,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     internal UI.PlayingRowVisibility? QueueVisibility { get; set; }
     internal UI.FolderExpansionState FolderExpansion { get; } = new();
     internal UI.ViewModels.MainViewModel? Navigation { get; set; }
+    internal UI.ExternalFileOpener? ExternalFiles { get; set; }
     internal Online.OnlineFeature? Online { get; set; }
     internal Action? CheckpointWindow { get; set; }
     internal Action? ShowSyncConflicts { get; set; }

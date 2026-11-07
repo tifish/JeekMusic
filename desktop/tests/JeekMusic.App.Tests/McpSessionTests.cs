@@ -6,6 +6,19 @@ namespace JeekMusic.App.Tests;
 public sealed class McpSessionTests
 {
     [Fact]
+    public void ExternalFileCatalogRequiresBoundedPathsAndDocumentsPlaybackBeforeDirectoryRead()
+    {
+        var tool = McpTools.BuildCatalog().Single(t => t!["name"]!.GetValue<string>() == "open_files")!;
+        var schema = tool["inputSchema"]!;
+        Assert.False(schema["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal("paths", Assert.Single(schema["required"]!.AsArray())!.GetValue<string>());
+        Assert.Equal(1000, schema["properties"]!["paths"]!["maxItems"]!.GetValue<int>());
+        Assert.Contains("before reading", tool["description"]!.GetValue<string>());
+        Assert.Throws<ArgumentException>(() => McpSession.Validate(new() { ["paths"] = new JsonArray() }, schema.AsObject()));
+        Assert.Throws<ArgumentException>(() => McpSession.Validate(new() { ["paths"] = new JsonArray(123) }, schema.AsObject()));
+    }
+
+    [Fact]
     public void AnnotationCatalogHasCompatibleSearchAndSharedCurrentListSchema()
     {
         var catalog=McpTools.BuildCatalog();
@@ -74,7 +87,7 @@ public sealed class McpSessionTests
         await Ready(session, version);
         var response = await session.HandleAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         var tools = response!["result"]!["tools"]!.AsArray();
-        Assert.Equal(41, tools.Count);
+        Assert.Equal(42, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t!["name"]!.GetValue<string>()).Distinct().Count());
         Assert.All(tools, t => Assert.False(t!["inputSchema"]!["additionalProperties"]!.GetValue<bool>()));
     }

@@ -1,4 +1,6 @@
 {
+  "{0}（临时）": "{0} (temporary)",
+  "无法读取同目录歌曲": "Could not read other songs in this directory",
   "较大": "Larger",
   "较小": "Smaller",
   "大小相同": "Same size",

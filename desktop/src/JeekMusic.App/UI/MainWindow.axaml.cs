@@ -219,9 +219,9 @@ public partial class MainWindow : Window
         if (row is null)
         {
             // 不在当前列表里：跳到它所在的文件夹
-            if (_app.Player.CurrentTrack is { } t)
+            if (_app.Player.CurrentTrack is { } t && _vm.FolderTarget(t) is { } target && target != _vm.Current)
             {
-                _vm.Navigate(new NavTarget.Folder(t.FolderId, t.Dir));
+                _vm.Navigate(target);
                 _vm.RowsChanged += Once;
                 void Once()
                 {

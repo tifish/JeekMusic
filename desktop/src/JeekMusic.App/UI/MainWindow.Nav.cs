@@ -70,6 +70,9 @@ public partial class MainWindow
         }
         switch (node.Kind)
         {
+            case NavKind.TemporaryFolder:
+                Add(L.T("在资源管理器中打开"), () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(node.Dir) { UseShellExecute = true }));
+                break;
             case NavKind.Folder:
                 var source = new QueueSource.Folder(node.FolderId, node.Dir, true);
                 Add(L.T("播放全部（含子文件夹）"), () => PlaySource(source, node.Title, shuffle: false));

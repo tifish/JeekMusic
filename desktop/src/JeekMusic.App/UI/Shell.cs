@@ -23,6 +23,7 @@ public sealed partial class Shell
     MainWindow _main = null!;
     TrayIcon? _tray;
     bool _restored;
+    bool _libraryReady;
     bool _exiting;
 
     public Shell(AppServices app, IClassicDesktopStyleApplicationLifetime desktop)
@@ -45,6 +46,7 @@ public sealed partial class Shell
         _ = _app.Library.StartAsync();
 
         using (LifecycleTimings.Measure("startupWork.windowConstruction")) _main = new MainWindow(_app);
+        _app.ExternalFiles = new ExternalFileOpener(_app, _main.ViewModel, () => _restored = true);
         using (LifecycleTimings.Measure("startupWork.windowRestore")) RestoreWindow();
         _app.CheckpointWindow = SaveWindow;
         _main.ViewModel.InitialTarget = InitialTarget();
@@ -186,10 +188,14 @@ public sealed partial class Shell
             _app.Args = [.. _app.Args.Where(a => a != "--autoplay")];
             _main.PlayFrom(first);
         }
-        if (_restored) return;
-        _restored = true;
+        if (_libraryReady) return;
+        _libraryReady = true;
+        if (!_restored)
+        {
+            _restored = true;
+            _app.QueuePersistence.Restore(_app.Library.Snapshot);
+        }
         LifecycleTimings.Mark("startup.libraryReady");
-        _app.QueuePersistence.Restore(_app.Library.Snapshot);
         // 只有曲库和保存的队列就绪后才接受外部控制，避免启动恢复覆盖 MCP 命令。
         _app.Mcp.Start();
     }

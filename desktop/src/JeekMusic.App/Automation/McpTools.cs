@@ -32,6 +32,7 @@ public sealed class McpTools
     internal JsonArray Catalog { get; } = BuildCatalog();
 
     internal static JsonArray BuildCatalog() => new(
+        Tool("open_files", "Open existing absolute local audio paths through the same file-association service. Requests playback before reading the first successfully opened file's immediate directory, then displays a session-only temporary folder with supported sibling audio files. No recursive scan, library registration or window activation. Explicit multi-file play order is preserved until a song is played from the folder list. Latest open wins; a late folder result never navigates away from user browsing. Response means scheduled; observe get_diagnostics.externalFiles (opening/loading/ready/failed), song_filter and get_status. Same service in development and production.", "\"paths\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":1000,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767,\"description\":\"Existing absolute local audio file path; directories are not accepted.\"}}", ["paths"]),
         Tool("lan_file_conflicts", "List persistent shared file conflicts (100 per page), open the same comparison window, or choose a captured version. local means PHONE, remote means PC. Returns both sizes/modifiedNs/deletion states, sizeComparison (larger/smaller/equal/unavailable) and modifiedComparison (newer/older/equal/unavailable) relative to the other side using exact integers, device, scope, path and immutable conflict id. choose records first-writer-wins intent; it does NOT mean files were changed. Foreground phone exchanges conflict status every 2 seconds and sends queued choices immediately; files apply through the reconciler after checking both versions again. Local UI updates on state changes; offline phone leaves choice pending. Stale IDs, changed PC files and opposite concurrent choices are rejected. Same UI service in development/AOT. No hashes or audio reads for list/choose.", "\"action\":{\"type\":\"string\",\"enum\":[\"list\",\"choose\",\"open\"]},\"id\":{\"type\":\"string\",\"minLength\":64,\"maxLength\":64},\"choice\":{\"type\":\"string\",\"enum\":[\"local\",\"remote\"]},\"offset\":{\"type\":\"integer\",\"minimum\":0}", ["action"]),
         Tool("preference_inventory", "status reads the bounded identity review page; register hashes at most six additional local recordings for explicit identity review, does not ask labels or consume attempt budget; freeze locks complete component-disjoint lists before evaluation: full workout frame 48/12/48; other heads may use compact training12/24/36, development8/sealed24 without requiring workout material. Incomplete identities/components fail closed; no title-based content matching, no component splitting, no inferred answers. Training pilot remains non-independent. Current deterministic sampling deviation is recorded in frozen manifest.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"register\",\"freeze\"]}", ["action"]),
         Tool("preference_data", "Single learning dataset, ready on first use and automatically synced with paired devices using protocol 3. status/list reads counts without private labels. clear (legacy delete) clears only learning answers, batches and candidates and propagates a durable clear boundary; old offline events cannot return. Reuse immediately by labeling again. Library, daily tags, playlists and pairing preserved. export includes private learning labels. dimension changes only the independent question. import_regression requires explicit owner/version confirmation. No create/select or profileId required. capture drains only NEW local explicit manual-correction audit entries (at most six recording hashes), with idempotent generation/device-bound retries; no audio inference. status.dailyFeedback reports pending reasons and self-selection bias.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"list\",\"capture\",\"clear\",\"dimension\",\"import_regression\",\"delete\",\"export\"]},\"path\":{\"type\":\"string\",\"maxLength\":1000}", ["action"], destructive:true),
@@ -93,6 +94,7 @@ public sealed class McpTools
     static JsonObject Tool(string name, string description, string properties, string[] required, bool readOnly = false, bool destructive = false, int minProperties = 0, bool openWorld = false)
     {
         if (name == "get_diagnostics") description += " dotnetRuntime reports kind (framework-dependent/self-contained/native-aot), actual CLR directory (null for NativeAOT) and version. runtimeDirectory remains the application/dependency folder. The daily managed package uses installed .NET 10 x64; required NuGet/native dependencies remain bundled.";
+        if (name == "get_diagnostics") description += " externalFiles reports the shared file-association/open_files state, directory, trackCount, failedFiles, generation and play-before-directory-read policy; directories are nonrecursive and session-only. song_filter reads the displayed temporary list using the normal paging/filter service.";
         if (name == "get_diagnostics") description += " Startup restores queue/track/position in released-pause idle state without initializing libmpv; engineReady=false is expected until first playback. First play still validates the endpoint and output safety. lifecycle.startup includes mainEntered/platformStarting/themeReady/servicesReady/windowOpened/libraryReady/rowsReady cumulative ms, startupWork contains per-phase durations, compositeImagePresent reports the managed precompiled composite image on disk (not a claim that OS caches are cold). No persistent background player is installed.";
         if (name == "get_diagnostics") description += " lifecycle reports startup servicesReady/windowOpened/libraryReady milliseconds since process creation, shutdownState running/requested/cleaning and measured shutdown stage durations. shutdown.uiHidden measures exit request to window hiding after the menu callback returns; shutdown totals are recorded in get_logs after exit. No arguments.";
         if (name is "lan_sync_status" or "lan_sync_control") description += " Automatic startup is asynchronous: starting=true with enabled=false/port=0 means firewall verification is pending; the UI, MCP and local playback remain available. start waits asynchronously for the same verified listener; stop cancels pending startup. firewall.durationMs measures the last reconciliation. firewall.helper reports reuse, current processId (0 when closed), starts and requests of the fixed embedded rule manager. This private stdio helper is reused at the player's existing privilege, closes after verified exit cleanup or parent pipe EOF, and accepts no arbitrary commands; UAC repair remains a separate one-shot helper. No new inputs.";
@@ -239,6 +241,13 @@ public sealed class McpTools
         var p = app.Player;
         switch (name)
         {
+            case "open_files":
+                var paths = Required(a, "paths").AsArray().Select(n => n!.GetValue<string>()).ToArray();
+                if (paths.Any(path => !Path.IsPathFullyQualified(path) || !File.Exists(path) || !Scanner.AudioExtensions.Contains(Path.GetExtension(path))))
+                    throw new ArgumentException("paths must contain existing absolute supported audio files");
+                var opener = app.ExternalFiles ?? throw new InvalidOperationException("File opening service is not ready");
+                _ = opener.OpenAsync(paths);
+                return Queued();
             case "preference_inventory": return Required(a,"action").GetValue<string>() switch { "status"=>app.Preferences.Inventory(), "freeze"=>app.Preferences.FreezeStudy(), _=>throw new ArgumentException("Use asynchronous register") };
             case "preference_data":
             case "preference_profile":
@@ -493,7 +502,8 @@ public sealed class McpTools
                     ["resourceBatch"] = app.Online?.Batches.Diagnostics() ?? new JsonObject { ["state"] = "unavailable", ["busy"] = false },
                     ["mainLayout"] = app.MainLayoutDiagnostics?.Invoke() ?? new JsonObject { ["created"] = false },
                     ["folderNavigation"] = app.FolderExpansion.Diagnostics(app.Navigation?.Nav),
-                    ["songFilter"] = FilterDiagnostics()
+                    ["songFilter"] = FilterDiagnostics(),
+                    ["externalFiles"] = app.ExternalFiles?.Diagnostics() ?? new JsonObject { ["state"] = "unavailable" }
                 };
             case "get_logs": return Logs(a);
             case "show_window": Shell.Current.ShowMainWindow(); return new JsonObject { ["shown"] = true };
@@ -680,6 +690,7 @@ public sealed class McpTools
             QueueSource.Album a => new JsonObject { ["kind"] = "album", ["albumKey"] = a.AlbumKey },
             QueueSource.Playlist p => new JsonObject { ["kind"] = "playlist", ["playlistId"] = p.PlaylistId },
             QueueSource.Search s => new JsonObject { ["kind"] = "search", ["query"] = s.Query },
+            QueueSource.TemporaryFolder f => new JsonObject { ["kind"] = "temporary-folder", ["path"] = f.Path },
             _ => new JsonObject()
         };
         result["title"] = context.Title;

@@ -64,7 +64,7 @@ public sealed class AppSettings
     public bool HasSongSortPreference => SavedSongSort.HasValue;
     public SongSort SortFor(bool orderedView) => orderedView && !HasSongSortPreference ? SongSort.FileName : SongSort;
     public bool SortDescending { get; set; }
-    /// <summary>智能标签筛选（需求 M-6）：选中的标签名，如 "SPORT"、"INSTRUMENTAL"；每个维度最多一个；MANUAL/UNANNOTATED 为互斥的当前手工覆盖状态。</summary>
+    /// <summary>智能标签筛选（需求 M-6）：选中的标签名，如 "SPORT"、"INSTRUMENTAL"；每个维度最多一个；CHINESE/NON_CHINESE、ENGLISH/NON_ENGLISH 为独立的歌名文字互补过滤；MANUAL/UNANNOTATED 为互斥的当前手工覆盖状态。</summary>
     public List<string> TagFilter { get; set; } = [];
     public bool IncludeSubfolders { get; set; }
 

@@ -318,6 +318,8 @@ public partial class MainWindow : Window
             foreach (var tag in tags)
             {
                 var item = new MenuItem { Header = "    " + Text.TagName(tag), ToggleType = MenuItemToggleType.CheckBox, IsChecked = _vm.TagFilter.Contains(tag) };
+                if (ListBuilder.DimensionOf(tag) is "TITLE_CHINESE" or "TITLE_ENGLISH")
+                    ToolTip.SetTip(item, L.T("按歌名中的汉字或英文字母筛选；混合歌名可同时符合中文和英文。"));
                 item.Click += (_, _) => _vm.ToggleTag(tag);
                 menu.Items.Add(item);
             }
@@ -326,6 +328,7 @@ public partial class MainWindow : Window
         Group(L.T("人声"), "VOCAL", "INSTRUMENTAL");
         Group(L.T("曲风"), "CLASSICAL", "NON_CLASSICAL");
         Group(L.T("平静程度"), "CALM", "NON_CALM");
+        Group(L.T("歌名文字"), "CHINESE", "NON_CHINESE", "ENGLISH", "NON_ENGLISH");
         var manual=new MenuItem { Header=L.T("已手工标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("MANUAL") };
         manual.Click+=(_,_)=>_vm.ToggleTag("MANUAL"); menu.Items.Add(manual);
         var unannotated=new MenuItem { Header=L.T("未标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("UNANNOTATED") };

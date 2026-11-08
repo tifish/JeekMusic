@@ -720,5 +720,12 @@
   "正在配置；Windows 可能请求管理员确认。": "Configuring; Windows may request administrator consent.",
   "管理员确认已取消，点击修复后重试。": "Administrator consent was cancelled. Select Repair to retry.",
   "组织策略禁止本地入站规则，请联系管理员。": "Managed policy blocks local inbound rules. Contact your administrator.",
-  "防火墙未就绪。点击修复；若仍失败，请检查管理员权限、系统策略或第三方防火墙。": "Firewall setup is not ready. Select Repair; if it still fails, check administrator permissions, system policy or third-party firewalls."
+  "防火墙未就绪。点击修复；若仍失败，请检查管理员权限、系统策略或第三方防火墙。": "Firewall setup is not ready. Select Repair; if it still fails, check administrator permissions, system policy or third-party firewalls.",
+  "中文": "Chinese",
+  "非中文": "Non-Chinese",
+  "英文": "English",
+  "非英文": "Non-English",
+  "歌名文字": "Title text",
+  "按智能标签和歌名文字筛选": "Filter by smart tags and title text",
+  "按歌名中的汉字或英文字母筛选；混合歌名可同时符合中文和英文。": "Match Han characters or English letters in the title; mixed titles can match both Chinese and English."
 }

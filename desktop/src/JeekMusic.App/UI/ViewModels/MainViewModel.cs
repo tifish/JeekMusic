@@ -620,7 +620,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void SetTagFilter(IEnumerable<string> filter)
     {
-        S.TagFilter = ListBuilder.NormalizeFilter(filter).OrderBy(t => ListBuilder.DimensionOf(t) switch { "MOOD" => 0, "VOICE" => 1, "GENRE" => 2, _ => 3 }).ToList();
+        S.TagFilter = ListBuilder.NormalizeFilter(filter).OrderBy(t => ListBuilder.DimensionOf(t) switch {
+            "MOOD" => 0, "VOICE" => 1, "GENRE" => 2, "CALMNESS" => 3,
+            "TITLE_CHINESE" => 4, "TITLE_ENGLISH" => 5, _ => 6 }).ToList();
         _settings.Save("filter");
         FilterChanged();
     }

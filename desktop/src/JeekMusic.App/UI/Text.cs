@@ -35,6 +35,10 @@ public static class Text
         "INSTRUMENTAL" => L.T("纯音乐"),
         "CLASSICAL" => L.T("古典"),
         "NON_CLASSICAL" => L.T("非古典"),
+        "CHINESE" => L.T("中文"),
+        "NON_CHINESE" => L.T("非中文"),
+        "ENGLISH" => L.T("英文"),
+        "NON_ENGLISH" => L.T("非英文"),
         _ => "",
     };
 

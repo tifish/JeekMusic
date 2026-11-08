@@ -99,7 +99,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 `search_tracks` 新增可选 `annotation: "all" | "manual" | "unannotated"`，默认 all。manual 为 MOOD/VOICE/GENRE/CALMNESS 任一当前有效 MANUAL 值，包括与自动同值；unannotated 为严格补集，包含未分析和只有 AUTO/PERSONAL 结果的歌曲。不查询审计、学习或封存答案。与 query/folderId/artistKey/albumKey/tags 作 AND，在排序和分页前筛选整个结果；不保存 UI 设置。兼容 `onlyManual=true`（manual）和 false（无额外限制）；true 与显式 all/unannotated 冲突报错，不制造永远为空的组合。
 
-新增 `song_filter`：`action="status"` 仅读当前 UI 筛选和列表，另可 offset/limit；`action="set"` 至少提供 annotation 或 tags，省略字段保持当前值，`tags=[]` 清除四维标签限制，`annotation="all"` 清除标注状态限制。tags 每维最多一个；经同一 UI 服务本地保存、刷新目录/艺人数及完整列表，不修改标注或直接播放。返回 annotation/tags/source、ready、rowCount（包括缺失引用）及 total/items/nextOffset（有 Track 的完整当前列表分页）。ready=false 表示正在计算，items/total 暂为空；继续 status 读刷新后的结果。沿用搜索页在筛选后最多展示 200 首的既有行为。
+新增 `song_filter`：`action="status"` 仅读当前 UI 筛选和列表，另可 offset/limit；`action="set"` 至少提供 annotation 或 tags，省略字段保持当前值，`tags=[]` 清除标签及歌名文字限制，`annotation="all"` 清除标注状态限制。tags 每维最多一个；经同一 UI 服务本地保存、刷新目录/艺人数及完整列表，不修改标注或直接播放。返回 annotation/tags/source、ready、rowCount（包括缺失引用）及 total/items/nextOffset（有 Track 的完整当前列表分页）。ready=false 表示正在计算，items/total 暂为空；继续 status 读刷新后的结果。沿用搜索页在筛选后最多展示 200 首的既有行为。
 
 `get_diagnostics.songFilter` 只读报告 annotation/tagFilter/ready/rowCount、policy=`current-effective-MANUAL-any-four-dimensions-complement`、learningAnswersIncluded=false，不创建窗口。`fetch_resources` status 的 currentList 兼容增加 annotation。两者均使用同一筛选偏好；开发版与 NativeAOT 工具目录、Schema 和实现相同。checkpoint_client 保全当前实时状态，重启后仍保留标注筛选。
 
@@ -650,3 +650,13 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 ### 文件同步协议3：仅大小和修改时间
 
 两端必须同时升级。文件版本用 `stamp=m2:size:modifiedNs` 表示，取代内容 hash；基线 comparisonProtocol=2 和已保存的两端落地时间对应关系保留，不清空基线。相同大小和精确修改时间即视为同一版本，即使内容不同。续传校验事务归属、文件身份和已持久化的部分文件大小/修改时间；无法确认的部分文件不覆盖用户文件。旧事务仅能从现存元数据迁移，无可靠元数据时保留并报告延期。认证、TLS、路径边界、撤销和配额不变。MCP 参数 Schema 无变化，新增诊断值两种构建一致。
+
+## 歌名文字过滤
+
+筛选菜单新增“歌名文字”：中文 / 非中文、英文 / 非英文。按当前显示歌名判断（沿用元数据、文件名及 CUE 标题回退），不读取艺术家、专辑、歌词或音频演唱语言，也不要求分析结果。中文表示含汉字，英文表示含 A–Z/a–z（兼容全角字母）；对应“非”是严格补集。混合歌名可同时属于中文和英文，纯数字/符号同时属于非中文和非英文；日文歌名中的汉字也按汉字匹配。两组各自互斥、可跨组组合，并与四维智能标签、标注状态、来源和搜索取交集。重复点击取消，清除筛选移除全部限制，重启保留选择。
+
+`song_filter` 与 `search_tracks` 的 `tags` 兼容增加 `CHINESE`、`NON_CHINESE`、`ENGLISH`、`NON_ENGLISH`，上限从 4 扩至 6（四维智能标签加两组文字条件）。相反选项或重复维度报错；搜索不改变界面偏好。`song_filter` 省略 tags 保留文字选择，`tags=[]` 清除；`get_diagnostics.songFilter.titleTextPolicy` 说明判定策略。开发版和 NativeAOT 使用同一业务管线和 Schema。
+
+```json
+{"action":"set","tags":["CHINESE","NON_ENGLISH"],"annotation":"all"}
+```

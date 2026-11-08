@@ -1,5 +1,14 @@
 # 实现与验证记录
 
+## 2026-11-08：中文 / 英文歌名文字过滤
+
+- 筛选菜单新增“歌名文字”的中文 / 非中文、英文 / 非英文；按显示标题的汉字与兼容规范化后的英文字母判断，不推断演唱语言，也不读取艺术家或要求智能分析。两组各自互斥、跨组取交集；混合标题可同时为中文和英文，纯数字/符号同时为非中文和非英文。保留文件名/CUE 的既有显示标题回退。
+- 复用 ListBuilder 管线，来源、搜索、目录/艺术家计数、列表和后续列表队列使用同一谓词；同组替换、重复点击取消、清除全部以及重启持久化通过。与四维智能标签和手工标注状态组合，不修改标注、媒体或播放状态。
+- MCP `song_filter` / `search_tracks` 的 tags 增加四个文字条件，上限兼容扩至六维；矛盾组合报错，搜索不保存界面偏好，省略 tags 保留选择。工具描述、共享 Schema、英文翻译、使用文档和诊断策略同步更新。
+- 新增定向回归 14 项通过；完整 Core **118 通过**、App **774 通过，2 项既有真实设备测试跳过**。日常 Composite ReadyToRun 构建通过；正式 NativeAOT 发布通过（第三方 DataGrid 既有 IL2104 / IL3053）。两种真实产物的 **42 项工具目录、描述及 Schema 完全一致**。
+- **真实客户端 UI 验收通过**：日常版中文、英文，以及正式 NativeAOT 中文均在独立合成静音曲库中通过 UIAutomation 调用筛选按钮并实际点击四个选项；逐步核对组合结果、重复取消、清除和重启保持。已目检原生窗口及菜单截图，含 NativeAOT 中英混合筛选的双勾选状态；未以 headless 代替。未播放音频、访问在线资源或写入真实媒体。
+- 本机忽略目录证据：`desktop/artifacts/title-filter-zh/`、`title-filter-en/`、`title-filter-native-acceptance/`，包含真实截图、交互记录和完整 MCP 目录；完整测试及构建日志为 `desktop/artifacts/title-filter-*.log`。旧日常客户端先 checkpoint 再结束，新版本根 `bin/JeekMusic.exe` 已启动。
+
 ## 2026-11-07：日常版使用系统 .NET 运行时
 
 - 按用户要求，日常 Release Composite ReadyToRun 改为 `--self-contained false`，保留预编译。publish 和旧的 debug 日常同步入口都拒绝 SelfContained=true，防止重建重新带入共享框架；普通独立 build/publish 和正式 NativeAOT 仍各自隔离。构建命令、README 和构建隔离回归同步维护。目标电脑需 .NET 10 x64 Runtime；本机实际使用已安装的 Microsoft.NETCore.App **10.0.14**。

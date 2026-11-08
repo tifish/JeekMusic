@@ -58,6 +58,7 @@ public sealed partial class MainViewModel : ObservableObject
         app.Player.StateChanged += OnPlaybackStateChanged;
         app.Player.Error += ShowToast;
         _includeSubfolders = _settings.Current.IncludeSubfolders;
+        app.SingingLanguages.Changed += () => OnPropertyChanged(nameof(FilterText));
     }
 
     LibrarySnapshot Snapshot => _library.Snapshot;
@@ -606,7 +607,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public IReadOnlyList<string> TagFilter => S.TagFilter;
     public bool FilterActive => S.TagFilter.Count > 0;
-    public string FilterText => FilterActive ? string.Join("·", S.TagFilter.Select(Text.TagName)) : L.T("筛选");
+    public string FilterText => (FilterActive ? string.Join("·", S.TagFilter.Select(Text.TagName)) : L.T("筛选"))
+        + (_app.SingingLanguages.Busy ? " · " + L.T("语种识别中") : "");
 
     /// <summary>点一下选中，再点一下取消；同一维度只能选一个。</summary>
     public void ToggleTag(string tag)
@@ -622,7 +624,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         S.TagFilter = ListBuilder.NormalizeFilter(filter).OrderBy(t => ListBuilder.DimensionOf(t) switch {
             "MOOD" => 0, "VOICE" => 1, "GENRE" => 2, "CALMNESS" => 3,
-            "TITLE_CHINESE" => 4, "TITLE_ENGLISH" => 5, _ => 6 }).ToList();
+            "SINGING_CHINESE" => 4, "SINGING_ENGLISH" => 5, _ => 6 }).ToList();
         _settings.Save("filter");
         FilterChanged();
     }

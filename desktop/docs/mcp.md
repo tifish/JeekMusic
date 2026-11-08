@@ -8,7 +8,7 @@
 {"paths":["D:\\Music\\Album\\song.flac"]}
 ```
 
-工具返回 queued 仅表示已接受，且不激活窗口；需要显示时单独调用 `show_window`。`get_diagnostics.externalFiles` 返回 `state`（idle/opening/loading/ready/failed）、`directory`、`trackCount`、`failedFiles`、`generation`、`policy="play-before-directory-read"`、`recursive=false`、`persisted=false`。`song_filter` 的 status 可分页读取完整临时列表，`get_track` / `play_tracks` / `edit_queue` 可使用其会话内 trackId，`get_status` 读实际播放状态。`loading` 时列表可能先显示显式打开的歌曲；目录读取失败保留播放和初始列表。连续打开以后一次为准；后台结果不会抢走用户已切换的浏览页面。临时来源编码为 `temporary-folder`，不在下次启动恢复；开发版和正式版提供同一工具、严格 Schema 和行为。工具目录现为 42 个。
+工具返回 queued 仅表示已接受，且不激活窗口；需要显示时单独调用 `show_window`。`get_diagnostics.externalFiles` 返回 `state`（idle/opening/loading/ready/failed）、`directory`、`trackCount`、`failedFiles`、`generation`、`policy="play-before-directory-read"`、`recursive=false`、`persisted=false`。`song_filter` 的 status 可分页读取完整临时列表，`get_track` / `play_tracks` / `edit_queue` 可使用其会话内 trackId，`get_status` 读实际播放状态。`loading` 时列表可能先显示显式打开的歌曲；目录读取失败保留播放和初始列表。连续打开以后一次为准；后台结果不会抢走用户已切换的浏览页面。临时来源编码为 `temporary-folder`，不在下次启动恢复；开发版和正式版提供同一工具、严格 Schema 和行为。工具目录现为 43 个。
 
 `ExternalFileOpenTests` 验证播放先于目录枚举、空曲库、同目录点播、不递归、不入库、多文件顺序、迟到结果、连续打开及 MCP 错误输入。真实客户端另以外部进程参数转发和实际列表双击、截图验收；Headless 验证不能代替该步骤。
 
@@ -99,7 +99,7 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 `search_tracks` 新增可选 `annotation: "all" | "manual" | "unannotated"`，默认 all。manual 为 MOOD/VOICE/GENRE/CALMNESS 任一当前有效 MANUAL 值，包括与自动同值；unannotated 为严格补集，包含未分析和只有 AUTO/PERSONAL 结果的歌曲。不查询审计、学习或封存答案。与 query/folderId/artistKey/albumKey/tags 作 AND，在排序和分页前筛选整个结果；不保存 UI 设置。兼容 `onlyManual=true`（manual）和 false（无额外限制）；true 与显式 all/unannotated 冲突报错，不制造永远为空的组合。
 
-新增 `song_filter`：`action="status"` 仅读当前 UI 筛选和列表，另可 offset/limit；`action="set"` 至少提供 annotation 或 tags，省略字段保持当前值，`tags=[]` 清除标签及歌名文字限制，`annotation="all"` 清除标注状态限制。tags 每维最多一个；经同一 UI 服务本地保存、刷新目录/艺人数及完整列表，不修改标注或直接播放。返回 annotation/tags/source、ready、rowCount（包括缺失引用）及 total/items/nextOffset（有 Track 的完整当前列表分页）。ready=false 表示正在计算，items/total 暂为空；继续 status 读刷新后的结果。沿用搜索页在筛选后最多展示 200 首的既有行为。
+新增 `song_filter`：`action="status"` 仅读当前 UI 筛选和列表，另可 offset/limit；`action="set"` 至少提供 annotation 或 tags，省略字段保持当前值，`tags=[]` 清除标签及演唱语种限制，`annotation="all"` 清除标注状态限制。tags 每维最多一个；经同一 UI 服务本地保存、刷新目录/艺人数及完整列表，不修改标注或直接播放。返回 annotation/tags/source、ready、rowCount（包括缺失引用）及 total/items/nextOffset（有 Track 的完整当前列表分页）。ready=false 表示正在计算，items/total 暂为空；继续 status 读刷新后的结果。沿用搜索页在筛选后最多展示 200 首的既有行为。
 
 `get_diagnostics.songFilter` 只读报告 annotation/tagFilter/ready/rowCount、policy=`current-effective-MANUAL-any-four-dimensions-complement`、learningAnswersIncluded=false，不创建窗口。`fetch_resources` status 的 currentList 兼容增加 annotation。两者均使用同一筛选偏好；开发版与 NativeAOT 工具目录、Schema 和实现相同。checkpoint_client 保全当前实时状态，重启后仍保留标注筛选。
 
@@ -651,12 +651,44 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 两端必须同时升级。文件版本用 `stamp=m2:size:modifiedNs` 表示，取代内容 hash；基线 comparisonProtocol=2 和已保存的两端落地时间对应关系保留，不清空基线。相同大小和精确修改时间即视为同一版本，即使内容不同。续传校验事务归属、文件身份和已持久化的部分文件大小/修改时间；无法确认的部分文件不覆盖用户文件。旧事务仅能从现存元数据迁移，无可靠元数据时保留并报告延期。认证、TLS、路径边界、撤销和配额不变。MCP 参数 Schema 无变化，新增诊断值两种构建一致。
 
-## 歌名文字过滤
+## 演唱语言过滤
 
-筛选菜单新增“歌名文字”：中文 / 非中文、英文 / 非英文。按当前显示歌名判断（沿用元数据、文件名及 CUE 标题回退），不读取艺术家、专辑、歌词或音频演唱语言，也不要求分析结果。中文表示含汉字，英文表示含 A–Z/a–z（兼容全角字母）；对应“非”是严格补集。混合歌名可同时属于中文和英文，纯数字/符号同时属于非中文和非英文；日文歌名中的汉字也按汉字匹配。两组各自互斥、可跨组组合，并与四维智能标签、标注状态、来源和搜索取交集。重复点击取消，清除筛选移除全部限制，重启保留选择。
+2026-11-08 根据用户确认，替换此前按歌名字符判断的实现。`CHINESE` / `NON_CHINESE`、`ENGLISH` / `NON_ENGLISH` 令牌保留，但语义改为**实际演唱语言**，不再检查标题、文件名、艺术家或歌词。现有选择沿用并应用新语义；此前字符过滤结果不能当作语种结果。
 
-`song_filter` 与 `search_tracks` 的 `tags` 兼容增加 `CHINESE`、`NON_CHINESE`、`ENGLISH`、`NON_ENGLISH`，上限从 4 扩至 6（四维智能标签加两组文字条件）。相反选项或重复维度报错；搜索不改变界面偏好。`song_filter` 省略 tags 保留文字选择，`tags=[]` 清除；`get_diagnostics.songFilter.titleTextPolicy` 说明判定策略。开发版和 NativeAOT 使用同一业务管线和 Schema。
+- 中文为已确认包含 zh/yue 的人声语种，英文为包含 en；混合演唱可同时为中文和英文。非中文 / 非英文只在语种已知时表示不包含对应语种。未知、未识别、文件签名过期及纯音乐均不匹配任何一项，尤其不把未知归入“非”。
+- 各组内部互斥，跨组和四维智能标签、标注状态、来源、搜索取 AND；列表、目录/艺术家计数和后续列表队列共用管线。`tags` 上限 6；`song_filter` 省略 tags 保持选择，`tags=[]` 清除；搜索不保存界面筛选。
+- 语种的手工纠正是独立数据，不改变原有四维 MANUAL/unannotated 的含义，也不生成学习答案。当前语种结果本机保存，不改变既有跨设备同步协议。不修改或嵌入媒体标签。
+
+### singing_language
+
+开发版、日常版和正式 NativeAOT 完整提供同一个工具，目前共 **43 项工具**。
+
+| action | 参数及行为 |
+| --- | --- |
+| status | 可选 trackIds 和 offset/limit。返回模型、任务进度、失败数、当前曲目及近期 20 项结果；tracks 分页返回每首语言及来源、置信参考值和取样证据。|
+| prepare | 首次需 downloadConfirmed=true；下载并校验多语种 Whisper tiny GGML 模型（77,691,713 字节，约 78 MB）。不分析歌曲。|
+| start | 必填 scope=library/current_list/track_ids，track_ids 另需 trackIds；其余 scope 拒绝 trackIds。当前列表必须已计算完成且非空，捕获后切换视图不改变目标。首次缺少模型需 downloadConfirmed=true；默认只处理没有有效结果的歌曲，force=true 重做自动证据并保留手工覆盖。|
+| cancel | 仅 action；协作取消，保留已完成结果，不回滚。|
+| set | trackIds（1–1000）和 value=CHINESE/ENGLISH/CHINESE_ENGLISH/OTHER/INSTRUMENTAL/UNKNOWN/AUTO。一次校验并原子保存手工覆盖；AUTO 删除该手工覆盖，恢复有效自动结果，没有自动结果则回到未识别。|
+
+任务 state：idle/preparing/running/cancelling/completed/completed_with_errors/cancelled/failed。`failed`、`error`、`errorDetail` 及 `recentResults` 用于定位部分失败；界面也显示失败数量。`get_diagnostics.singingLanguages` 复用同一状态；`songFilter.singingLanguagePolicy` 说明新策略，旧 `titleTextPolicy` 已移除。`get_track` / 搜索 / 列表输出增加 singingLanguage。missing 为 null，其余 state 为 known/unknown/instrumental，source 为 AUTO/MANUAL。
+
+```json
+{"action":"start","scope":"library","downloadConfirmed":true}
+```
+
+```json
+{"action":"set","trackIds":[12],"value":"CHINESE_ENGLISH"}
+```
 
 ```json
 {"action":"set","tags":["CHINESE","NON_ENGLISH"],"annotation":"all"}
 ```
+
+### 本地识别范围与限制
+
+[Whisper.net 1.9.1](https://github.com/sandrohanea/whisper.net/tree/1.9.1) 和其 NoAvx CPU 原生库随包提供，日常及正式包均保持相同目录布局；模型来自 [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin)，固定 SHA256 `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21`，安装在数据目录 models/singing-language。下载采用临时文件及完整性验证；无音频上传。
+
+每首逻辑歌曲（包括 CUE）最多取三个不重叠的 20 秒片段，2 个 CPU 线程，120 秒单曲协作预算。用现有 mpv PCM 解码及 YAMNet 人声支持门槛后，执行不限制候选语言的音频识别，再检查转写的人声/字符支持。语言分数至少 .6，须两个片段支持同种语言，或一个片段达到 .9；证据不足保留 unknown。分数是模型参考值，未校准为歌唱语种正确率；老录音、重伴奏、方言、短人声及混合语种可能无法识别或误判。仅采样，不能保证发现全曲所有语种。原始转写不保存，手工纠正优先。纯音乐也不得依赖语种检测器的任意输出（[whisper.cpp 对非语音的说明](https://github.com/ggml-org/whisper.cpp/tree/master/examples/cli)）。
+
+右键所选歌曲可重新识别（force）或手工设置；筛选菜单的全曲库识别可继续处理未完成歌曲。文件修改时间、大小及 CUE 范围/时长变化会使旧自动和手工语种记录失效。删除歌曲级联移除记录。

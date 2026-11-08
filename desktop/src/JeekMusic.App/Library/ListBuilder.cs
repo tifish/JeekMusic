@@ -22,8 +22,8 @@ public static class ListBuilder
         return t => {
             snapshot.Tags.TryGetValue(t.TrackKey, out var tags);
             var manual = tags?.HasManual == true;
-            return wanted.All(w => w.dimension is "TITLE_CHINESE" or "TITLE_ENGLISH"
-                    ? TitleTextFilter.Matches(t.Title, w.tag) : tags?[w.dimension!] == w.tag)
+            return wanted.All(w => w.dimension is "SINGING_CHINESE" or "SINGING_ENGLISH"
+                    ? snapshot.Languages.GetValueOrDefault(t.TrackKey)?.Matches(w.tag) == true : tags?[w.dimension!] == w.tag)
                 && (annotation == "all" || (annotation == "manual" ? manual : !manual));
         };
     }
@@ -46,8 +46,8 @@ public static class ListBuilder
         "VOCAL" or "INSTRUMENTAL" => "VOICE",
         "CLASSICAL" or "NON_CLASSICAL" => "GENRE",
         "CALM" or "NON_CALM" => "CALMNESS",
-        "CHINESE" or "NON_CHINESE" => "TITLE_CHINESE",
-        "ENGLISH" or "NON_ENGLISH" => "TITLE_ENGLISH",
+        "CHINESE" or "NON_CHINESE" => "SINGING_CHINESE",
+        "ENGLISH" or "NON_ENGLISH" => "SINGING_ENGLISH",
         _ => null,
     };
 

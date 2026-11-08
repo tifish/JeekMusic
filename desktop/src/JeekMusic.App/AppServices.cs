@@ -18,6 +18,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     public LibraryDb Db { get; }
     public LibraryService Library { get; }
     public Analysis.SmartTagService SmartTags { get; }
+    public Analysis.SingingLanguageService SingingLanguages { get; }
     public PlaylistService Playlists { get; }
     public PlayerService Player { get; }
     public QueuePersistence QueuePersistence { get; }
@@ -64,6 +65,8 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
         using (LifecycleTimings.Measure("startupWork.libraryDb")) Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
         SmartTags = new Analysis.SmartTagService(Library);
+        SingingLanguages = new Analysis.SingingLanguageService(Library);
+        OnExit += SingingLanguages.Dispose;
         Playlists = new PlaylistService(Library);
         using (LifecycleTimings.Measure("startupWork.player")) Player = createPlayer?.Invoke(Library) ?? new PlayerService(Library);
         var s = Settings.Current;

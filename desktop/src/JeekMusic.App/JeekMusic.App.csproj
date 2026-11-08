@@ -48,6 +48,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite.Core" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="z440.atl.core" />
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime.NoAvx" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 

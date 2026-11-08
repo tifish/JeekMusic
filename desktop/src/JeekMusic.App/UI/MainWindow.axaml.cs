@@ -318,8 +318,8 @@ public partial class MainWindow : Window
             foreach (var tag in tags)
             {
                 var item = new MenuItem { Header = "    " + Text.TagName(tag), ToggleType = MenuItemToggleType.CheckBox, IsChecked = _vm.TagFilter.Contains(tag) };
-                if (ListBuilder.DimensionOf(tag) is "TITLE_CHINESE" or "TITLE_ENGLISH")
-                    ToolTip.SetTip(item, L.T("按歌名中的汉字或英文字母筛选；混合歌名可同时符合中文和英文。"));
+                if (ListBuilder.DimensionOf(tag) is "SINGING_CHINESE" or "SINGING_ENGLISH")
+                    ToolTip.SetTip(item, L.T("按实际演唱语言筛选；未知和纯音乐不匹配，混合语种可同时符合中文和英文。"));
                 item.Click += (_, _) => _vm.ToggleTag(tag);
                 menu.Items.Add(item);
             }
@@ -328,7 +328,7 @@ public partial class MainWindow : Window
         Group(L.T("人声"), "VOCAL", "INSTRUMENTAL");
         Group(L.T("曲风"), "CLASSICAL", "NON_CLASSICAL");
         Group(L.T("平静程度"), "CALM", "NON_CALM");
-        Group(L.T("歌名文字"), "CHINESE", "NON_CHINESE", "ENGLISH", "NON_ENGLISH");
+        Group(L.T("演唱语言"), "CHINESE", "NON_CHINESE", "ENGLISH", "NON_ENGLISH");
         var manual=new MenuItem { Header=L.T("已手工标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("MANUAL") };
         manual.Click+=(_,_)=>_vm.ToggleTag("MANUAL"); menu.Items.Add(manual);
         var unannotated=new MenuItem { Header=L.T("未标注"),ToggleType=MenuItemToggleType.CheckBox,IsChecked=_vm.TagFilter.Contains("UNANNOTATED") };
@@ -337,6 +337,7 @@ public partial class MainWindow : Window
         var clear = new MenuItem { Header = L.T("清除筛选"), IsEnabled = _vm.FilterActive };
         clear.Click += (_, _) => _vm.ClearFilterCommand.Execute(null);
         menu.Items.Add(clear);
+        AddLanguageFilterActions(menu);
         AddFilterExtras(menu);
         menu.ShowAt(FilterButton);
     }

@@ -32,6 +32,7 @@ public partial class MainWindow
     {
         menu.Items.Add(QuickTagCorrectionItem(tracks));
         menu.Items.Add(TagCorrectionItem(tracks));
+        menu.Items.Add(SingingLanguageMenu(tracks));
     }
 
     internal MenuItem QuickTagCorrectionItem(IReadOnlyList<Track> tracks)

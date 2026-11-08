@@ -124,6 +124,13 @@ public sealed partial class LibraryDb : IDisposable
         END;
         """,
         "CREATE TABLE tag_review(id INTEGER PRIMARY KEY AUTOINCREMENT, track_key TEXT NOT NULL, record TEXT NOT NULL);",
+        """
+        CREATE TABLE track_language (
+            track_key TEXT NOT NULL REFERENCES track(track_key) ON DELETE CASCADE,
+            signature TEXT NOT NULL, data TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('AUTO','MANUAL')),
+            PRIMARY KEY(track_key,source)
+        );
+        """,
     ];
 
     void Migrate()

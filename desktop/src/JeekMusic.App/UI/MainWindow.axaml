@@ -61,7 +61,7 @@
                          PlaceholderText="{ui:Tr &apos;搜索歌名、艺术家、专辑、文件名，或拼音首字母（Ctrl+F）&apos;}" VerticalContentAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding ScanText}" Classes="secondary" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,12,0" />
             </Grid>
-            <Button Grid.Column="2" x:Name="FilterButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;按智能标签和歌名文字筛选&apos;}" ToolTip.Tip="{ui:Tr &apos;按智能标签和歌名文字筛选&apos;}" Padding="10,6">
+            <Button Grid.Column="2" x:Name="FilterButton" Classes="icon" AutomationProperties.Name="{ui:Tr &apos;按智能标签和演唱语言筛选&apos;}" ToolTip.Tip="{ui:Tr &apos;按智能标签和演唱语言筛选&apos;}" Padding="10,6">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Filter}" />
                     <TextBlock Text="{Binding FilterText}" FontFamily="{x:Static FontFamily.Default}" FontSize="13" VerticalAlignment="Center"

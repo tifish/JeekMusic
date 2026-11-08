@@ -1,4 +1,4 @@
-"""Title-character filter regression through the real client/MCP; optional native UI acceptance.
+"""Actual vocal-language filter regression through the real client/MCP; optional native UI acceptance.
 
 Uses a fresh isolated synthetic library and silence only. No audio playback, network,
 learning answers, or writes to user media. UI actions reuse Windows UI Automation.
@@ -37,9 +37,9 @@ def main():
         sortDescending=False, language=args.language)), encoding="utf-8")
     music = data / "music"
     music.mkdir()
-    titles = ["晴天", "Hello", "晴天 Hello", "かな", "한글", "123 — 🎵", "Ｆｕｌｌ", "𠮷"]
+    titles = ["Hello", "晴天", "123", "かな", "中文 English instrumental", "Hello unknown", "晴天 missing", "Sunny"]
     player = None
-    report = dict(language=args.language, titleCharacterPolicy=True, uiAccepted=False)
+    report = dict(language=args.language, actualVocalLanguagePolicy=True, uiAccepted=False)
     try:
         with McpClient(args.exe, data) as client:
             player = startup.call(client, "get_diagnostics")["processId"]
@@ -47,7 +47,7 @@ def main():
             player = None
         with sqlite3.connect(data / "library.db") as db:
             folder = str(music) + "\\"
-            db.execute("INSERT INTO library_folder(id,volume_id,path_in_volume,last_root,display_name,available,added_at) VALUES(1,'path',?,?,'Title text fixture',1,1)", (folder, folder))
+            db.execute("INSERT INTO library_folder(id,volume_id,path_in_volume,last_root,display_name,available,added_at) VALUES(1,'path',?,?,'Vocal language fixture',1,1)", (folder, folder))
             for i, title in enumerate(titles, 1):
                 file = music / f"{i:02}.wav"
                 with wave.open(str(file), "wb") as output:
@@ -77,8 +77,12 @@ def main():
                 return value
             all_ids = list(range(1, 9))
             view(all_ids)
-            cases = [("CHINESE", [1, 3, 8]), ("NON_CHINESE", [2, 4, 5, 6, 7]),
-                     ("ENGLISH", [2, 3, 7]), ("NON_ENGLISH", [1, 4, 5, 6, 8])]
+            cases = [("CHINESE", [1, 3, 8]), ("NON_CHINESE", [2, 4]),
+                     ("ENGLISH", [2, 3]), ("NON_ENGLISH", [1, 4, 8])]
+            call("song_filter", action="set", tags=["CHINESE"]); view([])
+            for value, ids in (("CHINESE", [1, 8]), ("ENGLISH", [2]), ("CHINESE_ENGLISH", [3]),
+                               ("OTHER", [4]), ("INSTRUMENTAL", [5]), ("UNKNOWN", [6])):
+                call("singing_language", action="set", trackIds=ids, value=value)
             for token, ids in cases:
                 call("song_filter", action="set", tags=[token]); view(ids)
                 found = call("search_tracks", tags=[token], sort="FileName")
@@ -87,7 +91,7 @@ def main():
             call("song_filter", action="set", annotation="unannotated"); view([3])
             assert call("song_filter", action="status")["tags"] == ["CHINESE", "ENGLISH"]
             assert call("search_tracks", query="Hello", tags=["CHINESE"], folderId=1)["total"] == 1
-            assert call("search_tracks", tags=["NON_CHINESE", "NON_ENGLISH"])["total"] == 3
+            assert call("search_tracks", tags=["NON_CHINESE", "NON_ENGLISH"])["total"] == 1
             six = ["SPORT", "VOCAL", "CLASSICAL", "CALM", "CHINESE", "ENGLISH"]
             assert call("search_tracks", tags=six)["total"] == 0
             for name in ("song_filter", "search_tracks"):
@@ -96,7 +100,7 @@ def main():
                     if name == "song_filter": params["action"] = "set"
                     assert client.call(name, params).get("isError"), (name, pair)
             assert call("song_filter", action="status")["tags"] == ["CHINESE", "ENGLISH"]
-            assert "displayed-title" in call("get_diagnostics")["songFilter"]["titleTextPolicy"]
+            assert "audio-vocal" in call("get_diagnostics")["songFilter"]["singingLanguagePolicy"]
             call("song_filter", action="set", tags=[], annotation="all"); view(all_ids)
 
             if args.ui:
@@ -121,10 +125,24 @@ def main():
                 ui("Click", "    " + label["CHINESE"], shot="chinese-selected", Type="MenuItem"); view([1, 3, 8])
                 menu(); ui("Click", "    " + label["ENGLISH"], shot="mixed-title", Type="MenuItem"); view([3])
                 menu(); ui("Dump", shot="menu-selected-pairs"); ui("Key", Key=27)
-                menu(); ui("Click", "    " + label["NON_CHINESE"], shot="non-chinese-english", Type="MenuItem"); view([2, 7])
-                menu(); ui("Click", "    " + label["NON_ENGLISH"], shot="neither-language", Type="MenuItem"); view([4, 5, 6])
-                menu(); ui("Click", "    " + label["NON_ENGLISH"], Type="MenuItem"); view([2, 4, 5, 6, 7])
+                menu(); ui("Click", "    " + label["NON_CHINESE"], shot="non-chinese-english", Type="MenuItem"); view([2])
+                menu(); ui("Click", "    " + label["NON_ENGLISH"], shot="neither-language", Type="MenuItem"); view([4])
+                menu(); ui("Click", "    " + label["NON_ENGLISH"], Type="MenuItem"); view([2, 4])
                 menu(); ui("Click", "Clear filters" if args.language == "en" else "清除筛选", shot="cleared", Type="MenuItem"); view(all_ids)
+                # Correct a deliberately misleading English title through the real context submenu.
+                ui("Right", "Hello", Type="Text")
+                ui("Expand", Id="SingingLanguageMenu", Type="MenuItem")
+                ui("Dump", shot="vocal-language-correction")
+                ui("Click", Id="SingingLanguageCHINESE_ENGLISH", Type="MenuItem")
+                status = call("singing_language", action="status", trackIds=[1])
+                assert set(status["tracks"]["items"][0]["language"]["languages"]) == {"zh", "en"}
+                call("singing_language", action="set", trackIds=[1], value="CHINESE")
+                # Exercise the first-download confirmation and cancel through the native UI.
+                menu(); ui("Click", Id="AnalyzeSingingLanguages", Type="MenuItem")
+                ui("Dump", shot="local-model-confirmation")
+                ui("Click", "Cancel" if args.language == "en" else "取消", Type="Button")
+                assert call("singing_language", action="status", limit=1)["state"] == "idle"
+                report["downloadDialogCancelled"] = True
                 report["uiAccepted"] = True
             call("song_filter", action="set", tags=["CHINESE", "NON_ENGLISH"]); view([1, 8])
             call("checkpoint_client")
@@ -133,7 +151,7 @@ def main():
             final = call("get_status")
             assert final["playing"] == initial["playing"] and final["queueCount"] == initial["queueCount"]
             report.update(fourFilters=True, mixedAndNeither=True, sixDimensions=True, contradictionsRejected=True,
-                searchDoesNotPersist=True, artistIgnored=True, missingAnalysisIncluded=True, playbackUnchanged=True)
+                searchDoesNotPersist=True, titlesAndArtistIgnored=True, unknownAndInstrumentalExcluded=True, playbackUnchanged=True)
         startup.close_player(player); player = None
         with McpClient(args.exe, data) as client:
             player = startup.call(client, "get_diagnostics")["processId"]

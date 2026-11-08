@@ -65,13 +65,14 @@ public sealed class LibrarySnapshot
     public IReadOnlyList<DirNode> Roots { get; }
     public IReadOnlyDictionary<string, SongTags> Tags { get; }
     /// <summary>扫描时跳过的不支持的文件数（设置的曲库页显示）。</summary>
+    public IReadOnlyDictionary<string,SingingLanguage> Languages { get; }
     public int Version { get; }
 
     static int _version;
 
     public static readonly LibrarySnapshot Empty = new([], [], new Dictionary<string, SongTags>());
 
-    public LibrarySnapshot(IReadOnlyList<LibraryFolder> folders, IReadOnlyList<Track> tracks, IReadOnlyDictionary<string, SongTags> tags)
+    public LibrarySnapshot(IReadOnlyList<LibraryFolder> folders, IReadOnlyList<Track> tracks, IReadOnlyDictionary<string, SongTags> tags, IReadOnlyDictionary<string,SingingLanguage>? languages = null)
     {
         Version = Interlocked.Increment(ref _version);
         Folders = folders;
@@ -81,6 +82,7 @@ public sealed class LibrarySnapshot
         ById = tracks.ToDictionary(t => t.Id);
         ByKey = tracks.ToDictionary(t => t.TrackKey);
         Tags = tags;
+        Languages = languages ?? new Dictionary<string,SingingLanguage>();
 
         // 艺术家（需求 A-2：多艺术家拆分后，一首歌出现在每个艺术家下面；A-5：名称合并忽略大小写和空白）
         var groups = new Dictionary<string, (string name, List<Track> tracks)>();

@@ -6,6 +6,29 @@ namespace JeekMusic.Sync;
 
 internal static class LanPairingQr
 {
+    // This is a TLS TCP endpoint, never an HTTP path or reverse-proxy URL.
+    internal static (string Host, int Port) ParseExternalAddress(string value)
+    {
+        value = value.Trim();
+        if (value.Length is < 1 or > 300 || value.Any(c => c <= ' ' || c > 126) || value.Contains('\\'))
+            throw new ArgumentException("Enter hostname:port or tls://hostname:port");
+        var text = value.Contains("://", StringComparison.Ordinal) ? value : "tls://" + value;
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme is not ("tls" or "https" or "jeeklan") ||
+            uri.UserInfo.Length != 0 || uri.AbsolutePath is not ("" or "/") || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
+            uri.HostNameType is not (UriHostNameType.IPv4 or UriHostNameType.Dns) || uri.Port is < 1 or > 65535 ||
+            uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            IPAddress.TryParse(uri.Host, out var ip) && !IsPhoneAddress(ip))
+            throw new ArgumentException("Use a phone-reachable TLS TCP hostname and port, without a path");
+        return (uri.IdnHost.ToLowerInvariant(), uri.Port);
+    }
+
+    internal static string NormalizeExternalAddress(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var endpoint = ParseExternalAddress(value);
+        return $"tls://{endpoint.Host}:{endpoint.Port}";
+    }
+
     // This restriction is for phone-facing invitations. MCP loopback integration remains supported.
     internal static bool IsPhoneAddress(IPAddress address)
     {

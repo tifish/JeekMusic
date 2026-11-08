@@ -6,6 +6,31 @@ namespace JeekMusic.App.Tests;
 public sealed class LanPairingQrTests
 {
     [Theory]
+    [InlineData("music.example.com:45678", "tls://music.example.com:45678")]
+    [InlineData(" https://MUSIC.example.com:45678/ ", "tls://music.example.com:45678")]
+    [InlineData("tls://203.0.113.7:39843", "tls://203.0.113.7:39843")]
+    [InlineData("https://music.example.com", "tls://music.example.com:443")]
+    [InlineData("", "")]
+    public void ExternalAddressNormalizes(string input, string expected) => Assert.Equal(expected, LanPairingQr.NormalizeExternalAddress(input));
+
+    [Theory]
+    [InlineData("music.example.com")]
+    [InlineData("http://music.example.com:39843")]
+    [InlineData("https://music.example.com:39843/path")]
+    [InlineData("tls://user:pass@music.example.com:39843")]
+    [InlineData("tls://music.example.com:39843?q=x")]
+    [InlineData("tls://music.example.com:39843#x")]
+    [InlineData("tls://localhost:39843")]
+    [InlineData("tls://127.0.0.1:39843")]
+    [InlineData("tls://0.0.0.0:39843")]
+    [InlineData("tls://224.0.0.1:39843")]
+    [InlineData("tls://[::1]:39843")]
+    [InlineData("tls://music.example.com:0")]
+    [InlineData("tls://music.example.com:65536")]
+    [InlineData("tls://music.example.com:39843\\path")]
+    public void ExternalAddressRejectsInvalidEndpoints(string input) => Assert.Throws<ArgumentException>(() => LanPairingQr.NormalizeExternalAddress(input));
+
+    [Theory]
     [InlineData("127.0.0.1", false)]
     [InlineData("0.0.0.0", false)]
     [InlineData("0.1.2.3", false)]

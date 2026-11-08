@@ -121,6 +121,9 @@ public sealed class McpTools
         if (name == "lan_sync_control")
         {
             var propertiesNode = tool["inputSchema"]!["properties"]!;
+            propertiesNode["action"]!["enum"]!.AsArray().Add((JsonNode?)JsonValue.Create("external_address"));
+            propertiesNode["externalAddress"] = new JsonObject { ["type"] = "string", ["maxLength"] = 300, ["description"] = "external_address action only: persist phone-facing hostname:port, tls://host:port or https://host:port. Empty clears. TLS TCP passthrough only; no HTTP paths. Does not configure NAT or prove reachability. invite without host uses this saved endpoint; explicit host preserves legacy override." };
+            tool["description"] = tool["description"]!.GetValue<string>() + " external_address persists externalAddress for QR invitations and invalidates outstanding invitations. invite may omit host to use the saved external endpoint, including its advertised port. Cannot combine saved endpoint with advertisedPort. This remains TLS TCP, including when entered with https://; no HTTP proxy support. Status exposes externalAddress, externalTransport and externalReachability=not_verified.";
             propertiesNode["jobId"] = new JsonObject { ["type"] = "string", ["minLength"] = 32, ["maxLength"] = 32 };
             propertiesNode["bindAddress"] = new JsonObject { ["type"] = "string", ["maxLength"] = 15 };
             propertiesNode["advertisedPort"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 65535 };
@@ -145,6 +148,8 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if (name == "lan_sync_control" && a["externalAddress"] is not null && a["action"]?.GetValue<string>() != "external_address")
+            throw new ArgumentException("externalAddress is only supported for external_address");
         if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "start")
         {
             await app.LanSync.StartAsync(a["port"]?.GetValue<int>());
@@ -167,9 +172,11 @@ public sealed class McpTools
         if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "invite" && a["includeQr"]?.GetValue<bool>() == true)
         {
             McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
-            var host = Required(a, "host").GetValue<string>();
+            var saved = a["host"] is null ? LanPairingQr.ParseExternalAddress(app.LanSync.ExternalAddress) : ((string Host, int Port)?)null;
+            if (saved is not null && a["advertisedPort"] is not null) throw new ArgumentException("advertisedPort requires explicit host");
+            var host = saved?.Host ?? Required(a, "host").GetValue<string>();
             await LanPairingQr.ValidatePhoneHost(host);
-            var invitation = app.LanSync.Invite(host, a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90);
+            var invitation = app.LanSync.Invite(host, saved?.Port ?? a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90);
             return new JsonObject { ["invitation"] = invitation, ["qrPngBase64"] = Convert.ToBase64String(LanPairingQr.Encode(invitation)) };
         }
         if (name != "set_smart_tags") return Call(name, a);
@@ -287,6 +294,7 @@ public sealed class McpTools
             case "get_status": return Status();
             case "lan_sync_status": return app.LanSync.Diagnostics();
             case "lan_sync_control":
+                if (a["externalAddress"] is not null && a["action"]?.GetValue<string>() != "external_address") throw new ArgumentException("externalAddress is only supported for external_address");
                 if (a["port"] is not null && a["action"]?.GetValue<string>() is not ("start" or "configure")) throw new ArgumentException("port is only supported for start/configure");
                 switch (Required(a, "action").GetValue<string>())
                 {
@@ -295,7 +303,11 @@ public sealed class McpTools
                     case "stop": app.LanSync.Stop(); break;
                     case "share": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), true);
                     case "unshare": return app.LanSync.EnableRoot(Required(a, "folderId").GetValue<long>(), false);
-                    case "invite": return new JsonObject { ["invitation"] = app.LanSync.Invite(Required(a, "host").GetValue<string>(), a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90) };
+                    case "external_address": app.LanSync.SetExternalAddress(Required(a, "externalAddress").GetValue<string>()); break;
+                    case "invite":
+                        if (a["host"] is null && a["advertisedPort"] is not null) throw new ArgumentException("advertisedPort requires explicit host");
+                        if (a["host"] is null && a["permissions"] is JsonObject legacy) LanPairingPolicy.RejectLegacyPermissions(legacy);
+                        return new JsonObject { ["invitation"] = a["host"] is null ? app.LanSync.InviteExternal() : app.LanSync.Invite(a["host"]!.GetValue<string>(), a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90) };
                     case "cancel_task": return app.LanSync.CancelTask(Required(a, "jobId").GetValue<string>());
                     case "configure": app.LanSync.Configure(Required(a, "bindAddress").GetValue<string>(), Required(a, "port").GetValue<int>()); break;
                     case "authorize": app.LanSync.Authorize(Required(a, "deviceId").GetValue<string>(), Required(a, "permissions").AsObject(), a["credentialDays"]?.GetValue<int>() ?? 90); break;

@@ -1,4 +1,10 @@
 {
+  "外网连接地址": "External connection address",
+  "填写域名:外网端口或 https://域名:外网端口。路由器需将该 TCP 端口转发到本机监听端口；使用 TLS TCP 透传，不支持网页路径或 HTTP 反向代理。保存后生成的二维码优先使用外网地址，留空恢复局域网连接。": "Enter hostname:external-port or https://hostname:external-port. Forward that TCP port to this PC's listener port. Requires TLS TCP passthrough; HTTP paths and HTTP reverse proxies are unsupported. New QR codes use the saved external address. Clear it to use the LAN address.",
+  "保存外网地址": "Save external address",
+  "外网地址已保存；请重新生成配对二维码。外网可达性尚未验证。": "External address saved. Generate a new pairing QR code. Internet reachability has not been verified.",
+  "请输入有效域名或 IPv4 和外网端口，不含路径、账号或查询参数；留空可清除。": "Enter a valid hostname or IPv4 address and external port, without paths, credentials or query parameters. Leave empty to clear.",
+  "请先保存外网地址，再生成二维码；留空使用下方局域网地址。检查域名、端口、服务和网络，不能使用回环、广播或未指定地址。": "Save the external address before generating a QR code, or leave it empty to use the LAN fields below. Check the hostname, port, service and network. Loopback, broadcast and unspecified addresses are unsupported.",
   "{0}（临时）": "{0} (temporary)",
   "无法读取同目录歌曲": "Could not read other songs in this directory",
   "较大": "Larger",

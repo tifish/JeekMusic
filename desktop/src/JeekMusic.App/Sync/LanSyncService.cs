@@ -66,6 +66,25 @@ public sealed partial class LanSyncService : IDisposable
     int _rootAuthorizationRevision;
     public int Port => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
     public string Fingerprint => Convert.ToHexStringLower(SHA256.HashData(Certificate().RawData));
+    public string ExternalAddress { get { lock (_gate) return _config["externalAddress"]?.GetValue<string>() ?? ""; } }
+
+    public void SetExternalAddress(string address)
+    {
+        var normalized = LanPairingQr.NormalizeExternalAddress(address);
+        lock (_gate)
+        {
+            _config["externalAddress"] = normalized;
+            Save();
+            _invitation = null;
+        }
+        Notify();
+    }
+
+    public string InviteExternal()
+    {
+        var endpoint = LanPairingQr.ParseExternalAddress(ExternalAddress);
+        return Invite(endpoint.Host, endpoint.Port);
+    }
     JsonObject Roots => _config["roots"]!.AsObject();
     JsonObject Devices => _config["devices"]!.AsObject();
 
@@ -373,6 +392,7 @@ public sealed partial class LanSyncService : IDisposable
         lock (_gate) return new JsonObject
         {
             ["starting"] = Starting,
+            ["externalAddress"] = ExternalAddress, ["externalTransport"] = "tls-tcp", ["externalReachability"] = "not_verified",
             ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),["fileWatch"]=WatchDiagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,

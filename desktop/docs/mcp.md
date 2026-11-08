@@ -1,5 +1,13 @@
 # Windows MCP 接口
 
+## 外网扫码地址
+
+`lan_sync_control action=external_address`、必填 `externalAddress`，保存独立于监听地址的手机连接端点。例如 `{"action":"external_address","externalAddress":"music.example.com:45678"}`。接受 `域名:端口`、`tls://域名:端口`、`https://域名:端口`（https 省略端口时为 443），统一保存为 `tls://host:port`；空字符串清除。拒绝路径、账号、查询参数、IPv6、回环、未指定及广播/组播地址。保存不依赖 DNS 在线，不改监听、路由器或现有设备凭证，并使尚未使用的邀请码失效。
+
+`invite` 省略 `host` 时使用已保存外网主机和外网端口；`includeQr=true` 使用同一端点且校验 DNS。旧 `host` / `advertisedPort` 调用保持兼容，显式 host 优先；无 host 时禁止单独覆盖 advertisedPort。桌面设置页保存外网地址后，生成的邀请及二维码均使用该地址；未保存的编辑会阻止生成，防止扫到旧地址。二维码仍是现有 `jeeklan://host:port/fingerprint/invitation` 格式，Android 无需协议改动。地址重启后保留。
+
+路由器需配置 **TCP 透传**，把外网端口映射到本机 IPv4 和实际监听端口。`https://` 仅是端点输入形式，服务不是网站，不支持 HTTP 反向代理及 URL 路径。新状态字段 `externalAddress`、`externalTransport=tls-tcp`、`externalReachability=not_verified` 不表示公网连通测试通过；Windows 入站规则也不能证明路由器/运营商可达。开发版与 NativeAOT 使用同一工具、Schema 和服务。
+
 ## 关联打开与临时目录
 
 `open_files` 接受 `paths`（1–1000 个现存的绝对音频文件路径，不接受目录），复用文件关联和命令行打开的同一服务。先提交播放请求，再在后台读取第一个成功打开文件的所在目录，在“文件夹”导航下显示标为“临时”的目录项及同目录支持的音频文件。只读直接子文件，不递归、不注册曲库、不启动目录同步，临时项在退出后消失。多个文件仍按传入顺序播放；从临时列表点播歌曲后，列表才成为播放队列来源，沿用排序、筛选和连续播放。原队列手工插入项沿用播放器规则。

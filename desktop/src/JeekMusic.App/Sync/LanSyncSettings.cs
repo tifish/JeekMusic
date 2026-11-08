@@ -77,6 +77,17 @@ internal static class LanSyncSettings
             try { if (!int.TryParse(listenPort.Text, out var port)) throw new ArgumentException(); service.Configure(bind.Text?.Trim() ?? "", port); c.Window.Build(); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException) { problem.Text = L.T("先停止服务，再填写有效 IPv4 和 1–65535 端口。"); }
         }));
+        panel.Children.Add(SubHeading(L.T("外网连接地址")));
+        panel.Children.Add(Note(L.T("填写域名:外网端口或 https://域名:外网端口。路由器需将该 TCP 端口转发到本机监听端口；使用 TLS TCP 透传，不支持网页路径或 HTTP 反向代理。保存后生成的二维码优先使用外网地址，留空恢复局域网连接。")));
+        var externalAddress = new TextBox { Text = service.ExternalAddress, PlaceholderText = "tls://music.example.com:39843", MinWidth = 300, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch };
+        Avalonia.Automation.AutomationProperties.SetAutomationId(externalAddress, "LanExternalAddress");
+        panel.Children.Add(externalAddress);
+        var externalFeedback = Note("");
+        panel.Children.Add(Action(L.T("保存外网地址"), () => {
+            try { service.SetExternalAddress(externalAddress.Text ?? ""); externalAddress.Text = service.ExternalAddress; externalFeedback.Text = L.T("外网地址已保存；请重新生成配对二维码。外网可达性尚未验证。"); }
+            catch (ArgumentException) { externalFeedback.Text = L.T("请输入有效域名或 IPv4 和外网端口，不含路径、账号或查询参数；留空可清除。"); }
+        }));
+        panel.Children.Add(externalFeedback);
         panel.Children.Add(Note(L.T("文件恢复备份最多 32 GiB；达到预算时延期，不自动删除。恢复/清除前先停服务；恢复不改同步基线。")));
         var backupPanel=new StackPanel { Spacing=4 };panel.Children.Add(backupPanel);int backupOffset=0;
         var backupStatus=Note("");panel.Children.Add(backupStatus);
@@ -137,16 +148,20 @@ internal static class LanSyncSettings
             ClearInvitation(); lifetime.Text = "";
             try
             {
-                var address = host.Text?.Trim() ?? "";
+                if (LanPairingQr.NormalizeExternalAddress(externalAddress.Text ?? "") != service.ExternalAddress)
+                    throw new ArgumentException("Save external address first");
+                var endpoint = service.ExternalAddress.Length > 0 ? LanPairingQr.ParseExternalAddress(service.ExternalAddress) : ((string Host, int Port)?)null;
+                var address = endpoint?.Host ?? host.Text?.Trim() ?? "";
                 await LanPairingQr.ValidatePhoneHost(address);
                 if (detached) return;
-                if (!int.TryParse(externalPort.Text, out var reachablePort)) throw new ArgumentException();
+                if (!int.TryParse(externalPort.Text, out var reachablePort) && endpoint is null) throw new ArgumentException();
+                reachablePort = endpoint?.Port ?? reachablePort;
                 current = service.Invite(address, reachablePort);
                 bitmap = new Bitmap(new MemoryStream(LanPairingQr.Encode(current)));
                 invitation.Text = current; qr.Source = bitmap; qr.IsVisible = true;
                 lifetime.Text = L.T("用手机扫码，或复制下方邀请手动配对。刷新会使旧邀请失效。");
             }
-            catch (Exception) { ClearInvitation(); problem.Text = L.T("请输入手机可达的局域网地址；不能使用 localhost、回环、广播或未指定地址。检查服务和网络。"); }
+            catch (Exception) { ClearInvitation(); problem.Text = L.T("请先保存外网地址，再生成二维码；留空使用下方局域网地址。检查域名、端口、服务和网络，不能使用回环、广播或未指定地址。"); }
             finally { generating = false; }
         });
         inviteButton = generate; generate.IsEnabled = service.Port != 0;

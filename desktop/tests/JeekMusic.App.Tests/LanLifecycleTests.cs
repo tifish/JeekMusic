@@ -15,6 +15,49 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class LanLifecycleTests
 {
+    [Fact]
+    public async Task ExternalEndpointPersistsAndDrivesInvitationsWithoutChangingListener()
+    {
+        using var session = HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
+        await session.Dispatch(async () =>
+        {
+            var root = Path.Combine(Path.GetTempPath(), "jeek-external-" + Guid.NewGuid());
+            Directory.CreateDirectory(root);
+            var configPath = Path.Combine(root, "lan.json");
+            using var app = new AppServices(new SettingsStore(Path.Combine(root, "settings.json")), new LibraryDb(":memory:"),
+                source => new PlayerService(source, o => new OutputModeSwitchTests.FakeEngine(o), new OutputModeSwitchTests.FakeEndpointVolume()),
+                owner => new LanSyncService(owner, null, configPath, false));
+            using var rsa = RSA.Create(2048);
+            var cert = new CertificateRequest("CN=External endpoint fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+                .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            typeof(LanSyncService).GetField("_certificate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app.LanSync, cert);
+            var tools = new McpTools(app);
+            await tools.CallAsync("lan_sync_control", new() { ["action"] = "external_address", ["externalAddress"] = "https://203.0.113.7:45678/" });
+            Assert.Equal("tls://203.0.113.7:45678", JsonNode.Parse(File.ReadAllText(configPath))!["externalAddress"]!.GetValue<string>());
+            await app.LanSync.StartAsync(0);
+            var localPort = app.LanSync.Port;
+            var invite = await tools.CallAsync("lan_sync_control", new() { ["action"] = "invite", ["includeQr"] = true });
+            var value = invite["invitation"]!.GetValue<string>();
+            Assert.StartsWith("jeeklan://203.0.113.7:45678/", value);
+            Assert.NotEmpty(invite["qrPngBase64"]!.GetValue<string>());
+            Assert.True(app.LanSync.IsInvitationCurrent(value));
+            await Assert.ThrowsAsync<ArgumentException>(() => tools.CallAsync("lan_sync_control", new() { ["action"] = "external_address", ["externalAddress"] = "tls://127.0.0.1:45678" }));
+            Assert.True(app.LanSync.IsInvitationCurrent(value));
+            Assert.Equal(localPort, app.LanSync.Port);
+            await Assert.ThrowsAsync<ArgumentException>(() => tools.CallAsync("lan_sync_control", new() { ["action"] = "invite", ["advertisedPort"] = 45679 }));
+            var legacy = await tools.CallAsync("lan_sync_control", new() { ["action"] = "invite", ["host"] = "10.0.2.2", ["advertisedPort"] = 45679 });
+            Assert.StartsWith("jeeklan://10.0.2.2:45679/", legacy["invitation"]!.GetValue<string>());
+            app.LanSync.SetExternalAddress("");
+            Assert.False(app.LanSync.IsInvitationCurrent(legacy["invitation"]!.GetValue<string>()));
+            await Assert.ThrowsAsync<ArgumentException>(() => tools.CallAsync("lan_sync_control", new() { ["action"] = "invite" }));
+            app.LanSync.SetExternalAddress("music.example.com:45678");
+            app.LanSync.Stop();
+            using var reloaded = new LanSyncService(app, null, configPath, false);
+            Assert.Equal("tls://music.example.com:45678", reloaded.ExternalAddress);
+            return 0;
+        }, CancellationToken.None);
+    }
+
     sealed class DelayedFirewall : ILanFirewallBackend
     {
         internal TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);

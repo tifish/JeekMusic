@@ -105,6 +105,8 @@ pwsh desktop/tools/test-app.ps1 -Data "$env:TEMP/jeekmusic-smoke" -Seconds 15 -G
 
 局域网音乐同步现已提供根共享、TLS 配对、手机子目录下载及独立目的地映射，详见 [首版契约与限制](../docs/lan-sync.md)。
 
+设置 → 同步可保存“外网连接地址”（域名:外网端口），保存后手机扫码直接连接该地址；留空使用局域网地址。路由器需将外网 TCP 端口转发到电脑监听端口，使用 TLS TCP 透传，不支持网页路径或 HTTP 反向代理。支持同一设置的 MCP 参数与诊断见 [外网扫码地址](docs/mcp.md#外网扫码地址)。
+
 ## MCP 接口
 
 开发版和正式发布包均内置相同的 MCP 接口，使用 `JeekMusic.exe --mcp` 通过标准 stdio 连接。支持播放控制、曲库搜索、队列、播放列表、智能标签修正、扫描、音频输出和日志诊断，共 43 个工具。连接配置、参数说明和调试示例见 [MCP 使用文档](docs/mcp.md)。

@@ -15,7 +15,7 @@ P = argparse.ArgumentParser(description=__doc__)
 P.add_argument("--serial", required=True)
 P.add_argument("--package", default="com.tinyfish.jeekmusic.debug")
 P.add_argument("--output", type=Path, default=Path("output/settings-ui"))
-P.add_argument("action", choices=["show", "tap", "shot", "verify", "verify-sync", "verify-sync-offline", "down", "up", "back"])
+P.add_argument("action", choices=["show", "tap", "shot", "verify", "verify-sync", "verify-sync-offline", "verify-sync-mapping-order", "down", "up", "back"])
 P.add_argument("value", nargs="?")
 A = P.parse_args()
 assert A.serial.startswith("emulator-"), "This regression tool is restricted to an explicitly allocated emulator"
@@ -235,6 +235,68 @@ def verify_sync():
     (A.output / "sync-results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result))
 
+def verify_sync_mapping_order():
+    """Three synthetic, unpaired mappings; verify row/indicator taps and persisted identity."""
+    assert A.package.endswith(".debug")
+    assert command("emu", "avd", "name").splitlines()[0].strip() == b"JeekLanEmpty35"
+    roots = [letter * 32 for letter in "abc"]
+    tags = ["lan_mapping_enabled_" + root for root in roots]
+
+    def state():
+        config = json.loads(command("exec-out", "run-as", A.package, "cat", "files/lan-sync.json"))
+        assert "connection" not in config, "Use unpaired synthetic mappings"
+        mappings = config["mappings"]
+        assert {m["name"] for m in mappings} == {"Toggle fixture " + letter for letter in "ABC"}
+        return mappings
+
+    assert [m["rootId"] for m in state()] == roots
+    assert all(not m["enabled"] for m in state())
+    if nodes("open_settings"): tap("open_settings")
+    find("settings_group_devices"); tap("settings_group_devices")
+
+    def verify_rows(expected):
+        assert [m["rootId"] for m in state()] == roots, "Updating a mapping moved its row"
+        assert [m["enabled"] for m in state()] == expected, "Another folder's persisted state changed"
+        for tag, checked in zip(tags, expected):
+            find(tag)
+            assert nodes(tag)[0].get("checked") == str(checked).lower(), "Wrong folder switch state"
+
+    expected = [False] * 3
+    verify_rows(expected)
+    shot("mapping-order-initial")
+    # Alternate whole-row and switch-indicator taps, including repeated taps on A.
+    for step, (index, indicator) in enumerate([(0, False), (0, True), (1, True), (2, False), (1, False), (2, True)]):
+        find(tags[index])
+        original_bounds = bounds(nodes(tags[index])[0])
+        if indicator:
+            x1, y1, x2, y2 = original_bounds
+            command("shell", "input", "tap", str(x2 - (x2-x1)//12), str((y1+y2)//2))
+            time.sleep(.3)
+        else:
+            tap(tags[index])
+        expected[index] = not expected[index]
+        assert bounds(nodes(tags[index])[0]) == original_bounds, "The folder moved under the pointer"
+        verify_rows(expected)
+        find(tags[index]); shot(f"mapping-order-{step + 1}")
+    # Leave a non-default state to distinguish persisted values from defaults.
+    find(tags[0]); tap(tags[0]); expected[0] = True
+    back(); find("settings_group_devices"); tap("settings_group_devices")
+    verify_rows(expected)
+    command("shell", "am", "force-stop", A.package)
+    command("shell", "am", "start", "-W", "-n", A.package + "/com.tinyfish.jeekmusic.MainActivity")
+    time.sleep(1)
+    if nodes("open_settings"): tap("open_settings")
+    find("settings_group_devices"); tap("settings_group_devices")
+    verify_rows(expected)
+    find(tags[0]); tap(tags[0]); expected[0] = False
+    verify_rows(expected)
+    find(tags[0]); shot("mapping-order-after-restart")
+    result = dict(folder_order_preserved=True, only_selected_folder_changed=True,
+                  row_and_indicator_taps=True, navigation_and_restart_persisted=True, real_library_accessed=False)
+    (A.output / "mapping-order-results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps(result))
+
+
 def verify_sync_offline():
     """Only for the synthetic offline fixture: closed local port, fake credentials, no SAF grant."""
     assert command("emu", "avd", "name").splitlines()[0].strip() == b"JeekLanEmpty35"
@@ -294,5 +356,6 @@ elif A.action == "shot": shot(A.value)
 elif A.action == "verify": verify()
 elif A.action == "verify-sync": verify_sync()
 elif A.action == "verify-sync-offline": verify_sync_offline()
+elif A.action == "verify-sync-mapping-order": verify_sync_mapping_order()
 elif A.action == "back": back()
 else: scroll(A.action == "down")

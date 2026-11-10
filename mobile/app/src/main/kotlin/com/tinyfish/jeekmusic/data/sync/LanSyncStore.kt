@@ -76,7 +76,10 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
         return emptyList()
     }
     fun saveMapping(mapping: JSONObject) = update { state ->
-        val list = mappings().filterNot { it.getString("rootId") == mapping.getString("rootId") } + mapping
-        state.put("mappings", JSONArray(list))
+        val list = state.optJSONArray("mappings") ?: JSONArray()
+        val index = (0 until list.length()).firstOrNull { list.getJSONObject(it).getString("rootId") == mapping.getString("rootId") }
+        // Updating a switch or sync checkpoint must not move its folder under the user's finger.
+        if (index == null) list.put(mapping) else list.put(index, mapping)
+        state.put("mappings", list)
     }
 }

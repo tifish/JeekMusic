@@ -99,15 +99,17 @@ fun LanSyncSettings(lan: LanSyncService) {
         })
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
         for (m in mappings) {
-            val selected = m.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it).ifEmpty { "/" } }.joinToString(", ") }
-            val current=LanMappingTargets.isCurrent(m)
-            SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
-            SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
-                checked = current && m.optBoolean("enabled", true), enabled = current,
-                modifier = Modifier.testTag("lan_mapping_enabled_${m.getString("rootId")}"),
-                onChange = { lan.setEnabled(m.getString("rootId"), it) })
-            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
+            key(m.getString("rootId")) {
+                val selected = m.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it).ifEmpty { "/" } }.joinToString(", ") }
+                val current=LanMappingTargets.isCurrent(m)
+                SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
+                SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
+                    checked = current && m.optBoolean("enabled", true), enabled = current,
+                    modifier = Modifier.testTag("lan_mapping_enabled_${m.getString("rootId")}"),
+                    onChange = { lan.setEnabled(m.getString("rootId"), it) })
+                FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
+                }
             }
         }
         SettingsSectionHeader(stringResource(R.string.sync_automation))

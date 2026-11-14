@@ -34,6 +34,7 @@ class SyncNetworkPolicy @Inject constructor(
     val state = _state.asStateFlow()
     val wifiOnly get() = store.read().optBoolean("wifiOnly", true)
     val waitingForWifi get() = wifiOnly && wifiNetwork() == null
+    internal val hasSyncNetwork get() = if(wifiOnly)wifiNetwork()!=null else connectivity.activeNetwork!=null
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = refresh()

@@ -145,7 +145,7 @@ def main():
                     try:
                         test_class=('LanAutoSyncTest' if a.auto else 'LanFileSynchronizerTest')+('#'+a.case if a.case else '')
                         result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
-                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (6 tests)') in result.stdout
+                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (') in result.stdout and 'FAILURES!!!' not in result.stdout
                     finally:device('reverse','--remove',f'tcp:{port}',capture_output=True)
                 # Administrative recovery uses the same private store and never a remote endpoint.
                 backups=call(c,'lan_file_backups',action='list')['backups'];assert backups

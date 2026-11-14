@@ -82,7 +82,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         if(privateBytes()+size-part.length()>16L*1024*1024*1024 || partials.usableSpace<size-part.length()+256L*1024*1024)throw LanLocalDeferred("private_staging_byte_budget")
         FileOutputStream(part,true).use { output ->
             var offset=part.length();savePartial();var partialStamp=LanFileMetrics.stamp(part);var checkpointOffset=offset;var checkpointTime=android.os.SystemClock.elapsedRealtime()
-            while(offset<size) {
+            try { while(offset<size) {
                 currentCoroutineContext().ensureActive()
                 val args=JSONObject().put("path",path).put("offset",offset)
                 val result=if(inside)call(client,scope,"file_read",args.put("size",size).put("sourceVersion",meta(remote))) else client.call("read",args.put("rootId",mapping.getString("rootId")).put("plan",plan))
@@ -94,8 +94,11 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                     output.fd.sync();savePartial();checkpointOffset=offset;checkpointTime=android.os.SystemClock.elapsedRealtime()
                 }
                 report.bytes+=bytes.size;progress(path,report)
+            } } finally {
+                // Orderly cancellation/network errors must retain the last complete block,
+                // including files interrupted before the periodic 8 MiB / 2 s checkpoint.
+                if(LanFileMetrics.stamp(part)==partialStamp) { output.fd.sync();savePartial() }
             }
-            output.fd.sync()
         }
         LanFileMetrics.setModified(part,remote.getLong("modifiedNs"));savePartial()
         if(LanFileMetrics.stamp(part)!=desired) { part.delete();throw LanLocalDeferred("download_integrity") }
@@ -156,7 +159,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val fingerprint=listOf(mapping.getString("key"),scope,path,baseline?.optString("version").orEmpty(),meta(local).orEmpty(),meta(remote).orEmpty()).joinToString("\n")
         return JSONObject().put("id",LanProtocol.sha(fingerprint.toByteArray())).put("mapping",mapping.getString("key")).put("scope",scope).put("rootId",mapping.getString("rootId")).put("path",path).put("baselineVersion",baseline?.optString("version").orEmpty()).put("localVersion",meta(local) ?: JSONObject.NULL).put("remoteVersion",meta(remote) ?: JSONObject.NULL).put("localChange",change(effective,state(local))).put("remoteChange",change(effective,state(remote))).put("reason",reason).put("plan",plan).also(db::issue)
     }
-    suspend fun synchronize(mapping: JSONObject,client: LanProtocol,onPinned: ()->Unit,progress: (String,LanFileReport)->Unit,beforeChange: (String,JSONObject?,Boolean)->Unit,afterChange: suspend ()->Unit): LanFileReport {
+    suspend fun synchronize(mapping: JSONObject,client: LanProtocol,onPinned: ()->Unit,progress: (String,LanFileReport)->Unit,beforeChange: (String,JSONObject?,Boolean)->Unit,afterChange: suspend ()->Unit,phase: (String,Int,Int)->Unit={ _,_,_-> }): LanFileReport {
         val report=LanFileReport();val key=mapping.getString("key")
         val startMetadata=LanFileMetrics.metadataObservations.get();val startHash=LanFileMetrics.hashBytes.get()
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==3) { "Upgrade both devices for size+mtime file sync" }
@@ -167,19 +170,23 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
         db.resetSnapshots(key)
         var offset=0
+        phase("reading_baseline",0,scopeInfo.getInt("total"))
         do {
             currentCoroutineContext().ensureActive();val page=call(client,scope,"file_rows",JSONObject().put("offset",offset).put("revision",revision));val rows=page.getJSONArray("rows")
-            db.baselines(key,List(rows.length()) { rows.getJSONObject(it) });offset=page.getInt("next")
+            db.baselines(key,List(rows.length()) { rows.getJSONObject(it) });offset=page.getInt("next");phase("reading_baseline",offset,scopeInfo.getInt("total"))
         } while(page.optBoolean("hasMore"))
+        phase("pc_scan",0,0)
         val plan=client.call("plan",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("selection",mapping.getJSONArray("selection")))
         val planId=plan.getString("plan");offset=0
+        phase("reading_manifest",0,plan.getInt("total"))
         while(offset<plan.getInt("total")) {
             currentCoroutineContext().ensureActive();val rows=client.call("manifest",JSONObject().put("rootId",mapping.getString("rootId")).put("plan",planId).put("offset",offset)).getJSONArray("files")
-            require(rows.length()>0);db.entries(key,"remote",List(rows.length()) { rows.getJSONObject(it) });offset+=rows.length()
+            require(rows.length()>0);db.entries(key,"remote",List(rows.length()) { rows.getJSONObject(it) });offset+=rows.length();phase("reading_manifest",offset,plan.getInt("total"))
         }
         client.close()
         localFactory(mapping,scopeInfo.getLong("total")==0L).use { io ->
             onPinned()
+            phase("local_recovery",0,0)
             var journalOffset=0
             while(true) {
                 val rows=db.transactions(key,journalOffset);if(rows.isEmpty())break
@@ -189,9 +196,11 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                 }
                 journalOffset+=rows.size
             }
-            val scanned=ArrayList<JSONObject>(200)
-            fun flushScan() { if(scanned.isNotEmpty()) { db.entries(key,"local",scanned);scanned.clear() } }
+            val scanned=ArrayList<JSONObject>(200);var scannedCount=0
+            phase("phone_scan",0,0)
+            fun flushScan() { if(scanned.isNotEmpty()) { db.entries(key,"local",scanned);scannedCount+=scanned.size;scanned.clear();phase("phone_scan",scannedCount,0) } }
             io.scan(selection,{ scanned.add(it);if(scanned.size==200)flushScan() },{ report.defer("$it: local_directory_unknown") });flushScan();db.requirePortableLayout(key)
+            phase("reconciling",0,0)
             for(cues in listOf(false,true)) {
                 offset=0
                 while(true) {

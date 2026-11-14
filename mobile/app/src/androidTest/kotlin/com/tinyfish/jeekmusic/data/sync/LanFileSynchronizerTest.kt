@@ -62,7 +62,7 @@ class LanFileSynchronizerTest {
             if(bytes==null) { if(before!=null)call("file_delete",JSONObject().put("scope",scope).put("path",path).put("operation",UUID.randomUUID().toString().replace("-","")).put("expectedStamp",before).put("baselineVersion",baseline.getString("version")));return }
             val operation=UUID.randomUUID().toString().replace("-","")
             call("file_begin",JSONObject().put("scope",scope).put("path",path).put("operation",operation).put("stamp",LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)).put("size",bytes.size).put("expectedStamp",before ?: JSONObject.NULL).put("baselineVersion",baseline.optString("version")).put("modifiedNs",1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L).put("resolve",true))
-            call("file_chunk",JSONObject().put("scope",scope).put("operation",operation).put("offset",0).put("data",Base64.encodeToString(bytes,Base64.NO_WRAP)))
+            for(offset in bytes.indices step 262144)call("file_chunk",JSONObject().put("scope",scope).put("operation",operation).put("offset",offset).put("data",Base64.encodeToString(bytes,offset,minOf(262144,bytes.size-offset),Base64.NO_WRAP)))
             call("file_finish",JSONObject().put("scope",scope).put("operation",operation))
         }
         suspend fun run(): LanFileReport=LanProtocol(connection).use { sync.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{}) }
@@ -132,6 +132,24 @@ class LanFileSynchronizerTest {
         db.onIssuesChanged={ if(db.issueCount()==0)removalPublished=true }
         LanProtocol(connection).use { sync.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{ assertTrue(removalPublished) }) }
         assertArrayEquals(d,localBytes());assertEquals(hash(d),remoteHash())
+    }
+    @Test fun interruptedDownloadResumesTheLastCompleteBlock()=fixture {
+        val bytes=ByteArray(1024*1024).also { "RIFF".toByteArray().copyInto(it);"WAVE".toByteArray().copyInto(it,8);it[it.lastIndex]=57 }
+        remote(bytes)
+        val phases=mutableListOf<String>()
+        val failure=runCatching { LanProtocol(connection).use { client ->
+            sync.synchronize(mapping,client,{}, { _,report -> if(report.bytes>=262144)throw kotlinx.coroutines.CancellationException("Isolated pause") },{ _,_,_-> },{},phase={ stage,_,_-> phases+=stage })
+        } }.exceptionOrNull()
+        assertTrue(failure is kotlinx.coroutines.CancellationException)
+        val part=File(context.filesDir,"lan-file-parts").listFiles()!!.single { it.name.endsWith(".part") }
+        assertEquals(262144L,part.length())
+        val checkpoint=android.util.AtomicFile(File(part.path+".metadata")).openRead().bufferedReader().use { it.readText() }
+        assertEquals(LanFileMetrics.stamp(part),checkpoint)
+        assertTrue(phases.containsAll(listOf("reading_baseline","pc_scan","reading_manifest","phone_scan","reconciling")))
+        val report=run()
+        assertEquals((bytes.size-262144).toLong(),report.bytes)
+        assertArrayEquals(bytes,localBytes())
+        assertFalse(part.exists())
     }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {
         val a=audio(11);val b=audio(12);val c=audio(13)

@@ -125,6 +125,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             !paired -> R.string.sync_pair_first
             !enabledMappings -> R.string.sync_no_enabled_folders
             schedule.cancelled -> R.string.sync_cancelled
+            schedule.state=="waiting_for_background" -> R.string.lan_background_waiting
             schedule.backoffUntil > System.currentTimeMillis() -> R.string.sync_retry_waiting
             schedule.watchFailed -> R.string.sync_watch_limited
             schedule.foreground && schedule.watchDirectories > 0 -> R.string.sync_watching

@@ -98,7 +98,7 @@ Windows 现有发布流程提供 NativeAOT ZIP，**原来并无 Authenticode 签
 
 新增fileProtocol=1，在传输4鉴权后协商，缺能力明确升级，不降级文件写。旧设备新增writeFiles/deleteFiles均为false；旧四个权限输入继续兼容，新两项可选且默认false。管理员须明确授予文件写/删除，writeSync不授文件系统写。文件基线、直目录映射、冲突规则与安全恢复见[同步合同](lan-sync.md)。
 
-单文件8GiB，暂存16GiB，备份32GiB；scope10万基线，全局100万，128scope/每credential8scope，事务25万，SQLite最大1GiB。目标盘保留至少256MiB且约5%（最高5GiB）空间。每UTC日预约上传每设备64GiB/全局256GiB，失败预约不退款；分块最大256KiB，所有帧仍预鉴权/分级准入。文件全局工作1项，无等待队列；重工作15分钟deadline，可查询/取消，prepared资源保留用于恢复，不因暂存TTL丢弃已移走的原文件。
+单文件8GiB，暂存16GiB，备份32GiB；scope10万基线，全局100万，128scope/每credential8scope，事务25万，SQLite最大1GiB。目标盘保留至少256MiB且约5%（最高5GiB）空间。每UTC日预约上传每设备64GiB/全局256GiB，失败预约不退款；分块最大256KiB，所有帧仍预鉴权/分级准入。文件全局工作1项；认证后的请求最多短等250ms入场，等待受认证连接上限与请求取消/截止约束；重工作15分钟deadline，可查询/取消，prepared资源保留用于恢复，不因暂存TTL丢弃已移走的原文件。
 
 备份保留在原目录旁，未确认不清除。桌面设置或本地MCP lan_file_backups可分页查看；停止服务后按receipt核验恢复/清除单个备份，不递归搬删目录、不改变同步基线。Android设置有同一生产句柄服务的备份管理。达到备份/元数据预算时延期；管理员检查后明确清除，不擅自丢弃恢复副本。
 

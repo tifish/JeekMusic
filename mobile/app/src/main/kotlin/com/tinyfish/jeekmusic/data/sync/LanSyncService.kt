@@ -57,14 +57,16 @@ class LanSyncService @Inject constructor(
 ) {
     private val gate = Mutex()
     @Volatile private var job: Job? = null
+    private class StopState { @Volatile var reason = "" }
+    @Volatile private var stopState = StopState()
     @Volatile private var activeFileRoot: String? = null
     private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing) }
     private val automation by lazy { LanAutoSync(context,scope,this) }
     val schedule get()=automation.state
     fun initializeAutomation()=automation.initialize()
-    internal fun isSyncRunning()=job?.isActive==true
+    internal fun isSyncRunning()=job?.isCompleted==false
     internal suspend fun awaitSync() { job?.join() }
-    internal fun cancelScheduled() { job?.cancel();transport?.cancel() }
+    internal fun cancelScheduled(reason: String="cancelled") { stopState.reason=reason;job?.cancel();transport?.cancel() }
     internal suspend fun backgroundSync()=automation.background()
     internal suspend fun localWatchDirectories(mapping: JSONObject): List<File> = LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { io ->
         // Only synchronization may persist a new directory pin. Watching never initializes one.
@@ -243,15 +245,17 @@ class LanSyncService @Inject constructor(
         store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root })) }; report()
         automation.configure()
     }
-    fun cancel() { automation.cancel();cancelScheduled();scope.launch(Dispatchers.IO) { reportFileSchedule(automation.state.value.json()) } }
+    fun cancel() { automation.cancel();cancelScheduled();automation.report() }
     fun start() { automation.hint("manual",manual=true) }
     @Synchronized internal fun startScheduled(reason: String) {
-        if (job?.isActive == true) return
+        if (job?.isCompleted == false) return
         if (networkPolicy.waitingForWifi) { _status.update { it.copy(running=false,text=context.getString(R.string.sync_wifi_waiting)) };return }
+        val stop=StopState();stopState=stop
+        fun stoppedText()=context.getString(when(stop.reason) { "background"->R.string.lan_background_waiting;"cancelled"->R.string.lan_cancelled;else->R.string.lan_interrupted })
         automation.begin(reason)
         // Status reporting is advisory. An offline PC must not delay the actual sync round
         // or occupy the mapping-edit gate before synchronization has even begun.
-        scope.launch(Dispatchers.IO) { reportFileSchedule(automation.state.value.json()) }
+        automation.report()
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
@@ -262,6 +266,7 @@ class LanSyncService @Inject constructor(
                     val obsolete=store.mappings().count { !LanMappingTargets.isCurrent(it) }
                     if(obsolete>0) problems += context.getString(R.string.lan_mapping_reselect)
                     loadLedger()
+                    _status.update { it.copy(text=context.getString(R.string.sync_recovering)) }
                     recoverPending()
                     drainRefresh()
                     val actions=mutableMapOf<String,Int>();val conflicts=mutableListOf<JSONObject>();var deferredCount=0;var processed=0;var lastProgress=0L
@@ -277,7 +282,18 @@ class LanSyncService @Inject constructor(
                                     lastProgress=now
                                     _status.update { it.copy(running=true,text=path,done=done+progress.bytes,total=0,problems=problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed) }
                                 }
-                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ drainRefresh() })
+                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ drainRefresh() },phase={ stage,count,total ->
+                                automation.phase(stage)
+                                val text=when(stage) {
+                                    "reading_baseline"->context.getString(R.string.sync_reading_baseline,count,total)
+                                    "pc_scan"->context.getString(R.string.sync_pc_scan)
+                                    "reading_manifest"->context.getString(R.string.sync_reading_manifest,count,total)
+                                    "phone_scan"->context.getString(R.string.sync_phone_scan,count)
+                                    "reconciling"->context.getString(R.string.sync_reconciling)
+                                    else->context.getString(R.string.sync_recovering)
+                                }
+                                _status.update { it.copy(text=text) }
+                            })
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
@@ -298,19 +314,24 @@ class LanSyncService @Inject constructor(
                     }
                     _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {
-                    _status.value = _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
+                    _status.value = _status.value.copy(running=false,text=stoppedText(),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: Exception) {
                     // Transport exceptions can contain connection addresses, but never serialize the invitation/token.
-                    _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
+                    _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=stoppedText(),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                         else _status.value.copy(running=false,text=context.getString(R.string.lan_failed),done=done,total=total,problems=problems+problem(e),timeDetails=timeDetails,precisionNs=precisionNs)
                 } finally { completedBytes=done;transport?.close(); transport = null; refreshConflicts(); startRecovery() }
-            } }finally {
+            } } catch(e: CancellationException) {
+                // Cancellation while waiting for the reconciliation gate never enters the
+                // inner handler, but still needs the same truthful interruption status.
+                _status.update { it.copy(running=false,text=stoppedText()) }
+                throw e
+            } finally {
                 _status.update { it.copy(running=false) }
                 // Choices made after their path was visited still need a round. An incomplete
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes)
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background")
             }
         }
     }

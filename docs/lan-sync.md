@@ -42,7 +42,7 @@ Android从电脑根内选择全部或子目录，通过系统SAF选择本机目�
 
 前台每30秒通过短期认证请求读取 PC 根 revision（进程 epoch+watch序号+根修订），连接随请求关闭；不会占满公网槽等长连接。即便没有事件，每15分钟补元数据对账；watch失败/溢出/重挂载/重启漏事件由此补偿。网络/忙碌错误按30秒至15分钟指数退避，保持原有设备/全局限流。已有冲突以映射/路径/基线/双方元数据形成稳定标识，不反复弹窗或传输；相关版本变化或用户明确选择后重新决策。
 
-Android 后台使用正式 WorkManager：connected约束、15分钟周期（系统可推迟）、指数退避至少15分钟；离开前台时，仅将没有系统执行保障的前台任务安全取消并交给普通 Worker；已经由 WorkManager 持有的任务继续运行，不因页面退后台而错误取消。每次后台工作最多8分钟，保留已有分块/事务恢复能力；没有借用播放服务、申请电池豁免、长期 dataSync FGS 或精确闹钟。大任务可在前台继续。强制停止、Doze、系统配额、离线期间不承诺实时持续。依据：[FileObserver](https://developer.android.com/reference/android/os/FileObserver)、[PeriodicWorkRequest](https://developer.android.com/reference/androidx/work/PeriodicWorkRequest)、[Android 15 FGS 时限](https://developer.android.com/develop/background-work/services/fgs/timeout)。
+Android 后台使用正式 WorkManager：15分钟周期（系统可推迟）、指数退避至少15分钟；实际传输由同一网络策略检查 Wi-Fi/可用网络，不用要求互联网验证的 CONNECTED 约束阻挡仅局域网 Wi-Fi。离开前台时，先结束没有系统执行保障的前台任务并等待清理完成，再交给普通 Worker；已由 Worker 持有的任务继续运行。交接显示“等待 Android 接管后台同步”，不算用户取消或失败退避；快速回到前台则重新提示自动调度。每次后台工作最多8分钟，保留已有分块/事务恢复能力；没有借用播放服务、申请电池豁免、长期 dataSync FGS 或精确闹钟。大任务可在前台继续。强制停止、Doze、系统配额、离线期间不承诺实时持续。准备步骤、重试边界和验证见[同步准备与后台交接](sync-preparation-and-background.md)。依据：[FileObserver](https://developer.android.com/reference/android/os/FileObserver)、[PeriodicWorkRequest](https://developer.android.com/reference/androidx/work/PeriodicWorkRequest)、[Android 15 FGS 时限](https://developer.android.com/develop/background-work/services/fgs/timeout)。
 
 “取消”中断当前工作，并持久抑制自动文件同步，直到点击“立即同步”或重新启用映射；watch/前台/重启不会立即把取消复活。暂停只作用于该文件映射，保留文件与基线，不关闭播放、学习或配对；立即同步仍跳过暂停映射。忘记映射同样保留文件。旧映射不会参与 watcher/后台自动同步，也不迁移旧目录。
 
@@ -52,7 +52,7 @@ Android 设置只保留一个“同步”入口：电脑连接/配对与状态�
 
 不删除/重建原 scope、baseline 或事务表。新增 metadata 列保存合同2双端版本，已有合同2精确证据直接复用；原合同1基线只有 hash，没有足够的双方实际 size/mtime，不能从 hash 或“较新mtime”伪造版本。旧 tombstone 保留版本与已删除历史；双方都缺失的旧存活记录确认成 tombstone，双方当前元数据相同则安全建立新元数据基线。旧存活记录双方不同（包括单侧缺失）保留 `legacy_metadata_unconfirmed` 冲突，不据缺失传播误删，也不自动重新下载。用户按既有冲突选择解决。新首次无基线单侧新增仍自动补齐。不会清标签、学习、配对、SAF权限或其他配置。
 
-传输/安全与变化判断独立。仅确实需要传输、删除或恢复的文件调用按需 file_verify（计划内只读依赖用 verify），取得操作摘要；256KiB传输块使用TLS，接收部分文件做完整性核验，提交继续使用句柄、路径检查、同名抢占拒绝、摘要、条件提交和持久恢复日志。可能多次读取单次操作的目标/暂存/备份，不宣称省掉所有操作IO。确认记录落地版本；提交已成功但确认丢失时通过持久操作结果恢复因果关系，再三方处理后续编辑，不把时间舍入误报成永久冲突。
+传输/安全与变化判断独立。兼容命名的 file_verify/verify 当前读取文件元数据版本，不计算音频内容哈希；256KiB 传输块使用 TLS，接收时检查长度、来源版本与受控暂存状态，提交使用句柄、路径检查、同名抢占拒绝、条件提交和持久恢复日志。实际传输、复制及恢复仍需要文件 IO；元数据比较不能识别大小和修改时间均未变的内容修改。确认记录保存双方实际落地版本；提交已成功但确认丢失时通过持久操作结果恢复因果关系，再三方处理后续编辑，不把时间舍入误报成永久冲突。
 
 ## 权限与文件安全
 

@@ -434,10 +434,10 @@
     <string name="lan_clean_confirm">Remove only files owned by this task that still match their saved hash and modification time. Modified or playing files are kept. PC files are never deleted. The task will pause.</string>
     <string name="lan_forget_confirm">Forget this mapping and keep all files, including internal recovery versions. A new mapping starts with no deletion baseline. You can then pair with another PC.</string>
     <string name="lan_start">Sync now</string>
-    <string name="lan_verifying">Verifying all selected content on PC…</string>
+    <string name="lan_verifying">Preparing sync…</string>
     <string name="lan_done">Sync complete · SHA-256 verified</string>
     <string name="lan_issues">Sync needs attention</string>
-    <string name="lan_cancelled">Cancelled. Partial downloads retained for retry.</string>
+    <string name="lan_cancelled">Sync cancelled. Completed files are kept; the next sync will check changes and continue unfinished files.</string>
     <string name="lan_failed">Connection/sync failed. Check pairing, network, PC service and firewall status; then retry. Partial downloads and existing files are preserved.</string>
     <string name="lan_cleaned">Clean finished; task paused. See any retained conflicts below.</string>
     <string name="lan_folders_hint">Selected folders include subfolders. Browse with ›. Select the root to download everything in it. Only selected files and CUE dependencies are transferred.</string>

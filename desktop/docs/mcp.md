@@ -654,6 +654,10 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 手机 Wi-Fi 同步策略：TLS `capabilities.syncNetworkPolicy=true` 表示电脑接受 `file_schedule.schedule` 的可选布尔字段 `wifiOnly`、`waitingForWifi`。`lan_sync_status.fileSync.schedules[].schedule` 原样提供最后一次经认证的手机报告；这些字段不是电脑实时观测的手机网络状态，断开 Wi-Fi 时报告可能无法更新。旧手机可以省略，手机连接旧电脑时不发送这两个字段。MCP 工具输入 Schema 不变；电脑不能更改手机本机的 Wi-Fi 选项。开发版和正式版使用同一服务。
 
+同一调度报告的 `state` 可进一步显示 `reading_baseline`（读取已确认记录）、`pc_scan`、`reading_manifest`、`local_recovery`、`phone_scan`、`reconciling`、`waiting_for_background`。正常后台交接不是 `cancelled`，不增加失败退避。手机合并阶段报告并串行发送，避免进度通知自身占满设备连接。字段类型与工具输入 Schema 均不变，旧电脑仍接受这些普通状态字符串；仍以最后一次经认证的报告为准，不把离线时的旧状态当作实时进度。
+
+`lan_sync_status.fileSync.admissionWaitMs=250` 表示已认证文件请求在工作许可被占用时最多短等的毫秒数。工作并发仍为 1，等待受当前认证连接数及请求取消/截止约束；短暂的元数据/调度报告竞争不再立即触发手机的 30 秒 busy 退避。超时继续返回兼容 busy；工具输入 Schema 不变。
+
 
 `lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。hashBytes 保留兼容字段且始终为0；扫描、传输、条件提交、删除及恢复均不计算文件内容摘要，hashPurpose=none。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
 

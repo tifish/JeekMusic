@@ -31,6 +31,8 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var timer: Job?=null
     private var loop: Job?=null
     private var conflictLoop: Job?=null
+    private var reportJob: Job?=null
+    private var reportPending=false
     private var firstHint=0L
     private var failures=0
     private var workerOwned=false
@@ -63,13 +65,15 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     fun configure() {
         scope.launch(Dispatchers.IO) {
             val enabled=eligible()
-            if(enabled)WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK,ExistingPeriodicWorkPolicy.KEEP,
-                PeriodicWorkRequestBuilder<LanSyncWorker>(15,TimeUnit.MINUTES).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+            // LAN-only Wi-Fi need not have validated internet. The production socket policy
+            // checks the actual transport before any DNS/TCP; CONNECTED would block such LANs.
+            if(enabled)WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK,ExistingPeriodicWorkPolicy.UPDATE,
+                PeriodicWorkRequestBuilder<LanSyncWorker>(15,TimeUnit.MINUTES).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).build())
             else WorkManager.getInstance(context).cancelUniqueWork(WORK)
             synchronized(lock) { _state.value=_state.value.copy(paused=!enabled,cancelled=held()) }
             rebuildWatches()
             if(enabled)hint("mapping_or_startup")
-            service.reportFileSchedule(_state.value.json())
+            report()
         }
     }
     private fun enterForeground(value: Boolean) {
@@ -79,11 +83,20 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         if(!value) {
             synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear();timer?.cancel() }
             val needsHandoff=synchronized(lock) { if(_state.value.running)!workerOwned else _state.value.dirty }
+            val userRequested=synchronized(lock) { _state.value.trigger=="manual" }
             if(eligible() && !held() && needsHandoff) {
                 // Foreground coroutines are not a background execution entitlement.
-                service.cancelScheduled()
-                scope.launch(Dispatchers.IO) { WorkManager.getInstance(context).enqueueUniqueWork(WORK+"-handoff",ExistingWorkPolicy.KEEP,
-                    OneTimeWorkRequestBuilder<LanSyncWorker>().setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()) }
+                service.cancelScheduled("background")
+                scope.launch(Dispatchers.IO) {
+                    // The worker must not mistake the cancelling foreground job for a task
+                    // that is still taking care of this round and immediately return success.
+                    service.awaitSync()
+                    if(!eligible() || held())return@launch
+                    if(foreground) { hint("foreground_return");return@launch }
+                    val request=OneTimeWorkRequestBuilder<LanSyncWorker>().setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES)
+                    if(userRequested && android.os.Build.VERSION.SDK_INT>=31)request.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    WorkManager.getInstance(context).enqueueUniqueWork(WORK+"-handoff",ExistingWorkPolicy.REPLACE,request.build())
+                }
             }
             return
         }
@@ -119,7 +132,9 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             if(!eligible())return
             if(manual) { service.store.update { it.put("autoCancelled",false) };failures=0;_state.value=_state.value.copy(backoffUntil=0) }
             if(held())return
-            _state.value=_state.value.copy(trigger=reason,dirty=true,cancelled=false)
+            // trigger identifies the current/last execution. A pending hint must not
+            // relabel a WorkManager run (including a completed run with dirty follow-up).
+            _state.value=_state.value.copy(dirty=true,cancelled=false)
             if(service.networkPolicy.waitingForWifi) { _state.value=_state.value.copy(state="waiting_for_wifi");return }
             if(_state.value.running)return
             if(!foreground && !manual)return // WorkManager owns background execution, no wakeup loop.
@@ -134,15 +149,33 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         }
     }
     fun begin(reason: String) { synchronized(lock) { workerOwned=reason=="workmanager_fallback";_state.value=_state.value.copy(trigger=reason,running=true,dirty=false,state="running") } }
-    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long) {
+    fun report() { synchronized(lock) {
+        reportPending=true
+        if(reportJob?.isActive==true)return
+        reportJob=scope.launch(Dispatchers.IO) {
+            while(isActive) {
+                val snapshot=synchronized(lock) {
+                    if(!reportPending) { reportJob=null;return@launch }
+                    reportPending=false;_state.value.json()
+                }
+                service.reportFileSchedule(snapshot)
+                delay(200)
+            }
+        }
+    } }
+    fun phase(stage: String) { synchronized(lock) {
+        if(_state.value.running && _state.value.state!=stage) { _state.value=_state.value.copy(state=stage);report() }
+    } }
+    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
             _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,state=if(held())"cancelled" else if(success)"idle" else "backoff")
             if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
+            else if(handoff && !held())_state.value=_state.value.copy(state="waiting_for_background",backoffUntil=0)
             else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
             if(old.dirty && !held())hint("dirty_followup")
         }
-        scope.launch(Dispatchers.IO) { rebuildWatches();service.reportFileSchedule(_state.value.json()) }
+        scope.launch(Dispatchers.IO) { rebuildWatches();report() }
     }
     private fun failed(reason: String) { synchronized(lock) {
         failures=(failures+1).coerceAtMost(6)
@@ -179,13 +212,13 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         }
     }
     suspend fun background(): Boolean {
-        if(service.networkPolicy.waitingForWifi)return true
+        if(!service.networkPolicy.hasSyncNetwork)return true
         if(!eligible() || held())return true
         if(System.currentTimeMillis()<_state.value.backoffUntil)return true
         if(service.isSyncRunning())return true
         service.startScheduled("workmanager_fallback")
         return try { withTimeout(8*60_000L) { service.awaitSync() };service.status.value.problems.isEmpty() }
-        catch(e: CancellationException) { service.cancelScheduled();throw e }
+        catch(e: CancellationException) { service.cancelScheduled("interrupted");throw e }
     }
     companion object {
         const val WORK="lan-metadata-sync"

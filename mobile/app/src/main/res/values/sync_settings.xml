@@ -1,4 +1,12 @@
 <resources>
+    <string name="sync_recovering">Restoring unfinished file operations…</string>
+    <string name="sync_reading_baseline">Reading confirmed sync records: %1$d / %2$d</string>
+    <string name="sync_pc_scan">Reading file names, sizes and modification times on the PC…</string>
+    <string name="sync_reading_manifest">Reading PC file list: %1$d / %2$d</string>
+    <string name="sync_phone_scan">Scanning phone folders: %1$d files found</string>
+    <string name="sync_reconciling">Comparing file changes…</string>
+    <string name="lan_background_waiting">Paused while Android takes over background sync.</string>
+    <string name="lan_interrupted">Sync paused. Unfinished files will be retried when conditions allow.</string>
     <string name="sync_wifi_only">Sync only over Wi-Fi</string>
     <string name="sync_wifi_only_summary">Use Wi-Fi for manual and automatic sync of music, user data and learning data. Pause when Wi-Fi disconnects and resume when it returns.</string>
     <string name="sync_wifi_waiting">Waiting for Wi-Fi. Sync is paused.</string>

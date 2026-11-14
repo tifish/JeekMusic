@@ -1,4 +1,12 @@
 <resources>
+    <string name="sync_recovering">正在恢复未完成的文件操作…</string>
+    <string name="sync_reading_baseline">读取已确认的同步记录：%1$d / %2$d 项</string>
+    <string name="sync_pc_scan">正在读取电脑上的文件名、大小和修改时间…</string>
+    <string name="sync_reading_manifest">读取电脑文件清单：%1$d / %2$d 项</string>
+    <string name="sync_phone_scan">正在扫描手机目录：已找到 %1$d 个文件</string>
+    <string name="sync_reconciling">正在比较文件变化…</string>
+    <string name="lan_background_waiting">同步已暂停，等待 Android 接管后台同步。</string>
+    <string name="lan_interrupted">同步已暂停，将在条件允许时重试未完成的文件。</string>
     <string name="sync_wifi_only">仅在 Wi-Fi 下同步</string>
     <string name="sync_wifi_only_summary">手动和自动同步音乐、用户数据及学习数据均使用 Wi-Fi。断开 Wi-Fi 后暂停，恢复连接后继续。</string>
     <string name="sync_wifi_waiting">等待 Wi-Fi 连接，同步已暂停。</string>

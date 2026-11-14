@@ -5,6 +5,7 @@ namespace JeekMusic.Sync;
 
 public sealed partial class LanSyncService
 {
+    internal const int FileAdmissionWaitMs=250;
     readonly SemaphoreSlim _fileWork=new(1);
     LanFileSyncStore? _fileStore;
     volatile JsonObject _fileDiagnostics=new() { ["fileProtocol"]=3,["comparison"]="size+mtime-exact",["state"]="idle",["fileWorkLimit"]=1,["taskSeconds"]=900,["fileBytesLimit"]=8L*1024*1024*1024,["stagingBytesLimit"]=16L*1024*1024*1024,["backupBytesLimit"]=32L*1024*1024*1024,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024 };
@@ -60,6 +61,7 @@ public sealed partial class LanSyncService
     }
     JsonObject FileDiagnostics() {
         var result=_fileDiagnostics.DeepClone().AsObject();
+        result["admissionWaitMs"]=FileAdmissionWaitMs;
         result["pendingConflicts"]=ConflictCount;result["conflictProtocol"]=1;result["conflictStatusProtocol"]=1;
         result["metadataObservations"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.MetadataObservations);
         result["hashBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.HashBytes);
@@ -85,7 +87,7 @@ public sealed partial class LanSyncService
         var op=a["op"]!.GetValue<string>();
         if(!modern || a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
         if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
-        if(!_fileWork.Wait(0))throw Busy();
+        if(!await _fileWork.WaitAsync(TimeSpan.FromMilliseconds(FileAdmissionWaitMs),request))throw Busy();
         bool handedOff=false;
         // Metadata checks and acknowledgements no longer require a background content pass.
         var independent=op is "file_finish" or "file_delete";

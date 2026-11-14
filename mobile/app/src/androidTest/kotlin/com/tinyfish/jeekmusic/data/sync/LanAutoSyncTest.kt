@@ -11,6 +11,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -22,6 +23,58 @@ import java.util.UUID
 /** Real foreground scheduler, authenticated PC watcher revisions and public SAF. Never calls start(). */
 @RunWith(AndroidJUnit4::class)
 class LanAutoSyncTest {
+    @Test fun backgroundHandoffWaitsForForegroundCleanup()=runBlocking {
+        val raw=InstrumentationRegistry.getArguments().getString("jeekFileFixture") ?: error("Explicit isolated fixture required")
+        val config=JSONObject(String(Base64.decode(raw,Base64.NO_WRAP),Charsets.UTF_8))
+        require(config.getBoolean("isolated") && config.getBoolean("publicSaf") && config.getString("host")=="127.0.0.1")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val service=EntryPointAccessors.fromApplication(context,LanSyncWorker.Dependencies::class.java).lan()
+        val original=service.store.read()
+        service.cancel();service.awaitSync()
+        val manager=androidx.work.WorkManager.getInstance(context)
+        manager.cancelUniqueWork(LanAutoSync.WORK).result.get()
+        manager.cancelUniqueWork(LanAutoSync.WORK+"-handoff").result.get()
+        val mapping=JSONObject().put("layoutVersion",2).put("key",UUID.randomUUID().toString()).put("rootId",config.getString("rootId")).put("name","Isolated handoff")
+            .put("selection",JSONArray(listOf(""))).put("treeUri","content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FJeekLanFinalDirect")
+            .put("documentId","primary:Documents/JeekLanFinalDirect").put("volume","external_primary").put("relative","Documents/JeekLanFinalDirect/").put("enabled",true)
+        val field=LanSyncService::class.java.getDeclaredField("gate").apply { isAccessible=true }
+        val gate=field.get(service) as kotlinx.coroutines.sync.Mutex
+        val jobField=LanSyncService::class.java.getDeclaredField("job").apply { isAccessible=true }
+        suspend fun waitFor(label: String,check: ()->Boolean) {
+            try { withTimeout(30_000) { while(!check())delay(50) } }
+            catch(e: TimeoutCancellationException) { throw AssertionError("$label: ${service.schedule.value.json()} status=${service.status.value.text}",e) }
+        }
+        val texts=java.util.Collections.synchronizedList(mutableListOf<String>())
+        val collector=launch(Dispatchers.Unconfined) { service.status.collect { texts+=it.text } }
+        try {
+            service.store.update { it.put("connection",JSONObject(config.toString())).put("mappings",JSONArray(listOf(mapping))).put("autoCancelled",true) }
+            service.initializeAutomation()
+            ActivityScenario.launch(MainActivity::class.java).use { activity ->
+                waitFor("foreground") { service.schedule.value.foreground }
+                gate.lock()
+                service.start()
+                waitFor("preparing") { service.status.value.running }
+                val foregroundJob=jobField.get(service) as Job
+                texts.clear()
+                activity.moveToState(Lifecycle.State.CREATED)
+                waitFor("worker_handoff") { service.schedule.value.trigger=="workmanager_fallback" && service.status.value.running && jobField.get(service)!==foregroundJob }
+                assertTrue(foregroundJob.isCompleted)
+                assertEquals(0L,service.schedule.value.backoffUntil)
+                assertTrue(texts.contains(context.getString(com.tinyfish.jeekmusic.R.string.lan_background_waiting)))
+                assertFalse(texts.contains(context.getString(com.tinyfish.jeekmusic.R.string.lan_cancelled)))
+                service.setEnabled(config.getString("rootId"),true)
+                waitFor("pending_hint") { service.schedule.value.dirty }
+                assertEquals("workmanager_fallback",service.schedule.value.trigger)
+                println("HANDOFF_EVIDENCE foregroundCompleted=true workerStarted=true noUserCancel=true noFailureBackoff=true")
+                collector.cancelAndJoin()
+                service.cancel();gate.unlock();service.awaitSync()
+            }
+        } finally {
+            collector.cancelAndJoin();service.cancel();if(gate.isLocked)gate.unlock();service.awaitSync()
+            manager.cancelUniqueWork(LanAutoSync.WORK+"-handoff").result.get()
+            service.store.update { state -> state.keys().asSequence().toList().forEach(state::remove);original.keys().forEach { state.put(it,original.get(it)) } }
+        }
+    }
     private fun id()=UUID.randomUUID().toString().replace("-","")
     private fun audio(marker: Int)=ByteArray(64).also { "RIFF".toByteArray().copyInto(it);"WAVE".toByteArray().copyInto(it,8);it[63]=marker.toByte() }
     @Test fun actualEventsReconcileBothDirectionsAndRespectCancelAndPause()=runBlocking {

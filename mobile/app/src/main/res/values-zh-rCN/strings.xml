@@ -10,6 +10,11 @@
     <string name="sync_conflict_compared_version">%1$s 字节（%2$s）\n修改时间：%3$s（%4$s）</string>
 
     <string name="sync_conflict_notice">%1$d 个同步冲突，点击比较并处理</string>
+    <string name="sync_conflict_waiting_notice">%1$d 项已选择，等待同步完成</string>
+    <string name="sync_conflict_mixed_notice">%1$d 个冲突待选择 · %2$d 项等待同步完成</string>
+    <string name="sync_conflict_waiting_help">选择已保存。请连接电脑并启用对应同步目录，以完成处理。双方版本校验完成后，记录会自动消失。</string>
+    <string name="sync_conflict_resume">继续同步</string>
+    <string name="sync_conflict_syncing">正在同步…</string>
     <string name="sync_conflict_title">同步冲突</string>
     <string name="sync_conflict_phone">手机版本</string>
     <string name="sync_conflict_pc">电脑版本</string>

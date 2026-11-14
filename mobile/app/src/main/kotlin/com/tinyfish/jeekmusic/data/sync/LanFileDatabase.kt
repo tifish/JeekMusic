@@ -121,8 +121,19 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         if(existing.toString()!=row.toString())onIssuesChanged?.invoke()
     }
     @Synchronized fun issueForPath(mapping: String,path: String): JSONObject? = one("SELECT json FROM issues WHERE mapping=? AND path=?",arrayOf(mapping,path))
-    @Synchronized fun issuePage(offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM issues ORDER BY mapping,path LIMIT 100 OFFSET ?",arrayOf(offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
+    @Synchronized fun issuePage(offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json,choice FROM issues ORDER BY mapping,path LIMIT 100 OFFSET ?",arrayOf(offset.toString())).use { c -> buildList {
+        while(c.moveToNext())add(JSONObject(c.getString(0)).also { row ->
+            // Old clients stored phone intent only in the choice column. Keep queued
+            // intent distinct from a confirmed choice in the current JSON representation.
+            if(!c.isNull(1) && row.optString("choice") !in setOf("local","remote") && row.optString("queuedChoice") !in setOf("local","remote"))row.put("queuedChoice",c.getString(1))
+        })
+    } }
     @Synchronized fun issueCount(): Int = db.rawQuery("SELECT COUNT(*) FROM issues",null).use { it.moveToFirst();it.getInt(0) }
+    /** Includes queued and peer-confirmed choices, including choices saved by older clients. */
+    @Synchronized fun pendingIssueCount(mapping: String?=null): Int = db.rawQuery(
+        "SELECT COUNT(*) FROM issues WHERE (choice IN ('local','remote') OR json_extract(json,'$.choice') IN ('local','remote') OR json_extract(json,'$.queuedChoice') IN ('local','remote'))" +
+            if(mapping==null) "" else " AND mapping=?",mapping?.let { arrayOf(it) }
+    ).use { it.moveToFirst();it.getInt(0) }
     @Synchronized fun resolved(mapping: String,path: String) { if(db.delete("issues","mapping=? AND path=?",arrayOf(mapping,path))>0)onIssuesChanged?.invoke() }
     @Synchronized fun issues(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM issues WHERE mapping=? ORDER BY path LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
     private fun metadataTransaction(row: JSONObject): JSONObject {

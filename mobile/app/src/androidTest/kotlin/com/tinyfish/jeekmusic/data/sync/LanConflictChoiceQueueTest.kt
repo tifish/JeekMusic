@@ -23,19 +23,27 @@ class LanConflictChoiceQueueTest {
         val id="a".repeat(64)
         try {
             LanFileDatabase(context).use { db ->
-                db.issue(row(id));db.queueChoice(id,"local")
+                db.issue(row(id));assertEquals(0,db.pendingIssueCount());db.queueChoice(id,"local")
+                assertEquals(1,db.pendingIssueCount())
                 db.updateIssue(row(id).put("choice",JSONObject.NULL)) // server reply begun before user click
                 assertEquals("local",db.issuePage().single().getString("queuedChoice"))
             }
             LanFileDatabase(context).use { db ->
+                assertEquals(1,db.pendingIssueCount())
+                assertEquals(1,db.pendingIssueCount("queue-test"));assertEquals(0,db.pendingIssueCount("other"))
                 assertEquals("local",db.issue(id)!!.getString("choice"))
                 db.updateIssue(row(id).put("choice","remote")) // another device already confirmed
+                assertEquals(1,db.pendingIssueCount())
                 assertFalse(db.issuePage().single().has("queuedChoice"))
                 assertEquals("remote",db.issue(id)!!.getString("choice"))
                 db.updateIssue(row(id).put("choice",JSONObject.NULL)) // delayed pre-choice status reply
                 assertEquals("remote",db.issuePage().single().getString("choice"))
                 assertThrows(IllegalStateException::class.java) { db.queueChoice(id,"local") }
                 val next="b".repeat(64);db.issue(row(next))
+                assertEquals(0,db.pendingIssueCount())
+                db.choose(next,"remote") // legacy column-only phone intent
+                assertEquals(1,db.pendingIssueCount())
+                assertEquals("remote",db.issuePage().single().getString("queuedChoice"))
                 assertNull(db.issue(id));assertFalse(db.issue(next)!!.has("queuedChoice"))
                 assertThrows(IllegalStateException::class.java) { db.queueChoice(id,"local") }
             }

@@ -126,6 +126,7 @@ import com.tinyfish.jeekmusic.ui.playlists.PlaylistListScreen
 import com.tinyfish.jeekmusic.ui.search.SearchScreen
 import com.tinyfish.jeekmusic.ui.settings.ArtistSettingsScreen
 import com.tinyfish.jeekmusic.ui.settings.SettingsScreen
+import com.tinyfish.jeekmusic.ui.settings.SyncConflictSummary
 import com.tinyfish.jeekmusic.ui.settings.TabManagerScreen
 import com.tinyfish.jeekmusic.ui.theme.JeekTheme
 import kotlinx.coroutines.launch
@@ -331,8 +332,9 @@ private fun MainScreen(viewModel: MainViewModel) {
                     )
                 }
                 val conflictCount by viewModel.lan.conflictCount.collectAsStateWithLifecycle()
+                val pendingConflictCount by viewModel.lan.pendingConflictCount.collectAsStateWithLifecycle()
                 if(conflictCount>0) TextButton(onClick={ viewModel.open(TopRoute.SyncConflicts) },modifier=Modifier.fillMaxWidth().testTag("sync_conflict_notice")) {
-                    Text(stringResource(R.string.sync_conflict_notice,conflictCount))
+                    SyncConflictSummary(conflictCount,pendingConflictCount)
                 }
                 // 只组合当前页，避免固定标签很多时拖慢启动和滑动（docs/design.md §5.1）
                 HorizontalPager(state = pagerState, beyondViewportPageCount = 0, key = { tabs.getOrNull(it)?.key ?: it }) { page ->

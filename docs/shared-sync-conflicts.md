@@ -13,7 +13,7 @@ transaction/recovery protection remains in place.
 
 An active sync no longer disables every conflict action. A phone choice is first
 saved atomically in the private issue database as `queuedChoice` with the immutable
-conflict ID. Only that row is disabled and explicitly shows that it is queued;
+conflict ID. That row shows that it is queued and hides its version-choice buttons;
 other conflicts remain selectable. The existing reconciler submits the queued
 choice during a safe reconciliation step and rechecks both metadata versions.
 The sync scheduler requests a follow-up round if the current round has already
@@ -27,6 +27,29 @@ No new Windows MCP or wire operation is needed: this reuses `file_conflict_choos
 and the existing first-confirmed-choice rules. Queuing itself neither writes nor
 deletes an audio file. Both the dedicated conflict page and settings summary use
 the same row behavior.
+
+### Android selected choices and completion
+
+The main notice and conflict page distinguish conflicts still needing a choice
+from saved choices waiting for file synchronization. This count covers queued
+phone choices and choices already confirmed by the PC, including persisted rows
+from older versions. A partial completion such as three selected items reducing
+to two is displayed as “2 selected, waiting for sync”, including after reopening
+the page. Selected entries retain their version comparison and saved decision;
+only unselected entries offer version-choice buttons. “Continue sync” uses the
+normal synchronization service and is disabled while a round is running.
+
+An enabled mapping with an unfinished selected conflict prevents the scheduler
+from reporting a successful idle round. It retains a dirty follow-up and uses the
+existing 30-second to 15-minute exponential retry backoff; paused mappings and
+explicit cancellation remain respected. Rows are removed only by verified file
+reconciliation, never merely because a version was selected or the PC no longer
+lists an ID.
+
+Windows MCP remains compatible: `lan_file_conflicts` lists pending rows and its
+`choose` action records intent, as before; `lan_sync_status` reports file work and
+the received phone schedule. No new wire operation or MCP parameter is needed
+for the Android presentation and scheduler correction.
 
 #### Queue delivery 1.0.243 (2026-11-05)
 

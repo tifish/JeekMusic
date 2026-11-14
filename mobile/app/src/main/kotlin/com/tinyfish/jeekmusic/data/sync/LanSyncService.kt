@@ -90,9 +90,11 @@ class LanSyncService @Inject constructor(
     val status = _status.asStateFlow()
     private val _conflictCount = MutableStateFlow(0)
     val conflictCount = _conflictCount.asStateFlow()
+    private val _pendingConflictCount = MutableStateFlow(0)
+    val pendingConflictCount = _pendingConflictCount.asStateFlow()
     private val _conflictError = MutableStateFlow(false)
     val conflictError = _conflictError.asStateFlow()
-    private fun refreshConflicts() { _conflictCount.value=fileDatabase.issueCount();val rows=fileDatabase.issuePage();_status.update { it.copy(fileConflicts=rows) };report() }
+    private fun refreshConflicts() { _pendingConflictCount.value=fileDatabase.pendingIssueCount();_conflictCount.value=fileDatabase.issueCount();val rows=fileDatabase.issuePage();_status.update { it.copy(fileConflicts=rows) };report() }
     suspend fun conflictPage(offset: Int=0): List<JSONObject> = withContext(Dispatchers.IO) { fileDatabase.issuePage(offset) }
     private val conflictExchange=Mutex()
     private var conflictOffset=0
@@ -295,7 +297,11 @@ class LanSyncService @Inject constructor(
                 } finally { completedBytes=done;transport?.close(); transport = null; refreshConflicts(); startRecovery() }
             } }finally {
                 _status.update { it.copy(running=false) }
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes)
+                // Choices made after their path was visited still need a round. An incomplete
+                // choice is not a successful idle state; retry with the normal bounded backoff.
+                val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
+                if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes)
             }
         }
     }

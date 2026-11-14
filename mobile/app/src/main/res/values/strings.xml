@@ -10,6 +10,11 @@
     <string name="sync_conflict_compared_version">%1$s bytes (%2$s)\nModified: %3$s (%4$s)</string>
 
     <string name="sync_conflict_notice">%1$d sync conflicts — review versions</string>
+    <string name="sync_conflict_waiting_notice">%1$d selected, waiting for sync</string>
+    <string name="sync_conflict_mixed_notice">%1$d conflicts to review · %2$d selected, waiting for sync</string>
+    <string name="sync_conflict_waiting_help">Your choices are saved. Connect to the PC and enable the sync folders to finish applying them. Entries disappear after both versions are verified.</string>
+    <string name="sync_conflict_resume">Continue sync</string>
+    <string name="sync_conflict_syncing">Syncing…</string>
     <string name="sync_conflict_title">Sync conflicts</string>
     <string name="sync_conflict_phone">Phone version</string>
     <string name="sync_conflict_pc">PC version</string>

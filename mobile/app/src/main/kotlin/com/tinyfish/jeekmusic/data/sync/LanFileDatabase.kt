@@ -26,6 +26,8 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
             execSQL("CREATE TABLE IF NOT EXISTS dependency_baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS scheduled(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
+            execSQL("CREATE TABLE IF NOT EXISTS metadata_checkpoint(mapping TEXT PRIMARY KEY,scope TEXT,cursor TEXT,valid INTEGER)")
+            execSQL("CREATE TABLE IF NOT EXISTS delta_work(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS latest_edit(path TEXT PRIMARY KEY,size INTEGER NOT NULL,modified_ns INTEGER NOT NULL,edited_at_ms INTEGER NOT NULL)")
             execSQL("CREATE TABLE IF NOT EXISTS transactions(operation TEXT PRIMARY KEY,mapping TEXT,path TEXT,scope TEXT,json TEXT)")
             execSQL("CREATE INDEX IF NOT EXISTS transaction_path ON transactions(mapping,path,scope)")
@@ -44,6 +46,7 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         try { write();db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
     @Synchronized fun lastEdit(path: String,size: Long,modifiedNs: Long): Long = db.rawQuery("SELECT edited_at_ms FROM latest_edit WHERE path=? AND size=? AND modified_ns=?",arrayOf(File(path).absolutePath,size.toString(),modifiedNs.toString())).use { if(it.moveToFirst())it.getLong(0) else 0L }
+    @Synchronized fun editSnapshot(): Map<String,Triple<Long,Long,Long>> = db.rawQuery("SELECT path,size,modified_ns,edited_at_ms FROM latest_edit",null).use { c -> buildMap { while(c.moveToNext())put(c.getString(0),Triple(c.getLong(1),c.getLong(2),c.getLong(3))) } }
     @Synchronized fun lastEdit(path: String,size: Long,modifiedNs: Long,editedAtMs: Long) {
         require(editedAtMs>=0)
         val full=File(path).absolutePath
@@ -51,7 +54,45 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         else db.execSQL("INSERT OR REPLACE INTO latest_edit VALUES(?,?,?,?)",arrayOf(full,size,modifiedNs,editedAtMs))
     }
     @Synchronized fun resetSnapshots(mapping: String) = snapshotBatch {
+        db.execSQL("DELETE FROM metadata_checkpoint WHERE mapping=?",arrayOf(mapping))
         db.execSQL("DELETE FROM held WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM entries WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM baseline WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM scheduled WHERE mapping=?",arrayOf(mapping))
+    }
+    @Synchronized fun metadataCursor(mapping: String,scope: String): String = db.rawQuery("SELECT cursor FROM metadata_checkpoint WHERE mapping=? AND scope=? AND valid=1",arrayOf(mapping,scope)).use { if(it.moveToFirst())it.getString(0) else "" }
+    @Synchronized fun beginDelta(mapping: String,reset: Boolean) {
+        if(reset)resetSnapshots(mapping)
+        snapshotBatch {
+            // Mark before changing any retained row. An interrupted overlay requests a safe full reset.
+            db.execSQL("UPDATE metadata_checkpoint SET valid=0 WHERE mapping=?",arrayOf(mapping))
+            db.execSQL("DELETE FROM entries WHERE mapping=? AND side='local'",arrayOf(mapping))
+            for(table in listOf("scheduled","held","delta_work"))db.execSQL("DELETE FROM $table WHERE mapping=?",arrayOf(mapping))
+        }
+    }
+    @Synchronized fun deltaRows(mapping: String,rows: List<JSONObject>) = snapshotBatch {
+        require(rows.size<=200)
+        for(row in rows) {
+            val path=LanProtocol.relative(row.getString("path"))
+            if(row.isNull("remote"))db.execSQL("DELETE FROM entries WHERE mapping=? AND side='remote' AND path=?",arrayOf(mapping,path))
+            else entry(mapping,"remote",row.getJSONObject("remote").put("path",path))
+            if(row.isNull("baseline"))db.execSQL("DELETE FROM baseline WHERE mapping=? AND path=?",arrayOf(mapping,path))
+            else baseline(mapping,row.getJSONObject("baseline").put("path",path))
+            db.execSQL("INSERT OR IGNORE INTO delta_work VALUES(?,?)",arrayOf(mapping,path))
+        }
+    }
+    @Synchronized fun queueDelta(mapping: String,paths: List<String>) = snapshotBatch {
+        for(path in paths)db.execSQL("INSERT OR IGNORE INTO delta_work VALUES(?,?)",arrayOf(mapping,LanProtocol.relative(path)))
+    }
+    @Synchronized fun completeDeltaScan(mapping: String) = snapshotBatch {
+        db.execSQL("INSERT OR IGNORE INTO delta_work SELECT mapping,path FROM baseline b WHERE mapping=? AND json_extract(json,'$.localVersion') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.mapping=b.mapping AND e.side='local' AND e.path=b.path)",arrayOf(mapping))
+        db.execSQL("INSERT OR IGNORE INTO delta_work SELECT mapping,path FROM issues WHERE mapping=?",arrayOf(mapping))
+        db.execSQL("INSERT OR IGNORE INTO delta_work SELECT mapping,path FROM transactions WHERE mapping=? AND json_extract(json,'$.state') NOT IN ('acknowledged','aborted')",arrayOf(mapping))
+        db.execSQL("INSERT OR IGNORE INTO delta_work SELECT c.mapping,c.cue FROM cue_bindings c JOIN delta_work w ON c.mapping=w.mapping AND c.audio=w.path WHERE c.mapping=?",arrayOf(mapping))
+    }
+    @Synchronized fun deltaPaths(mapping: String,offset: Int,cues: Boolean): List<String> = db.rawQuery("SELECT path FROM delta_work WHERE mapping=? AND lower(substr(path,-4)) ${if(cues) "=" else "!="} '.cue' ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
+    @Synchronized fun dependencyEntries(mapping: String,offset: Int): List<JSONObject> = db.rawQuery("SELECT e.json FROM entries e JOIN dependency_baseline d ON e.mapping=d.mapping AND e.path=d.path WHERE e.mapping=? AND e.side='remote' ORDER BY e.path LIMIT 200 OFFSET ?",arrayOf(mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(JSONObject(c.getString(0))) } }
+    @Synchronized fun confirmDelta(mapping: String,scope: String,cursor: String) = snapshotBatch {
+        db.execSQL("DELETE FROM entries WHERE mapping=? AND side='last_local'",arrayOf(mapping))
+        db.execSQL("INSERT INTO entries SELECT mapping,'last_local',path,normalized,json FROM entries WHERE mapping=? AND side='local'",arrayOf(mapping))
+        db.execSQL("INSERT OR REPLACE INTO metadata_checkpoint VALUES(?,?,?,1)",arrayOf(mapping,scope,cursor))
     }
     /** The caller buffers at most one 200-row page, never holding a transaction over I/O. */
     @Synchronized fun entries(mapping: String,side: String,rows: List<JSONObject>,scheduled: List<String> = emptyList()) {
@@ -64,6 +105,9 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         }
     }
     @Synchronized fun scheduled(mapping: String,path: String)=db.rawQuery("SELECT 1 FROM scheduled WHERE mapping=? AND path=?",arrayOf(mapping,path)).use { it.moveToFirst() }
+    @Synchronized fun markScheduled(mapping: String,paths: List<String>) = snapshotBatch {
+        for(path in paths)db.execSQL("INSERT OR IGNORE INTO scheduled VALUES(?,?)",arrayOf(mapping,path))
+    }
     @Synchronized fun postponeDeletes(mapping: String,paths: List<String>) {
         if(paths.isEmpty())return
         snapshotBatch { for(path in paths)db.execSQL("DELETE FROM scheduled WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
@@ -104,7 +148,7 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     }
     @Synchronized fun paths(mapping: String,offset: Int,cues: Boolean): List<String> = db.rawQuery("SELECT path FROM (SELECT path FROM entries WHERE mapping=? UNION SELECT path FROM baseline WHERE mapping=? UNION SELECT path FROM issues WHERE mapping=?) WHERE lower(substr(path,-4)) ${if(cues) "=" else "!="} '.cue' ORDER BY path LIMIT 200 OFFSET ?",arrayOf(mapping,mapping,mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
     @Synchronized fun requirePortableLayout(mapping: String) {
-        db.rawQuery("SELECT normalized FROM entries WHERE mapping=? GROUP BY normalized HAVING MIN(path)!=MAX(path) LIMIT 1",arrayOf(mapping)).use { check(!it.moveToFirst()) { "Case or Unicode layout conflict; align the filenames before syncing" } }
+        db.rawQuery("SELECT normalized FROM entries WHERE mapping=? AND side IN ('local','remote') GROUP BY normalized HAVING MIN(path)!=MAX(path) LIMIT 1",arrayOf(mapping)).use { check(!it.moveToFirst()) { "Case or Unicode layout conflict; align the filenames before syncing" } }
     }
     @Synchronized fun hold(mapping: String,path: String) { db.execSQL("INSERT OR IGNORE INTO held VALUES(?,?)",arrayOf(mapping,path)) }
     @Synchronized fun held(mapping: String,path: String)=db.rawQuery("SELECT 1 FROM held WHERE mapping=? AND path=?",arrayOf(mapping,path)).use { it.moveToFirst() }

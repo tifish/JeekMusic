@@ -32,7 +32,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
         Run("CREATE TABLE IF NOT EXISTS write_budget(day TEXT,owner TEXT,bytes INTEGER,PRIMARY KEY(day,owner))");
         bool metadataColumn=false;using(var columns=Command("PRAGMA table_info(baseline)"))using(var reader=columns.ExecuteReader())while(reader.Read())if(reader.GetString(1)=="metadata")metadataColumn=true;
         if(!metadataColumn)Run("ALTER TABLE baseline ADD COLUMN metadata TEXT");
-        InitializeConflicts();
+        InitializeConflicts();InitializeDelta();
         operationCount=Convert.ToInt64(Scalar("SELECT COUNT(*) FROM operations"));backupTotal=Convert.ToInt64(Scalar("SELECT COALESCE(SUM(backup_bytes),0) FROM operations"));
         using var count=Command("SELECT scope,COUNT(*) FROM baseline GROUP BY scope");using var rows=count.ExecuteReader();while(rows.Read()) { var n=rows.GetInt64(1);scopeCounts[rows.GetString(0)]=n;baselineCount+=n; }
 

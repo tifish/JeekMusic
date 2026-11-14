@@ -135,6 +135,20 @@ class LanFileSynchronizerTest {
             }
         }
     }
+    @Test fun incrementalMetadataSkipsUnchangedAndFindsOldDatedAddsAndDeletes()=fixture {
+        remote(audio(11));var report=run();assertEquals(0,report.deferredCount);assertFalse(report.incremental)
+        run() // Receipts created during the initial snapshot are conservatively included once.
+        report=run();assertTrue(report.incremental);assertEquals(0,report.metadataRows);assertEquals(0,report.processed);assertEquals(0L,report.bytes)
+        recordLocalEdit(1234);report=run();assertTrue(report.processed>0);assertEquals(0L,report.bytes)
+        report=run();assertEquals(0,report.processed)
+        stopBeforePhoneScan();report=run();assertFalse(report.incremental);assertEquals(0,report.deferredCount)
+        val added=File(root,"$prefix/old-dated.wav").apply { writeBytes(audio(12));LanFileMetrics.setModified(this,1_000_000_000L) }
+        report=run();assertEquals(0,report.deferredCount);assertEquals(1,report.actions["upload"])
+        assertNotNull(remoteHash("$prefix/old-dated.wav"))
+        added.delete();report=run();assertEquals(0,report.deferredCount);assertEquals(1,report.actions["delete_remote"]);assertNull(remoteHash("$prefix/old-dated.wav"))
+        remote(audio(13));report=run();assertEquals(0,report.deferredCount);assertEquals(1,report.actions["download"]);assertArrayEquals(audio(13),localBytes())
+        run();report=run();assertTrue(report.incremental);assertEquals(0,report.metadataRows);assertEquals(0,report.processed)
+    }
     @Test fun initialAndTrackedChangesReconcileBothDirections()=fixture {
         val a=audio(1);val b=audio(3);val c=audio(4)
         local(a);var report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a),remoteHash());val unchanged=run();assertEquals(0L,unchanged.hashBytes);assertTrue(unchanged.actions.isEmpty())
@@ -149,6 +163,15 @@ class LanFileSynchronizerTest {
         remote(null);stopBeforePhoneScan();assertArrayEquals(a,localBytes())
         report=run();assertEquals(0,report.conflictCount);assertNull(localBytes())
         local(b);remote(b);File(root,path).setLastModified(1_800_000_000_000L+(b.last().toLong() and 255)*1000L);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash());assertArrayEquals(b,localBytes())
+    }
+    @Test fun incrementalMetadataStillRepairsCueAudioOutsideTheSelectedSubtree()=fixture {
+        mapping.put("selection",JSONArray(listOf("$prefix/sheets")))
+        val a=audio(17);remote(a)
+        remote("FILE \"../A.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n".toByteArray(),"$prefix/sheets/album.cue")
+        var report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertArrayEquals(a,localBytes())
+        run();report=run();assertTrue(report.incremental);assertEquals(0,report.metadataRows)
+        local(null);report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.metadataRows)
+        assertEquals(1,report.actions["download"]);assertArrayEquals(a,localBytes());assertNotNull(remoteHash())
     }
     @Test fun sharedChoiceWinsAndChangedVersionsNeedAnotherDecision()=fixture {
         fixedTime=1_800_000_000_000_000_000L
@@ -185,7 +208,7 @@ class LanFileSynchronizerTest {
         assertEquals(262144L,part.length())
         val checkpoint=android.util.AtomicFile(File(part.path+".metadata")).openRead().bufferedReader().use { it.readText() }
         assertEquals(LanFileMetrics.stamp(part),checkpoint)
-        assertTrue(phases.containsAll(listOf("reading_baseline","pc_scan","reading_manifest","reconciling")))
+        assertTrue(phases.containsAll(listOf("pc_scan","reading_delta","reconciling")))
         assertFalse("The first file must start before the full phone scan",phases.contains("phone_scan"))
         val report=run()
         assertEquals((bytes.size-262144).toLong(),report.bytes)

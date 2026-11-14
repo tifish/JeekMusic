@@ -40,7 +40,7 @@ public sealed partial class LanSyncService : IDisposable
     long _transferBytes;
     long _authFailures, _protocolFailures, _limited, _overload;
     static string Stamp() => Guid.NewGuid().ToString("N");
-    readonly Dictionary<string, (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files)> _plans = new();
+    readonly Dictionary<string, (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files,IReadOnlyList<string> Selection)> _plans = new();
     readonly string _configPath = Path.Combine(AppPaths.DataDir, "lan-sync.json");
     readonly string _inbox = Path.Combine(AppPaths.DataDir, "lan-inbox");
     X509Certificate2? _certificate;
@@ -606,13 +606,13 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileDeltaProtocol"]=1,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
         }
         if(op?.StartsWith("file_",StringComparison.Ordinal)==true)return await DispatchFile(a,cancel,modern);
-        if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read")) throw new ArgumentException("Unknown operation");
+        if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read" or "verify")) throw new ArgumentException("Unknown operation");
         lock (_gate) _lastOperation = op;
         if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>()).Select(n => n!.DeepClone()).ToArray()) };
         if (op == "state")
@@ -724,7 +724,7 @@ public sealed partial class LanSyncService : IDisposable
                         if(!cached && watch==WatchRevision(rootId))_manifestCache.Store(folder,rootId,root,selected,watch,_app.Library.Watcher.IsWatching(folder),Environment.TickCount64,entries);
                         foreach (var key in _plans.Where(p => p.Value.Device == device || p.Value.Expires < DateTime.UtcNow).Select(p => p.Key).ToArray()) _plans.Remove(key);
                         if (_plans.Count >= 16 || _plans.Values.Sum(p => p.Files.Count) + entries.Count > 200_000 || _plans.Values.Sum(p => ManifestMemory(p.Files)) + ManifestMemory(entries) > 128L * 1024 * 1024) throw Busy();
-                        var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries);
+                        var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries,selected);
                         return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact",["cacheHit"]=cached,["scanMs"]=cached?0:elapsed.ElapsedMilliseconds };
                     }
                 }
@@ -742,7 +742,7 @@ public sealed partial class LanSyncService : IDisposable
             }
         }
 
-        (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files) plan;
+        (string Device, string Root, DateTime Expires, IReadOnlyList<LanFiles.Entry> Files,IReadOnlyList<string> Selection) plan;
         lock (_gate)
             if (!_plans.TryGetValue(a["plan"]?.GetValue<string>() ?? "", out plan) || plan.Device != device || plan.Root != rootId || plan.Expires < DateTime.UtcNow) throw new UnauthorizedAccessException();
         if (op == "manifest")

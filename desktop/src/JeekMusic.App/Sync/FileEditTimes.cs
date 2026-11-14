@@ -27,6 +27,14 @@ internal sealed class FileEditTimeStore(string filename):IDisposable
             return (long?)query.ExecuteScalar()??0;
         }
     }
+    public Dictionary<string,(long Size,long ModifiedNs,long EditedAtMs)> Snapshot() {
+        lock(gate) {
+            var result=new Dictionary<string,(long,long,long)>(StringComparer.OrdinalIgnoreCase);
+            using var query=Database.CreateCommand();query.CommandText="SELECT path,size,modified_ns,edited_at_ms FROM latest_edit";
+            using var reader=query.ExecuteReader();while(reader.Read())result[reader.GetString(0)]=(reader.GetInt64(1),reader.GetInt64(2),reader.GetInt64(3));
+            return result;
+        }
+    }
     public void Set(string path,long size,long modifiedNs,long editedAtMs) {
         ArgumentOutOfRangeException.ThrowIfNegative(editedAtMs);
         lock(gate) {
@@ -46,6 +54,12 @@ internal static class FileEditTimes
     internal static long Read(string path,long size,long modifiedNs) {
         try { return store.Value.Read(path,size,modifiedNs); }
         catch(Exception e) when(e is SqliteException or IOException or UnauthorizedAccessException) { problem="last_edit_time_unavailable";return 0; }
+    }
+    internal static Func<LanFiles.Entry,long> Snapshot(string root) {
+        try {
+            var edits=store.Value.Snapshot();
+            return file=>edits.TryGetValue(Path.GetFullPath(Path.Combine(root,file.Path.Replace('/',Path.DirectorySeparatorChar))),out var edit) && edit.Size==file.Size && edit.ModifiedNs==file.ModifiedNs?edit.EditedAtMs:0;
+        } catch(Exception e) when(e is SqliteException or IOException or UnauthorizedAccessException) { problem="last_edit_time_unavailable";return _=>0; }
     }
     internal static void Set(string path,long editedAtMs) {
         if(!enabled)return;

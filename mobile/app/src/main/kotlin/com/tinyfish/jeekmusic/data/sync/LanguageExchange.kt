@@ -27,10 +27,12 @@ class LanguageExchange(private val db: JeekDatabase) {
         require(input.getInt("version") == 1) { "Unsupported vocal-language exchange" }
         val items = input.getJSONObject("items")
         require(items.length() <= 100_000)
+        var matched=0;var saved=0;var metadataMismatch=0
         db.withTransaction {
             val tracks = db.trackDao().all().associateBy { it.trackKey }
             for (ref in items.keys()) {
                 val track = match(ref)?.let(tracks::get) ?: continue
+                matched++
                 val rows = items.getJSONArray(ref)
                 require(rows.length() <= 2)
                 val old = db.languageDao().forTrack(track.trackKey).associateBy { it.source }
@@ -46,7 +48,7 @@ class LanguageExchange(private val db: JeekDatabase) {
                     require(state != "auto" || source == "MANUAL")
                     require(languages.size <= 16 && languages.distinct().size == languages.size && languages.all { it.matches(Regex("[a-z]{2,3}|other")) })
                     require((state == "known") == languages.isNotEmpty() && at >= 0 && (confidence == null || confidence.isFinite() && confidence in 0.0..1.0))
-                    if (row.getLong("size") != track.size || abs(row.getLong("duration_ms") - track.durationMs) > 1000 || row.getLong("start_ms") != (track.startMs ?: 0L)) continue
+                    if (row.getLong("size") != track.size || abs(row.getLong("duration_ms") - track.durationMs) > 1000 || row.getLong("start_ms") != (track.startMs ?: 0L)) { metadataMismatch++;continue }
                     val prior = old[source]
                     if (prior != null && prior.signature == track.languageSignature()) {
                         if (prior.updatedAt > at) continue
@@ -57,8 +59,11 @@ class LanguageExchange(private val db: JeekDatabase) {
                         }
                     }
                     db.languageDao().save(TrackLanguageEntity(track.trackKey, source, track.languageSignature(), state, languages.joinToString(","), confidence, at))
+                    saved++
                 }
             }
+            val cached=db.languageDao().all().filter { row -> row.state!="auto" && tracks[row.trackKey]?.languageSignature()==row.signature }.map { it.trackKey }.distinct().size
+            android.util.Log.i("LanguageExchange","receivedTracks=${items.length()} matchedTracks=$matched savedRows=$saved metadataMismatchRows=$metadataMismatch validCachedTracks=$cached pendingTracks=${tracks.size-cached}")
         }
     }
 }

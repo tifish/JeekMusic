@@ -62,6 +62,7 @@ public sealed partial class LanSyncService
     JsonObject FileDiagnostics() {
         var result=_fileDiagnostics.DeepClone().AsObject();
         result["admissionWaitMs"]=FileAdmissionWaitMs;
+        result["metadataDelta"]=_fileStore?.DeltaStatus()??new JsonObject { ["protocol"]=1,["policy"]="confirmed_snapshot_delta",["history"]=false };
         result["fileComparisonPolicy"]="mtime_then_size_then_last_edit";result["lastFileEditTime"]=FileEditTimes.Diagnostics();
         result["pendingConflicts"]=ConflictCount;result["conflictProtocol"]=1;result["conflictStatusProtocol"]=1;
         result["metadataObservations"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.MetadataObservations);
@@ -87,7 +88,7 @@ public sealed partial class LanSyncService
     {
         var op=a["op"]!.GetValue<string>();
         if(!modern || a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
-        if(op is not ("file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
+        if(op is not ("file_delta" or "file_delta_rows" or "file_delta_commit" or "file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
         if(!await _fileWork.WaitAsync(TimeSpan.FromMilliseconds(FileAdmissionWaitMs),request))throw Busy();
         bool handedOff=false;
         // Metadata checks and acknowledgements no longer require a background content pass.
@@ -126,6 +127,13 @@ public sealed partial class LanSyncService
                     switch(op)
                     {
                         case "file_open":result=store.Open(auth.Device,owner,rootId,a["mapping"]!.GetValue<string>(),a["selection"]!.AsArray().Select(n=>n!.GetValue<string>()).ToArray());break;
+                        case "file_delta": {
+                            (string Device,string Root,DateTime Expires,IReadOnlyList<JeekMusic.Core.Sync.LanFiles.Entry> Files,IReadOnlyList<string> Selection) plan;
+                            lock(_gate)if(!_plans.TryGetValue(a["plan"]!.GetValue<string>(),out plan) || plan.Device!=auth.Device || plan.Root!=rootId || plan.Expires<DateTime.UtcNow)throw new UnauthorizedAccessException();
+                            result=store.Delta(scope,a["cursor"]?.GetValue<string>()??"",plan.Files,plan.Selection,FileEditTimes.Snapshot(root),token);break;
+                        }
+                        case "file_delta_rows":result=store.DeltaRows(scope,a["cursor"]!.GetValue<string>(),a["offset"]!.GetValue<int>());break;
+                        case "file_delta_commit":result=store.CommitDelta(scope,a["cursor"]!.GetValue<string>());break;
                         case "file_revision":result=new() { ["revision"]=WatchRevision(rootId)+":"+store.ConflictRevision(scope),["pollSeconds"]=30,["fallbackSeconds"]=900 };break;
                         case "file_conflict_status":result=store.ConflictStatus(scope,a["ids"]!.AsArray());break;
                         case "file_conflict":result=store.ReportConflict(scope,root,a);break;

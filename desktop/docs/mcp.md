@@ -681,6 +681,8 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 `lan_sync_status.fileSync.expiredUploadPolicy=fresh_admission_restart` 表示过期或已中止的上传在重新 `file_begin` 时按新上传准入；`restartedUploads` 是当前进程成功重新准入的次数。相同操作号必须匹配原路径、源版本和提交前提，重新检查基线、权限、并发、空间及每日上传预算，成功后从偏移 0 开始，可选返回 `restarted=true`。重用原事务行不再次占用事务行数配额；仍存活的可信断点继续续传。prepared/committed/acknowledged 事务保持原恢复或幂等路径，不重置；无法确认归属的私有部分文件保留并拒绝覆盖。对 expired/aborted/conflict 的 `file_chunk` 明确返回 `upload_restart_required`，不再返回可能误当作成功的偏移 0。旧手机调用兼容，无新增 MCP 参数，工具输入 Schema 不变，开发版与正式版共用实现。原因及验收见[过期上传恢复](../../docs/sync-expired-upload-recovery.md)。
 
+`lan_sync_status.fileSync.metadataDelta` 新增 protocol=1、policy=confirmed_snapshot_delta、history=false 和进程内 rounds/fullRounds/rowsSent。最新手机完成首次状态建立后只获取变化的文件信息与基线，包括删除及最后软件编辑时间变化，无变化返回 0 个路径；未确认/丢失的缓存才重新获取全量。手机仍在本地扫描元数据，不传输未变化文件的信息。协商 `capabilities.fileDeltaProtocol=1` 后，手机调度可报告非负整数 lastMetadataRows 与布尔 lastIncremental，含义及 reportedAt 边界见[增量文件信息](../../docs/sync-incremental-metadata.md)。工具描述同步更新，MCP 输入 Schema 不变。
+
 两端必须同时升级。文件版本用 `stamp=m2:size:modifiedNs` 表示，取代内容 hash；基线 comparisonProtocol=2 和已保存的两端落地时间对应关系保留，不清空基线。相同大小和精确修改时间即视为同一版本，即使内容不同。续传校验事务归属、文件身份和已持久化的部分文件大小/修改时间；无法确认的部分文件不覆盖用户文件。旧事务仅能从现存元数据迁移，无可靠元数据时保留并报告延期。认证、TLS、路径边界、撤销和配额不变。MCP 参数 Schema 无变化，新增诊断值两种构建一致。
 
 ## 演唱语言过滤

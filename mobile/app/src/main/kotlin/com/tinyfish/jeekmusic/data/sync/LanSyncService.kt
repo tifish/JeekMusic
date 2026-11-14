@@ -85,6 +85,7 @@ class LanSyncService @Inject constructor(
             LanProtocol(connection, networkPolicy).use { client ->
                 val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
                 val capabilities=client.call("capabilities")
+                if(capabilities.optInt("fileDeltaProtocol")<1)for(field in listOf("lastMetadataRows","lastIncremental"))schedule.remove(field)
                 if(!capabilities.optBoolean("syncPerformanceDiagnostics"))for(field in listOf("lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastManifestCacheHit"))schedule.remove(field)
                 if(!capabilities.optBoolean("syncNetworkPolicy")) {
                     schedule.remove("wifiOnly");schedule.remove("waitingForWifi")
@@ -271,7 +272,7 @@ class LanSyncService @Inject constructor(
         automation.report()
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
-            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false
+            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
             try { gate.withLock {
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage())
@@ -303,13 +304,14 @@ class LanSyncService @Inject constructor(
                                     "reading_baseline"->context.getString(R.string.sync_reading_baseline,count,total)
                                     "pc_scan"->context.getString(R.string.sync_pc_scan)
                                     "reading_manifest"->context.getString(R.string.sync_reading_manifest,count,total)
+                                    "reading_delta"->context.getString(R.string.sync_reading_delta,count,total)
                                     "phone_scan"->context.getString(R.string.sync_phone_scan,count)
                                     "reconciling"->context.getString(R.string.sync_reconciling)
                                     else->context.getString(R.string.sync_recovering)
                                 }
                                 _status.update { it.copy(text=text) }
                             })
-                            preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit
+                            preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit;metadataRows+=result.metadataRows;incremental=incremental && result.incremental
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=fileProblem(reason)
@@ -351,7 +353,7 @@ class LanSyncService @Inject constructor(
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit)
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental)
             }
         }
     }

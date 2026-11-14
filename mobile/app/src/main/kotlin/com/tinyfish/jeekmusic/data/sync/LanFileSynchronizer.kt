@@ -13,7 +13,7 @@ import java.io.IOException
 import java.util.UUID
 
 internal class LanRemoteFileConflict(val reason: String): IOException(reason)
-internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false) {
+internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false,var metadataRows: Int=0,var incremental: Boolean=false) {
     fun defer(text: String) { deferredCount++;if(deferred.size<100)deferred+=text.take(2300) }
     fun conflict(row: JSONObject) { conflictCount++;if(conflicts.size<100)conflicts+=row }
 }
@@ -175,17 +175,27 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val scopeInfo=call(client,"","file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",key).put("selection",mapping.getJSONArray("selection")))
         val scope=scopeInfo.getString("scope");val revision=scopeInfo.getString("revision")
         val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
-        db.resetSnapshots(key)
+        val deltaEnabled=capabilities.optInt("fileDeltaProtocol")>=1
         var offset=0
-        phase("reading_baseline",0,scopeInfo.getInt("total"))
-        do {
-            currentCoroutineContext().ensureActive();val page=call(client,scope,"file_rows",JSONObject().put("offset",offset).put("revision",revision));val rows=page.getJSONArray("rows")
-            db.baselines(key,List(rows.length()) { rows.getJSONObject(it) });offset=page.getInt("next");phase("reading_baseline",offset,scopeInfo.getInt("total"))
-        } while(page.optBoolean("hasMore"))
+        if(!deltaEnabled) {
+            db.resetSnapshots(key)
+            phase("reading_baseline",0,scopeInfo.getInt("total"))
+            do {
+                currentCoroutineContext().ensureActive();val page=call(client,scope,"file_rows",JSONObject().put("offset",offset).put("revision",revision));val rows=page.getJSONArray("rows")
+                db.baselines(key,List(rows.length()) { rows.getJSONObject(it) });offset=page.getInt("next");phase("reading_baseline",offset,scopeInfo.getInt("total"))
+            } while(page.optBoolean("hasMore"))
+        }
         phase("pc_scan",0,0)
         val plan=client.call("plan",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("selection",mapping.getJSONArray("selection")))
         val planId=plan.getString("plan");offset=0
         report.manifestCacheHit=plan.optBoolean("cacheHit")
+        var delta: JSONObject?=null
+        if(deltaEnabled) {
+            phase("reading_delta",0,0)
+            delta=call(client,scope,"file_delta",JSONObject().put("plan",planId).put("cursor",db.metadataCursor(key,scope)))
+            report.incremental=!delta.getBoolean("reset")
+            db.beginDelta(key,delta.getBoolean("reset"))
+        }
         localFactory(mapping,scopeInfo.getLong("total")==0L).use { io ->
             onPinned()
             phase("local_recovery",0,0)
@@ -335,15 +345,34 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                         catch(e: LanRemoteFileConflict) { report.defer("$path: ${e.reason}; refresh the snapshot");if(!cues)db.hold(key,path) }
                         catch(e: LanLocalDeferred) { android.util.Log.w("LanFileSync","$path: ${e.reason}");report.defer("$path: ${e.reason}");if(!cues)db.hold(key,path) }
                         catch(e: SyncWifiRequiredException) { throw e }
-                        catch(_: IOException) { report.defer("$path: peer_or_local_file_unavailable");if(!cues)db.hold(key,path) }
+                        catch(e: IOException) { android.util.Log.w("LanFileSync","$path: peer_or_local_file_unavailable",e);report.defer("$path: peer_or_local_file_unavailable");if(!cues)db.hold(key,path) }
                         report.processed++
                 }
                 return postponed
             }
             // Start changed PC files as each metadata page arrives. Unchanged PC entries
             // wait for the streamed phone scan, avoiding a second stat of every unchanged file.
-            phase("reading_manifest",0,plan.getInt("total"))
-            while(offset<plan.getInt("total")) {
+            phase(if(deltaEnabled)"reading_delta" else "reading_manifest",0,delta?.getInt("total") ?: plan.getInt("total"))
+            if(deltaEnabled) {
+                var page=delta!!
+                while(true) {
+                    currentCoroutineContext().ensureActive()
+                    val rows=page.getJSONArray("rows").let { a -> List(a.length()) { a.getJSONObject(it) } }
+                    db.deltaRows(key,rows);report.metadataRows+=rows.size
+                    // Every changed baseline/remote path is revisited, but local state is
+                    // observed afresh. Retained local observations are never authoritative.
+                    val candidates=rows.map { it.getString("path") }.filterNot { it.endsWith(".cue",true) }
+                    db.queueDelta(key,candidates)
+                    if(candidates.isNotEmpty()) {
+                        db.markScheduled(key,candidates)
+                        phase("reconciling",0,0)
+                        db.postponeDeletes(key,reconcile(candidates,false,false))
+                    }
+                    phase("reading_delta",page.getInt("next"),page.getInt("total"))
+                    if(!page.optBoolean("hasMore"))break
+                    page=call(client,scope,"file_delta_rows",JSONObject().put("cursor",delta.getString("cursor")).put("offset",page.getInt("next")))
+                }
+            } else while(offset<plan.getInt("total")) {
                 currentCoroutineContext().ensureActive()
                 val page=client.call("manifest",JSONObject().put("rootId",mapping.getString("rootId")).put("plan",planId).put("offset",offset)).getJSONArray("files")
                 require(page.length()>0)
@@ -353,6 +382,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                     !path.endsWith(".cue",true) && (previous==null || previous.migration || previous.remoteHash!=meta(row) || db.transaction(key,path,scope)!=null || db.issueForPath(key,path)!=null)
                 }.map { it.getString("path") }
                 db.entries(key,"remote",rows,candidates);offset+=rows.size
+                report.metadataRows+=rows.size
                 phase("reading_manifest",offset,plan.getInt("total"))
                 if(candidates.isNotEmpty()) {
                     phase("reconciling",0,0)
@@ -365,7 +395,15 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             suspend fun flushScan() {
                 if(scanned.isEmpty())return
                 val rows=scanned.toList()
-                val candidates=rows.map { it.getString("path") }.filter { !it.endsWith(".cue",true) && !db.scheduled(key,it) }
+                val changes=if(!deltaEnabled)rows else rows.filter { row ->
+                    val path=row.getString("path");val previous=base(db.baseline(key,path))
+                    val pending=db.transaction(key,path,scope)
+                    !row.optBoolean("known",true) || previous==null || previous.migration || previous.hash!=meta(row) ||
+                        db.entry(key,"last_local",path)?.optLong("editedAtMs")!=row.optLong("editedAtMs") ||
+                        pending!=null && pending.optString("state") !in setOf("acknowledged","aborted") || db.issueForPath(key,path)!=null
+                }
+                if(deltaEnabled)db.queueDelta(key,changes.map { it.getString("path") })
+                val candidates=changes.map { it.getString("path") }.filter { !it.endsWith(".cue",true) && !db.scheduled(key,it) }
                 db.entries(key,"local",rows,candidates);scannedCount+=rows.size;scanned.clear()
                 if(candidates.isNotEmpty()) {
                     phase("reconciling",0,0)
@@ -374,17 +412,38 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                 phase("phone_scan",scannedCount,0)
             }
             io.scan(selection,{ scanned.add(it);if(scanned.size==200)flushScan() },{ report.defer("$it: local_directory_unknown") });flushScan();db.requirePortableLayout(key)
+            if(deltaEnabled) {
+                // CUE may refer to audio outside the selected subtree. Those files are not
+                // visited by the regular scan; retain the existing read-only dependency repair.
+                var dependencyOffset=0
+                while(true) {
+                    val rows=db.dependencyEntries(key,dependencyOffset);if(rows.isEmpty())break
+                    for(remote in rows) {
+                        val path=remote.getString("path");if(selected(path,selection))continue
+                        val local=try { io.observe(path) }catch(_: IOException) { JSONObject().put("known",false) }
+                        db.entry(key,"local",local.put("path",path))
+                        if(!local.optBoolean("known",true) || !equivalent(mapping,path,local,remote))db.queueDelta(key,listOf(path))
+                    }
+                    dependencyOffset+=rows.size
+                }
+                db.completeDeltaScan(key)
+            }
             // Only complete snapshots can establish deletions. CUE remains last so its
             // audio dependencies have finished; per-file commit preconditions stay intact.
             phase("reconciling",0,0)
             for(cues in listOf(false,true)) {
                 offset=0
                 while(true) {
-                    val paths=db.paths(key,offset,cues);if(paths.isEmpty())break
+                    val paths=if(deltaEnabled)db.deltaPaths(key,offset,cues) else db.paths(key,offset,cues);if(paths.isEmpty())break
                     reconcile(paths.filterNot { db.scheduled(key,it) },cues,true)
                     offset+=paths.size
                 }
             }
+        }
+        if(deltaEnabled && report.deferredCount==0 && report.conflictCount==0) {
+            val cursor=delta!!.getString("cursor")
+            call(client,scope,"file_delta_commit",JSONObject().put("cursor",cursor))
+            db.confirmDelta(key,scope,cursor)
         }
         report.metadataObservations=LanFileMetrics.metadataObservations.get()-startMetadata;report.hashBytes=LanFileMetrics.hashBytes.get()-startHash
         if(report.preparationMillis<0)report.preparationMillis=(System.nanoTime()-started)/1_000_000

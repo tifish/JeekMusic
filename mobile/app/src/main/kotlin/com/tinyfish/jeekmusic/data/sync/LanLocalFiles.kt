@@ -145,6 +145,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
     }
     suspend fun scan(selection: List<String>,emit: suspend (JSONObject)->Unit,unavailable: (String)->Unit) {
         var visited=0;var files=0;var bytes=0L
+        val edits=database.editSnapshot()
         suspend fun walk(path: String,depth: Int) {
             currentCoroutineContext().ensureActive();if(depth>64 || ++visited>250000)throw LanLocalDeferred("scan_work_budget")
             val raw=LanAtomicFiles.openParent(root.fd,path,false);if(raw<0)return
@@ -162,6 +163,8 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
                         else if(item[0].toInt().toChar()=='F' && name.substringAfterLast('.').lowercase(java.util.Locale.ROOT) in supported) {
                             if(++files>100000)throw LanLocalDeferred("scan_file_budget")
                             val row=try { observe(relative) }catch(_: IOException) { JSONObject().put("known",false) }
+                            val edit=edits[File(absoluteRoot,relative).absolutePath]
+                            row.put("editedAtMs",if(edit!=null && edit.first==row.optLong("size") && edit.second==row.optLong("modifiedNs"))edit.third else 0L)
                             bytes=Math.addExact(bytes,row.optLong("size"));if(bytes>500L*1024*1024*1024)throw LanLocalDeferred("scan_byte_budget")
                             emit(row.put("path",relative))
                         }

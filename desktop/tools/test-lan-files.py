@@ -82,7 +82,8 @@ def main():
                 assert request('file_upload_status',scope=scope,operation=operation)['state']=='acknowledged'
                 assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,expectedStamp=stamp,baselineVersion='')['deferred']
                 deletion=uuid.uuid4().hex
-                assert request('file_delete',scope=scope,path='Fresh/A.wav',operation=deletion,expectedStamp=stamp,baselineVersion=ack['version'])['committed']
+                deleted=request('file_delete',scope=scope,path='Fresh/A.wav',operation=deletion,expectedStamp=stamp,baselineVersion=ack['version'])
+                assert deleted.get('committed'),('file_delete',deleted)
                 assert not (music/'Fresh/A.wav').exists();assert len(list((music/'Fresh').glob('.jeek-sync-*.bak')))==1
                 assert request('file_ack',scope=scope,path='Fresh/A.wav',operation=uuid.uuid4().hex,mutationOperation=deletion,stamp=None,localKnown=True,baselineVersion=ack['version'])['version']
                 assert request('file_probe',scope=scope,path='../outside.wav').get('deferred')

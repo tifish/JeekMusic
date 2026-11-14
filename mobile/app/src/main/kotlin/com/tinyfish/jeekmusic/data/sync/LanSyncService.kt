@@ -37,6 +37,8 @@ import javax.inject.Singleton
 
 data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0)
 
+internal class LanMappingBusyException : IllegalStateException("Cancel sync before editing mappings")
+
 @Singleton
 class LanSyncService @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -195,8 +197,11 @@ class LanSyncService @Inject constructor(
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
     suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
-        gate.withLock {
-            check(job?.isActive != true) { "Cancel sync before editing mappings" }
+        // A sync round can hold this gate while waiting for the network. Never queue a UI save
+        // behind it: the user must be able to cancel synchronization before retrying the edit.
+        if (!gate.tryLock()) throw LanMappingBusyException()
+        try {
+            if (job?.isActive == true) throw LanMappingBusyException()
             require(target.authority == "com.android.externalstorage.documents") { "Only local storage / SD card SAF folders are supported" }
             require(selected.isNotEmpty()) { "Choose at least one folder" }
             selected.forEach { LanProtocol.relative(it, true) }
@@ -216,7 +221,7 @@ class LanSyncService @Inject constructor(
             old?.optString("directoryIdentity")?.takeIf { it.isNotEmpty() }?.let { mapping.put("directoryIdentity",it) }
             store.saveMapping(mapping); report()
             automation.resume()
-        }
+        } finally { gate.unlock() }
     }
     fun setEnabled(root: String, enabled: Boolean) {
         if(!enabled && activeFileRoot==root)cancelScheduled()
@@ -233,10 +238,13 @@ class LanSyncService @Inject constructor(
     @Synchronized internal fun startScheduled(reason: String) {
         if (job?.isActive == true) return
         automation.begin(reason)
+        // Status reporting is advisory. An offline PC must not delay the actual sync round
+        // or occupy the mapping-edit gate before synchronization has even begun.
+        scope.launch(Dispatchers.IO) { reportFileSchedule(automation.state.value.json()) }
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
+            _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
             try { gate.withLock {
-                reportFileSchedule(automation.state.value.json())
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage())
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
@@ -285,7 +293,10 @@ class LanSyncService @Inject constructor(
                     _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=context.getString(R.string.lan_cancelled),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                         else _status.value.copy(running=false,text=context.getString(R.string.lan_failed),done=done,total=total,problems=problems+problem(e),timeDetails=timeDetails,precisionNs=precisionNs)
                 } finally { completedBytes=done;transport?.close(); transport = null; refreshConflicts(); startRecovery() }
-            } }finally { automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes) }
+            } }finally {
+                _status.update { it.copy(running=false) }
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes)
+            }
         }
     }
     /** Local recovery only; this never connects to a PC or starts a new download. */

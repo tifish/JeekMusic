@@ -469,6 +469,7 @@
     <string name="lan_pair_network">无法连接电脑。请检查两端是否在同一局域网，以及地址、端口和防火墙，再使用新邀请重试。</string>
     <string name="lan_pair_mappings">配对另一台电脑前，请先移除现有下载任务，已有文件会保留。</string>
     <string name="lan_pair_busy">请先取消当前同步再配对。</string>
+    <string name="lan_mapping_busy">正在同步。请关闭此窗口，取消当前同步后再保存目录设置。</string>
     <string name="lan_paired_identity">已安全配对 %1$s · %2$s</string>
     <string name="tag_calm">安静</string>
     <string name="tag_non_calm">非安静</string>

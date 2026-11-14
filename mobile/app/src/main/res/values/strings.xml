@@ -477,6 +477,7 @@
     <string name="lan_pair_network">Cannot reach the PC. Check that both devices use the same LAN, and check the address, port and firewall. Then try a new invitation.</string>
     <string name="lan_pair_mappings">Remove existing download mappings before pairing a different PC. Downloaded files will be kept.</string>
     <string name="lan_pair_busy">Cancel the current sync before pairing.</string>
+    <string name="lan_mapping_busy">Sync is busy. Close this dialog and cancel the current sync before saving folder changes.</string>
     <string name="lan_paired_identity">Paired securely with %1$s · %2$s</string>
     <string name="tag_calm">Quiet</string>
     <string name="tag_non_calm">Not quiet</string>

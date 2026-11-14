@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.data.sync.LanMappingTargets
+import com.tinyfish.jeekmusic.data.sync.LanMappingBusyException
 import com.tinyfish.jeekmusic.data.sync.LanSyncService
 import com.tinyfish.jeekmusic.data.sync.LanInvitation
 import com.tinyfish.jeekmusic.data.sync.LanRemoteException
@@ -204,6 +205,9 @@ private fun fileChangeLabel(value: String)=stringResource(when(value) {
 
 @Composable
 private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: () -> Unit, onError: (String) -> Unit) {
+    val status by lan.status.collectAsStateWithLifecycle()
+    val schedule by lan.schedule.collectAsStateWithLifecycle()
+    val syncing = status.running || schedule.running
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -216,12 +220,12 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) target = it }
     val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed -> if (allowed) picker.launch(target) else onError(resources.getString(R.string.permission_needed)) }
-    LaunchedEffect(path) { busy = true; try { children = lan.directories(root.getString("rootId"), path) } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false } }
+    LaunchedEffect(path) { busy = true; try { children = lan.directories(root.getString("rootId"), path) } catch (e: CancellationException) { throw e } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false } }
     fun select(value: String) {
         selection = if (value in selection) selection - value else selection.filterNot { value.isEmpty() || it.startsWith("$value/") || it.isEmpty() || value.startsWith("$it/") }.toSet() + value
         estimate = null
     }
-    AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { Text(root.getString("name")) },
+    AlertDialog(modifier = Modifier.semantics { testTagsAsResourceId = true }, onDismissRequest = { if (!busy) onDismiss() }, title = { Text(root.getString("name")) },
         text = { Column(Modifier.heightIn(max = 490.dp).verticalScroll(rememberScrollState())) {
             SettingSummary(stringResource(R.string.lan_folders_hint))
             SettingCheckbox(title = stringResource(R.string.lan_whole_root), checked = "" in selection, onChange = { select("") }, enabled = !busy)
@@ -237,6 +241,7 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
             Text(selection.joinToString("\n") { it.ifEmpty { "/" } })
             OutlinedButton(enabled = !busy && selection.isNotEmpty(), onClick = { scope.launch {
                 busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection); estimate = resources.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
+                catch (e: CancellationException) { throw e }
                 catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
             } }) { Text(stringResource(R.string.lan_estimate)) }
             estimate?.let { Text(it) }
@@ -244,10 +249,16 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
                 if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) picker.launch(target) else permission.launch(audioPermission)
             }, modifier = Modifier.testTag("lan_pick_target"))
             target?.let { SettingSummary(stringResource(R.string.lan_target_direct, targetLabel(it))) }
+            if (syncing) SettingSummary(stringResource(R.string.lan_mapping_busy), Modifier.testTag("lan_mapping_busy"))
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } },
-        confirmButton = { TextButton(enabled = !busy && selection.isNotEmpty() && target != null, onClick = { scope.launch {
-            busy = true; try { lan.saveMapping(root, selection, target!!); onDismiss() } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
+        confirmButton = { TextButton(enabled = !busy && !syncing && selection.isNotEmpty() && target != null, modifier = Modifier.testTag("lan_save_mapping"), onClick = { scope.launch {
+            busy = true
+            try { lan.saveMapping(root, selection, target!!); onDismiss() }
+            catch (e: CancellationException) { throw e }
+            catch (e: LanMappingBusyException) { onError(resources.getString(R.string.lan_mapping_busy)) }
+            catch (e: Exception) { onError(e.message.orEmpty()) }
+            finally { busy = false }
         } }) { Text(stringResource(R.string.save)) } }, dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 

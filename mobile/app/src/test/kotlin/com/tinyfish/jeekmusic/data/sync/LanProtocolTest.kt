@@ -7,6 +7,11 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 class LanProtocolTest {
+    @Test fun retriesBusyForBackgroundPollingAndDurableConflictOperations() {
+        for(op in listOf("file_revision","file_schedule","file_conflict","file_conflict_choose","file_conflict_clear","file_conflict_status"))
+            assertTrue(op, LanProtocol.retriesBusy(op))
+        for(op in listOf("pair","preference_training","unknown")) assertFalse(op, LanProtocol.retriesBusy(op))
+    }
     @Test fun pairedCapabilitiesRejectOldRestrictedServersRatherThanSilentlySkipSync() {
         val grants=JSONObject()
         val keys=listOf("readMusic","writeSync","writeFiles","deleteFiles","manageLearning","downloadLearning")

@@ -40,7 +40,7 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         for(attempt in 0..2) {
             try { return callOnce(op,args) }
             catch(e: LanRemoteException) {
-                if(e.code != "busy" || op !in setOf("roots","tree","plan","plan_status","manifest","read","file_open","file_rows","file_baseline","file_probe","file_verify","file_ack","file_begin","file_chunk","file_finish","file_delete","file_upload_status","file_read","file_abort","capabilities","state","preference_delta","preference_results") || attempt == 2) throw e
+                if(e.code != "busy" || !retriesBusy(op) || attempt == 2) throw e
                 close(); pause(30_000)
             }
         }
@@ -128,6 +128,11 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         } catch (e: Exception) { socket.close(); throw e }
     }
     companion object {
+        internal fun retriesBusy(op: String): Boolean = op in setOf(
+            "roots","tree","plan","plan_status","manifest","read","capabilities","state","preference_delta","preference_results",
+            "file_open","file_revision","file_schedule","file_rows","file_baseline","file_probe","file_verify","file_ack",
+            "file_begin","file_chunk","file_finish","file_delete","file_upload_status","file_read","file_abort",
+            "file_conflict","file_conflict_choose","file_conflict_clear","file_conflict_status")
         private val remoteCancellation = java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,
             java.util.concurrent.ArrayBlockingQueue<Runnable>(4),java.util.concurrent.ThreadFactory { task -> Thread(task,"LAN plan cancellation").apply { isDaemon=true } },java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
         private val pacingGate = Any()

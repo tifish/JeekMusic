@@ -13,6 +13,15 @@ import java.io.File
 /** Opt-in isolated synthetic fixture. The host removes the private test credentials. */
 @RunWith(AndroidJUnit4::class)
 class LanPublicProtocolTest {
+    @Test fun retriesBusyRevisionAfterHostReleasesSession() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("lanBudgetFixture") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val fixture = JSONObject(File(context.filesDir, "isolated-lan-budget-test.json").readText())
+        LanProtocol(fixture.getJSONObject("connection")).use { client ->
+            val result = client.call("file_revision", JSONObject().put("fileProtocol", 3).put("scope", fixture.getString("scope")))
+            assertTrue(result.has("revision"))
+        }
+    }
     @Test fun realPinnedTlsPagingReadWriteLearningAndWrongPin() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("lanFixture") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

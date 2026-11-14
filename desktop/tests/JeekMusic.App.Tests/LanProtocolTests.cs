@@ -38,6 +38,7 @@ public sealed class LanProtocolTests
         Assert.True(status["annotations"]!["readOnlyHint"]!.GetValue<bool>());
         Assert.Empty(status["inputSchema"]!["properties"]!.AsObject());
         Assert.Contains("sharedFolderCount", status["description"]!.GetValue<string>());
+        Assert.Contains("deviceAuthenticatedConnections=4", status["description"]!.GetValue<string>());
         var control = catalog.Single(t => t!["name"]!.GetValue<string>() == "lan_sync_control")!;
         Assert.False(control["inputSchema"]!["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("boolean", control["inputSchema"]!["properties"]!["includeQr"]!["type"]!.GetValue<string>());

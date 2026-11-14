@@ -6,6 +6,9 @@ namespace JeekMusic.Sync;
 /// <summary>Fixed global ceilings remain authoritative even with distributed sources. No queues.</summary>
 internal sealed class LanAdmission
 {
+    // File transfer, learning, automatic polling and conflict exchange use independent sessions.
+    // Keep the global (16) and per-source (8) ceilings authoritative.
+    internal const int DeviceSessions = 4;
     internal sealed class Lease(string source)
     {
         public string Source { get; } = source;
@@ -44,7 +47,7 @@ internal sealed class LanAdmission
         lock (gate)
         {
             if (lease.Device == device) return true;
-            if (lease.Device is not null || live.Count(l => l.Device is not null) >= 16 || live.Count(l => l.Device == device) >= 2 || live.Count(l => l.Device is not null && l.Source == lease.Source) >= 8)
+            if (lease.Device is not null || live.Count(l => l.Device is not null) >= 16 || live.Count(l => l.Device == device) >= DeviceSessions || live.Count(l => l.Device is not null && l.Source == lease.Source) >= 8)
             { Rejected++; return false; }
             lease.Device = device; return true;
         }

@@ -178,7 +178,9 @@ class LanSyncService @Inject constructor(
         }
     }
     suspend fun roots(): List<JSONObject> = withContext(Dispatchers.IO) {
-        val a = protocol().call("roots").getJSONArray("roots"); List(a.length()) { a.getJSONObject(it) }
+        protocol().use { client ->
+            val a = client.call("roots").getJSONArray("roots"); List(a.length()) { a.getJSONObject(it) }
+        }
     }
     suspend fun directories(root: String, path: String): List<String> = withContext(Dispatchers.IO) {
         LanProtocol.relative(path, true)
@@ -195,7 +197,7 @@ class LanSyncService @Inject constructor(
     }
     suspend fun estimate(root: String, selected: Set<String>): JSONObject = withContext(Dispatchers.IO) {
         require(selected.isNotEmpty()) { "Choose at least one folder" }
-        protocol().call("plan", JSONObject().put("fileProtocol",3).put("rootId", root).put("selection", JSONArray(selected.toList())))
+        protocol().use { it.call("plan", JSONObject().put("fileProtocol",3).put("rootId", root).put("selection", JSONArray(selected.toList()))) }
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
     suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
@@ -280,12 +282,12 @@ class LanSyncService @Inject constructor(
                     fileRoundCompleted=true
                     if(reason=="manual") {
                         val dataClient = protocol()
-                        LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
                         dataClient.use {
+                            LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
                             val remote = dataClient.call("state", sync.exportLan())
                             sync.acceptLan(remote)
-                            try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
                         }
+                        try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
                     }
                     _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {

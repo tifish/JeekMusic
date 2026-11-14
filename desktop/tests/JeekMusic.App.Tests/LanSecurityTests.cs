@@ -38,15 +38,21 @@ public sealed class LanSecurityTests
         var recovered = b.Enter("legitimate", now.AddMinutes(5)); Assert.NotNull(recovered); b.Exit(recovered!);
     }
     [Fact]
-    public void NatSupportsEightAuthenticatedDevicesAndOnlyTwoSessionsPerDevice()
+    public void NatSupportsEightAuthenticatedDevicesAndFourIndependentSyncSessionsPerDevice()
     {
         var b = new LanAdmission(); var now = DateTime.UtcNow;
         var peers = new List<LanAdmission.Lease>();
         for (int i = 0; i < 8; i++) { var p = b.Enter("nat", now)!; Assert.True(b.Authenticate(p, "device" + i)); peers.Add(p); }
         var ninth = b.Enter("nat", now)!; Assert.False(b.Authenticate(ninth, "extra")); b.Exit(ninth);
         foreach (var p in peers) b.Exit(p);
-        for (int i = 0; i < 2; i++) Assert.True(b.Authenticate(b.Enter("nat", now)!, "same"));
-        var third = b.Enter("other", now)!; Assert.False(b.Authenticate(third, "same"));
+        var sessions = new List<LanAdmission.Lease>();
+        for (int i = 0; i < 4; i++) {
+            var session = b.Enter("nat", now)!;
+            Assert.True(b.Authenticate(session, "same")); sessions.Add(session);
+        }
+        var fifth = b.Enter("other", now)!; Assert.False(b.Authenticate(fifth, "same")); b.Exit(fifth);
+        b.Exit(sessions[0]);
+        Assert.True(b.Authenticate(b.Enter("nat", now)!, "same"));
     }
     [Theory]
     [InlineData("{\"op\":\"auth\",\"op\":\"pair\"}")]

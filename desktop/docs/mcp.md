@@ -650,6 +650,8 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 `lan_sync_status` / TLS capabilities 的 `userDataSyncReady` 区分启动期领域合并服务尚未就绪。就绪前 state 返回 transient busy，沿用有界重试，不误报配对授权失败。配对夹具显式等待该诊断状态后检验实际 state 交换。
 
+`lan_sync_status.budgets.deviceAuthenticatedConnections=4` 是单设备已认证连接上限，供文件传输、学习数据、自动轮询及冲突状态独立连接使用；全局已认证连接仍为 16、每来源仍为 8，其他限流保持不变。手机查询目录/预估后立即释放连接，用户数据交换结束后先关闭连接再同步学习数据。`file_revision/file_schedule` 和冲突相关请求遇到 `busy` 与文件请求采用相同的有界重试（间隔 30 秒，最多重试两次）；不自动重试配对或学习启动。工具输入 Schema 不变，新增诊断字段向后兼容。
+
 
 `lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。hashBytes 保留兼容字段且始终为0；扫描、传输、条件提交、删除及恢复均不计算文件内容摘要，hashPurpose=none。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
 

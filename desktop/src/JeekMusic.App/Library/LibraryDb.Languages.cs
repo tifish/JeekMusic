@@ -23,7 +23,7 @@ public sealed partial class LibraryDb
             while(reader.Read()) {
                 var key=reader.GetString(0);
                 if(signatures.GetValueOrDefault(key)!=reader.GetString(1)) continue;
-                try { result[key]=SingingLanguage.Parse(reader.GetString(2),reader.GetString(3)); }
+                try { var value=SingingLanguage.Parse(reader.GetString(2),reader.GetString(3)); if(value.State!="auto") result[key]=value; }
                 catch(System.Text.Json.JsonException) { }
             }
             return result;
@@ -33,9 +33,9 @@ public sealed partial class LibraryDb
     {
         if(source is not ("AUTO" or "MANUAL")) throw new ArgumentException("Invalid language source");
         lock(Gate) {
-            if(value is null) Exec("DELETE FROM track_language WHERE track_key=$k AND source=$s",null,("$k",track.TrackKey),("$s",source));
-            else Exec("INSERT INTO track_language(track_key,signature,data,source) VALUES($k,$sig,$d,$s) ON CONFLICT(track_key,source) DO UPDATE SET signature=excluded.signature,data=excluded.data",null,
-                ("$k",track.TrackKey),("$sig",SingingLanguage.Signature(track)),("$d",value.ToJson().ToJsonString()),("$s",source));
+            value ??= new SingingLanguage("auto",[],"MANUAL");
+            Exec("INSERT INTO track_language(track_key,signature,data,source,updated_at) VALUES($k,$sig,$d,$s,$at) ON CONFLICT(track_key,source) DO UPDATE SET signature=excluded.signature,data=excluded.data,updated_at=max(excluded.updated_at,track_language.updated_at+1)",null,
+                ("$k",track.TrackKey),("$sig",SingingLanguage.Signature(track)),("$d",value.ToJson().ToJsonString()),("$s",source),("$at",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
         }
     }
 }

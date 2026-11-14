@@ -454,8 +454,9 @@ private fun TopBarMoreMenu(viewModel: MainViewModel, modifier: Modifier = Modifi
 private fun TagFilterButton(viewModel: MainViewModel) {
     val filter by viewModel.tagFilter.collectAsStateWithLifecycle()
     val sort by viewModel.songSort.collectAsStateWithLifecycle()
+    val reversed by viewModel.sortReversed.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
-    val active = filter.isActive || sort != SongSort.MODIFIED
+    val active = filter.isActive || sort != SongSort.MODIFIED || reversed
     // 有筛选或排序时整个按钮用主题色填充（需求 U-11）
     val color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
@@ -471,7 +472,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
             Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
             if (active) {
                 // 比如"非运动·纯音乐·按歌名"；放不下时末尾显示省略号，连一个字都放不下就只显示图标
-                val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, sortLabel(sort).takeIf { sort != SongSort.MODIFIED })
+                val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, (sortLabel(sort) + if (reversed) " ↕" else "").takeIf { sort != SongSort.MODIFIED || reversed })
                 val minLabelWidth = MaterialTheme.typography.labelMedium.fontSize * 2
                 Text(
                     label.joinToString("·"),
@@ -515,6 +516,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                         }
                     }
                 }
+                com.tinyfish.jeekmusic.ui.components.LanguageFilterControls(viewModel)
                 // 排序（需求 U-8）：单选
                 Text(
                     stringResource(R.string.sort_group),
@@ -534,6 +536,12 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                     }
                 }
             }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.sort_reverse)) },
+                trailingIcon = { if (reversed) Text("✓") },
+                onClick = viewModel::reverseSort,
+                modifier = Modifier.testTag("sort_reverse"),
+            )
             if (filter.isActive) {
                 HorizontalDivider()
                 DropdownMenuItem(text = { Text(stringResource(R.string.filter_clear)) }, onClick = { viewModel.clearFilter(); open = false })

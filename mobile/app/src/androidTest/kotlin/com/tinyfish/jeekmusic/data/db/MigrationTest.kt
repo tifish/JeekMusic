@@ -106,6 +106,18 @@ class MigrationTest {
         }
     }
 
+    @Test fun migrate8To9PreservesQueueAndCorrections() {
+        helper.createDatabase(DB, 8).use { db ->
+            db.execSQL("INSERT INTO tag_override (track_key, dimension, value) VALUES ('song', 'VOICE', 'VOCAL')")
+            db.execSQL("INSERT INTO queue_item (position, track_key) VALUES (0, 'song')")
+        }
+        helper.runMigrationsAndValidate(DB, 9, true, MIGRATION_8_9).use { db ->
+            db.query("SELECT value FROM tag_override").use { c -> c.moveToFirst(); assertEquals("VOCAL",c.getString(0)) }
+            db.query("SELECT track_key FROM queue_item").use { c -> c.moveToFirst(); assertEquals("song",c.getString(0)) }
+            db.query("SELECT COUNT(*) FROM track_language").use { c -> c.moveToFirst(); assertEquals(0,c.getInt(0)) }
+        }
+    }
+
     private companion object {
         const val DB = "migration-test.db"
     }

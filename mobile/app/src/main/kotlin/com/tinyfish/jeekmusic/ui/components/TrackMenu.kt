@@ -105,6 +105,8 @@ class TrackMenuViewModel @Inject constructor(
     private val coverClient: CoverClient,
     private val coverStore: CoverStore,
     private val lyrics: LyricsRepository,
+    val languageAnalysis: com.tinyfish.jeekmusic.analysis.LanguageAnalysisService,
+    val languages: com.tinyfish.jeekmusic.data.filter.LanguageRepository,
 ) : ViewModel(), LyricsSearchHost {
 
     val onlineCovers: StateFlow<Boolean> = settings.settings.map { it.onlineCovers }
@@ -196,6 +198,21 @@ class TrackMenuViewModel @Inject constructor(
         messages.post(UiMessage(R.string.added_to_playlist, name.trim()))
     }
 
+    fun addToPlaylist(playlist: PlaylistEntity, tracks: List<TrackEntity>) = viewModelScope.launch {
+        playlists.add(playlist.id, tracks)
+        messages.post(UiMessage(R.string.added_to_playlist, playlist.name))
+    }
+
+    fun createPlaylistAndAdd(name: String, tracks: List<TrackEntity>) = viewModelScope.launch {
+        val id = playlists.create(name)
+        playlists.add(id, tracks)
+        messages.post(UiMessage(R.string.added_to_playlist, name.trim()))
+    }
+
+    fun playNext(tracks: List<TrackEntity>) { player.playNext(tracks); messages.post(UiMessage(R.string.added_to_queue)) }
+    fun addToQueue(tracks: List<TrackEntity>) { player.addToQueue(tracks); messages.post(UiMessage(R.string.added_to_queue)) }
+    suspend fun applyTags(tracks: List<TrackEntity>, edits: Map<TagDimension, Tag?>) = tags.applyManualBatch(tracks, edits)
+
     suspend fun artistsOf(track: TrackEntity): List<ArtistEntity> = searchDao.artistsOfTrack(track.id)
 
     suspend fun folderOf(track: TrackEntity) = folderDao.byId(track.folderId)
@@ -208,6 +225,7 @@ private sealed interface MenuDialog {
     data object Tags : MenuDialog
     data object Cover : MenuDialog
     data object Lyrics : MenuDialog
+    data object Language : MenuDialog
 }
 
 /**
@@ -281,6 +299,7 @@ fun TrackMenuHost(
                 MenuItem(R.drawable.ic_image, R.string.menu_search_cover) { dialogTrack = current; dialog = MenuDialog.Cover; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_lyrics, R.string.menu_search_lyrics) { dialogTrack = current; dialog = MenuDialog.Lyrics; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_bolt, R.string.menu_edit_tags) { dialogTrack = current; dialog = MenuDialog.Tags; viewModel.dismiss() }
+                MenuItem(R.drawable.ic_bolt, R.string.language_edit) { dialogTrack = current; dialog = MenuDialog.Language; viewModel.dismiss() }
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
                 // CUE 整轨里的歌共用一个文件，不能单独做文件操作（需求 F-10）
                 if (current.cueTrackNo == null) {
@@ -295,7 +314,7 @@ fun TrackMenuHost(
 
     val target = dialogTrack
     when (val d = dialog) {
-        MenuDialog.Playlist -> if (target != null) AddToPlaylistDialog(viewModel, target) { dialog = null }
+        MenuDialog.Playlist -> if (target != null) AddToPlaylistDialog(viewModel, listOf(target)) { dialog = null }
         is MenuDialog.Artists -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.choose_artist)) },
@@ -314,6 +333,7 @@ fun TrackMenuHost(
         )
         MenuDialog.Info -> if (target != null) SongInfoDialog(target, viewModel) { dialog = null }
         MenuDialog.Tags -> if (target != null) TagEditDialog(target, viewModel) { dialog = null }
+        MenuDialog.Language -> if (target != null) LanguageEditDialog(listOf(target), viewModel) { dialog = null }
         MenuDialog.Cover -> if (target != null) CoverSearchDialog(target, viewModel, onlineCovers) { dialog = null }
         MenuDialog.Lyrics -> if (target != null) {
             LyricsSearchDialog(target, viewModel, onDismiss = { dialog = null }, onlineLyrics = onlineLyrics, onEnable = viewModel::enableOnlineLyrics)
@@ -336,7 +356,7 @@ private fun MenuItem(icon: Int, label: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntity, onDismiss: () -> Unit) {
+internal fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, tracks: List<TrackEntity>, onDismiss: () -> Unit) {
     var lists by remember { mutableStateOf<List<PlaylistEntity>?>(null) }
     var newName by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { lists = viewModel.playlists() }
@@ -350,7 +370,7 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
                     items(lists.orEmpty(), key = { it.id }) { playlist ->
                         Text(
                             playlist.name,
-                            Modifier.fillMaxWidth().clickable { viewModel.addToPlaylist(playlist, track); onDismiss() }.padding(vertical = 12.dp),
+                            Modifier.fillMaxWidth().clickable { viewModel.addToPlaylist(playlist, tracks); onDismiss() }.padding(vertical = 12.dp),
                         )
                     }
                 }
@@ -364,7 +384,7 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
             }
         },
         confirmButton = {
-            TextButton(enabled = newName.isNotBlank(), onClick = { viewModel.createPlaylistAndAdd(newName, track); onDismiss() }) {
+            TextButton(enabled = newName.isNotBlank(), onClick = { viewModel.createPlaylistAndAdd(newName, tracks); onDismiss() }) {
                 Text(stringResource(R.string.create))
             }
         },
@@ -376,47 +396,10 @@ private fun AddToPlaylistDialog(viewModel: TrackMenuViewModel, track: TrackEntit
  * 修正智能标签（需求 M-4）：四个维度各一行，"自动"表示用识别结果（括号里是识别出的标签），
  * 其余选项是手动指定；手动结果优先，重新扫描或重新分析后依然保留。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var info by remember(track.id) { mutableStateOf<TagInfo?>(null) }
-    LaunchedEffect(track.id) { info = viewModel.tagInfo(track) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.menu_edit_tags)) },
-        text = {
-            val current = info ?: return@AlertDialog
-            Column(Modifier.verticalScrollWithScrollbar(rememberScrollState())) {
-                TagDimension.entries.forEach { dimension ->
-                    val manual = dimension in current.manual
-                    val auto = current.auto[dimension]
-                    Text(dimensionLabel(dimension), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        fun apply(block: suspend () -> Unit) = scope.launch { block(); info = viewModel.tagInfo(track) }
-                        FilterChip(
-                            colors = selectedChipColors(),
-                            selected = !manual,
-                            onClick = { apply { viewModel.resetTag(track, dimension) } },
-                            label = { Text(stringResource(R.string.tag_auto, auto?.let { tagLabel(it) } ?: stringResource(R.string.tag_none))) },
-                        )
-                        Tag.of(dimension).forEach { tag ->
-                            FilterChip(
-                                colors = selectedChipColors(),
-                                selected = manual && current.tags[dimension] == tag,
-                                onClick = { apply { viewModel.setTag(track, dimension, tag) } },
-                                label = { Text(tagLabel(tag)) },
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.confirm)) } },
-    )
-}
+private fun TagEditDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) =
+    BatchTagDialog(listOf(track), viewModel, onDismiss)
 
-/** 歌曲信息（需求 U-3、M-7）。 */
 @Composable
 private fun SongInfoDialog(track: TrackEntity, viewModel: TrackMenuViewModel, onDismiss: () -> Unit) {
     val manualLabel = stringResource(R.string.tag_manual)

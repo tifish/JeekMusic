@@ -268,7 +268,7 @@ fun dimensionLabel(dimension: TagDimension): String = stringResource(
 /** 筛选的显示名称：选中的标签用"·"连接，比如"非运动·纯音乐"；没有筛选时为"全部"。 */
 @Composable
 fun filterLabel(filter: TagFilter): String =
-    if (!filter.isActive) stringResource(R.string.filter_all) else (filter.active.map { tagLabel(it) }+listOfNotNull(if(filter.onlyManual) stringResource(R.string.filter_manual) else if(filter.unannotated) stringResource(R.string.filter_unannotated) else null)).joinToString("·")
+    if (!filter.isActive) stringResource(R.string.filter_all) else (filter.active.map { tagLabel(it) }+filter.languages.map { languageFilterLabel(it) }+listOfNotNull(if(filter.onlyManual) stringResource(R.string.filter_manual) else if(filter.unannotated) stringResource(R.string.filter_unannotated) else null)).joinToString("·")
 
 /** 排序方式的名称：默认 / 修改时间 / 文件名 / 歌名 / 歌手（需求 U-8）。 */
 @Composable
@@ -278,6 +278,9 @@ fun sortName(sort: SongSort): String = stringResource(
         SongSort.FILE_NAME -> R.string.sort_file_name
         SongSort.TITLE -> R.string.sort_title
         SongSort.ARTIST -> R.string.sort_artist
+        SongSort.ALBUM -> R.string.sort_album
+        SongSort.DURATION -> R.string.sort_duration
+        SongSort.FORMAT -> R.string.sort_format
     },
 )
 

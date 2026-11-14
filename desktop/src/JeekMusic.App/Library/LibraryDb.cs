@@ -131,6 +131,7 @@ public sealed partial class LibraryDb : IDisposable
             PRIMARY KEY(track_key,source)
         );
         """,
+        "ALTER TABLE track_language ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;",
     ];
 
     void Migrate()

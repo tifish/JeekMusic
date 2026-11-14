@@ -211,6 +211,9 @@ fun SelectionBar(
     viewModel: FileOpsViewModel = hiltViewModel(),
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val trackMenu: TrackMenuViewModel = hiltViewModel()
+    var captured by remember { mutableStateOf<List<TrackEntity>>(emptyList()) }
+    var batchDialog by remember { mutableStateOf<String?>(null) }
     val actions = rememberFileActions()
 
     BackHandler(enabled = selection.active) { selection.clear() }
@@ -246,10 +249,15 @@ fun SelectionBar(
         ) {
             Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.file_delete))
         }
-        IconButton(onClick = { menuOpen = true }) {
+        IconButton(onClick = { captured = selection.selected(tracks()).toList(); menuOpen = true }) {
             Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more))
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(text = { Text(stringResource(R.string.menu_play_next)) }, enabled = captured.isNotEmpty(), onClick = { menuOpen = false; trackMenu.playNext(captured); selection.clear() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.menu_add_to_queue)) }, enabled = captured.isNotEmpty(), onClick = { menuOpen = false; trackMenu.addToQueue(captured); selection.clear() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.menu_add_to_playlist)) }, enabled = captured.isNotEmpty(), onClick = { menuOpen = false; batchDialog = "playlist" })
+            DropdownMenuItem(text = { Text(stringResource(R.string.menu_edit_tags)) }, enabled = captured.size in 1..1000, onClick = { menuOpen = false; batchDialog = "tags" })
+            DropdownMenuItem(text = { Text(stringResource(R.string.language_edit)) }, enabled = captured.size in 1..1000, onClick = { menuOpen = false; batchDialog = "language" })
             DropdownMenuItem(text = { Text(stringResource(R.string.selection_all)) }, onClick = { menuOpen = false; selection.selectAll(tracks()) })
             if (onRemoveFromPlaylist != null) {
                 DropdownMenuItem(
@@ -265,6 +273,11 @@ fun SelectionBar(
     }
 
     FileActionDialogs(actions, onDone = selection::clear, viewModel = viewModel)
+    when (batchDialog) {
+        "tags" -> BatchTagDialog(captured, trackMenu) { batchDialog = null }
+        "playlist" -> AddToPlaylistDialog(trackMenu, captured) { batchDialog = null }
+        "language" -> LanguageEditDialog(captured, trackMenu) { batchDialog = null }
+    }
 }
 
 @Composable

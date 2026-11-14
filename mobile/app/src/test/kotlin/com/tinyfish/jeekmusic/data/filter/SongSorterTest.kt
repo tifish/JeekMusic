@@ -14,6 +14,21 @@ import java.time.ZoneId
 import java.util.Locale
 
 class SongSorterTest {
+    @Test fun addedSortsReverseAndKeepUnknownOrMissingItemsLast() = runBlocking {
+        val a = song(1,"a.flac",date).copy(album="Z",durationMs=2000)
+        val b = song(2,"b.mp3",date+1).copy(album="A",durationMs=1000)
+        val unknown = song(3,"c.wav",0).copy(album=null,durationMs=0)
+        val all = listOf(a,b,unknown)
+        assertEquals(listOf(2L,1L,3L),sorter.sorted(all,SongOrder(SongSort.ALBUM)) { it }.map { it.id })
+        assertEquals(listOf(1L,2L,3L),sorter.sorted(all,SongOrder(SongSort.ALBUM,true)) { it }.map { it.id })
+        assertEquals(listOf(2L,1L,3L),sorter.sorted(all,SongOrder(SongSort.DURATION)) { it }.map { it.id })
+        assertEquals(listOf(1L,2L,3L),sorter.sorted(all,SongOrder(SongSort.DURATION,true)) { it }.map { it.id })
+        assertEquals(listOf(1L,2L,3L),sorter.sorted(all,SongOrder(SongSort.FORMAT)) { it }.map { it.id })
+        assertEquals(listOf(1L,2L,3L),sorter.sorted(all,SongOrder(SongSort.MODIFIED,true)) { it }.map { it.id })
+        assertNull(sorter.sorted(listOf(null,a,b),SongOrder(SongSort.TITLE,true)) { it }.last())
+        preferences.value=Settings(songSort=SongSort.FILE_NAME,hasSongSortPreference=true,sortReversed=true)
+        assertFalse(sorter.orderedViewOrder.first().manualPlaylistOrder)
+    }
     private val preferences = MutableStateFlow(Settings())
     private val sorter = SongSorter(preferences) { SortKeys { it } }
     private val date = 1792828800L // Unix seconds, 2026-10-24 08:00 UTC

@@ -139,6 +139,37 @@ class TagRepository @Inject constructor(
     }
 
     private suspend fun libraryTrackSignature(key: String)=db.trackDao().byTrackKeys(listOf(key)).singleOrNull()?.let { "${it.dateModified}:${it.size}" }.orEmpty()
+
+    /** One captured batch, one transaction/recompute; null explicitly restores AUTO. */
+    suspend fun applyManualBatch(targets: List<com.tinyfish.jeekmusic.data.db.TrackEntity>, edits: Map<TagDimension, Tag?>) = mutex.withLock {
+        val tracks = targets.distinctBy { it.trackKey }
+        require(tracks.size in 1..1000 && edits.isNotEmpty())
+        require(edits.all { (dimension, tag) -> tag == null || tag.dimension == dimension })
+        val generation = feedback.prepare()
+        db.withTransaction {
+            val current = tracks.map { target ->
+                db.trackDao().byId(target.id)?.also {
+                    check(it.trackKey == target.trackKey && it.dateModified == target.dateModified && it.size == target.size) { "Recording changed" }
+                } ?: error("Recording removed")
+            }
+            val before = current.associate { it.trackKey to reviewSnapshot(it.trackKey) }
+            for (track in current) for ((dimension, tag) in edits) {
+                if (tag == null) dao.clearOverride(track.trackKey, dimension.name)
+                else dao.setOverride(TagOverrideEntity(track.trackKey, dimension.name, tag.name))
+            }
+            recomputeCore()
+            for (track in current) {
+                val explicit = JSONObject().also { o -> edits.forEach { (d, t) -> o.put(d.name, t?.name ?: JSONObject.NULL) } }
+                dao.saveReview(TagReviewEntity(trackKey = track.trackKey, record = JSONObject()
+                    .put("recordedAt", System.currentTimeMillis()).put("provenance", "manual_correction_not_independent_truth")
+                    .put("learningGeneration", generation).put("learningDevice", feedback.store.deviceId)
+                    .put("recordingSignature", "${track.dateModified}:${track.size}")
+                    .put("explicitCorrections", explicit).put("before", before.getValue(track.trackKey))
+                    .put("after", reviewSnapshot(track.trackKey)).toString()))
+            }
+        }
+        feedback.schedule()
+    }
     private suspend fun reviewSnapshot(key: String): JSONObject {
         val info = info(key)
         val evidence = AnalysisEvidence.parse(info.features?.analysisEvidence)

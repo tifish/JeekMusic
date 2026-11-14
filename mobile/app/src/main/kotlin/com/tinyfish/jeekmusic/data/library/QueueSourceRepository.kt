@@ -33,6 +33,7 @@ class QueueSourceRepository @Inject constructor(
     private val searchDao: SearchDao,
     private val tagFilters: TagFilterRepository,
     private val sorter: SongSorter,
+    private val search: com.tinyfish.jeekmusic.data.filter.LibrarySearch,
 ) {
     suspend fun title(source: QueueSource, fallback: String): String = when (source) {
         is QueueSource.Artist -> library.artist(source.nameKey).first()?.name ?: fallback
@@ -43,7 +44,7 @@ class QueueSourceRepository @Inject constructor(
 
     fun tracks(source: QueueSource): Flow<List<TrackEntity>> = when (source) {
         is QueueSource.Folder -> if (source.recursive) {
-            combine(searchDao.trackChanges(), tagFilters.allowedKeys, sorter.sort) { _, _, _ -> }
+            combine(searchDao.trackChanges(), tagFilters.allowedKeys, sorter.order) { _, _, _ -> }
                 .mapLatest { library.tracksUnder(source.folderId, source.relativePath) }
         } else {
             library.directory(source.folderId, source.relativePath).map { it.tracks }
@@ -56,21 +57,20 @@ class QueueSourceRepository @Inject constructor(
 
     /** 播放列表的条目（包括文件不可用的），按筛选和排序；按文件名（默认）时保持手动排的顺序（需求 U-8、PL-3）。 */
     fun playlistEntries(playlistId: Long): Flow<List<PlaylistEntry>> =
-        combine(playlists.entries(playlistId), tagFilters.allowedKeys, sorter.orderedViewSort) { entries, allowed, sort ->
+        combine(playlists.entries(playlistId), tagFilters.allowedKeys, sorter.orderedViewOrder) { entries, allowed, sort ->
             val filtered = entries.filterByTags(allowed) { it.track?.trackKey }
-            if (sort == SongSort.FILE_NAME) filtered else sorter.sorted(filtered, sort) { it.track }
+            if (sort.manualPlaylistOrder) filtered else sorter.sorted(filtered, sort) { it.track }
         }.flowOn(Dispatchers.Default)
 
     /** 曲库、筛选、排序变化时发出，搜索结果据此重新查询。 */
-    fun searchChanges(): Flow<Unit> = combine(searchDao.trackChanges(), tagFilters.allowedKeys, sorter.sort) { _, _, _ -> }
+    fun searchChanges(): Flow<Unit> = combine(searchDao.trackChanges(), tagFilters.allowedKeys, sorter.order) { _, _, _ -> }
 
     /** 搜索到的歌曲（需求 S-1）：也按智能标签筛选（需求 M-6），按全局排序（需求 U-8）后取前 [MAX_SEARCH_TRACKS] 首。 */
     suspend fun searchTracks(query: String): List<TrackEntity> {
         if (query.isBlank()) return emptyList()
-        val pattern = "%" + MediaStoreSource.escapeLike(query) + "%"
-        val tracks = searchDao.tracks(pattern).filterByTags(tagFilters.allowedKeys.first()) { it.trackKey }
+        val tracks = search.tracks(query).filterByTags(tagFilters.allowedKeys.first()) { it.trackKey }
         // 先排序再截取，否则截到的不是排在最前面的那些
-        return sorter.sorted(tracks, sorter.sort.first()) { it }.take(MAX_SEARCH_TRACKS)
+        return sorter.sorted(tracks, sorter.order.first()) { it }.take(MAX_SEARCH_TRACKS)
     }
 
     companion object {

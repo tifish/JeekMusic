@@ -7,3 +7,4 @@
     public <init>();
 }
 -keep class com.tinyfish.jeekmusic.data.sync.LanAtomicFiles { *; }
+-keep class com.tinyfish.jeekmusic.analysis.NativeWhisper { *; }

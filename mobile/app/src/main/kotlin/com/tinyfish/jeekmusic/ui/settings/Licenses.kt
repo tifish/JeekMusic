@@ -29,6 +29,8 @@ private val LICENSES = listOf(
     "TagLib" to "LGPL-2.1 / MPL-1.1",
     "LiteRT (TensorFlow Lite)" to "Apache-2.0",
     "YAMNet audio event classifier (Google, AudioSet)" to "Apache-2.0",
+    "whisper.cpp / ggml (pinned CPU runtime)" to "MIT — licenses/whisper-cpp-LICENSE.txt in APK assets",
+    "Whisper tiny multilingual model (OpenAI, downloaded on request)" to "MIT — licenses/whisper-model-LICENSE.txt in APK assets",
     "LRCLIB (lrclib.net)" to "Online lyrics database, used only when online lyrics are turned on",
 )
 

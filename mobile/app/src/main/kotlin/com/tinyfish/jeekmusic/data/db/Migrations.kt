@@ -3,6 +3,12 @@ package com.tinyfish.jeekmusic.data.db
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `track_language` (`track_key` TEXT NOT NULL, `source` TEXT NOT NULL, `signature` TEXT NOT NULL, `state` TEXT NOT NULL, `languages` TEXT NOT NULL, `confidence` REAL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`track_key`, `source`), FOREIGN KEY(`track_key`) REFERENCES `track`(`track_key`) ON UPDATE CASCADE ON DELETE CASCADE)")
+    }
+}
+
 /** Preserve all rows and references; ordinary incremental scans fill in file precision. */
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {

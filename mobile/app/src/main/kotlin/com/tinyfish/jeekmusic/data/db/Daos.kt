@@ -21,6 +21,8 @@ data class ArtistCount(
     val count: Int,
 )
 
+data class ArtistTrackKey(@ColumnInfo(name = "artist_id") val artistId: Long, @ColumnInfo(name = "track_key") val trackKey: String)
+
 data class DirectoryCount(
     @ColumnInfo(name = "relative_path") val relativePath: String,
     val count: Int,
@@ -96,6 +98,9 @@ interface TrackDao {
     @Query("SELECT * FROM track")
     suspend fun all(): List<TrackEntity>
 
+    @Query("SELECT * FROM track")
+    fun observeAll(): Flow<List<TrackEntity>>
+
     @Query("SELECT COUNT(*) FROM track")
     fun observeCount(): Flow<Int>
 
@@ -120,6 +125,9 @@ interface TrackDao {
 
     @Query("""SELECT * FROM track WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\'""")
     suspend fun under(folderId: Long, prefix: String): List<TrackEntity>
+
+    @Query("SELECT * FROM track WHERE folder_id = :folderId AND relative_path LIKE :prefix || '%' ESCAPE '\\'")
+    fun observeUnder(folderId: Long, prefix: String): Flow<List<TrackEntity>>
 
     @Query(
         """
@@ -149,6 +157,8 @@ interface TrackDao {
 
 @Dao
 interface ArtistDao {
+    @Query("SELECT ta.artist_id, t.track_key FROM track_artist ta JOIN track t ON ta.track_id = t.id")
+    fun observeLinks(): Flow<List<ArtistTrackKey>>
     @Query("SELECT * FROM artist WHERE name_key IN (:keys)")
     suspend fun byNameKeys(keys: List<String>): List<ArtistEntity>
 

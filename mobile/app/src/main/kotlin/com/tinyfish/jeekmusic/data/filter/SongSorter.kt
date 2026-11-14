@@ -14,6 +14,10 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class SongOrder(val sort: SongSort, val reversed: Boolean = false) {
+    val manualPlaylistOrder: Boolean get() = sort == SongSort.FILE_NAME && !reversed
+}
+
 /**
  * 全局的歌曲排序（需求 U-8）：标题栏菜单里选一次，所有歌曲列表都按它排，默认按修改时间倒序
  * （播放列表按文件名时保持手动排的顺序，由调用方处理）。
@@ -24,6 +28,13 @@ class SongSorter internal constructor(settings: Flow<Settings>, createSortKeys: 
     @Inject constructor(settings: SettingsRepository) : this(settings.settings, { SortKeys.android() })
 
     val sort: Flow<SongSort> = settings.map { it.songSort }.distinctUntilChanged()
+    val order: Flow<SongOrder> = settings.map { SongOrder(it.songSort, it.sortReversed) }.distinctUntilChanged()
+    val orderedViewOrder: Flow<SongOrder> = settings.map {
+        SongOrder(if (it.hasSongSortPreference) it.songSort else SongSort.FILE_NAME, it.sortReversed)
+    }.distinctUntilChanged()
+    val albumOrder: Flow<SongOrder?> = settings.map {
+        if (it.hasSongSortPreference) SongOrder(it.songSort, it.sortReversed) else null
+    }.distinctUntilChanged()
     /** No saved preference: keep playlist manual order and album track order. */
     val orderedViewSort: Flow<SongSort> = settings.map {
         if (it.hasSongSortPreference) it.songSort else SongSort.FILE_NAME
@@ -61,6 +72,27 @@ class SongSorter internal constructor(settings: Flow<Settings>, createSortKeys: 
             .thenBy { it.trackNo ?: it.cueTrackNo ?: Int.MAX_VALUE }.then(byFileName))
         else sorted(tracks, sort) { it }
 
+    fun <T> sorted(items: List<T>, order: SongOrder, track: (T) -> TrackEntity?): List<T> {
+        val (present, missing) = items.partition { track(it) != null }
+        return present.sortedWith(compareBy(comparator(order)) { track(it)!! }) + missing
+    }
+
+    fun albumOrdered(tracks: List<TrackEntity>, order: SongOrder?): List<TrackEntity> =
+        if (order == null) albumSorted(tracks, null) else sorted(tracks, order) { it }
+
+    fun comparator(order: SongOrder): Comparator<TrackEntity> {
+        val comparator = comparator(order.sort)
+        val directed = if (order.reversed) comparator.reversed() else comparator
+        // Invalid dates and unknown metadata remain last in both directions.
+        return compareBy<TrackEntity> { when (order.sort) {
+            SongSort.MODIFIED -> !FileModified.isValid(it.dateModified)
+            SongSort.ARTIST -> it.artistDisplay.isBlank()
+            SongSort.ALBUM -> it.album.isNullOrBlank()
+            SongSort.DURATION -> it.durationMs <= 0
+            else -> false
+        } }.then(directed)
+    }
+
     fun comparator(sort: SongSort): Comparator<TrackEntity> = when (sort) {
         SongSort.MODIFIED -> compareBy<TrackEntity> { !FileModified.isValid(it.dateModified) }
             .thenByDescending { if (FileModified.isValid(it.dateModified)) it.dateModified else 0 }
@@ -72,5 +104,11 @@ class SongSorter internal constructor(settings: Flow<Settings>, createSortKeys: 
         SongSort.ARTIST -> compareBy<TrackEntity> { it.artistDisplay.isEmpty() }
             .thenBy(NaturalOrderComparator) { key(it.artistDisplay) }
             .then(byTitle)
+        SongSort.ALBUM -> compareBy<TrackEntity> { it.album.isNullOrBlank() }
+            .thenBy(NaturalOrderComparator) { key(it.album.orEmpty()) }.then(byTitle)
+        SongSort.DURATION -> compareBy<TrackEntity> { it.durationMs <= 0 }.thenBy { it.durationMs }.then(byTitle)
+        SongSort.FORMAT -> compareBy<TrackEntity, String>(NaturalOrderComparator) {
+            it.fileName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+        }.then(byTitle)
     }
 }

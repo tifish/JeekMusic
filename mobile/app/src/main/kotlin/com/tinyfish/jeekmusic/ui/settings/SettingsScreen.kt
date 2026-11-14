@@ -178,7 +178,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setAnalysisMode(mode: AnalysisMode) = viewModelScope.launch {
         settingsRepository.setAnalysisMode(mode)
-        analysis.schedule()
+        analysis.modeChanged()
     }
 
 
@@ -569,7 +569,11 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     items(AnalysisMode.entries) { mode ->
                         RadioRow(
                             selected = settings.analysisMode == mode,
-                            text = stringResource(if (mode == AnalysisMode.CHARGING) R.string.analysis_charging else R.string.analysis_anytime),
+                            text = stringResource(when (mode) {
+                                AnalysisMode.CHARGING -> R.string.analysis_charging
+                                AnalysisMode.ANYTIME -> R.string.analysis_anytime
+                                AnalysisMode.MANUAL -> R.string.analysis_manual
+                            }),
                             onClick = { viewModel.setAnalysisMode(mode) },
                         )
                     }

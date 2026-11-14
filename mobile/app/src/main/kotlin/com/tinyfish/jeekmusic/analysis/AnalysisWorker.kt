@@ -25,6 +25,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.guava.await
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,11 +44,14 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         fun tagger(): AudioTagger
         fun tags(): TagRepository
         fun scheduler(): AnalysisScheduler
+        fun settings(): SettingsRepository
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
         val deps = EntryPointAccessors.fromApplication(applicationContext, Dependencies::class.java)
+        if (!inputData.getBoolean(KEY_IGNORE_CHARGING, false) && deps.settings().current().analysisMode == AnalysisMode.MANUAL)
+            return@withContext Result.success()
         val deadline = SystemClock.elapsedRealtime() + MAX_RUN_MS
         deps.tags().recomputeAll() // promote only verified v5 bases that need no new audio before querying pending work
         val batch = deps.tagDao().pending(TagRepository.ANALYZER_VERSION, MAX_TRACKS)
@@ -105,10 +109,18 @@ class AnalysisScheduler @Inject constructor(
     /** "立即分析"：不要求充电，替换掉正在等待充电的任务。 */
     suspend fun runNow() = enqueue(ignoreCharging = true, policy = ExistingWorkPolicy.REPLACE)
 
+    /** An explicit preference change cancels old automatic work; normal scans never cancel a manual run. */
+    suspend fun modeChanged() {
+        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME).result.await()
+        schedule()
+    }
+
     suspend fun continueLater(ignoreCharging: Boolean) = enqueue(ignoreCharging, ExistingWorkPolicy.APPEND_OR_REPLACE)
 
     private suspend fun enqueue(ignoreCharging: Boolean, policy: ExistingWorkPolicy) {
-        val anytime = ignoreCharging || settings.current().analysisMode == AnalysisMode.ANYTIME
+        val mode = settings.current().analysisMode
+        if (!ignoreCharging && mode == AnalysisMode.MANUAL) return
+        val anytime = ignoreCharging || mode == AnalysisMode.ANYTIME
         val constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
             .setRequiresCharging(!anytime)

@@ -361,6 +361,7 @@ class SyncService @Inject constructor(
             val state = capture(folders) { it }
             val result = JSONObject().put("state", SyncFormat.toJson(SyncFile(device, System.currentTimeMillis(), state)))
             val roots=folders.map { BackupRefs.Root(it.volumeName,it.relativePath) }
+            result.getJSONObject("state").put("vocal_languages", LanguageExchange(db).export { reference(it, roots) })
             if(includeFeatures) result.put("features",shareFeatures(emptyList(),db.trackDao().all(),roots,{ null },export=true))
             saveJournal()
             result
@@ -370,6 +371,13 @@ class SyncService @Inject constructor(
         val state=SyncFormat.parse(payload.getJSONObject("state").toString()) ?: error("Invalid LAN state")
         mutex.withLock { ensureLoaded(); metadata.put("initialized",true); saveJournal() }
         syncNow(directoryRequested=false,incoming=state,incomingFeatures=payload.optJSONObject("features"))
+        mutex.withLock {
+            val roots = db.folderDao().all().map { BackupRefs.Root(it.volumeName,it.relativePath) }
+            val references = db.trackDao().all().groupBy { reference(it.trackKey,roots).lowercase() }
+                .filterValues { it.size == 1 }.mapValues { it.value.single().trackKey }
+            val matcher = BackupRefs.Matcher(references)
+            LanguageExchange(db).accept(payload.getJSONObject("state").optJSONObject("vocal_languages")) { matcher.match(it.lowercase()) }
+        }
     }
     private val adapterSettings=context.getSharedPreferences("sync-adapter",Context.MODE_PRIVATE)
     val directoryEnabled get()=adapterSettings.getBoolean("legacy_directory",true)

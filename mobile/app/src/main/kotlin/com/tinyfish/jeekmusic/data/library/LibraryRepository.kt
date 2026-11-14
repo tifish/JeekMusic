@@ -60,16 +60,17 @@ class LibraryRepository @Inject constructor(
     private val sorter: SongSorter,
 ) {
     /** 根级音乐文件夹；歌曲数只算符合筛选的（需求 M-6），文件夹本身总是显示。 */
-    val folders: Flow<List<FolderWithCount>> = tagFilter.filter.flatMapLatest { folderDao.observeWithCounts(it.mood?.name, it.voice?.name, it.genre?.name, it.calmness?.name,it.onlyManual,it.unannotated) }
+    val folders: Flow<List<FolderWithCount>> = combine(folderDao.observeWithCounts(null,null,null), trackDao.observeAll(), tagFilter.allowedKeys) { folders, tracks, allowed ->
+        val counts = tracks.filterByTags(allowed) { it.trackKey }.groupingBy { it.folderId }.eachCount()
+        folders.map { it.copy(trackCount = counts[it.folder.id] ?: 0) }
+    }.flowOn(Dispatchers.Default)
 
-    /** 艺术家列表；筛选时只保留有这类歌的艺术家，歌曲数也只算这类歌（需求 M-6）。 */
-    val artists: Flow<List<ArtistEntity>> = tagFilter.filter.flatMapLatest { filter ->
-        if (!filter.isActive) return@flatMapLatest artistDao.observeAll()
-        combine(artistDao.observeAll(), artistDao.observeCounts(filter.mood?.name, filter.voice?.name, filter.genre?.name, filter.calmness?.name,filter.onlyManual,filter.unannotated)) { artists, counts ->
-            val byId = counts.associate { it.artistId to it.count }
-            artists.mapNotNull { artist -> byId[artist.id]?.let { artist.copy(trackCount = it) } }
+    val artists: Flow<List<ArtistEntity>> = combine(artistDao.observeAll(), artistDao.observeLinks(), tagFilter.allowedKeys) { artists, links, allowed ->
+        if (allowed == null) artists else {
+            val counts = links.filter { it.trackKey in allowed }.groupingBy { it.artistId }.eachCount()
+            artists.mapNotNull { a -> counts[a.id]?.let { a.copy(trackCount = it) } }
         }
-    }
+    }.flowOn(Dispatchers.Default)
 
     val trackCount: Flow<Int> = trackDao.observeCount()
 
@@ -125,18 +126,16 @@ class LibraryRepository @Inject constructor(
     fun directory(folderId: Long, path: String): Flow<DirectoryContent> {
         val prefix = MediaStoreSource.escapeLike(path)
         // 筛选时没有符合歌曲的子文件夹不显示（计数查询里已经过滤）
-        return tagFilter.filter.flatMapLatest { filter ->
-            combine(
-                trackDao.observeDirectoryCounts(folderId, prefix, filter.mood?.name, filter.voice?.name, filter.genre?.name, filter.calmness?.name,filter.onlyManual,filter.unannotated),
-                trackDao.observeInDirectory(folderId, path),
-                tagFilter.allowedKeys,
-            ) { counts, tracks, allowed -> Triple(counts, tracks.filterByTags(allowed) { it.trackKey }, allowed) }
-        }.combine(sorter.sort) { (counts, tracks, _), sort ->
+        return combine(trackDao.observeUnder(folderId, prefix), tagFilter.allowedKeys) { all, allowed ->
+            val matching = all.filterByTags(allowed) { it.trackKey }
+            val counts = matching.groupingBy { it.relativePath }.eachCount().map { (path, count) -> com.tinyfish.jeekmusic.data.db.DirectoryCount(path, count) }
+            Triple(counts, matching.filter { it.relativePath == path }, allowed)
+        }.combine(sorter.order) { (counts, tracks, _), sort ->
             DirectoryContent(
                 folders = FolderTree.children(path, counts, sorter::key),
                 // 按文件名时 CUE 虚拟歌曲排在同目录普通歌曲的后面，按音轨号排序
-                tracks = if (sort == SongSort.FILE_NAME) {
-                    tracks.sortedWith(compareBy<TrackEntity> { it.cueTrackNo != null }.then(sorter.byFileName))
+                tracks = if (sort.sort == SongSort.FILE_NAME) {
+                    tracks.sortedWith(compareBy<TrackEntity> { it.cueTrackNo != null }.then(sorter.comparator(sort)))
                 } else {
                     sorter.sorted(tracks, sort) { it }
                 },
@@ -147,9 +146,9 @@ class LibraryRepository @Inject constructor(
     /** 文件夹及其子文件夹中的全部歌曲（"播放全部（含子文件夹）"）；按文件名时先按所在目录、再按文件名。 */
     suspend fun tracksUnder(folderId: Long, path: String): List<TrackEntity> {
         val tracks = trackDao.under(folderId, MediaStoreSource.escapeLike(path)).filterByTags(tagFilter.allowedKeys.first()) { it.trackKey }
-        val sort = sorter.sort.first()
-        return if (sort == SongSort.FILE_NAME) {
-            tracks.sortedWith(compareBy<TrackEntity, String>(NaturalOrderComparator) { sorter.key(it.relativePath) }.then(sorter.byFileName))
+        val sort = sorter.order.first()
+        return if (sort.sort == SongSort.FILE_NAME) {
+            tracks.sortedWith((compareBy<TrackEntity, String>(NaturalOrderComparator) { sorter.key(it.relativePath) }.let { if (sort.reversed) it.reversed() else it }).then(sorter.comparator(sort)))
         } else {
             sorter.sorted(tracks, sort) { it }
         }
@@ -159,14 +158,14 @@ class LibraryRepository @Inject constructor(
 
     /** 艺术家的全部歌曲，不分组，默认修改时间倒序（需求 A-6、U-8）。 */
     fun artistTracks(nameKey: String): Flow<List<TrackEntity>> =
-        combine(trackDao.observeByArtist(nameKey), tagFilter.allowedKeys, sorter.sort) { tracks, allowed, sort ->
+        combine(trackDao.observeByArtist(nameKey), tagFilter.allowedKeys, sorter.order) { tracks, allowed, sort ->
             sorter.sorted(tracks.filterByTags(allowed) { it.trackKey }, sort) { it }
         }.flowOn(Dispatchers.Default)
 
     /** 专辑没有显式排序偏好时按碟号、音轨号，CUE 同源分轨按曲序。 */
     fun albumTracks(albumKey: String): Flow<List<TrackEntity>> =
-        combine(trackDao.observeByAlbum(albumKey), tagFilter.allowedKeys, sorter.albumSort) { tracks, allowed, sort ->
-            sorter.albumSorted(tracks.filterByTags(allowed) { it.trackKey }, sort)
+        combine(trackDao.observeByAlbum(albumKey), tagFilter.allowedKeys, sorter.albumOrder) { tracks, allowed, sort ->
+            sorter.albumOrdered(tracks.filterByTags(allowed) { it.trackKey }, sort)
         }.flowOn(Dispatchers.Default)
 
     suspend fun tracksByIds(ids: List<Long>): List<TrackEntity> {

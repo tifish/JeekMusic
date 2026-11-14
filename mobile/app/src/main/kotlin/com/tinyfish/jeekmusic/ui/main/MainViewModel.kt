@@ -65,6 +65,7 @@ class MainViewModel @Inject constructor(
     private val tags: TagRepository,
     private val sorter: SongSorter,
     private val updater: AppUpdater,
+    val languageAnalysis: com.tinyfish.jeekmusic.analysis.LanguageAnalysisService,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
 
@@ -75,6 +76,7 @@ class MainViewModel @Inject constructor(
     val pendingAnalysis: StateFlow<Int> = tags.pendingCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
+    fun toggleLanguage(value: com.tinyfish.jeekmusic.analysis.LanguageFilter) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggleLanguage(value)) }
 
     fun toggleUnannotatedFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=false,onlyUnannotated=!tagFilter.value.unannotated)) }
     fun toggleManualFilter()=viewModelScope.launch { tagFilters.set(tagFilter.value.copy(onlyManual=!tagFilter.value.onlyManual,onlyUnannotated=false)) }
@@ -84,7 +86,10 @@ class MainViewModel @Inject constructor(
     /** 全局的歌曲排序（需求 U-8）。 */
     val songSort: StateFlow<SongSort> = sorter.sort.stateIn(viewModelScope, SharingStarted.Eagerly, SongSort.MODIFIED)
 
+    val sortReversed = sorter.order.map { it.reversed }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     fun setSort(sort: SongSort) = viewModelScope.launch { settingsRepository.setSongSort(sort) }
+    fun reverseSort() = viewModelScope.launch { settingsRepository.setSortReversed(!sortReversed.value) }
 
     fun analyzeNow() = viewModelScope.launch { analysis.runNow() }
 

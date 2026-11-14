@@ -62,7 +62,7 @@ enum class OnlineSource {
 enum class FetchMode { MANUAL, AUTO, WIFI }
 
 /** 智能标签的分析时机（需求 M-5）。 */
-enum class AnalysisMode { CHARGING, ANYTIME }
+enum class AnalysisMode { CHARGING, ANYTIME, MANUAL }
 
 /** 低功耗播放（音频 offload）的三档设置（docs/design.md §7.2）。 */
 enum class LowPowerMode { BACKGROUND, ALWAYS, OFF }
@@ -77,10 +77,14 @@ data class ScanConfig(
 )
 
 /** 全局的智能标签筛选（需求 M-6）：每个维度不选或选一个，多个维度同时满足。 */
-data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null, val onlyManual: Boolean=false, val onlyUnannotated: Boolean=false) {
+data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: Tag? = null, val calmness: Tag? = null, val onlyManual: Boolean=false, val onlyUnannotated: Boolean=false,
+    val chinese: com.tinyfish.jeekmusic.analysis.LanguageFilter? = null, val english: com.tinyfish.jeekmusic.analysis.LanguageFilter? = null) {
     val active: List<Tag> get() = listOfNotNull(mood, voice, genre, calmness)
     val unannotated: Boolean get() = onlyUnannotated && !onlyManual
-    val isActive: Boolean get() = active.isNotEmpty() || onlyManual || unannotated
+    val languages get() = listOfNotNull(chinese, english)
+    val isActive: Boolean get() = active.isNotEmpty() || onlyManual || unannotated || languages.isNotEmpty()
+    fun toggleLanguage(value: com.tinyfish.jeekmusic.analysis.LanguageFilter): TagFilter =
+        if (value.chineseGroup) copy(chinese = value.takeIf { it != chinese }) else copy(english = value.takeIf { it != english })
 
     operator fun get(dimension: TagDimension): Tag? = when (dimension) {
         TagDimension.MOOD -> mood
@@ -106,7 +110,7 @@ data class TagFilter(val mood: Tag? = null, val voice: Tag? = null, val genre: T
  * 已保存的 FILE_NAME 和旧 DEFAULT 保留为文件名排序，不能推断为未选择。
  */
 enum class SongSort {
-    FILE_NAME, MODIFIED, TITLE, ARTIST;
+    FILE_NAME, MODIFIED, TITLE, ARTIST, ALBUM, DURATION, FORMAT;
 
     companion object {
         fun fromSaved(value: String?): SongSort = when (value) {
@@ -150,6 +154,7 @@ data class Settings(
     val tagFilter: TagFilter = TagFilter(),
     val songSort: SongSort = SongSort.MODIFIED,
     val hasSongSortPreference: Boolean = false,
+    val sortReversed: Boolean = false,
     /** 每天自动检查一次 GitHub 上的新版本（需求 U-6）。 */
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheck: Long = 0,
@@ -177,7 +182,10 @@ class SettingsRepository @Inject constructor(
         val UNSUPPORTED = intPreferencesKey("unsupported_file_count")
         val LOW_POWER = stringPreferencesKey("low_power_mode")
         val ANALYSIS_MODE = stringPreferencesKey("analysis_mode")
+        val SORT_REVERSED = booleanPreferencesKey("sort_reversed")
         val FILTER_UNANNOTATED=booleanPreferencesKey("filter_unannotated")
+        val FILTER_CHINESE=stringPreferencesKey("filter_chinese")
+        val FILTER_ENGLISH=stringPreferencesKey("filter_english")
         val FILTER_MANUAL=booleanPreferencesKey("filter_manual")
         val SENSITIVITY = stringPreferencesKey("mood_sensitivity")
         val ONLINE_LYRICS = booleanPreferencesKey("online_lyrics")
@@ -276,6 +284,11 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setSongSort(sort: SongSort) = context.dataStore.edit { it[Keys.SONG_SORT] = sort.name }
 
+    suspend fun setSortReversed(reversed: Boolean) = context.dataStore.edit {
+        it[Keys.SORT_REVERSED] = reversed
+        it[Keys.SONG_SORT] = SongSort.fromSaved(it[Keys.SONG_SORT]).name
+    }
+
     suspend fun setTagFilter(filter: TagFilter) = context.dataStore.edit { prefs ->
         prefs.remove(Keys.MOOD_FILTER)
         fun put(key: Preferences.Key<String>, tag: Tag?) = if (tag == null) prefs[key] = "" else prefs[key] = tag.name
@@ -285,6 +298,8 @@ class SettingsRepository @Inject constructor(
         put(Keys.FILTER_CALMNESS, filter.calmness)
         prefs[Keys.FILTER_MANUAL]=filter.onlyManual
         prefs[Keys.FILTER_UNANNOTATED]=filter.unannotated
+        prefs[Keys.FILTER_CHINESE]=filter.chinese?.name.orEmpty()
+        prefs[Keys.FILTER_ENGLISH]=filter.english?.name.orEmpty()
     }
 
     suspend fun setUnsupportedFileCount(count: Int) = context.dataStore.edit { it[Keys.UNSUPPORTED] = count }
@@ -338,9 +353,12 @@ class SettingsRepository @Inject constructor(
             calmness = Tag.of(TagDimension.CALMNESS, this[Keys.FILTER_CALMNESS]),
             onlyManual=this[Keys.FILTER_MANUAL] ?: false,
             onlyUnannotated=(this[Keys.FILTER_UNANNOTATED] ?: false) && this[Keys.FILTER_MANUAL] != true,
+            chinese=com.tinyfish.jeekmusic.analysis.LanguageFilter.entries.firstOrNull { it.name==this[Keys.FILTER_CHINESE] && it.chineseGroup },
+            english=com.tinyfish.jeekmusic.analysis.LanguageFilter.entries.firstOrNull { it.name==this[Keys.FILTER_ENGLISH] && !it.chineseGroup },
         ),
         songSort = SongSort.fromSaved(this[Keys.SONG_SORT]),
         hasSongSortPreference = SongSort.hasPreference(this[Keys.SONG_SORT]),
+        sortReversed = this[Keys.SORT_REVERSED] ?: false,
         autoUpdateCheck = this[Keys.AUTO_UPDATE] ?: true,
         lastUpdateCheck = this[Keys.LAST_UPDATE_CHECK] ?: 0,
         skippedUpdateVersion = this[Keys.SKIPPED_UPDATE] ?: 0,

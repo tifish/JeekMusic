@@ -73,6 +73,7 @@ class SearchViewModel @Inject constructor(
     private val dao: SearchDao,
     private val player: PlayerConnection,
     private val sources: QueueSourceRepository,
+    private val search: com.tinyfish.jeekmusic.data.filter.LibrarySearch,
 ) : ViewModel() {
 
     val query = MutableStateFlow("")
@@ -88,8 +89,7 @@ class SearchViewModel @Inject constructor(
             if (q.isEmpty()) {
                 null
             } else {
-                val pattern = "%" + MediaStoreSource.escapeLike(q) + "%"
-                SearchResults(q, dao.artists(pattern, MAX_ARTISTS), sources.searchTracks(q))
+                SearchResults(q, search.artists(q, MAX_ARTISTS), sources.searchTracks(q))
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

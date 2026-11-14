@@ -244,6 +244,12 @@ public sealed class SyncFeature : IFeature
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("sync", "写入同步文件失败", e); }
             }
             await ShareFeatures(directory ? folders : [], refs, Match, incomingFeatures, cancel, authorizedCommit);
+            if(incoming?["vocal_languages"] is JsonObject languages) {
+                var languageChanged=false;
+                void ImportLanguages() { languageChanged=_app.Db.ImportLanguages(languages,Match); }
+                if(authorizedCommit is null) ImportLanguages(); else authorizedCommit(ImportLanguages);
+                if(languageChanged) await _app.Library.RefreshAsync();
+            }
             if (_stopped) return;
             Status = L.F($"上次同步 {DateTime.Now:HH:mm:ss}；发现 {_devices.Count} 台设备");
             Changed?.Invoke();
@@ -383,7 +389,9 @@ public sealed class SyncFeature : IFeature
             if (_app.Library.ByKey(f.TrackKey) is { } t && f.Signature == AnalysisFeature.Signature(t) && f.Data is not null)
                 items[lan[t.TrackKey]] = new JsonObject { ["size"] = t.Size, ["duration_ms"] = t.DurationMs, ["features"] = JsonNode.Parse(f.Data) };
         _app.Db.SetValue("sync_initialized", "1"); // Pairing explicitly authorizes the normal merge.
-        return new JsonObject { ["state"] = ForWire(state), ["features"] = includeFeatures ? new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } : null };
+        var wire=ForWire(state);
+        wire["vocal_languages"]=_app.Db.ExportLanguages(lan);
+        return new JsonObject { ["state"] = wire, ["features"] = includeFeatures ? new JsonObject { ["format"] = 2, ["analyzer_version"] = AnalysisFeature.AnalyzerVersion, ["items"] = items } : null };
     }
 
     bool DirectoryEnabled => _app.Db.GetValue("legacy_directory_sync") != "0";

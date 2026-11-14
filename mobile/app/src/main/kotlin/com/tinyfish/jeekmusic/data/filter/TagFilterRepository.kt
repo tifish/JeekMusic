@@ -22,16 +22,20 @@ import javax.inject.Singleton
 class TagFilterRepository @Inject constructor(
     private val settings: SettingsRepository,
     private val tagDao: TagDao,
+    private val languages: LanguageRepository? = null,
 ) {
     val filter: Flow<TagFilter> = settings.settings.map { it.tagFilter }.distinctUntilChanged()
 
     /** 当前筛选允许的 track_key（各维度的交集）；null 表示不筛选。分类结果变化（分析完成、手动修正）时自动更新。 */
     val allowedKeys: Flow<Set<String>?> = filter.flatMapLatest { f ->
         val active = f.active
-        if (active.isEmpty() && !f.onlyManual && !f.unannotated) return@flatMapLatest flowOf(null)
+        if (!f.isActive) return@flatMapLatest flowOf(null)
         val sources=active.map { tag -> tagDao.observeKeys(tag.dimension.name, tag.name) }.toMutableList()
         if(f.onlyManual) sources.add(tagDao.observeManualKeys())
         if(f.unannotated) sources.add(tagDao.observeUnannotatedKeys())
+        if(f.languages.isNotEmpty()) sources.add(languages?.results?.map { results ->
+            results.filterValues { result -> f.languages.all(result::matches) }.keys.toList()
+        } ?: flowOf(emptyList()))
         combine(sources) { lists ->
             lists.map { it.toHashSet() }.reduce { a, b -> a.apply { retainAll(b) } }
         }

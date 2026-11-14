@@ -11,6 +11,41 @@ namespace JeekMusic.App.Tests;
 [Collection("Avalonia UI")]
 public sealed class SingingLanguageTests
 {
+    [Fact]
+    public async Task PairedMetadataExchangesBothSourcesAndRestoreAutoWithoutResurrection()
+    {
+        using var session=HeadlessUnitTestSession.StartNew(typeof(LayoutRenderingApplication));
+        await session.Dispatch(()=> {
+            using var h=new PlayingVisibilityTests.Harness("Language exchange fixture");
+            var track=h.Track(5); var db=h.App.Db;
+            var refs=new Dictionary<string,string> { [track.TrackKey]="fixture/song.wav" };
+            db.SaveLanguage(track,new("known",["en"],"AUTO",.95),"AUTO");
+            db.SaveLanguage(track,SingingLanguage.Manual("CHINESE"),"MANUAL");
+            var prior=db.ExportLanguages(refs);
+            Assert.Equal(2,prior["items"]!["fixture/song.wav"]!.AsArray().Count);
+            db.SaveLanguage(track,null,"MANUAL");
+            Assert.False(db.ImportLanguages(prior,_=>track.TrackKey));
+            Assert.True(db.Languages([track])[track.TrackKey].Matches("ENGLISH"));
+            var remote=db.ExportLanguages(refs);
+            var manual=remote["items"]!["fixture/song.wav"]!.AsArray().OfType<JsonObject>().Single(r=>r["source"]!.GetValue<string>()=="MANUAL");
+            manual["state"]="known"; manual["languages"]=new JsonArray("zh","en"); manual["updated_at"]=manual["updated_at"]!.GetValue<long>()+10;
+            Assert.True(db.ImportLanguages(remote,_=>track.TrackKey));
+            Assert.True(db.Languages([track])[track.TrackKey].Matches("CHINESE"));
+            Assert.True(db.Languages([track])[track.TrackKey].Matches("ENGLISH"));
+            manual["size"]=track.Size+1; manual["updated_at"]=manual["updated_at"]!.GetValue<long>()+10;
+            Assert.False(db.ImportLanguages(remote,_=>track.TrackKey));
+            manual["size"]=track.Size; manual["languages"]=new JsonArray("not-a-language");
+            Assert.Throws<ArgumentException>(()=>db.ImportLanguages(remote,_=>track.TrackKey));
+            Assert.True(db.Languages([track])[track.TrackKey].Matches("CHINESE"));
+            var conflict=db.ExportLanguages(refs);
+            var equal=conflict["items"]!["fixture/song.wav"]!.AsArray().OfType<JsonObject>().Single(r=>r["source"]!.GetValue<string>()=="MANUAL");
+            equal["state"]="unknown"; equal["languages"]=new JsonArray();
+            Assert.True(db.ImportLanguages(conflict,_=>track.TrackKey));
+            Assert.Equal("unknown",db.Languages([track])[track.TrackKey].State);
+            manual["languages"]=new JsonArray("zh","en"); manual["updated_at"]=equal["updated_at"]!.GetValue<long>();
+            Assert.False(db.ImportLanguages(remote,_=>track.TrackKey));
+        },default);
+    }
     [Theory]
     [InlineData("CHINESE",true,false,false,true)]
     [InlineData("ENGLISH",false,true,true,false)]

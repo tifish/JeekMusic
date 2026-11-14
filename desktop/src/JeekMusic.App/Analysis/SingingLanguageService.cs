@@ -48,7 +48,8 @@ public sealed class SingingLanguageService : IDisposable
         ["policy"]=SingingLanguage.Policy,["audioUploaded"]=false,["writesAudio"]=false,
         ["model"]="whisper-tiny-multilingual",["sampleSecondsAtMost"]=60,["threads"]=2,
         ["unknownMatchesNegatives"]=false,["instrumentalMatchesLanguageFilters"]=false,
-        ["confidenceIsCalibrated"]=false }; }
+        ["confidenceIsCalibrated"]=false,["pairedSync"]=new JsonObject { ["version"]=1,["transport"]="paired-lan-metadata",["sources"]=new JsonArray("AUTO","MANUAL"),
+            ["restoresAutomaticWithTombstone"]=true,["requiresSizeDurationAndCueStartMatch"]=true,["directoryAdapter"]=false } }; }
     public SingingLanguage? Result(Track track) => library.Db.Languages([track]).GetValueOrDefault(track.TrackKey);
     public void Prepare(bool downloadConfirmed) => Begin([],downloadConfirmed,false);
     public void Start(IReadOnlyList<Track> targets, bool downloadConfirmed=false, bool force=false)

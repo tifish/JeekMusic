@@ -1,5 +1,42 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(jeek_sync LANGUAGES C)
+project(jeek_sync LANGUAGES C CXX)
 add_library(jeek_sync SHARED lan_atomic.c)
 target_compile_options(jeek_sync PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
 target_compile_definitions(jeek_sync PRIVATE _GNU_SOURCE)
+
+# Pin the complete CPU implementation and archive bytes for both release and debug.
+include(FetchContent)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+set(GGML_AVX OFF CACHE BOOL "" FORCE)
+set(GGML_AVX2 OFF CACHE BOOL "" FORCE)
+set(GGML_FMA OFF CACHE BOOL "" FORCE)
+set(GGML_F16C OFF CACHE BOOL "" FORCE)
+# Audio inference must remain usable in debug clients too.
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O2")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O2")
+FetchContent_Declare(whisper
+    URL https://codeload.github.com/ggml-org/whisper.cpp/tar.gz/5922450fbce1ed9d1648babd0d5ac4520055b436
+    URL_HASH SHA256=500bb90af764f2bb7d51fd7917be8b0c3adcf76bd524b656508fdceb6340d945)
+FetchContent_GetProperties(whisper)
+if(NOT whisper_POPULATED)
+    FetchContent_Populate(whisper)
+    # Upstream's public language detector has no abort callback. Expose its pinned
+    # internal detector so cancellation/deadlines cover the encoder as well.
+    file(READ "${whisper_SOURCE_DIR}/src/whisper.cpp" WHISPER_SOURCE)
+    if(NOT WHISPER_SOURCE MATCHES "jeek_whisper_detect")
+        file(APPEND "${whisper_SOURCE_DIR}/src/whisper.cpp" "\nextern \"C\" int jeek_whisper_detect(whisper_context *ctx, float *probs, ggml_abort_callback abort, void *data) { return whisper_lang_auto_detect_internal(ctx, ctx->state, 0, 2, probs, abort, data); }\n")
+    endif()
+    add_subdirectory(${whisper_SOURCE_DIR} ${whisper_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+add_library(jeek_whisper SHARED singing_language.cpp)
+target_compile_features(jeek_whisper PRIVATE cxx_std_17)
+target_compile_options(jeek_whisper PRIVATE -Wall -Wextra -fvisibility=hidden)
+target_link_options(jeek_whisper PRIVATE "-Wl,-z,max-page-size=16384")
+target_link_libraries(jeek_whisper PRIVATE whisper android log)

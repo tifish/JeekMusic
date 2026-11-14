@@ -22,6 +22,65 @@ class LibraryDaoTest {
     private val tracks get() = db.trackDao()
     private val artists get() = db.artistDao()
 
+    @Test fun vocalLanguagesPersistOverrideInvalidateAndExchangeWithoutResurrectingCorrections() = runTest {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = com.tinyfish.jeekmusic.data.settings.SettingsRepository(context)
+        val original = settings.current().tagFilter
+        val folder = addFolder("LanguageFixture/")
+        val songs = listOf(track(folder,"LanguageFixture/","English title.mp3"), track(folder,"LanguageFixture/","Chinese title.mp3"))
+        val ids = tracks.insert(songs)
+        val targets = songs.zip(ids).map { (s,id) -> s.copy(id=id) }
+        val repo = com.tinyfish.jeekmusic.data.filter.LanguageRepository(db)
+        val filters = com.tinyfish.jeekmusic.data.filter.TagFilterRepository(settings,db.tagDao(),repo)
+        try {
+            repo.save(targets[0],com.tinyfish.jeekmusic.analysis.SingingLanguage("known",listOf("zh"),confidence=.95))
+            repo.save(targets[1],com.tinyfish.jeekmusic.analysis.SingingLanguage("unknown",emptyList()))
+            settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(chinese=com.tinyfish.jeekmusic.analysis.LanguageFilter.NON_CHINESE))
+            assertTrue(filters.allowedKeys.first()!!.isEmpty())
+            settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(chinese=com.tinyfish.jeekmusic.analysis.LanguageFilter.CHINESE))
+            assertEquals(setOf(targets[0].trackKey),filters.allowedKeys.first())
+            repo.setManual(targets,"ENGLISH")
+            assertTrue(filters.allowedKeys.first()!!.isEmpty())
+            val exchange=com.tinyfish.jeekmusic.data.sync.LanguageExchange(db)
+            val snapshot=exchange.export { it }
+            repo.setManual(targets,"AUTO")
+            assertEquals("AUTO",repo.result(targets[0])!!.source)
+            exchange.accept(snapshot) { it }
+            assertEquals("AUTO",repo.result(targets[0])!!.source) // older manual result cannot resurrect
+            val row=exchange.export { it }.getJSONObject("items").getJSONArray(targets[0].trackKey).getJSONObject(0)
+            assertTrue(row.has("updated_at"))
+            tracks.update(listOf(targets[0].copy(size=1)))
+            assertTrue(repo.results.first().keys.none { it==targets[0].trackKey })
+            tracks.delete(ids)
+            assertTrue(db.languageDao().all().isEmpty())
+        } finally { settings.setTagFilter(original) }
+    }
+
+    @Test fun batchTagCorrectionCommitsTogetherAndRollsBackOnAnyFailure() = runTest {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = com.tinyfish.jeekmusic.data.settings.SettingsRepository(context)
+        val folder=addFolder("BatchFixture/")
+        val songs=(1..3).map { track(folder,"BatchFixture/","$it.wav") }
+        val ids=tracks.insert(songs); val targets=songs.zip(ids).map { (s,id)->s.copy(id=id) }
+        val feedback=com.tinyfish.jeekmusic.data.preference.DailyLearningFeedback(object: android.content.ContextWrapper(context) {
+            override fun getNoBackupFilesDir()=java.io.File(context.cacheDir,"parity-batch-"+System.nanoTime()).apply { mkdirs() }
+        },db)
+        val repository=com.tinyfish.jeekmusic.analysis.TagRepository(db,db.tagDao(),settings,feedback)
+        try {
+        val voice=com.tinyfish.jeekmusic.analysis.TagDimension.VOICE
+        val mood=com.tinyfish.jeekmusic.analysis.TagDimension.MOOD
+        repository.applyManualBatch(targets,mapOf(voice to com.tinyfish.jeekmusic.analysis.Tag.VOCAL))
+        assertEquals(3,db.tagDao().overrides().size)
+        db.openHelper.writableDatabase.execSQL("CREATE TRIGGER fail_batch BEFORE INSERT ON tag_override WHEN NEW.track_key='${targets.last().trackKey}' AND NEW.dimension='MOOD' BEGIN SELECT RAISE(ABORT,'fixture'); END")
+        try { repository.applyManualBatch(targets,mapOf(mood to com.tinyfish.jeekmusic.analysis.Tag.SPORT)); error("expected rollback") }
+        catch (_: android.database.sqlite.SQLiteException) { }
+        assertTrue(db.tagDao().overrides().none { it.dimension=="MOOD" })
+        assertEquals(3,db.tagDao().overrides().count { it.dimension=="VOICE" })
+        repository.applyManualBatch(targets,mapOf(voice to null))
+        assertTrue(targets.all { voice !in repository.info(it.trackKey).manual })
+        } finally { feedback.close() }
+    }
+
     @Before
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

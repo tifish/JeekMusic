@@ -140,7 +140,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         for(path in selection.distinct()) { LanProtocol.relative(path,true);walk(path,0) }
         return result.toList()
     }
-    suspend fun scan(selection: List<String>,emit: (JSONObject)->Unit,unavailable: (String)->Unit) {
+    suspend fun scan(selection: List<String>,emit: suspend (JSONObject)->Unit,unavailable: (String)->Unit) {
         var visited=0;var files=0;var bytes=0L
         suspend fun walk(path: String,depth: Int) {
             currentCoroutineContext().ensureActive();if(depth>64 || ++visited>250000)throw LanLocalDeferred("scan_work_budget")

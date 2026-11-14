@@ -8,11 +8,15 @@ public sealed partial class LanSyncService
     readonly Dictionary<long,long> _folderChanges=new();
     string _watchReason="startup";
     long _watchEvents;
+    readonly LanManifestCache _manifestCache=new();
+    void OnFileMetadataChanged(long folder) {
+        lock(_gate) { _folderChanges[folder]=_folderChanges.GetValueOrDefault(folder)+1;_manifestCache.Invalidate(folder); }
+    }
     void OnFileDirectoriesChanged(long folder,IReadOnlyCollection<string> directories)=>FilesChanged(folder,"directory_change_or_overflow");
     void OnFileWatcherFailed(long folder)=>FilesChanged(folder,"watch_unavailable");
     void FilesChanged(long folder,string reason)
     {
-        lock(_gate) { _folderChanges[folder]=_folderChanges.GetValueOrDefault(folder)+1;_watchReason=reason;_watchEvents++; }
+        lock(_gate) { _folderChanges[folder]=_folderChanges.GetValueOrDefault(folder)+1;_manifestCache.Invalidate(folder);_watchReason=reason;_watchEvents++; }
     }
     string WatchRevision(string root)
     {

@@ -25,6 +25,7 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
             execSQL("CREATE TABLE IF NOT EXISTS entries(mapping TEXT,side TEXT,path TEXT,normalized TEXT,json TEXT,PRIMARY KEY(mapping,side,path),UNIQUE(mapping,side,normalized))")
             execSQL("CREATE TABLE IF NOT EXISTS dependency_baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
+            execSQL("CREATE TABLE IF NOT EXISTS scheduled(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS transactions(operation TEXT PRIMARY KEY,mapping TEXT,path TEXT,scope TEXT,json TEXT)")
             execSQL("CREATE INDEX IF NOT EXISTS transaction_path ON transactions(mapping,path,scope)")
             execSQL("CREATE TABLE IF NOT EXISTS held(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
@@ -34,20 +35,30 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
             execSQL("CREATE TABLE IF NOT EXISTS issues(id TEXT UNIQUE,mapping TEXT,path TEXT,json TEXT,choice TEXT,PRIMARY KEY(mapping,path))")
         }
     }
-    // Only scratch snapshot writes are grouped. Durable mutation/choice journals remain independent.
+    // Only short local snapshot/refresh writes are grouped; never hold these over I/O.
+    // Durable mutation/choice journals remain independent.
     private fun snapshotBatch(write: ()->Unit) {
         check(!db.inTransaction()) { "Snapshot batch must not contain another transaction" }
         db.beginTransaction()
         try { write();db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
     @Synchronized fun resetSnapshots(mapping: String) = snapshotBatch {
-        db.execSQL("DELETE FROM held WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM entries WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM baseline WHERE mapping=?",arrayOf(mapping))
+        db.execSQL("DELETE FROM held WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM entries WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM baseline WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM scheduled WHERE mapping=?",arrayOf(mapping))
     }
     /** The caller buffers at most one 200-row page, never holding a transaction over I/O. */
-    @Synchronized fun entries(mapping: String,side: String,rows: List<JSONObject>) {
+    @Synchronized fun entries(mapping: String,side: String,rows: List<JSONObject>,scheduled: List<String> = emptyList()) {
         require(rows.size<=200) { "Snapshot page exceeds 200 rows" }
         if(rows.isEmpty())return
-        snapshotBatch { for(row in rows)entry(mapping,side,row) }
+        require(scheduled.size<=rows.size && scheduled.all { path -> rows.any { it.getString("path")==path } })
+        snapshotBatch {
+            for(row in rows)entry(mapping,side,row)
+            for(path in scheduled)db.execSQL("INSERT OR IGNORE INTO scheduled VALUES(?,?)",arrayOf(mapping,path))
+        }
+    }
+    @Synchronized fun scheduled(mapping: String,path: String)=db.rawQuery("SELECT 1 FROM scheduled WHERE mapping=? AND path=?",arrayOf(mapping,path)).use { it.moveToFirst() }
+    @Synchronized fun postponeDeletes(mapping: String,paths: List<String>) {
+        if(paths.isEmpty())return
+        snapshotBatch { for(path in paths)db.execSQL("DELETE FROM scheduled WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
     }
     @Synchronized fun baselines(mapping: String,rows: List<JSONObject>) {
         require(rows.size<=200) { "Snapshot page exceeds 200 rows" }
@@ -179,6 +190,10 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
     @Synchronized fun refreshPaths(mapping: String): List<String> = db.rawQuery("SELECT path FROM refresh WHERE mapping=? ORDER BY path LIMIT 200",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
     @Synchronized fun refresh(mapping: String,path: String): JSONObject? = one("SELECT json FROM refresh WHERE mapping=? AND path=?",arrayOf(mapping,path))
     @Synchronized fun refreshed(mapping: String,path: String) { db.execSQL("DELETE FROM refresh WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
+    @Synchronized fun refreshed(mapping: String,paths: List<String>) {
+        require(paths.size<=200)
+        snapshotBatch { for(path in paths)db.execSQL("DELETE FROM refresh WHERE mapping=? AND path=?",arrayOf(mapping,path)) }
+    }
     @Synchronized fun cueAudio(mapping: String,cue: String): List<String> = db.rawQuery("SELECT audio FROM cue_bindings WHERE mapping=? AND cue=?",arrayOf(mapping,cue)).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
     @Synchronized fun cues(mapping: String,audio: String): List<String> = db.rawQuery("SELECT cue FROM cue_bindings WHERE mapping=? AND audio=?",arrayOf(mapping,audio)).use { c -> buildList { while(c.moveToNext())add(c.getString(0)) } }
     @Synchronized fun bindCue(mapping: String,cue: String,audio: List<String>) {

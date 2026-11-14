@@ -18,6 +18,8 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
     private var input: DataInputStream? = null
     private var output: DataOutputStream? = null
     private var authenticated = false
+    var requestCount=0L
+        private set
     @Volatile private var cancelled = false
     private val activePlan = java.util.concurrent.atomic.AtomicReference<String?>(null)
     internal val pendingPlanJobId: String? get() = activePlan.get()
@@ -68,6 +70,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
             if (op == "read") pause(20)
             val bytes = args.toString().toByteArray(Charsets.UTF_8)
             require(bytes.size <= requestLimit(op)) { "User data exceeds operation budget; split the selection or upgrade both clients" }
+            requestCount++
             if (op != "pair") {
                 send(JSONObject().put("op", "request").put("kind", op).put("length", bytes.size), 4096)
                 require(receive(4096).optBoolean("ready")) { "PC did not accept request" }
@@ -118,6 +121,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
         }
         val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         val socket = Socket()
+        socket.tcpNoDelay = true // Framed TLS control messages must not wait for delayed TCP acknowledgements.
         rawSocket = socket
         active = socket
         try {

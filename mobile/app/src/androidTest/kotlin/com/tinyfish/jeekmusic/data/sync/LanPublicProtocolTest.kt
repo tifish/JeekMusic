@@ -13,6 +13,40 @@ import java.io.File
 /** Opt-in isolated synthetic fixture. The host removes the private test credentials. */
 @RunWith(AndroidJUnit4::class)
 class LanPublicProtocolTest {
+    @Test fun measureMetadataAndFileSync() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("lanPerformanceFixture")=="true")
+        val base=InstrumentationRegistry.getInstrumentation().targetContext
+        val fixture=JSONObject(File(base.filesDir,"isolated-lan-performance.json").readText())
+        val connection=fixture.getJSONObject("connection")
+        require(connection.getString("host")=="10.0.2.2")
+        val result=JSONObject()
+        LanProtocol(connection).use { client ->
+            val start=System.nanoTime()
+            repeat(16) { assertEquals(4,client.call("capabilities").getInt("protocol")) }
+            result.put("metadata16Ms",(System.nanoTime()-start)/1_000_000.0)
+        }
+        val folder=File(base.cacheDir,"sync-performance-"+java.util.UUID.randomUUID()).apply { mkdirs() }
+        val context=object: android.content.ContextWrapper(base) {
+            override fun getFilesDir()=File(folder,"private").apply { mkdirs() }
+            override fun getNoBackupFilesDir()=getFilesDir()
+        }
+        val music=File(folder,"music").canonicalFile.apply { mkdirs() }
+        try { LanFileDatabase(context).use { db ->
+            val sync=LanFileSynchronizer(context,db,com.tinyfish.jeekmusic.data.library.PlayingFiles()) { mapping,pin -> LanLocalFiles(music.path,mapping,db,pin) }
+            val mapping=JSONObject().put("key",java.util.UUID.randomUUID().toString()).put("rootId",fixture.getString("rootId")).put("selection",JSONArray(listOf("Selected"))).put("volume","test").put("relative","")
+            kotlinx.coroutines.runBlocking {
+                for(label in listOf("initial","unchanged")) {
+                    val stages=JSONArray();var first=-1.0;val start=System.nanoTime()
+                    val report=LanProtocol(connection).use { client -> sync.synchronize(mapping,client,{}, { _,r -> if(r.bytes>0 && first<0)first=(System.nanoTime()-start)/1_000_000.0 },{ _,_,_-> },{},phase={ stage,count,total -> stages.put(JSONObject().put("stage",stage).put("count",count).put("total",total).put("ms",(System.nanoTime()-start)/1_000_000.0)) }) }
+                    assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.conflictCount);assertEquals(0L,report.hashBytes)
+                    if(label=="unchanged")assertEquals(0L,report.bytes)
+                    result.put(label,JSONObject().put("elapsedMs",(System.nanoTime()-start)/1_000_000.0).put("firstTransferMs",first).put("bytes",report.bytes).put("processed",report.processed).put("stages",stages))
+                }
+            }
+            assertEquals(21,music.walkTopDown().count { it.isFile() && !it.name.startsWith(".") })
+        } } finally { folder.deleteRecursively() }
+        File(base.filesDir,"isolated-lan-performance-result.json").writeText(result.toString())
+    }
     @Test fun retriesBusyRevisionAfterHostReleasesSession() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("lanBudgetFixture") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

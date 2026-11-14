@@ -1,4 +1,4 @@
-import sys,subprocess,tempfile,json,uuid,time,re,argparse
+import sys,subprocess,tempfile,json,uuid,time,re,argparse,io,wave
 from pathlib import Path
 from urllib.parse import urlsplit
 sys.path.insert(0,str(Path('desktop/tools').resolve()))
@@ -56,9 +56,14 @@ with tempfile.TemporaryDirectory(prefix='jeek-background-') as tmp:
                 rows=call(c,'lan_sync_status').get('fileSync',{}).get('schedules',[])
                 return rows[-1]['schedule'] if rows else {}
             wait(lambda:(lambda s:s if s.get('paused')==(not args.manual) and not s.get('running') else None)(schedule()))
-            wave=b'RIFF'+bytes(4)+b'WAVE'+bytes(32*1024*1024-12);(music/prefix/'A.wav').write_bytes(wave)
+            def audio(size):
+                output=io.BytesIO()
+                with wave.open(output,'wb') as wav:
+                    wav.setparams((1,2,16000,0,'NONE','none'));wav.writeframes(bytes(size-44))
+                return output.getvalue()
+            content=audio(32*1024*1024);(music/prefix/'A.wav').write_bytes(content)
             if args.manual:
-                for index in range(20):(music/prefix/f'{index:04}.wav').write_bytes(b'RIFF'+bytes(4)+b'WAVE'+bytes(52))
+                for index in range(20):(music/prefix/f'{index:04}.wav').write_bytes(audio(64))
             sys.path.insert(0,str(Path('mobile/tools').resolve()))
             import lan_ui as ui
             ui.ADB=adb
@@ -87,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix='jeek-background-') as tmp:
                 wait(lambda:any(n.get('resource-id')=='lan_cancel' and n.get('enabled')=='true' for n in ui.dump().iter('node')),seconds=20)
                 (root/'android-preparation.png').write_bytes(device('exec-out','screencap','-p'))
             device('shell','input','keyevent','3')
-            observed=wait(lambda:(lambda s:s if s.get('trigger')=='workmanager_fallback' and s.get('foreground')==False and not s.get('running') and (s.get('lastTransferBytes',0)>0 if args.manual else s.get('lastTransferBytes')==len(wave)) or s.get('state')=='retry_backoff' else None)(schedule()),seconds=150)
+            observed=wait(lambda:(lambda s:s if s.get('trigger')=='workmanager_fallback' and s.get('foreground')==False and not s.get('running') and (s.get('lastTransferBytes',0)>0 if args.manual else s.get('lastTransferBytes')==len(content)) or s.get('state')=='retry_backoff' else None)(schedule()),seconds=150)
             if observed.get('state')=='retry_backoff':
                 device('shell','input','keyevent','224');device('shell','wm','dismiss-keyguard');device('shell','am','start','-n',pkg+'/com.tinyfish.jeekmusic.MainActivity')
                 seen=[]
@@ -97,14 +102,24 @@ with tempfile.TemporaryDirectory(prefix='jeek-background-') as tmp:
                     device('shell','input','swipe','550','1900','550','700','300')
                 print(json.dumps(dict(workerFailure=observed,visibleText=seen)),flush=True)
                 raise AssertionError('Background worker reported an actual deferred/error result')
-            actual=device('exec-out','cat',target+'/A.wav');assert actual==wave
+            actual=device('exec-out','cat',target+'/A.wav');assert actual==content
+            indexed=device('shell','content','query','--uri','content://media/external_primary/audio/media','--projection','_display_name','--where',f'"relative_path=\'Documents/JeekLanFinalDirect/{prefix}/\'"').decode()
+            assert 'A.wav' in indexed,'Completed sync must finish MediaStore indexing too'
             if args.manual:
                 device('shell','am','start','-W','-n',pkg+'/com.tinyfish.jeekmusic.MainActivity')
+                # Returning foreground starts a normal metadata round. Capture its settled
+                # UI too, instead of mistaking the first transient reading stage for idle.
+                returned=wait(lambda:(lambda s:s if s.get('foreground') and not s.get('running') and s.get('state')=='idle' and s.get('lastSuccess',0)>observed.get('lastSuccess',0) else None)(schedule()),seconds=90)
+                device('shell','input','swipe','550','1900','550','1100','300')
                 shown=ui.dump()
                 assert not any(n.get('text','').startswith(('已取消同步','Sync cancelled')) for n in shown.iter('node'))
+                assert any(n.get('text') in ('同步完成','Sync complete') for n in shown.iter('node'))
+                assert not any('SHA-256' in n.get('text','') for n in shown.iter('node'))
                 (root/'android-returned.png').write_bytes(device('exec-out','screencap','-p'))
                 assert len(device('shell','ls',target).splitlines())==21
             result=dict(trigger='Real UI Sync now followed by Home' if args.manual else 'Real UI re-enable registered a fresh due periodic WorkManager job; app was backgrounded during transfer',natural15MinuteTimingTested=False,appStartMethodCalled=False,foreground=False,bytes=len(actual),contentVerified=True,schedule=observed)
+            result['mediaStoreMainIndexed']=True
+            if args.manual:result['returnedSchedule']=returned
             (root/'background-result.json').write_text(json.dumps(result,indent=2),encoding='utf-8');print(json.dumps(result))
         finally:
             device('shell','am','force-stop',pkg);write_config(original)

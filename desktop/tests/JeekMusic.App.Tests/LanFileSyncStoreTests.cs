@@ -16,6 +16,22 @@ public sealed class LanFileSyncStoreTests
         Assert.True(reported["wifiOnly"]!.GetValue<bool>());Assert.False(reported["waitingForWifi"]!.GetValue<bool>());
         Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["wifiOnly"]="yes" } }));
     }
+    [Fact] public void PeerPerformanceDiagnosticsPreserveNoTransferAndRejectInvalidTypes()
+    {
+        using var f=new Fixture();using var store=f.Store();
+        var scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+        var performance=new JsonObject { ["lastPreparationMs"]=120L,["lastFirstTransferMs"]=-1L,["lastProtocolRequests"]=8L,["lastManifestCacheHit"]=true };
+        Assert.True(store.Schedule(scope,new() { ["schedule"]=performance })["accepted"]!.GetValue<bool>());
+        var reported=Assert.Single(store.Diagnostics()["schedules"]!.AsArray())!["schedule"]!;
+        Assert.Equal(-1L,reported["lastFirstTransferMs"]!.GetValue<long>());
+        Assert.Equal(120L,reported["lastPreparationMs"]!.GetValue<long>());
+        Assert.True(reported["lastManifestCacheHit"]!.GetValue<bool>());
+        foreach(var key in new[] { "lastPreparationMs","lastFirstTransferMs","lastProtocolRequests" }) {
+            Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { [key]="1" } }));
+            Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { [key]=-2L } }));
+        }
+        Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["lastManifestCacheHit"]=1 } }));
+    }
     sealed class Fixture:IDisposable
     {
         public string Directory=Path.Combine(Path.GetTempPath(),"jeek-file-store-"+Guid.NewGuid().ToString("N"));

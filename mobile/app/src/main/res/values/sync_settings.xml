@@ -6,6 +6,7 @@
     <string name="sync_reading_manifest">Reading PC file list: %1$d / %2$d</string>
     <string name="sync_phone_scan">Scanning phone folders: %1$d files found</string>
     <string name="sync_reconciling">Comparing file changes…</string>
+    <string name="sync_library_refresh">Updating the music library…</string>
     <string name="lan_background_waiting">Paused while Android takes over background sync.</string>
     <string name="lan_interrupted">Sync paused. Unfinished files will be retried when conditions allow.</string>
     <string name="sync_wifi_only">Sync only over Wi-Fi</string>

@@ -54,18 +54,24 @@ class LanFileSynchronizerTest {
             client.call(op,args.put("fileProtocol",3))
         }.also { check(!it.optBoolean("conflict") && !it.optBoolean("deferred")) { it.toString() } }
         fun scope(): String { if(otherScope==null)otherScope=call("file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",UUID.nameUUIDFromBytes(("synthetic-writer:"+connection.getString("deviceId")).toByteArray()).toString()).put("selection",JSONArray(listOf("")))).getString("scope");return otherScope!! }
-        fun remoteHash(): String? { val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",path));val r=call("file_verify",JSONObject().put("scope",scope()).put("path",path).put("expectedVersion",observed.opt("metadataVersion") ?: JSONObject.NULL));return if(r.isNull("stamp"))null else r.getString("stamp") }
-        fun remote(bytes: ByteArray?) {
-            val scope=scope();val before=remoteHash()
-            var baseline=call("file_baseline",JSONObject().put("scope",scope).put("path",path))
-            if(before!=null)baseline=call("file_ack",JSONObject().put("scope",scope).put("path",path).put("operation",UUID.randomUUID().toString().replace("-","")).put("baselineVersion",baseline.optString("version")).put("stamp",before).put("localHash",before).put("localKnown",true))
-            if(bytes==null) { if(before!=null)call("file_delete",JSONObject().put("scope",scope).put("path",path).put("operation",UUID.randomUUID().toString().replace("-","")).put("expectedStamp",before).put("baselineVersion",baseline.getString("version")));return }
+        fun remoteHash(target: String=path): String? { val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",target));val r=call("file_verify",JSONObject().put("scope",scope()).put("path",target).put("expectedVersion",observed.opt("metadataVersion") ?: JSONObject.NULL));return if(r.isNull("stamp"))null else r.getString("stamp") }
+        fun remote(bytes: ByteArray?,target: String=path) {
+            val scope=scope();val before=remoteHash(target)
+            var baseline=call("file_baseline",JSONObject().put("scope",scope).put("path",target))
+            if(before!=null)baseline=call("file_ack",JSONObject().put("scope",scope).put("path",target).put("operation",UUID.randomUUID().toString().replace("-","")).put("baselineVersion",baseline.optString("version")).put("stamp",before).put("localHash",before).put("localKnown",true))
+            if(bytes==null) { if(before!=null)call("file_delete",JSONObject().put("scope",scope).put("path",target).put("operation",UUID.randomUUID().toString().replace("-","")).put("expectedStamp",before).put("baselineVersion",baseline.getString("version")));return }
             val operation=UUID.randomUUID().toString().replace("-","")
-            call("file_begin",JSONObject().put("scope",scope).put("path",path).put("operation",operation).put("stamp",LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)).put("size",bytes.size).put("expectedStamp",before ?: JSONObject.NULL).put("baselineVersion",baseline.optString("version")).put("modifiedNs",1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L).put("resolve",true))
+            call("file_begin",JSONObject().put("scope",scope).put("path",target).put("operation",operation).put("stamp",LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)).put("size",bytes.size).put("expectedStamp",before ?: JSONObject.NULL).put("baselineVersion",baseline.optString("version")).put("modifiedNs",1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L).put("resolve",true))
             for(offset in bytes.indices step 262144)call("file_chunk",JSONObject().put("scope",scope).put("operation",operation).put("offset",offset).put("data",Base64.encodeToString(bytes,offset,minOf(262144,bytes.size-offset),Base64.NO_WRAP)))
             call("file_finish",JSONObject().put("scope",scope).put("operation",operation))
         }
         suspend fun run(): LanFileReport=LanProtocol(connection).use { sync.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{}) }
+        suspend fun stopBeforePhoneScan() {
+            val failure=runCatching { LanProtocol(connection).use { client ->
+                sync.synchronize(mapping,client,{}, { _,_-> },{ _,_,_-> },{},phase={ stage,_,_-> if(stage=="phone_scan")throw kotlinx.coroutines.CancellationException("Incomplete scan") })
+            } }.exceptionOrNull()
+            assertTrue(failure is kotlinx.coroutines.CancellationException)
+        }
         suspend fun exchangeViaProductionService(issue: JSONObject,queued: String?,expected: String) {
             check(android.os.Build.HARDWARE in setOf("ranchu","goldfish"))
             val target=InstrumentationRegistry.getInstrumentation().targetContext
@@ -106,9 +112,11 @@ class LanFileSynchronizerTest {
         local(a+byteArrayOf(1));report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a+byteArrayOf(1)),remoteHash())
         local(b);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash())
         remote(c);report=run();assertEquals(0,report.conflictCount);assertArrayEquals(c,localBytes())
-        local(null);report=run();assertEquals(0,report.conflictCount);assertNull(remoteHash())
+        local(null);stopBeforePhoneScan();assertEquals(hash(c),remoteHash()) // An incomplete snapshot cannot propagate a deletion.
+        report=run();assertEquals(0,report.conflictCount);assertNull(remoteHash())
         remote(a);report=run();assertEquals(0,report.conflictCount);assertArrayEquals(a,localBytes())
-        remote(null);report=run();assertEquals(0,report.conflictCount);assertNull(localBytes())
+        remote(null);stopBeforePhoneScan();assertArrayEquals(a,localBytes())
+        report=run();assertEquals(0,report.conflictCount);assertNull(localBytes())
         local(b);remote(b);File(root,path).setLastModified(1_800_000_000_000L+(b.last().toLong() and 255)*1000L);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash());assertArrayEquals(b,localBytes())
     }
     @Test fun sharedChoiceWinsAndChangedVersionsNeedAnotherDecision()=fixture {
@@ -145,11 +153,21 @@ class LanFileSynchronizerTest {
         assertEquals(262144L,part.length())
         val checkpoint=android.util.AtomicFile(File(part.path+".metadata")).openRead().bufferedReader().use { it.readText() }
         assertEquals(LanFileMetrics.stamp(part),checkpoint)
-        assertTrue(phases.containsAll(listOf("reading_baseline","pc_scan","reading_manifest","phone_scan","reconciling")))
+        assertTrue(phases.containsAll(listOf("reading_baseline","pc_scan","reading_manifest","reconciling")))
+        assertFalse("The first file must start before the full phone scan",phases.contains("phone_scan"))
         val report=run()
         assertEquals((bytes.size-262144).toLong(),report.bytes)
         assertArrayEquals(bytes,localBytes())
         assertFalse(part.exists())
+        // The CUE sorts before its new audio; streaming must still install the audio first.
+        val cue="FILE \"B.wav\" WAVE\nTRACK 01 AUDIO\n INDEX 01 00:00:00\n".toByteArray()
+        remote(audio(58),"$prefix/B.wav");remote(cue,"$prefix/0.cue")
+        val changes=mutableListOf<String>()
+        val cueReport=LanProtocol(connection).use { client -> sync.synchronize(mapping,client,{}, { _,_-> },{ path,_,_-> changes+=path },{}) }
+        assertEquals(0,cueReport.deferredCount);assertEquals(0,cueReport.conflictCount)
+        assertEquals(listOf("$prefix/B.wav","$prefix/0.cue"),changes.distinct())
+        assertArrayEquals(audio(58),File(root,"$prefix/B.wav").readBytes())
+        assertArrayEquals(cue,File(root,"$prefix/0.cue").readBytes())
     }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {
         val a=audio(11);val b=audio(12);val c=audio(13)

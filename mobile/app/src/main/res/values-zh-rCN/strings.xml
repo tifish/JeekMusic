@@ -427,7 +427,7 @@
     <string name="lan_forget_confirm">忘记此映射，保留全部文件及内部恢复版本。新映射不会继承删除基线，之后可配对另一台电脑。</string>
     <string name="lan_start">立即同步</string>
     <string name="lan_verifying">正在准备同步…</string>
-    <string name="lan_done">同步完成 · SHA-256 已核验</string>
+    <string name="lan_done">同步完成</string>
     <string name="lan_issues">同步存在待处理项</string>
     <string name="lan_cancelled">已取消同步。已完成的文件保留，下次同步会检查变化并继续未完成的文件。</string>
     <string name="lan_failed">连接或同步失败。检查配对状态、网络、电脑服务与防火墙结果后重试。断点和已有文件保留。</string>

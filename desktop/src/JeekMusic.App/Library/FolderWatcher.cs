@@ -21,6 +21,10 @@ public sealed class FolderWatcher : IDisposable
     public event Action<long>? SyncChanged;
     /// <summary>监听出错（盘拔掉了、网络断了）。</summary>
     public event Action<long>? Failed;
+    /// <summary>Immediate metadata invalidation, before the library's 2-second debounce.</summary>
+    public event Action<long>? MetadataChanged;
+    readonly HashSet<long> _failed=new();
+    public bool IsWatching(long folderId) { lock(_lock)return _watchers.ContainsKey(folderId)&&!_failed.Contains(folderId); }
 
     /// <summary>暂时忽略这些路径的变化（自己在改名、移动、写入封面时）。</summary>
     readonly Dictionary<string, long> _ignored = new(StringComparer.OrdinalIgnoreCase);
@@ -43,14 +47,15 @@ public sealed class FolderWatcher : IDisposable
             void OnChange(string fullPath)
             {
                 if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
-                lock (_lock)
-                    if (_ignored.TryGetValue(fullPath, out var until) && Environment.TickCount64 < until) return;
                 var rel = fullPath[root.Length..];
                 if (rel.Equals(".jeekmusic", StringComparison.OrdinalIgnoreCase) || rel.StartsWith(@".jeekmusic\", StringComparison.OrdinalIgnoreCase) || rel.Contains(@"\.jeekmusic\", StringComparison.OrdinalIgnoreCase))
                 {
                     if (rel.Contains(@"sync\", StringComparison.OrdinalIgnoreCase)) lock (_lock) { _syncPending.Add(id); Arm(); }
                     return;
                 }
+                MetadataChanged?.Invoke(id);
+                lock (_lock)
+                    if (_ignored.TryGetValue(fullPath, out var until) && Environment.TickCount64 < until) return;
                 var slash = rel.LastIndexOf('\\');
                 var dir = slash < 0 ? "" : rel[..(slash + 1)];
                 lock (_lock)
@@ -66,20 +71,25 @@ public sealed class FolderWatcher : IDisposable
             w.Renamed += (_, e) => { OnChange(e.OldFullPath); OnChange(e.FullPath); };
             w.Error += (_, e) =>
             {
+                MetadataChanged?.Invoke(id);
                 if (e.GetException() is InternalBufferOverflowException)
                 {
                     lock (_lock) { _pending[id] = new(StringComparer.OrdinalIgnoreCase) { "" }; Arm(); }
                     return;
                 }
                 Log.Warn("watch", $"监听出错：{root}", e.GetException());
+                lock(_lock)_failed.Add(id);
                 Failed?.Invoke(id);
             };
             w.EnableRaisingEvents = true;
-            _watchers[folder.Id] = w;
+            lock(_lock) { _watchers[folder.Id]=w;_failed.Remove(folder.Id); }
+            MetadataChanged?.Invoke(id);
         }
         catch (Exception e) when (e is ArgumentException or IOException or PlatformNotSupportedException)
         {
             Log.Warn("watch", $"无法监听 {folder.Root}", e);
+            lock(_lock)_failed.Add(folder.Id);
+            Failed?.Invoke(folder.Id);
         }
     }
 
@@ -108,13 +118,15 @@ public sealed class FolderWatcher : IDisposable
 
     public void Unwatch(long folderId)
     {
-        if (_watchers.Remove(folderId, out var w)) w.Dispose();
+        FileSystemWatcher? watcher;
+        lock(_lock) { _watchers.Remove(folderId,out watcher);_failed.Remove(folderId); }
+        watcher?.Dispose();MetadataChanged?.Invoke(folderId);
     }
 
     public void Dispose()
     {
-        foreach (var w in _watchers.Values) w.Dispose();
-        _watchers.Clear();
+        FileSystemWatcher[] watchers;lock(_lock) { watchers=_watchers.Values.ToArray();_watchers.Clear();_failed.Clear(); }
+        foreach(var w in watchers)w.Dispose();
         _timer.Dispose();
     }
 }

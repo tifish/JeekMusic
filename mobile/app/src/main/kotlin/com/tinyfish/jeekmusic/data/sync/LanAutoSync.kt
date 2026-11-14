@@ -17,8 +17,8 @@ import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0,val wifiOnly: Boolean=true,val waitingForWifi: Boolean=false) {
-    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes).put("wifiOnly",wifiOnly).put("waitingForWifi",waitingForWifi)
+data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0,val wifiOnly: Boolean=true,val waitingForWifi: Boolean=false,val lastPreparationMs: Long=0,val lastFirstTransferMs: Long=-1,val lastProtocolRequests: Long=0,val lastManifestCacheHit: Boolean=false) {
+    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes).put("wifiOnly",wifiOnly).put("waitingForWifi",waitingForWifi).put("lastPreparationMs",lastPreparationMs).put("lastFirstTransferMs",lastFirstTransferMs).put("lastProtocolRequests",lastProtocolRequests).put("lastManifestCacheHit",lastManifestCacheHit)
 }
 
 /** Events are hints only. All writes/deletes go through the same serialized metadata reconciler. */
@@ -166,10 +166,10 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     fun phase(stage: String) { synchronized(lock) {
         if(_state.value.running && _state.value.state!=stage) { _state.value=_state.value.copy(state=stage);report() }
     } }
-    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false) {
+    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
-            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,state=if(held())"cancelled" else if(success)"idle" else "backoff")
+            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,state=if(held())"cancelled" else if(success)"idle" else "backoff")
             if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
             else if(handoff && !held())_state.value=_state.value.copy(state="waiting_for_background",backoffUntil=0)
             else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")

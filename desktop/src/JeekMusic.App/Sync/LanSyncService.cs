@@ -113,6 +113,7 @@ public sealed partial class LanSyncService : IDisposable
         app.Library.SnapshotChanged += ReconcileRoots;
         app.Library.Watcher.DirsChanged += OnFileDirectoriesChanged;
         app.Library.Watcher.Failed += OnFileWatcherFailed;
+        app.Library.Watcher.MetadataChanged += OnFileMetadataChanged;
         // Optional network setup must not delay construction of the main window.
         if (autoStart) Dispatcher.UIThread.Post(async () =>
         {
@@ -226,7 +227,7 @@ public sealed partial class LanSyncService : IDisposable
     }
     public void Stop()
     {
-        lock (_gate) { _listenerRevision++; _starting = null; _reservation?.Dispose(); _reservation = null; _firewallPendingPort = 0; InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear(); _config["enabled"] = false; Save(); }
+        lock (_gate) { _listenerRevision++; _starting = null; _reservation?.Dispose(); _reservation = null; _firewallPendingPort = 0; InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null; _invitation = null; _plans.Clear();_manifestCache.Clear(); _config["enabled"] = false; Save(); }
         _ = _firewall.Set(_config["bindAddress"]!.GetValue<string>(), 0);
         Notify();
     }
@@ -360,14 +361,17 @@ public sealed partial class LanSyncService : IDisposable
             if ((now - r.Window).TotalSeconds >= 1) { r.Window = now; r.Count = 0; }
             if ((now - _globalWindow).TotalSeconds >= 1) { _globalWindow = now; _globalRequests = 0; }
             bool limited = ++r.Count > 80 || ++_globalRequests > 320;
-            if (op == "plan")
-            {
-                if ((now - r.Plan).TotalMinutes >= 1) { r.Plan = now; r.Plans = 0; }
-                limited |= ++r.Plans > 4;
-            }
             if (op is "state" or "preference_delta") { limited |= (now - r.Write).TotalMilliseconds < 500; if (!limited) r.Write = now; }
             _rates[device] = r;
             if (limited) { Interlocked.Increment(ref _limited); throw Busy(); }
+        }
+    }
+    void RatePlan(string device) {
+        lock(_gate) {
+            var now=DateTime.UtcNow;var r=_rates.GetValueOrDefault(device);
+            if((now-r.Plan).TotalMinutes>=1) { r.Plan=now;r.Plans=0; }
+            r.Plans++;_rates[device]=r;
+            if(r.Plans>4) { Interlocked.Increment(ref _limited);throw Busy(); }
         }
     }
     void TransferBudget(string device, int bytes)
@@ -393,12 +397,12 @@ public sealed partial class LanSyncService : IDisposable
         {
             ["starting"] = Starting,
             ["externalAddress"] = ExternalAddress, ["externalTransport"] = "tls-tcp", ["externalReachability"] = "not_verified",
-            ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),["fileWatch"]=WatchDiagnostics(),
+            ["userDataSyncReady"] = Merge is not null, ["firewall"] = _firewall.Status(), ["authorizationPolicy"] = LanPairingPolicy.Mode, ["enabled"] = Port != 0, ["port"] = Port, ["problem"] = Problem, ["protocol"] = 4, ["legacySmallFrames"] = true,["fileSync"]=FileDiagnostics(),["fileWatch"]=WatchDiagnostics(),["manifestCache"]=_manifestCache.Diagnostics(),
             ["bindAddress"] = _config["bindAddress"]?.GetValue<string>() ?? "0.0.0.0", ["configuredPort"] = _config["port"]?.GetValue<int>() ?? 39843,
             ["activeConnections"] = _admission.Active, ["unauthenticatedConnections"] = _admission.Pending,
             ["sourceBuckets"] = _admission.SourceCount, ["connectionRejected"] = _admission.Rejected,
             ["authenticationFailures"] = Interlocked.Read(ref _authFailures), ["protocolFailures"] = Interlocked.Read(ref _protocolFailures), ["rateLimited"] = Interlocked.Read(ref _limited), ["overloadRejected"] = Interlocked.Read(ref _overload),
-            ["budgets"] = new JsonObject { ["handshakeSeconds"] = 5, ["authenticationSeconds"] = 5, ["requestSeconds"] = 30, ["writeSeconds"] = 15, ["connections"] = 24, ["unauthenticated"] = 8, ["authenticated"] = 16, ["deviceAuthenticatedConnections"] = LanAdmission.DeviceSessions, ["largeFrames"] = 2, ["expensiveWork"] = 2, ["planConcurrency"] = 1, ["deviceRequestsPerSecond"] = 80, ["globalRequestsPerSecond"] = 320, ["plansPerDevicePerMinute"] = 4, ["deviceReadBytesPerSecond"] = 16 * 1024 * 1024, ["globalReadBytesPerSecond"] = 64 * 1024 * 1024, ["authenticationBytes"] = LanLimits.AuthFrame, ["smallFrameBytes"] = LanLimits.SmallFrame, ["largeFrameBytes"] = LanLimits.LargeFrame, ["planFiles"] = 100000, ["planBytes"] = 500L * 1024 * 1024 * 1024, ["planSeconds"] = 1800 },
+            ["budgets"] = new JsonObject { ["handshakeSeconds"] = 5, ["authenticationSeconds"] = 5, ["requestSeconds"] = 30, ["writeSeconds"] = 15, ["connections"] = 24, ["unauthenticated"] = 8, ["authenticated"] = 16, ["deviceAuthenticatedConnections"] = LanAdmission.DeviceSessions, ["largeFrames"] = 2, ["expensiveWork"] = 2, ["planConcurrency"] = 1, ["deviceRequestsPerSecond"] = 80, ["globalRequestsPerSecond"] = 320, ["plansPerDevicePerMinute"] = 4, ["cachedPlansConsumeScanBudget"] = false, ["deviceReadBytesPerSecond"] = 16 * 1024 * 1024, ["globalReadBytesPerSecond"] = 64 * 1024 * 1024, ["authenticationBytes"] = LanLimits.AuthFrame, ["smallFrameBytes"] = LanLimits.SmallFrame, ["largeFrameBytes"] = LanLimits.LargeFrame, ["planFiles"] = 100000, ["planBytes"] = 500L * 1024 * 1024 * 1024, ["planSeconds"] = 1800 },
             ["learningOwner"] = _app.Preferences.Training.RemoteOwner,
             ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device,["kind"]=j.Value.Kind,["reason"]=j.Value.Task.IsCompletedSuccessfully?j.Value.Task.Result["reason"]?.DeepClone():null, ["state"] = j.Value.Cancel.IsCancellationRequested ? "cancelled" : j.Value.Task.IsFaulted || j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result.ContainsKey("error") ? "failed" : j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["conflict"]?.GetValue<bool>()==true?"conflict":j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["deferred"]?.GetValue<bool>()==true?"deferred":j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
             ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
@@ -439,7 +443,7 @@ public sealed partial class LanSyncService : IDisposable
             if (ReconcileRegisteredRoots(Roots, folders, shareAll))
             {
                 if (previouslyShared.Any(id => Roots[id]?["enabled"]?.GetValue<bool>() != true || Roots[id]?["revoked"]?.GetValue<bool>() == true))
-                { InvalidateAll(); _plans.Clear(); _rootAuthorizationRevision++; }
+                { InvalidateAll(); _plans.Clear();_manifestCache.Clear(); _rootAuthorizationRevision++; }
                 RootRevision++; Save(); Notify();
             }
         }
@@ -480,6 +484,7 @@ public sealed partial class LanSyncService : IDisposable
             while (!cancel.IsCancellationRequested)
             {
                 var client = await listener.AcceptTcpClientAsync(cancel);
+                client.NoDelay = true;
                 var lease = _admission.Enter(((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString(), DateTime.UtcNow);
                 if (lease is null) { client.Dispose(); continue; }
                 _ = Task.Run(async () => { try { await Handle(client, lease, cancel); } finally { _admission.Exit(lease); } });
@@ -600,7 +605,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
@@ -679,6 +684,11 @@ public sealed partial class LanSyncService : IDisposable
             if(a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
             var selected = (a["selection"] as JsonArray ?? throw new ArgumentException("Missing selection")).Select(n => n!.GetValue<string>()).ToArray();
             if (selected.Length is < 1 or > 1000) throw new ArgumentException("Invalid selection");
+            foreach(var selection in selected) {
+                LanFiles.Relative(selection,true);
+                try { if(!Directory.Exists(LanFiles.Resolve(root,selection,true)))throw new ArgumentException("Selections must be directories"); }
+                catch(Exception e) when(e is FileNotFoundException or DirectoryNotFoundException) { /* Missing selected directories are represented by an empty snapshot. */ }
+            }
             if (!_planWork.Wait(0)) throw Busy();
             CancellationTokenSource workCancel;
             try
@@ -697,16 +707,24 @@ public sealed partial class LanSyncService : IDisposable
             {
                 try
                 {
-                    var entries = await LanFiles.Manifest(root, selected, workCancel.Token, metadataOnly:true,cueCacheDirectory:Path.Combine(AppPaths.DataDir,"lan-cue-metadata"));
+                    long folder;string watch;bool reliable;
+                    lock(_gate) { folder=Roots[rootId]!["folderId"]!.GetValue<long>();watch=WatchRevision(rootId);reliable=_app.Library.Watcher.IsWatching(folder); }
+                    var cached=_manifestCache.TryGet(rootId,root,selected,watch,reliable,Environment.TickCount64,out var entries);
+                    var elapsed=System.Diagnostics.Stopwatch.StartNew();
+                    if(!cached) {
+                        RatePlan(device);
+                        entries=await LanFiles.Manifest(root,selected,workCancel.Token,metadataOnly:true,cueCacheDirectory:Path.Combine(AppPaths.DataDir,"lan-cue-metadata"));
+                    }
                     var currentRoot=RootPath(rootId);
                     lock (_gate)
                     {
                         workCancel.Token.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "readMusic");
                         if (revision != _rootAuthorizationRevision || currentRoot != root) throw new UnauthorizedAccessException();
+                        if(!cached && watch==WatchRevision(rootId))_manifestCache.Store(folder,rootId,root,selected,watch,_app.Library.Watcher.IsWatching(folder),Environment.TickCount64,entries);
                         foreach (var key in _plans.Where(p => p.Value.Device == device || p.Value.Expires < DateTime.UtcNow).Select(p => p.Key).ToArray()) _plans.Remove(key);
                         if (_plans.Count >= 16 || _plans.Values.Sum(p => p.Files.Count) + entries.Count > 200_000 || _plans.Values.Sum(p => ManifestMemory(p.Files)) + ManifestMemory(entries) > 128L * 1024 * 1024) throw Busy();
                         var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries);
-                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact" };
+                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact",["cacheHit"]=cached,["scanMs"]=cached?0:elapsed.ElapsedMilliseconds };
                     }
                 }
                 catch (OperationCanceledException) { return BusyResponse(); }
@@ -825,6 +843,7 @@ public sealed partial class LanSyncService : IDisposable
             _app.Library.SnapshotChanged -= ReconcileRoots;
             _app.Library.Watcher.DirsChanged -= OnFileDirectoriesChanged;
             _app.Library.Watcher.Failed -= OnFileWatcherFailed;
+            _app.Library.Watcher.MetadataChanged -= OnFileMetadataChanged;
             InvalidateAll(); _stop?.Cancel(); _listener?.Stop(); _listener = null;
             _certificate?.Dispose();
             return _shutdown = FinishShutdown();

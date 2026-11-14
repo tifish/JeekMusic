@@ -663,6 +663,12 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 `lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。hashBytes 保留兼容字段且始终为0；扫描、传输、条件提交、删除及恢复均不计算文件内容摘要，hashPurpose=none。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
 
+`lan_sync_status.manifestCache` 返回 PC 元数据清单的 `hits/misses/invalidated/entries/estimatedBytes`、`maximumEntries=16`、`maximumBytes=67108864`、`fallbackMs=900000`。只有目录 watcher 健康、根路径/选择范围/epoch/revision 相符时复用；目录事件立即失效，早于曲库的 2 秒合并；移除授权、停服务、监听失败或过期均不能复用。完整根缓存可筛选子目录并保留 CUE 依赖。`budgets.cachedPlansConsumeScanBudget=false`：缓存命中不占每设备每分钟 4 次的实际扫描预算，其他连接、请求、容量和提交限制不变。TLS plan 可选新增 `cacheHit` 和 `scanMs`。
+
+协商 `capabilities.syncPerformanceDiagnostics=true` 后，手机 `file_schedule` 可选新增布尔 `lastManifestCacheHit`、非负整数 `lastPreparationMs/lastProtocolRequests`，以及整数 `lastFirstTransferMs`（最小 -1）。`lastPreparationMs` 是各已完成映射从启动到首个可比较候选的耗时之和，无候选时为准备总耗时；`lastFirstTransferMs` 是本轮启动到首个收发数据块的毫秒数，-1 表示没有传输；`lastProtocolRequests` 为已完成映射的文件请求尝试数，含任务轮询/重试；缓存命中对应最后一个已完成映射。异常中断前未完成映射的计数可能未计入，不当作完整一轮性能。旧手机可省略，连接旧 PC 时不发送这些字段。MCP 工具描述同步更新，输入 Schema 保持无参数，数字仍为原始整数，无音频路径或凭据。
+
+手机按 PC 元数据页、手机扫描批次处理变化，不等待手机全目录扫描；删除等完整快照，CUE 等音频依赖。曲库刷新在映射完成后按最多 200 路径批量执行，`state=library_refresh`，持久刷新记录全部成功后才清除；取消/失败会重做未确认批次。实际测试与准备边界见[性能验证](../../docs/sync-streaming-performance.md)。
+
 `fileWatch` 报告复用曲库 watcher 的 epoch/events/lastTrigger、2秒合并、30秒轮询和900秒兜底合同。`fileSync.schedules[]` 是通过现有配对认证收到的手机调度报告，带 scope/reportedAt（可陈旧）：trigger、dirty、running、paused、cancelled、foreground、backoffUntil、lastSuccess、nextReconcile（Unix ms，意图时间，受Android系统约束）、watchDirectories/watchFailed、lastMetadataObservations/lastHashBytes/lastTransferBytes。报告不代表Windows主动连接或唤醒手机；没有新的远程MCP桥。映射暂停和取消语义、时间精度映射、旧基线迁移及局限见[同步合同](../../docs/lan-sync.md)。
 
 ### 文件同步协议3：仅大小和修改时间

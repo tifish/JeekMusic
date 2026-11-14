@@ -1,5 +1,5 @@
 """Real production TLS and optional Android reconciler, synthetic loopback fixture only."""
-import argparse, base64, hashlib, json, os, subprocess, tempfile, time, uuid
+import argparse, base64, hashlib, json, os, re, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 import importlib.util
@@ -9,6 +9,19 @@ from mcp_client import McpClient
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--exe',type=Path,required=True);parser.add_argument('--android');parser.add_argument('--public-saf',action='store_true');parser.add_argument('--auto',action='store_true');parser.add_argument('--benchmark',action='store_true');parser.add_argument('--case');parser.add_argument('--ui',type=Path);a=parser.parse_args()
+    if a.android and not a.auto and not a.case:
+        # Each case owns an isolated PC/credential. Sharing a server accumulates
+        # scopes and synthetic short TLS sessions beyond production limits.
+        cases=re.findall(r'@Test fun (\w+)\(',Path('mobile/app/src/androidTest/kotlin/com/tinyfish/jeekmusic/data/sync/LanFileSynchronizerTest.kt').read_text(encoding='utf-8'))
+        assert cases
+        for index,case in enumerate(cases):
+            command=[sys.executable,str(Path(__file__).resolve()),'--exe',str(a.exe.resolve()),'--android',a.android,'--case',case]
+            if a.public_saf:command+=['--public-saf']
+            if not index and a.benchmark:command+=['--benchmark']
+            if not index and a.ui:command+=['--ui',str(a.ui)]
+            print('CASE '+case,flush=True);subprocess.run(command,check=True)
+        print(f'PASS all {len(cases)} isolated Android reconciler cases',flush=True)
+        return
     with tempfile.TemporaryDirectory(prefix='jeek-files-') as temp:
         work=Path(temp);data=work/'data';data.mkdir();music=work/'Music';music.mkdir()
         (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoCheckUpdate=False,language='en')))
@@ -145,7 +158,7 @@ def main():
                     try:
                         test_class=('LanAutoSyncTest' if a.auto else 'LanFileSynchronizerTest')+('#'+a.case if a.case else '')
                         result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
-                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.auto or a.case else 'OK (') in result.stdout and 'FAILURES!!!' not in result.stdout
+                        print(result.stdout,flush=True);assert ('OK (1 test)' if a.case else 'OK (') in result.stdout and 'FAILURES!!!' not in result.stdout
                     finally:device('reverse','--remove',f'tcp:{port}',capture_output=True)
                 # Administrative recovery uses the same private store and never a remote endpoint.
                 backups=call(c,'lan_file_backups',action='list')['backups'];assert backups

@@ -84,7 +84,9 @@ class LanSyncService @Inject constructor(
         for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) })runCatching {
             LanProtocol(connection, networkPolicy).use { client ->
                 val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
-                if(!client.call("capabilities").optBoolean("syncNetworkPolicy")) {
+                val capabilities=client.call("capabilities")
+                if(!capabilities.optBoolean("syncPerformanceDiagnostics"))for(field in listOf("lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastManifestCacheHit"))schedule.remove(field)
+                if(!capabilities.optBoolean("syncNetworkPolicy")) {
                     schedule.remove("wifiOnly");schedule.remove("waitingForWifi")
                 }
                 val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
@@ -258,6 +260,7 @@ class LanSyncService @Inject constructor(
         automation.report()
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
+            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
             try { gate.withLock {
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage())
@@ -277,12 +280,13 @@ class LanSyncService @Inject constructor(
                         val client=protocol()
                         try {
                             val result=fileSynchronizer.synchronize(mapping,client,{ store.saveMapping(mapping);report() },{ path,progress ->
+                                if(progress.bytes>0 && firstTransferMs<0)firstTransferMs=(System.nanoTime()-roundStarted)/1_000_000
                                 val now=android.os.SystemClock.elapsedRealtime()
                                 if(now-lastProgress>=250) {
                                     lastProgress=now
                                     _status.update { it.copy(running=true,text=path,done=done+progress.bytes,total=0,problems=problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed) }
                                 }
-                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{ drainRefresh() },phase={ stage,count,total ->
+                            },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{},phase={ stage,count,total ->
                                 automation.phase(stage)
                                 val text=when(stage) {
                                     "reading_baseline"->context.getString(R.string.sync_reading_baseline,count,total)
@@ -294,12 +298,16 @@ class LanSyncService @Inject constructor(
                                 }
                                 _status.update { it.copy(text=text) }
                             })
+                            preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
                             _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed) }
                         } finally { client.close();activeFileRoot=null }
-                        drainRefresh()
+                        drainRefresh {
+                            automation.phase("library_refresh")
+                            _status.update { it.copy(text=context.getString(R.string.sync_library_refresh)) }
+                        }
                     }
                     ensureActive()
                     fileRoundCompleted=true
@@ -331,7 +339,7 @@ class LanSyncService @Inject constructor(
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background")
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit)
             }
         }
     }
@@ -354,13 +362,19 @@ class LanSyncService @Inject constructor(
         if(path.endsWith(".cue",true)) { paths.addAll(fileDatabase.cueAudio(mapping.getString("key"),path));paths.addAll(audio) }
         fileDatabase.queueRefresh(mapping.getString("key"),path,JSONObject().put("stamp",entry?.optString("stamp")).put("deleted",deleted).put("audio",JSONArray(audio.toList())).put("paths",JSONArray(paths.toList())))
     }
-    private suspend fun drainRefresh() {
+    private suspend fun drainRefresh(onBatch: ()->Unit={}) {
         // Legacy refresh entries are inert, just like legacy file transactions.
         if(ledger.has("refresh")) { ledger.remove("refresh");saveLedger() }
         for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optString("directoryIdentity").isNotEmpty() }) {
             val key=mapping.getString("key")
             while(true) {
                 val queued=fileDatabase.refreshPaths(key);if(queued.isEmpty())break
+                onBatch()
+                val affected=linkedSetOf<String>()
+                suspend fun flush() {
+                    if(affected.isEmpty())return
+                    refresh(mapping,affected.toList());affected.clear()
+                }
                 LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { local ->
                     for(path in queued) {
                         val update=fileDatabase.refresh(key,path) ?: continue
@@ -371,10 +385,17 @@ class LanSyncService @Inject constructor(
                                 val audio=update.getJSONArray("audio");fileDatabase.bindCue(key,path,List(audio.length()) { audio.getString(it) })
                             }
                         }
-                        val paths=update.getJSONArray("paths");for(offset in 0 until paths.length() step 200)refresh(mapping,List(minOf(200,paths.length()-offset)) { paths.getString(offset+it) })
-                        fileDatabase.refreshed(key,path)
+                        val paths=update.getJSONArray("paths")
+                        for(index in 0 until paths.length()) {
+                            affected+=paths.getString(index)
+                            if(affected.size==200)flush()
+                        }
                     }
                 }
+                // Keep every durable receipt until all affected paths have been indexed.
+                // A cancellation/error safely repeats the batch on recovery.
+                flush()
+                fileDatabase.refreshed(key,queued)
             }
         }
     }

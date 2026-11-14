@@ -13,7 +13,7 @@ import java.io.IOException
 import java.util.UUID
 
 internal class LanRemoteFileConflict(val reason: String): IOException(reason)
-internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0) {
+internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false) {
     fun defer(text: String) { deferredCount++;if(deferred.size<100)deferred+=text.take(2300) }
     fun conflict(row: JSONObject) { conflictCount++;if(conflicts.size<100)conflicts+=row }
 }
@@ -161,6 +161,11 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
     }
     suspend fun synchronize(mapping: JSONObject,client: LanProtocol,onPinned: ()->Unit,progress: (String,LanFileReport)->Unit,beforeChange: (String,JSONObject?,Boolean)->Unit,afterChange: suspend ()->Unit,phase: (String,Int,Int)->Unit={ _,_,_-> }): LanFileReport {
         val report=LanFileReport();val key=mapping.getString("key")
+        val started=System.nanoTime();val initialRequests=client.requestCount
+        val notifyProgress: (String,LanFileReport)->Unit={ path,value ->
+            if(value.bytes>0 && report.firstTransferMillis<0)report.firstTransferMillis=(System.nanoTime()-started)/1_000_000
+            progress(path,value)
+        }
         val startMetadata=LanFileMetrics.metadataObservations.get();val startHash=LanFileMetrics.hashBytes.get()
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==3) { "Upgrade both devices for size+mtime file sync" }
         val sharedConflicts=capabilities.optInt("conflictProtocol")>=1
@@ -178,12 +183,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         phase("pc_scan",0,0)
         val plan=client.call("plan",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("selection",mapping.getJSONArray("selection")))
         val planId=plan.getString("plan");offset=0
-        phase("reading_manifest",0,plan.getInt("total"))
-        while(offset<plan.getInt("total")) {
-            currentCoroutineContext().ensureActive();val rows=client.call("manifest",JSONObject().put("rootId",mapping.getString("rootId")).put("plan",planId).put("offset",offset)).getJSONArray("files")
-            require(rows.length()>0);db.entries(key,"remote",List(rows.length()) { rows.getJSONObject(it) });offset+=rows.length();phase("reading_manifest",offset,plan.getInt("total"))
-        }
-        client.close()
+        report.manifestCacheHit=plan.optBoolean("cacheHit")
         localFactory(mapping,scopeInfo.getLong("total")==0L).use { io ->
             onPinned()
             phase("local_recovery",0,0)
@@ -196,23 +196,17 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                 }
                 journalOffset+=rows.size
             }
-            val scanned=ArrayList<JSONObject>(200);var scannedCount=0
-            phase("phone_scan",0,0)
-            fun flushScan() { if(scanned.isNotEmpty()) { db.entries(key,"local",scanned);scannedCount+=scanned.size;scanned.clear();phase("phone_scan",scannedCount,0) } }
-            io.scan(selection,{ scanned.add(it);if(scanned.size==200)flushScan() },{ report.defer("$it: local_directory_unknown") });flushScan();db.requirePortableLayout(key)
-            phase("reconciling",0,0)
-            for(cues in listOf(false,true)) {
-                offset=0
-                while(true) {
-                    val paths=db.paths(key,offset,cues);if(paths.isEmpty())break
-                    for(path in paths) {
-                        currentCoroutineContext().ensureActive();progress(path,report)
+            suspend fun reconcile(paths: List<String>,cues: Boolean,allowDeletes: Boolean): List<String> {
+                if(paths.isNotEmpty() && report.preparationMillis<0)report.preparationMillis=(System.nanoTime()-started)/1_000_000
+                val postponed=mutableListOf<String>()
+                for(path in paths) {
+                        currentCoroutineContext().ensureActive();notifyProgress(path,report)
                         try {
                             if(db.held(key,path))throw LanLocalDeferred("local_recovery_required")
                             val inside=selected(path,selection)
 
                             var local=db.entry(key,"local",path)?.takeIf { it.optBoolean("known") } ?: io.observe(path)
-                            var remote=db.entry(key,"remote",path)?.put("known",true) ?: if(inside)call(client,scope,"file_probe",JSONObject().put("path",path)) else JSONObject().put("known",false)
+                            var remote=db.entry(key,"remote",path)?.put("known",true) ?: if(inside)LanFileMetrics.absent() else JSONObject().put("known",false)
                             var baseline=db.baseline(key,path)
                             var pending=db.transaction(key,path,scope)
                             if(pending?.optString("kind") in setOf("upload","delete_remote") && pending!!.optString("state") in setOf("captured","uploading","remote_committed")) {
@@ -272,17 +266,17 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 else { report.conflict(conflict);if(!cues)db.hold(key,path);report.processed++;continue }
                             }
                             if(decision.action=="defer")throw LanLocalDeferred(decision.reason!!)
+                            if(!allowDeletes && decision.action in setOf("delete_local","delete_remote")) { postponed+=path;continue }
                             val version=baseline?.optString("version").orEmpty()
                             var transaction: JSONObject?=null
                             if(decision.action in setOf("download","upload","delete_local","delete_remote")) {
                                 busy(mapping,path)
-                                kotlinx.coroutines.delay(500)
                                 local=io.verify(path,meta(local))
                                 remote=if(inside)call(client,scope,"file_verify",JSONObject().put("path",path).put("expectedVersion",meta(remote) ?: JSONObject.NULL)) else client.call("verify",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("plan",planId).put("path",path).put("expectedVersion",meta(remote)))
                             }
                             when(decision.action) {
                                 "download" -> {
-                                    val part=download(client,scope,mapping,path,remote,planId,inside,report,progress)
+                                    val part=download(client,scope,mapping,path,remote,planId,inside,report,notifyProgress)
                                     if(cues) {
                                         val dependencies=cueReferences(part,path)
                                         for(reference in dependencies) {
@@ -302,7 +296,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 "upload" -> {
                                     transaction=transaction(mapping,scope,path,"upload",stamp(remote),stamp(local),version,local.getLong("size")).put("sourceVersion",meta(local)).put("expectedVersion",meta(remote) ?: JSONObject.NULL)
                                     store(transaction,"created")
-                                    upload(client,scope,mapping,path,local,stamp(remote),baseline,transaction,io,resolve,report,progress)
+                                    upload(client,scope,mapping,path,local,stamp(remote),baseline,transaction,io,resolve,report,notifyProgress)
                                     remote=call(client,scope,"file_probe",JSONObject().put("path",path))
                                     if(meta(io.observe(path))!=meta(local))throw LanLocalDeferred("local_changed_during_upload")
                                 }
@@ -334,12 +328,58 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                         catch(e: SyncWifiRequiredException) { throw e }
                         catch(_: IOException) { report.defer("$path: peer_or_local_file_unavailable");if(!cues)db.hold(key,path) }
                         report.processed++
-                    }
+                }
+                return postponed
+            }
+            // Start changed PC files as each metadata page arrives. Unchanged PC entries
+            // wait for the streamed phone scan, avoiding a second stat of every unchanged file.
+            phase("reading_manifest",0,plan.getInt("total"))
+            while(offset<plan.getInt("total")) {
+                currentCoroutineContext().ensureActive()
+                val page=client.call("manifest",JSONObject().put("rootId",mapping.getString("rootId")).put("plan",planId).put("offset",offset)).getJSONArray("files")
+                require(page.length()>0)
+                val rows=List(page.length()) { page.getJSONObject(it) }
+                val candidates=rows.filter { row ->
+                    val path=row.getString("path");val previous=base(db.baseline(key,path))
+                    !path.endsWith(".cue",true) && (previous==null || previous.migration || previous.remoteHash!=meta(row) || db.transaction(key,path,scope)!=null || db.issueForPath(key,path)!=null)
+                }.map { it.getString("path") }
+                db.entries(key,"remote",rows,candidates);offset+=rows.size
+                phase("reading_manifest",offset,plan.getInt("total"))
+                if(candidates.isNotEmpty()) {
+                    phase("reconciling",0,0)
+                    db.postponeDeletes(key,reconcile(candidates,false,false))
+                }
+            }
+            client.close()
+            val scanned=ArrayList<JSONObject>(200);var scannedCount=0
+            phase("phone_scan",0,0)
+            suspend fun flushScan() {
+                if(scanned.isEmpty())return
+                val rows=scanned.toList()
+                val candidates=rows.map { it.getString("path") }.filter { !it.endsWith(".cue",true) && !db.scheduled(key,it) }
+                db.entries(key,"local",rows,candidates);scannedCount+=rows.size;scanned.clear()
+                if(candidates.isNotEmpty()) {
+                    phase("reconciling",0,0)
+                    db.postponeDeletes(key,reconcile(candidates,false,false))
+                }
+                phase("phone_scan",scannedCount,0)
+            }
+            io.scan(selection,{ scanned.add(it);if(scanned.size==200)flushScan() },{ report.defer("$it: local_directory_unknown") });flushScan();db.requirePortableLayout(key)
+            // Only complete snapshots can establish deletions. CUE remains last so its
+            // audio dependencies have finished; per-file commit preconditions stay intact.
+            phase("reconciling",0,0)
+            for(cues in listOf(false,true)) {
+                offset=0
+                while(true) {
+                    val paths=db.paths(key,offset,cues);if(paths.isEmpty())break
+                    reconcile(paths.filterNot { db.scheduled(key,it) },cues,true)
                     offset+=paths.size
                 }
             }
         }
         report.metadataObservations=LanFileMetrics.metadataObservations.get()-startMetadata;report.hashBytes=LanFileMetrics.hashBytes.get()-startHash
+        if(report.preparationMillis<0)report.preparationMillis=(System.nanoTime()-started)/1_000_000
+        report.protocolRequests=client.requestCount-initialRequests
         return report
     }
     fun issues(mapping: String)=db.issues(mapping)

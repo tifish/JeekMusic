@@ -435,7 +435,7 @@
     <string name="lan_forget_confirm">Forget this mapping and keep all files, including internal recovery versions. A new mapping starts with no deletion baseline. You can then pair with another PC.</string>
     <string name="lan_start">Sync now</string>
     <string name="lan_verifying">Preparing sync…</string>
-    <string name="lan_done">Sync complete · SHA-256 verified</string>
+    <string name="lan_done">Sync complete</string>
     <string name="lan_issues">Sync needs attention</string>
     <string name="lan_cancelled">Sync cancelled. Completed files are kept; the next sync will check changes and continue unfinished files.</string>
     <string name="lan_failed">Connection/sync failed. Check pairing, network, PC service and firewall status; then retry. Partial downloads and existing files are preserved.</string>

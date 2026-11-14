@@ -18,7 +18,7 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class LanFileSynchronizerTest {
     private fun id()=UUID.randomUUID().toString().replace("-","")
-    private fun audio(marker: Int)=ByteArray(64).also { "RIFF".toByteArray().copyInto(it);"WAVE".toByteArray().copyInto(it,8);it[63]=marker.toByte() }
+    private fun audio(marker: Int,size: Int=64)=ByteArray(size).also { "RIFF".toByteArray().copyInto(it);"WAVE".toByteArray().copyInto(it,8);it[it.lastIndex]=marker.toByte() }
     private fun hash(bytes: ByteArray)=LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)
     private fun fixture(body: suspend Fixture.()->Unit)=runBlocking {
         val raw=InstrumentationRegistry.getArguments().getString("jeekFileFixture") ?: error("Explicit isolated fixture required")
@@ -42,9 +42,40 @@ class LanFileSynchronizerTest {
     }
     private class Fixture(val context: android.content.Context,val connection: JSONObject,val root: File,val prefix: String,val mapping: JSONObject,val db: LanFileDatabase,val sync: LanFileSynchronizer) {
         private var otherScope: String?=null
+        var fixedTime: Long?=null
+        fun time(bytes: ByteArray)=fixedTime ?: (1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)
+        fun hash(bytes: ByteArray)=LanFileMetrics.token(bytes.size.toLong(),time(bytes))
         val path get()="$prefix/A.wav"
-        fun local(bytes: ByteArray?) { val f=File(root,path);f.parentFile!!.mkdirs();if(bytes==null)f.delete() else { f.writeBytes(bytes);LanFileMetrics.setModified(f,1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L) } }
+        fun local(bytes: ByteArray?) { val f=File(root,path);f.parentFile!!.mkdirs();if(bytes==null)f.delete() else { f.writeBytes(bytes);LanFileMetrics.setModified(f,time(bytes)) } }
         fun localBytes()=File(root,path).takeIf { it.exists() }?.readBytes()
+        fun recordLocalEdit(time: Long) {
+            val file=File(root,path);val stamp=LanFileMetrics.stamp(file).split(':')
+            db.lastEdit(file.path,stamp[1].toLong(),stamp[2].toLong(),time)
+        }
+        suspend fun checkEmbeddedWriteClock() {
+            check(connection.optBoolean("publicSaf"))
+            val file=File(root,"$prefix/last-edit.mp3").apply {
+                parentFile!!.mkdirs()
+                writeBytes(InstrumentationRegistry.getInstrumentation().context.assets.open("tag-writer-tone.mp3").use { it.readBytes() })
+                LanFileMetrics.setModified(this,1_600_000_000_000_000_000L)
+            }
+            val before=LanFileMetrics.stamp(file).split(':')[2].toLong()
+            val room=androidx.room.Room.inMemoryDatabaseBuilder(context,com.tinyfish.jeekmusic.data.db.JeekDatabase::class.java).build()
+            try {
+                val folder0=com.tinyfish.jeekmusic.data.db.LibraryFolderEntity(treeUri=mapping.getString("treeUri"),treeDocumentId=mapping.getString("documentId"),volumeName=mapping.getString("volume"),relativePath=mapping.getString("relative"),displayName="Isolated last-edit clock",addedAt=0)
+                val folder=folder0.copy(id=room.folderDao().insert(folder0))
+                val media=com.tinyfish.jeekmusic.data.scanner.MediaStoreAudio(0,folder.volumeName,folder.relativePath+prefix+"/",file.name,before/1_000_000_000,file.length(),0,"audio/mpeg",null)
+                val track=com.tinyfish.jeekmusic.data.scanner.TrackFactory(com.tinyfish.jeekmusic.data.settings.ScanConfig()).build(media,folder.id,null).entity
+                val editor=com.tinyfish.jeekmusic.data.library.AudioFileEditor(context,com.tinyfish.jeekmusic.data.library.DocumentTree(context),room.trackDao(),room.tagDao(),PlayingFiles(),com.tinyfish.jeekmusic.data.settings.SettingsRepository(context),com.tinyfish.jeekmusic.playback.PlaybackLog(context),db)
+                val started=System.currentTimeMillis()
+                assertTrue(editor.edit(folder,track,com.tinyfish.jeekmusic.data.tags.TagEdit(lyrics="[00:00.00]first clock write")))
+                var parts=LanFileMetrics.stamp(file).split(':');assertEquals(before,parts[2].toLong())
+                val first=db.lastEdit(file.path,parts[1].toLong(),before);assertTrue(first>=started)
+                assertTrue(editor.edit(folder,track,com.tinyfish.jeekmusic.data.tags.TagEdit(lyrics="[00:00.00]second clock write, only latest time retained")))
+                parts=LanFileMetrics.stamp(file).split(':');assertEquals(before,parts[2].toLong())
+                LanFileDatabase(context).use { reopened -> assertTrue(reopened.lastEdit(file.path,parts[1].toLong(),before)>=first) }
+            } finally { room.close() }
+        }
         fun call(op: String,args: JSONObject=JSONObject()): JSONObject=LanProtocol(connection).use { client ->
             if(op in setOf("file_begin","file_delete","file_ack")) {
                 val observed=client.call("file_probe",JSONObject().put("fileProtocol",3).put("scope",args.getString("scope")).put("path",args.getString("path")))
@@ -55,13 +86,13 @@ class LanFileSynchronizerTest {
         }.also { check(!it.optBoolean("conflict") && !it.optBoolean("deferred")) { it.toString() } }
         fun scope(): String { if(otherScope==null)otherScope=call("file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",UUID.nameUUIDFromBytes(("synthetic-writer:"+connection.getString("deviceId")).toByteArray()).toString()).put("selection",JSONArray(listOf("")))).getString("scope");return otherScope!! }
         fun remoteHash(target: String=path): String? { val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",target));val r=call("file_verify",JSONObject().put("scope",scope()).put("path",target).put("expectedVersion",observed.opt("metadataVersion") ?: JSONObject.NULL));return if(r.isNull("stamp"))null else r.getString("stamp") }
-        fun remote(bytes: ByteArray?,target: String=path) {
+        fun remote(bytes: ByteArray?,target: String=path,editedAtMs: Long=0) {
             val scope=scope();val before=remoteHash(target)
             var baseline=call("file_baseline",JSONObject().put("scope",scope).put("path",target))
             if(before!=null)baseline=call("file_ack",JSONObject().put("scope",scope).put("path",target).put("operation",UUID.randomUUID().toString().replace("-","")).put("baselineVersion",baseline.optString("version")).put("stamp",before).put("localHash",before).put("localKnown",true))
             if(bytes==null) { if(before!=null)call("file_delete",JSONObject().put("scope",scope).put("path",target).put("operation",UUID.randomUUID().toString().replace("-","")).put("expectedStamp",before).put("baselineVersion",baseline.getString("version")));return }
             val operation=UUID.randomUUID().toString().replace("-","")
-            call("file_begin",JSONObject().put("scope",scope).put("path",target).put("operation",operation).put("stamp",LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)).put("size",bytes.size).put("expectedStamp",before ?: JSONObject.NULL).put("baselineVersion",baseline.optString("version")).put("modifiedNs",1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L).put("resolve",true))
+            call("file_begin",JSONObject().put("scope",scope).put("path",target).put("operation",operation).put("stamp",hash(bytes)).put("size",bytes.size).put("expectedStamp",before ?: JSONObject.NULL).put("baselineVersion",baseline.optString("version")).put("modifiedNs",time(bytes)).put("editedAtMs",editedAtMs).put("resolve",true))
             for(offset in bytes.indices step 262144)call("file_chunk",JSONObject().put("scope",scope).put("operation",operation).put("offset",offset).put("data",Base64.encodeToString(bytes,offset,minOf(262144,bytes.size-offset),Base64.NO_WRAP)))
             call("file_finish",JSONObject().put("scope",scope).put("operation",operation))
         }
@@ -105,11 +136,11 @@ class LanFileSynchronizerTest {
         }
     }
     @Test fun initialAndTrackedChangesReconcileBothDirections()=fixture {
-        val a=audio(1);val b=audio(2);val c=audio(3)
+        val a=audio(1);val b=audio(3);val c=audio(4)
         local(a);var report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a),remoteHash());val unchanged=run();assertEquals(0L,unchanged.hashBytes);assertTrue(unchanged.actions.isEmpty())
-        File(root,path).setLastModified(File(root,path).lastModified()+2000)
+        File(root,path).setLastModified(File(root,path).lastModified()+500)
         report=run();assertEquals(0,report.conflictCount);assertEquals(1,report.actions["upload"]) // mtime alone is a change, without inspecting the content.
-        local(a+byteArrayOf(1));report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a+byteArrayOf(1)),remoteHash())
+        local(a+byteArrayOf(2));report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a+byteArrayOf(2)),remoteHash())
         local(b);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash())
         remote(c);report=run();assertEquals(0,report.conflictCount);assertArrayEquals(c,localBytes())
         local(null);stopBeforePhoneScan();assertEquals(hash(c),remoteHash()) // An incomplete snapshot cannot propagate a deletion.
@@ -120,10 +151,11 @@ class LanFileSynchronizerTest {
         local(b);remote(b);File(root,path).setLastModified(1_800_000_000_000L+(b.last().toLong() and 255)*1000L);report=run();assertEquals(0,report.conflictCount);assertEquals(hash(b),remoteHash());assertArrayEquals(b,localBytes())
     }
     @Test fun sharedChoiceWinsAndChangedVersionsNeedAnotherDecision()=fixture {
-        val a=audio(61);val b=audio(62);val c=audio(63);val d=audio(64)
+        fixedTime=1_800_000_000_000_000_000L
+        val a=audio(61);val b=audio(62,65);val c=audio(63,66);val d=audio(64,67)
         remote(a);run();local(b);remote(c)
         val issue=run().conflicts.single();assertTrue(issue.getBoolean("shared"))
-        assertTrue(issue.getJSONObject("local").getBoolean("exists"));assertEquals(64,issue.getJSONObject("remote").getInt("size"))
+        assertTrue(issue.getJSONObject("local").getBoolean("exists"));assertEquals(c.size,issue.getJSONObject("remote").getInt("size"))
         call("file_conflict_choose",JSONObject().put("scope",issue.getString("scope")).put("id",issue.getString("id")).put("choice","remote"))
         exchangeViaProductionService(issue,"local","remote") // status channel works even while the file-sync gate is held
         // A queued opposing phone choice cannot override the first confirmed selection.
@@ -170,10 +202,11 @@ class LanFileSynchronizerTest {
         assertArrayEquals(cue,File(root,"$prefix/0.cue").readBytes())
     }
     @Test fun realConflictsRetainBothSidesUntilExplicitChoice()=fixture {
-        val a=audio(11);val b=audio(12);val c=audio(13)
+        fixedTime=1_800_000_000_000_000_000L
+        val a=audio(11);val b=audio(12,65);val c=audio(13,66)
         local(a);remote(b);var report=run();assertEquals(1,report.conflictCount);assertArrayEquals(a,localBytes());assertEquals(hash(b),remoteHash())
         sync.choose(report.conflicts.single().getString("id"),"local");report=run();assertEquals(0,report.conflictCount);assertEquals(hash(a),remoteHash())
-        local(b);remote(c);report=run();assertEquals(1,report.conflictCount);assertEquals("both_modified",report.conflicts.single().getString("reason"))
+        local(b);remote(c);report=run();assertEquals(1,report.conflictCount);assertEquals("same_time_different_size",report.conflicts.single().getString("reason"))
         sync.choose(report.conflicts.single().getString("id"),"remote");run();assertArrayEquals(c,localBytes())
         local(a);remote(null);report=run();assertEquals(1,report.conflictCount);assertEquals("modified_vs_deleted",report.conflicts.single().getString("reason"));assertArrayEquals(a,localBytes());assertNull(remoteHash())
         sync.choose(report.conflicts.single().getString("id"),"local");run();assertEquals(hash(a),remoteHash())
@@ -208,5 +241,25 @@ class LanFileSynchronizerTest {
         val report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.conflictCount);assertEquals(1,report.actions["ack"])
         assertArrayEquals(b,localBytes());assertEquals(hash(a),remoteHash())
         val second=run();assertEquals(0L,second.hashBytes);assertTrue(second.actions.isEmpty())
+    }
+    @Test fun lastEditTimeBreaksOnlyEqualFileTimeAndDifferentSize()=fixture {
+        fixedTime=1_800_000_000_000_000_000L
+        val a=audio(71);val b=audio(72,65);val c=audio(73,66)
+        local(a);recordLocalEdit(200);remote(b,editedAtMs=100)
+        var report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.conflictCount);assertEquals(1,report.actions["upload"])
+        assertEquals(hash(a),remoteHash())
+        assertEquals(200,call("file_probe",JSONObject().put("scope",scope()).put("path",path)).getInt("editedAtMs"))
+        local(b);recordLocalEdit(300);remote(c,editedAtMs=400)
+        report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.conflictCount);assertEquals(1,report.actions["download"])
+        assertArrayEquals(c,localBytes())
+        val file=File(root,path);val parts=LanFileMetrics.stamp(file).split(':')
+        LanFileDatabase(context).use { reopened -> assertEquals(400L,reopened.lastEdit(file.path,parts[1].toLong(),parts[2].toLong())) }
+        // File mtime has priority over a much more recent software-edit record.
+        fixedTime=fixedTime!!+2_000_000_000L;local(a);recordLocalEdit(1)
+        report=run();assertEquals(0,report.conflictCount);assertEquals(1,report.actions["upload"]);assertEquals(hash(a),remoteHash())
+        // Same size/mtime is equal, even if bytes and recorded edit times differ.
+        val different=audio(74);local(different);recordLocalEdit(9999)
+        report=run();assertEquals(0L,report.bytes);assertEquals(0,report.conflictCount);assertArrayEquals(different,localBytes());assertEquals(hash(a),remoteHash())
+        if(connection.optBoolean("publicSaf"))checkEmbeddedWriteClock()
     }
 }

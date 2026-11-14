@@ -95,7 +95,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     }
     public async Task<JsonObject> Probe(string root,string path,CancellationToken ct,string? scope=null)
     {
-        ct.ThrowIfCancellationRequested();await System.Threading.Tasks.Task.CompletedTask;return FileMetadata.Observe(root,path);
+        ct.ThrowIfCancellationRequested();await System.Threading.Tasks.Task.CompletedTask;return FileMetadata.Observe(root,path,true);
     }
     public async Task<JsonObject> Ack(string scope,string root,JsonObject a,CancellationToken ct,Action<Action> commit)
     {
@@ -122,6 +122,8 @@ internal sealed partial class LanFileSyncStore:IDisposable
     }
     void SaveTask(string scope,JsonObject task,string state)
     {
+        if(state=="committed" && S(task["kind"])=="upload" && task["rootPath"] is not null)
+            FileEditTimes.Set(Path.Combine(S(task["rootPath"]),S(task["path"]).Replace('/',Path.DirectorySeparatorChar)),task["editedAtMs"] is null?0:N(task["editedAtMs"]));
         if(state=="committed" && !task.ContainsKey("resultVersion") && task["rootPath"] is not null)
             task["resultVersion"]=FileMetadata.Observe(S(task["rootPath"]),S(task["path"]))["metadataVersion"]?.DeepClone();
         var id=Key(scope,S(task["operation"]));var old=Scalar("SELECT backup_bytes FROM operations WHERE id=$id",("$id",id));
@@ -133,6 +135,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     string Partial(string scope,string operation)=>Path.Combine(staging,Key(scope,operation)+".part");
     public JsonObject Begin(string scope,JsonObject a)
     {
+        if(a.ContainsKey("editedAtMs") && N(a["editedAtMs"])<0)throw new IOException("Invalid last edit time");
         Reap();
         var path=S(a["path"]);PathAllowed(scope,path);var op=Operation(S(a["operation"]));var hash=Stamp(a["stamp"])??throw new IOException("Upload metadata stamp required");var expected=Stamp(a["expectedStamp"]);var size=N(a["size"]);
         if(hash!=FileMetadata.Version(size,N(a["modifiedNs"])))throw new IOException("Upload source metadata mismatch");
@@ -155,6 +158,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
         Run("INSERT OR REPLACE INTO write_budget VALUES($d,$o,$b)",("$d",day),("$o",owner),("$b",own+size));
         var task=new JsonObject { ["kind"]="upload",["device"]=S(a["deviceId"]),["operation"]=op,["path"]=path,["stamp"]=hash,["expectedStamp"]=expected,["baselineVersion"]=S(a["baselineVersion"]),["size"]=size,["modifiedNs"]=a["modifiedNs"]?.DeepClone(),["createdAt"]=DateTimeOffset.UtcNow.ToUnixTimeSeconds(),["resolve"]=a["resolve"]?.GetValue<bool>()==true };
         if(a.ContainsKey("expectedVersion"))task["expectedVersion"]=a["expectedVersion"]?.DeepClone();
+        task["editedAtMs"]=a["editedAtMs"]?.DeepClone()??JsonValue.Create(0L);
         SaveTask(scope,task,"uploading");
         if(size==0) { using var empty=LanFileMutation.OpenPrivate(Partial(scope,op));task["partialIdentity"]=LanFileMutation.Identity(empty);task["partialStamp"]=FileMetadata.Stamp(empty.SafeFileHandle);SaveTask(scope,task,"uploading"); }
         return UploadStatus(scope,op);

@@ -5,11 +5,12 @@ namespace JeekMusic.Core.Sync;
 /// <summary>Exact observed versions. These are change hints, never security identities.</summary>
 public static class FileMetadata
 {
+    public static Func<string,long,long,long>? LastEditTime { get; set; }
     public const int Protocol = 2;
     public static string Version(long size, long modifiedNs) => $"m2:{size}:{modifiedNs}";
     public static string Stamp(Microsoft.Win32.SafeHandles.SafeFileHandle handle) => Version(
         RandomAccess.GetLength(handle),checked((File.GetLastWriteTimeUtc(handle).Ticks-DateTime.UnixEpoch.Ticks)*100));
-    public static JsonObject Observe(string root, string relative)
+    public static JsonObject Observe(string root, string relative,bool includeEditTime=false)
     {
         Interlocked.Increment(ref MetadataObservations);
         // An unavailable root/ancestor is unknown, not an empty directory.
@@ -21,8 +22,10 @@ public static class FileMetadata
             if ((info.Attributes & FileAttributes.Directory) != 0) throw new IOException("Expected regular file");
             var size = info.Length;
             var ns = checked((info.LastWriteTimeUtc.Ticks - DateTime.UnixEpoch.Ticks) * 100);
-            return new() { ["known"] = true, ["exists"] = true, ["size"] = size, ["modifiedNs"] = ns,
+            var row=new JsonObject { ["known"] = true, ["exists"] = true, ["size"] = size, ["modifiedNs"] = ns,
                 ["precisionNs"] = 100, ["metadataVersion"] = Version(size, ns) };
+            if(includeEditTime)row["editedAtMs"]=LastEditTime?.Invoke(full,size,ns)??0;
+            return row;
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
         {

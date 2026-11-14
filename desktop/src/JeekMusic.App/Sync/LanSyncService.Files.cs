@@ -62,6 +62,7 @@ public sealed partial class LanSyncService
     JsonObject FileDiagnostics() {
         var result=_fileDiagnostics.DeepClone().AsObject();
         result["admissionWaitMs"]=FileAdmissionWaitMs;
+        result["fileComparisonPolicy"]="mtime_then_size_then_last_edit";result["lastFileEditTime"]=FileEditTimes.Diagnostics();
         result["pendingConflicts"]=ConflictCount;result["conflictProtocol"]=1;result["conflictStatusProtocol"]=1;
         result["metadataObservations"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.MetadataObservations);
         result["hashBytes"]=Interlocked.Read(ref JeekMusic.Core.Sync.FileMetadata.HashBytes);

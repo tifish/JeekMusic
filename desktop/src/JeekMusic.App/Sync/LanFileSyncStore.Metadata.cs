@@ -46,7 +46,7 @@ internal sealed partial class LanFileSyncStore
         if(FileMetadata.Token(before)!=V(args["expectedVersion"]))throw Conflict("source_changed_before_verification");
         using var file=new LanFileMutation(root,path,false);
         var stamp=await file.Observe(limits.FileBytes,ct);
-        var after=FileMetadata.Observe(root,path);
+        var after=FileMetadata.Observe(root,path,true);
         if(FileMetadata.Token(before)!=FileMetadata.Token(after))throw Conflict("source_changed_during_verification");
         after["stamp"]=stamp;return after;
     }

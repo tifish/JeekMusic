@@ -24,7 +24,7 @@ public static class TagWriter
             ["newMp3"] = "ID3v2.4/UTF-8", ["existingId3v23"] = "retain-v2.3/UTF-16-targets",
             ["preservation"] = "opaque non-target records; native container/audio validation; reject unsafe input",
             ["maximumFileBytes"] = TagWriteFrames.MaxFileBytes,
-            ["lastFormat"] = _lastFormat, ["lastResult"] = _lastResult, ["lastReason"] = _lastReason
+            ["lastFormat"] = _lastFormat, ["lastResult"] = _lastResult, ["lastReason"] = _lastReason,["lastFileEditTime"]=Sync.FileEditTimes.Diagnostics()
         };
     }
 
@@ -141,6 +141,7 @@ public static class TagWriter
                 }
                 sourceLease.Dispose(); // Commit acquires a fresh identity-checked DELETE/read guard.
                 TagWriteCommit.Commit(path, temporary, sourceStamp, sourceHash, candidateIdentity, validatedHash, commitOperations);
+                Sync.FileEditTimes.Set(path,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                 _lastResult = "saved";
                 Log.Info("tagwriter", $"写入完成：{path} cover={coverJpeg is not null} lyrics={lyrics is not null} id3v1Preserved={id3v1 is not null}");
                 Log.Info("tagwriter", $"preservation=verified policy=3 format={format}");

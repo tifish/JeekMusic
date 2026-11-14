@@ -101,7 +101,7 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         if(value[2]>maxBytes)throw LanLocalDeferred("file_byte_budget")
         return LanFileMetrics.stamp(value)
     }
-    suspend fun observe(path: String,includeStamp: Boolean=false): JSONObject {
+    suspend fun observe(path: String,includeStamp: Boolean=false,includeEditTime: Boolean=includeStamp): JSONObject {
         LanFileMetrics.metadataObservations.incrementAndGet()
         val parent=parent(path) ?: return LanFileMetrics.absent()
         return parent.use { p ->
@@ -110,7 +110,10 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             else ParcelFileDescriptor.adoptFd(fd).use { file ->
                 val id=LanAtomicFiles.identity(file.fd);if(includeStamp && id[2]>maxBytes)throw LanLocalDeferred("file_byte_budget");val value=if(includeStamp)LanFileMetrics.stamp(id) else null
                 val ns=Math.addExact(Math.multiplyExact(id[3],1_000_000_000),id[4])
-                JSONObject().put("known",true).put("exists",true).put("size",id[2]).put("modifiedNs",ns).put("precisionNs",1L).put("metadataVersion",LanFileMetrics.token(id[2],ns)).also { if(includeStamp)it.put("stamp",value) }
+                JSONObject().put("known",true).put("exists",true).put("size",id[2]).put("modifiedNs",ns).put("precisionNs",1L).put("metadataVersion",LanFileMetrics.token(id[2],ns)).also {
+                    if(includeStamp)it.put("stamp",value)
+                    if(includeEditTime)it.put("editedAtMs",database.lastEdit(File(absoluteRoot,path).path,id[2],ns))
+                }
             }
         }
     }
@@ -184,6 +187,12 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         }
     }
     private fun save(row: JSONObject,state: String) {
+        if(state=="committed" && row.optString("kind")=="download") {
+            val path=row.getString("path");val p=parent(path)
+            p?.use { LanAtomicFiles.statLeaf(it.fd,path.substringAfterLast('/')) }?.let { identity ->
+                database.lastEdit(File(absoluteRoot,path).path,identity[2],Math.addExact(Math.multiplyExact(identity[3],1_000_000_000),identity[4]),row.optLong("editedAtMs"))
+            }
+        }
         if(state=="committed" && row.has("sourceVersion") && !row.has("localVersion")) {
             val path=row.getString("path");val p=parent(path)
             val identity=p?.use { LanAtomicFiles.statLeaf(it.fd,path.substringAfterLast('/')) }

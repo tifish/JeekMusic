@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {"name":"newer phone file wins despite older edit record","local":"m2:64:2000","remote":"m2:65:1000","localEdited":1,"remoteEdited":999,"action":"upload","reason":"newer_file_mtime"},
+    {"name":"newer PC file wins despite phone edit","local":"m2:64:1000","remote":"m2:65:2000","localEdited":999,"remoteEdited":1,"action":"download","reason":"newer_file_mtime"},
+    {"name":"same time and size ignore edit records","local":"m2:64:1000","remote":"m2:64:1000","localEdited":999,"remoteEdited":1,"action":"ack","reason":null},
+    {"name":"same time different size newer phone edit","local":"m2:64:1000","remote":"m2:65:1000","localEdited":200,"remoteEdited":100,"action":"upload","reason":"newer_edit_time"},
+    {"name":"same time different size newer PC edit","local":"m2:64:1000","remote":"m2:65:1000","localEdited":100,"remoteEdited":200,"action":"download","reason":"newer_edit_time"},
+    {"name":"only phone has last edit","local":"m2:64:1000","remote":"m2:65:1000","localEdited":100,"remoteEdited":0,"action":"upload","reason":"newer_edit_time"},
+    {"name":"only PC has last edit","local":"m2:64:1000","remote":"m2:65:1000","localEdited":0,"remoteEdited":100,"action":"download","reason":"newer_edit_time"},
+    {"name":"equal record times cannot choose size","local":"m2:64:1000","remote":"m2:65:1000","localEdited":100,"remoteEdited":100,"action":"conflict","reason":"same_time_different_size"},
+    {"name":"missing records cannot choose size","local":"m2:64:1000","remote":"m2:65:1000","localEdited":0,"remoteEdited":0,"action":"conflict","reason":"same_time_different_size"},
+    {"name":"larger file is not automatically newer","local":"m2:999:1000","remote":"m2:64:1000","localEdited":100,"remoteEdited":200,"action":"download","reason":"newer_edit_time"},
+    {"name":"both changed use file mtime","base":["m2:64:500","m2:64:500"],"local":"m2:66:1000","remote":"m2:65:2000","localEdited":999,"remoteEdited":1,"action":"download","reason":"newer_file_mtime"},
+    {"name":"older unilateral edit does not override newer file","base":["m2:64:2000","m2:64:2000"],"local":"m2:66:1000","remote":"m2:64:2000","localEdited":999,"remoteEdited":0,"action":"download","reason":"newer_file_mtime"},
+    {"name":"confirmed landing rounding stays stable","base":["m2:64:1100","m2:64:1000"],"local":"m2:64:1100","remote":"m2:64:1000","localEdited":0,"remoteEdited":0,"action":"none","reason":null},
+    {"name":"same metadata baseline stays stable","base":["m2:64:1000","m2:64:1000"],"local":"m2:64:1000","remote":"m2:64:1000","localEdited":999,"remoteEdited":0,"action":"none","reason":null},
+    {"name":"unknown remains unknown","known":false,"local":null,"remote":"m2:64:1000","localEdited":0,"remoteEdited":0,"action":"defer","reason":"state_unknown"},
+    {"name":"first absence copies instead of deleting","local":null,"remote":"m2:64:1000","localEdited":0,"remoteEdited":0,"action":"download","reason":null},
+    {"name":"tracked deletion still propagates","base":["m2:64:1000","m2:64:1000"],"local":null,"remote":"m2:64:1000","localEdited":0,"remoteEdited":0,"action":"delete_remote","reason":null}
+  ]
+}

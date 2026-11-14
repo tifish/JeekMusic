@@ -32,7 +32,7 @@ internal sealed partial class LanFileSyncStore
         var baseline=RequireBaseline(scope,path,S(input["baselineVersion"]));
         if(FileMetadata.Token(FileMetadata.Observe(root,path))!=remote)throw Conflict("conflict_version_changed");
         var reason=S(input["reason"]);
-        if(reason is not ("initial_different_content" or "both_modified" or "modified_vs_deleted" or "legacy_metadata_unconfirmed"))throw new ArgumentException("Invalid conflict reason");
+        if(reason is not ("initial_different_content" or "both_modified" or "modified_vs_deleted" or "legacy_metadata_unconfirmed" or "same_time_different_size"))throw new ArgumentException("Invalid conflict reason");
         var mapping=(string)Scalar("SELECT mapping FROM scopes WHERE id=$s",("$s",scope))!;
         var id=Hash(string.Join("\n",mapping,scope,path,S(input["baselineVersion"]),local??"",remote??""));
         if(id!=S(input["id"]))throw new ArgumentException("Invalid conflict identity");

@@ -26,6 +26,7 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
             execSQL("CREATE TABLE IF NOT EXISTS dependency_baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS baseline(mapping TEXT,path TEXT,json TEXT,PRIMARY KEY(mapping,path))")
             execSQL("CREATE TABLE IF NOT EXISTS scheduled(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
+            execSQL("CREATE TABLE IF NOT EXISTS latest_edit(path TEXT PRIMARY KEY,size INTEGER NOT NULL,modified_ns INTEGER NOT NULL,edited_at_ms INTEGER NOT NULL)")
             execSQL("CREATE TABLE IF NOT EXISTS transactions(operation TEXT PRIMARY KEY,mapping TEXT,path TEXT,scope TEXT,json TEXT)")
             execSQL("CREATE INDEX IF NOT EXISTS transaction_path ON transactions(mapping,path,scope)")
             execSQL("CREATE TABLE IF NOT EXISTS held(mapping TEXT,path TEXT,PRIMARY KEY(mapping,path))")
@@ -41,6 +42,13 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         check(!db.inTransaction()) { "Snapshot batch must not contain another transaction" }
         db.beginTransaction()
         try { write();db.setTransactionSuccessful() } finally { db.endTransaction() }
+    }
+    @Synchronized fun lastEdit(path: String,size: Long,modifiedNs: Long): Long = db.rawQuery("SELECT edited_at_ms FROM latest_edit WHERE path=? AND size=? AND modified_ns=?",arrayOf(File(path).absolutePath,size.toString(),modifiedNs.toString())).use { if(it.moveToFirst())it.getLong(0) else 0L }
+    @Synchronized fun lastEdit(path: String,size: Long,modifiedNs: Long,editedAtMs: Long) {
+        require(editedAtMs>=0)
+        val full=File(path).absolutePath
+        if(editedAtMs==0L)db.execSQL("DELETE FROM latest_edit WHERE path=?",arrayOf(full))
+        else db.execSQL("INSERT OR REPLACE INTO latest_edit VALUES(?,?,?,?)",arrayOf(full,size,modifiedNs,editedAtMs))
     }
     @Synchronized fun resetSnapshots(mapping: String) = snapshotBatch {
         db.execSQL("DELETE FROM held WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM entries WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM baseline WHERE mapping=?",arrayOf(mapping));db.execSQL("DELETE FROM scheduled WHERE mapping=?",arrayOf(mapping))

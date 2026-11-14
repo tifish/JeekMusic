@@ -6,6 +6,16 @@ import org.junit.Test
 import org.json.JSONObject
 
 class FileReconciliationTest {
+    @Test fun fileTimeThenSizeThenLastEditMatrix() {
+        val cases=SharedCases.load("file-reconciliation-last-edit.json").getJSONArray("cases")
+        for(i in 0 until cases.length()) {
+            val c=cases.getJSONObject(i)
+            fun v(key: String)=if(c.isNull(key))null else c.getString(key)
+            val b=c.optJSONArray("base");val base=b?.let { FileReconciliation.Baseline(if(it.isNull(0))null else it.getString(0),"v",if(it.isNull(1))null else it.getString(1),true) }
+            val result=FileReconciliation.decide(base,FileReconciliation.State(c.optBoolean("known",true),v("local"),c.getLong("localEdited")),FileReconciliation.State(true,v("remote"),c.getLong("remoteEdited")),true)
+            assertEquals(v("name"),v("action"),result.action);assertEquals(v("name"),v("reason"),result.reason)
+        }
+    }
     @Test fun exactMetadataAndLandingPrecisionMatrix() {
         val cases=SharedCases.load("file-reconciliation-v2.json").getJSONArray("cases")
         for(i in 0 until cases.length()) {

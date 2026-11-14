@@ -673,6 +673,12 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 ### 文件同步协议3：仅大小和修改时间
 
+最新客户端增加独立能力 `capabilities.fileComparisonPolicy=mtime_then_size_then_last_edit`，物理版本合同仍是文件协议 3 / `m2:size:modifiedNs`，无需重配。两端都存在时先比较实际文件 mtime，较新者胜；相同 mtime 与大小视为一致，不读内容、不查软件时间；只有相同 mtime 且大小不同才通过已有 `file_probe` 读取 `editedAtMs` 并比较。缺失为 0，相同记录无法判定时产生 `same_time_different_size` 冲突。已确认且未再变化的时间舍入落地对保持稳定；删除、未知/离线仍按基线处理。旧客户端没有协商该能力时保持旧比较方式。
+
+`file_probe/file_verify` 的 `editedAtMs` 是可选非负 Int64 Unix 毫秒值；上传 `file_begin` 可带同名可选整数，负数/错误类型拒绝。下载与上传保存来源端的时间，不用本机接收时间替代。常规 manifest/手机扫描不增加逐文件时间记录查询，未变化轮次不读取音频内容。
+
+`lan_sync_status.fileSync.fileComparisonPolicy` 显示当前支持的策略；`fileSync.lastFileEditTime` 与 `get_diagnostics.tagWriting.lastFileEditTime` 返回 `policy/history=false/unit=unix_milliseconds/problem`。本机歌词/封面成功写入后只覆盖该文件的最后一个时间，绑定当时 size/mtime；不保留编辑操作历史。问题码 `last_edit_time_unavailable` 表示记录存取失败，没有原始路径/内容/凭据。MCP 工具描述同步更新，工具参数 Schema 不变，开发与正式版使用同一业务实现。具体行为及验证见[最后编辑时间规则](../../docs/sync-last-edit-time.md)。
+
 两端必须同时升级。文件版本用 `stamp=m2:size:modifiedNs` 表示，取代内容 hash；基线 comparisonProtocol=2 和已保存的两端落地时间对应关系保留，不清空基线。相同大小和精确修改时间即视为同一版本，即使内容不同。续传校验事务归属、文件身份和已持久化的部分文件大小/修改时间；无法确认的部分文件不覆盖用户文件。旧事务仅能从现存元数据迁移，无可靠元数据时保留并报告延期。认证、TLS、路径边界、撤销和配额不变。MCP 参数 Schema 无变化，新增诊断值两种构建一致。
 
 ## 演唱语言过滤

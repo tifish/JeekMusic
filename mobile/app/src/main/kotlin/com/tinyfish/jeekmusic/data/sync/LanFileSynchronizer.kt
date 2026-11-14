@@ -25,7 +25,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
     private fun id()=UUID.randomUUID().toString().replace("-","")
     private fun stamp(row: JSONObject?)=row?.optString("stamp")?.takeUnless { row.isNull("stamp") || it.isEmpty() }
     private fun meta(row: JSONObject?)=LanFileMetrics.version(row)
-    private fun state(row: JSONObject)=FileReconciliation.State(row.optBoolean("known",true),meta(row))
+    private fun state(row: JSONObject)=FileReconciliation.State(row.optBoolean("known",true),meta(row),row.optLong("editedAtMs"))
     private fun base(row: JSONObject?)=row?.takeIf { it.optString("version").isNotEmpty() }?.let { FileReconciliation.Baseline(it.optString("localVersion").takeUnless { _ -> it.isNull("localVersion") },it.getString("version"),it.optString("remoteVersion").takeUnless { _ -> it.isNull("remoteVersion") },true,it.optString("migration")=="legacy_metadata_unconfirmed") }
     private fun selected(path: String,selection: List<String>)=selection.any { it.isEmpty() || path==it || path.startsWith("$it/") }
     private fun checked(result: JSONObject): JSONObject {
@@ -122,7 +122,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             }
             local.put("dependencies",JSONArray(dependencies))
         }
-        val begin=call(client,scope,"file_begin",JSONObject().put("operation",row.getString("operation")).put("path",path).put("stamp",desired).put("size",part.length()).put("modifiedNs",local.optLong("modifiedNs")).put("expectedStamp",remoteHash ?: JSONObject.NULL).put("expectedVersion",row.opt("expectedVersion") ?: JSONObject.NULL).put("baselineVersion",baseline?.optString("version").orEmpty()).put("resolve",resolve))
+        val begin=call(client,scope,"file_begin",JSONObject().put("operation",row.getString("operation")).put("path",path).put("stamp",desired).put("size",part.length()).put("modifiedNs",local.optLong("modifiedNs")).put("editedAtMs",local.optLong("editedAtMs")).put("expectedStamp",remoteHash ?: JSONObject.NULL).put("expectedVersion",row.opt("expectedVersion") ?: JSONObject.NULL).put("baselineVersion",baseline?.optString("version").orEmpty()).put("resolve",resolve))
         var offset=begin.optLong("offset");require(offset in 0..part.length())
         if(!begin.optBoolean("committed")) {
             store(row,"uploading")
@@ -169,6 +169,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val startMetadata=LanFileMetrics.metadataObservations.get();val startHash=LanFileMetrics.hashBytes.get()
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==3) { "Upgrade both devices for size+mtime file sync" }
         val sharedConflicts=capabilities.optInt("conflictProtocol")>=1
+        val newestWins=capabilities.optString("fileComparisonPolicy")=="mtime_then_size_then_last_edit"
         LanProtocol.requirePairedCapabilities(capabilities)
         val scopeInfo=call(client,"","file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",key).put("selection",mapping.getJSONArray("selection")))
         val scope=scopeInfo.getString("scope");val revision=scopeInfo.getString("revision")
@@ -243,12 +244,18 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                 }
                                 else effective=FileReconciliation.Baseline(landedLocal,baseline?.optString("version").orEmpty(),landedRemote,true)
                             }
-                            var decision=if(inside)FileReconciliation.decide(effective,state(local),state(remote)) else when {
+                            // The last-edit store is consulted only for the size tie-breaker.
+                            // Ordinary scans and equal metadata never read it.
+                            if(newestWins && inside && meta(local)!=null && meta(remote)!=null && local.optLong("modifiedNs")==remote.optLong("modifiedNs") && local.optLong("size")!=remote.optLong("size")) {
+                                local=io.observe(path,includeEditTime=true)
+                                remote=call(client,scope,"file_probe",JSONObject().put("path",path))
+                            }
+                            var decision=if(inside)FileReconciliation.decide(effective,state(local),state(remote),newestWins) else when {
                                 equivalent(mapping,path,local,remote)->FileReconciliation.Decision("none")
                                 meta(local)==null->FileReconciliation.Decision("download")
                                 else->FileReconciliation.Decision("conflict","initial_different_content")
                             }
-                            var resolve=false
+                            var resolve=decision.reason in setOf("newer_file_mtime","newer_edit_time")
                             if(decision.action=="conflict") {
                                 val conflict=issue(mapping,scope,path,baseline,effective,local,remote,decision.reason!!,planId)
                                 if(sharedConflicts) {
@@ -285,7 +292,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                         }
                                         remote.put("dependencies",JSONArray(dependencies))
                                     }
-                                    transaction=transaction(mapping,scope,path,"download",stamp(local),stamp(remote),version,remote.getLong("size")).put("part",part.name).put("modifiedNs",remote.getLong("modifiedNs")).put("sourceVersion",meta(remote)).put("expectedVersion",meta(local) ?: JSONObject.NULL)
+                                    transaction=transaction(mapping,scope,path,"download",stamp(local),stamp(remote),version,remote.getLong("size")).put("part",part.name).put("modifiedNs",remote.getLong("modifiedNs")).put("editedAtMs",remote.optLong("editedAtMs")).put("sourceVersion",meta(remote)).put("expectedVersion",meta(local) ?: JSONObject.NULL)
                                     store(transaction,"created");beforeChange(path,remote,false)
                                     io.install(path,part,transaction) {
                                         busy(mapping,path)

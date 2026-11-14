@@ -1,4 +1,5 @@
 <resources>
+    <string name="sync_transfer_progress">%1$,d / %2$,d KiB</string>
     <string name="sync_recovering">正在恢复未完成的文件操作…</string>
     <string name="sync_reading_baseline">读取已确认的同步记录：%1$d / %2$d 项</string>
     <string name="sync_pc_scan">正在读取电脑上的文件名、大小和修改时间…</string>

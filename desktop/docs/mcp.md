@@ -658,6 +658,8 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 `lan_sync_status.fileSync.admissionWaitMs=250` 表示已认证文件请求在工作许可被占用时最多短等的毫秒数。工作并发仍为 1，等待受当前认证连接数及请求取消/截止约束；短暂的元数据/调度报告竞争不再立即触发手机的 30 秒 busy 退避。超时继续返回兼容 busy；工具输入 Schema 不变。
 
+手机同步界面的版本大小、预估总大小及传输进度使用当前语言的千分位分隔符显示。MCP 和同步协议中的 `size/bytes` 继续返回原始整数，不转换为带分隔符的字符串；工具描述、参数类型和 Schema 无变化。
+
 
 `lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。hashBytes 保留兼容字段且始终为0；扫描、传输、条件提交、删除及恢复均不计算文件内容摘要，hashPurpose=none。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
 

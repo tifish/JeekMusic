@@ -78,8 +78,8 @@ import java.time.format.DateTimeFormatter
                 val time=runCatching { val ns=token[2].toLong();DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS").withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(Math.floorDiv(ns,1_000_000_000L),Math.floorMod(ns,1_000_000_000L))) }.getOrDefault("—")
                 val sizeHint=if(other==null)"" else stringResource(when(token[1].toLong().compareTo(other[1].toLong())) { 1->R.string.sync_conflict_larger; -1->R.string.sync_conflict_smaller; else->R.string.sync_conflict_equal_size })
                 val timeHint=if(other==null)"" else stringResource(when(token[2].toLong().compareTo(other[2].toLong())) { 1->R.string.sync_conflict_newer; -1->R.string.sync_conflict_older; else->R.string.sync_conflict_equal_time })
-                if(other==null)stringResource(R.string.sync_conflict_version,token[1],time)
-                else stringResource(R.string.sync_conflict_compared_version,token[1],sizeHint,time,timeHint)
+                if(other==null)stringResource(R.string.sync_conflict_version,token[1].toLong(),time)
+                else stringResource(R.string.sync_conflict_compared_version,token[1].toLong(),sizeHint,time,timeHint)
             })
         }
         if(choice!=null)Text(stringResource(R.string.sync_conflict_pending,stringResource(if(choice=="local")R.string.lan_use_phone else R.string.lan_use_pc)))

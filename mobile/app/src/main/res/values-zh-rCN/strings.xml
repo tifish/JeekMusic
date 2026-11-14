@@ -7,7 +7,7 @@
     <string name="sync_conflict_newer">较新</string>
     <string name="sync_conflict_older">较旧</string>
     <string name="sync_conflict_equal_time">时间相同</string>
-    <string name="sync_conflict_compared_version">%1$s 字节（%2$s）\n修改时间：%3$s（%4$s）</string>
+    <string name="sync_conflict_compared_version">%1$,d 字节（%2$s）\n修改时间：%3$s（%4$s）</string>
 
     <string name="sync_conflict_notice">%1$d 个同步冲突，点击比较并处理</string>
     <string name="sync_conflict_waiting_notice">%1$d 项已选择，等待同步完成</string>
@@ -23,7 +23,7 @@
     <string name="sync_conflict_retry">文件版本已变化、另一端已先选择或连接失败。请同步后重试。</string>
     <string name="sync_conflict_empty">没有同步冲突</string>
     <string name="sync_conflict_missing">已删除／不存在</string>
-    <string name="sync_conflict_version">%1$s 字节\n修改时间：%2$s</string>
+    <string name="sync_conflict_version">%1$,d 字节\n修改时间：%2$s</string>
     <string name="sync_conflict_pending">已选择：%1$s。等待手机同步并校验。</string>
     <string name="sync_conflict_previous">上一页</string>
     <string name="sync_conflict_next">下一页</string>
@@ -440,7 +440,7 @@
     <string name="lan_mtime_permission">Android 保留精确修改时间需要可选的“所有文件访问权限”。下载仍仅使用你授权的目录。未授权时可下载文件，但会显示时间错误；授权后重试即可补正。</string>
     <string name="lan_mtime_allowed">已具备时间写入权限，下载目录仍需单独选择并授权。</string>
     <string name="lan_network_error">网络或 TLS 连接中断，已保留断点。请检查局域网后重试。</string>
-    <string name="lan_estimate_format">%1$d 个文件 · %2$d 字节</string>
+    <string name="lan_estimate_format">%1$d 个文件 · %2$,d 字节</string>
     <string name="lan_time_precision">目标时间精度限制：请求 %1$d，实际 %2$d 纳秒</string>
     <string name="lan_cue_held">CUE 等待依赖文件全部安装后再提交</string>
     <string name="lan_busy_file">此文件正在播放或预加载，播放释放后重试</string>

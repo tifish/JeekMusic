@@ -7,7 +7,7 @@
     <string name="sync_conflict_newer">Newer</string>
     <string name="sync_conflict_older">Older</string>
     <string name="sync_conflict_equal_time">Same time</string>
-    <string name="sync_conflict_compared_version">%1$s bytes (%2$s)\nModified: %3$s (%4$s)</string>
+    <string name="sync_conflict_compared_version">%1$,d bytes (%2$s)\nModified: %3$s (%4$s)</string>
 
     <string name="sync_conflict_notice">%1$d sync conflicts — review versions</string>
     <string name="sync_conflict_waiting_notice">%1$d selected, waiting for sync</string>
@@ -23,7 +23,7 @@
     <string name="sync_conflict_retry">The versions changed, another device chose first, or the connection failed. Sync and try again.</string>
     <string name="sync_conflict_empty">No sync conflicts</string>
     <string name="sync_conflict_missing">Deleted / not present</string>
-    <string name="sync_conflict_version">%1$s bytes\nModified: %2$s</string>
+    <string name="sync_conflict_version">%1$,d bytes\nModified: %2$s</string>
     <string name="sync_conflict_pending">Selected: %1$s. Waiting for the phone to sync and verify.</string>
     <string name="sync_conflict_previous">Previous page</string>
     <string name="sync_conflict_next">Next page</string>
@@ -448,7 +448,7 @@
     <string name="lan_mtime_permission">Android requires optional All files access to preserve exact modification times. Downloads still use only the folder you authorize. Without this permission files download with a visible timestamp error; retry after granting.</string>
     <string name="lan_mtime_allowed">Timestamp access granted. Choose and authorize a download folder separately.</string>
     <string name="lan_network_error">Network or TLS connection interrupted; partial retained. Check the LAN and retry.</string>
-    <string name="lan_estimate_format">%1$d files · %2$d bytes</string>
+    <string name="lan_estimate_format">%1$d files · %2$,d bytes</string>
     <string name="lan_time_precision">Time precision limit: requested %1$d, actual %2$d ns</string>
     <string name="lan_cue_held">CUE held until all dependencies are installed</string>
     <string name="lan_busy_file">Playing or preloaded; retry after playback releases this file</string>

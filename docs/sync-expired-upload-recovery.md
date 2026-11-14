@@ -18,6 +18,12 @@ PC 已清理过期上传的部分文件，旧 `file_begin` 却直接返回 `stat
 
 原始记录位于忽略的 `desktop/artifacts/sync-expired-*`，实体设备证据保留在私有 artifacts 中，不提交歌曲路径、配对信息或设备地址。
 
-## 未完成的实体 UI 验收
+## 实体手机安装与 UI 验收
 
-实体手机经无线 ADB 可连接。新版 APK 与已安装版本签名相同，但手机系统拒绝覆盖安装，返回 `INSTALL_FAILED_ABORTED: User rejected permissions`；未卸载或清除数据。后续手机锁屏，因此本轮未完成新版手机的重启、三个恢复提示的实际界面操作与截图验收。后台同步成功证明 PC 兼容修复已生效，不代表新版手机 UI 已验收。
+首次交付时，实体手机虽经无线 ADB 可连接，但系统拒绝同签名覆盖安装，返回 `INSTALL_FAILED_ABORTED: User rejected permissions`，随后锁屏；当时仅确认旧手机配合 PC 修复后台完成，未将新版手机 UI 标为通过。
+
+用户重开无线 ADB 并解锁后，同签名覆盖安装成功。已核实实体手机版本为 1.0.270，结束原进程并启动新版，原有配对、目录映射和 Wi-Fi 选项保留；全程没有卸载或清除数据。
+
+实际进入设置 → 同步，先确认自动对账完成，再点击“立即同步”、展开详情并等待本轮完成。真实页面显示“同步完成”，检查 1714 个路径，自动处理 0 项、冲突 0 项、延期 0 项，无原来的 Failed requirement。生产 MCP 对照前后报告：本次 trigger=manual、lastSuccess 推进、两个映射均 idle/running=false/backoffUntil=0、lastTransferBytes=0，PC 累积 transferBytes 未增长，pendingConflicts=0。原文件没有重复传输。
+
+已实际查看完成状态截图 `desktop/artifacts/sync-expired-physical/v270-complete-before-manual.png`、`v270-complete-details.png`；私有前后证据为同目录 `v270-status-before.json`、`v270-manual-final.json`。正常完成状态和详情已完成真机 UI 验收；三个新增异常恢复提示仍未在真机故障状态下展示验收，其判定由单元测试覆盖。

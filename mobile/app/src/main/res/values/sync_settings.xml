@@ -7,6 +7,9 @@
     <string name="sync_phone_scan">Scanning phone folders: %1$d files found</string>
     <string name="sync_reconciling">Comparing file changes…</string>
     <string name="sync_library_refresh">Updating the music library…</string>
+    <string name="sync_upload_restart_required">The upload checkpoint has expired. This file will restart on the next sync.</string>
+    <string name="sync_upload_offset_mismatch">The PC confirmed a different upload position. The file is preserved for retry.</string>
+    <string name="sync_upload_resume_offset_invalid">The PC returned an invalid upload checkpoint. The file is preserved for retry.</string>
     <string name="lan_background_waiting">Paused while Android takes over background sync.</string>
     <string name="lan_interrupted">Sync paused. Unfinished files will be retried when conditions allow.</string>
     <string name="sync_wifi_only">Sync only over Wi-Fi</string>

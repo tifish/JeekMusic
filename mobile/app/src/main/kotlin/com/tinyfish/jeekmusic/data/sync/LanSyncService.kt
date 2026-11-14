@@ -168,6 +168,17 @@ class LanSyncService @Inject constructor(
         else if(e is LanRemoteException && e.code=="upgrade_required") context.getString(R.string.lan_paired_upgrade)
         else if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
         else e.message?.lineSequence()?.firstOrNull()?.take(240) ?: e.javaClass.simpleName
+    private fun fileProblem(value: String): String {
+        val separator=value.indexOf(": ");if(separator<0)return value
+        val reason=value.substring(separator+2).substringBefore(':')
+        val resource=when(reason) {
+            "upload_restart_required"->R.string.sync_upload_restart_required
+            "upload_offset_mismatch"->R.string.sync_upload_offset_mismatch
+            "upload_resume_offset_invalid"->R.string.sync_upload_resume_offset_invalid
+            else->return value
+        }
+        return value.take(separator)+": "+context.getString(resource)
+    }
     private fun protocol() = LanProtocol(store.read().getJSONObject("connection"), networkPolicy).also { transport?.close(); transport = it }
 
     suspend fun pair(invitation: String) = withContext(Dispatchers.IO) {
@@ -301,7 +312,7 @@ class LanSyncService @Inject constructor(
                             preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
-                            for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=reason
+                            for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=fileProblem(reason)
                             _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed) }
                         } finally { client.close();activeFileRoot=null }
                         drainRefresh {
@@ -324,6 +335,7 @@ class LanSyncService @Inject constructor(
                 } catch (e: CancellationException) {
                     _status.value = _status.value.copy(running=false,text=stoppedText(),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: Exception) {
+                    android.util.Log.e("LanSyncService","File sync round failed",e)
                     // Transport exceptions can contain connection addresses, but never serialize the invitation/token.
                     _status.value = if (!currentCoroutineContext().isActive) _status.value.copy(running=false,text=stoppedText(),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                         else _status.value.copy(running=false,text=context.getString(R.string.lan_failed),done=done,total=total,problems=problems+problem(e),timeDetails=timeDetails,precisionNs=precisionNs)

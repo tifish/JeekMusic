@@ -7,6 +7,9 @@
     <string name="sync_phone_scan">正在扫描手机目录：已找到 %1$d 个文件</string>
     <string name="sync_reconciling">正在比较文件变化…</string>
     <string name="sync_library_refresh">正在更新曲库…</string>
+    <string name="sync_upload_restart_required">上传断点已失效，本文件会在下次同步时重新上传。</string>
+    <string name="sync_upload_offset_mismatch">电脑确认的上传进度不一致，已保留文件，等待重试。</string>
+    <string name="sync_upload_resume_offset_invalid">电脑返回的上传断点无效，已保留文件，等待重试。</string>
     <string name="lan_background_waiting">同步已暂停，等待 Android 接管后台同步。</string>
     <string name="lan_interrupted">同步已暂停，将在条件允许时重试未完成的文件。</string>
     <string name="sync_wifi_only">仅在 Wi-Fi 下同步</string>

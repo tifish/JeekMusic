@@ -17,7 +17,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     readonly SqliteConnection db;
     readonly string staging;
     readonly Limits limits;
-    long actions,conflicts,deferred;
+    long actions,conflicts,deferred,restartedUploads;
     readonly Dictionary<string,long> confirmations=new();
     long baselineCount,operationCount,backupTotal;readonly Dictionary<string,long> scopeCounts=new();
     public LanFileSyncStore(string directory,Limits? limits=null)
@@ -140,15 +140,26 @@ internal sealed partial class LanFileSyncStore:IDisposable
         var path=S(a["path"]);PathAllowed(scope,path);var op=Operation(S(a["operation"]));var hash=Stamp(a["stamp"])??throw new IOException("Upload metadata stamp required");var expected=Stamp(a["expectedStamp"]);var size=N(a["size"]);
         if(hash!=FileMetadata.Version(size,N(a["modifiedNs"])))throw new IOException("Upload source metadata mismatch");
         if(size is <0 || size>limits.FileBytes)throw new LanFileDeferred("file_byte_budget");
+        JsonObject? restarting=null;
         if(Task(scope,op) is { } existing)
         {
-            if(S(existing["path"])!=path || S(existing["stamp"])!=hash || existing["size"]!.GetValue<long>()!=size || Stamp(existing["expectedStamp"])!=expected || S(existing["baselineVersion"])!=S(a["baselineVersion"]))throw new IOException("Operation identity reused");
+            if(S(existing["kind"])!="upload" || S(existing["path"])!=path || S(existing["stamp"])!=hash || existing["size"]!.GetValue<long>()!=size || Stamp(existing["expectedStamp"])!=expected || S(existing["baselineVersion"])!=S(a["baselineVersion"]))throw new IOException("Operation identity reused");
             if(a.ContainsKey("expectedVersion") && (V(existing["expectedVersion"])!=V(a["expectedVersion"]) || existing["modifiedNs"]?.ToJsonString()!=a["modifiedNs"]?.ToJsonString()))throw new IOException("Operation metadata identity reused");
-            return UploadStatus(scope,op);
+            if(S(existing["state"]) is "expired" or "aborted") {
+                // The new begin is a fresh admission, never a continuation of a retired prefix.
+                // Prepared/committed operations stay on their existing recovery/idempotency path.
+                if(existing["backup"] is not null || existing["backupBytes"]?.GetValue<long>()>0)throw new LanFileDeferred("transaction_needs_recovery");
+                CleanupPartial(scope,existing);
+                if(File.Exists(Partial(scope,op)))throw new LanFileDeferred("private_staging_changed");
+                restarting=existing;
+            } else {
+                if(S(existing["state"])=="conflict")throw new LanFileDeferred("upload_restart_required");
+                return UploadStatus(scope,op);
+            }
         }
         var baseline=RequireBaseline(scope,path,S(a["baselineVersion"]));
         if(a.ContainsKey("expectedVersion"))RequireMetadataBaseline(baseline,a);else if(Stamp(baseline?["stamp"])!=expected && a["resolve"]?.GetValue<bool>()!=true)throw Conflict("remote_not_at_baseline");
-        if(operationCount>=limits.Operations || Convert.ToInt64(Scalar("SELECT COUNT(*) FROM operations WHERE state IN ('uploading','prepared')"))>=4)throw new LanFileDeferred("operation_budget");
+        if(restarting is null && operationCount>=limits.Operations || Convert.ToInt64(Scalar("SELECT COUNT(*) FROM operations WHERE state IN ('uploading','prepared')"))>=4)throw new LanFileDeferred("operation_budget");
         long reserved=0;using(var q=Command("SELECT json FROM operations WHERE state IN ('uploading','prepared')"))using(var rows=q.ExecuteReader())while(rows.Read()) { var t=JsonNode.Parse(rows.GetString(0))!;reserved=checked(reserved+(t["size"]?.GetValue<long>()??0));if(S(t["device"])==S(a["deviceId"]))throw new LanFileDeferred("device_upload_budget"); }
         if(Math.Max(reserved,StagingBytes())+size>limits.StagingBytes || new DriveInfo(Path.GetPathRoot(staging)!).AvailableFreeSpace<size+64L*1024*1024)throw new LanFileDeferred("staging_byte_budget");
         var day=DateTime.UtcNow.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture);var owner=(string)Scalar("SELECT owner FROM scopes WHERE id=$s",("$s",scope))!;
@@ -159,9 +170,15 @@ internal sealed partial class LanFileSyncStore:IDisposable
         var task=new JsonObject { ["kind"]="upload",["device"]=S(a["deviceId"]),["operation"]=op,["path"]=path,["stamp"]=hash,["expectedStamp"]=expected,["baselineVersion"]=S(a["baselineVersion"]),["size"]=size,["modifiedNs"]=a["modifiedNs"]?.DeepClone(),["createdAt"]=DateTimeOffset.UtcNow.ToUnixTimeSeconds(),["resolve"]=a["resolve"]?.GetValue<bool>()==true };
         if(a.ContainsKey("expectedVersion"))task["expectedVersion"]=a["expectedVersion"]?.DeepClone();
         task["editedAtMs"]=a["editedAtMs"]?.DeepClone()??JsonValue.Create(0L);
+        // A previously checkpointed target-side stage is still owned by this operation.
+        // Retain its identity so resuming never truncates an unowned/substituted stage.
+        if(restarting!=null)foreach(var field in new[] { "stageIdentity","stageStamp" })
+            if(restarting[field]!=null)task[field]=restarting[field]!.DeepClone();
         SaveTask(scope,task,"uploading");
         if(size==0) { using var empty=LanFileMutation.OpenPrivate(Partial(scope,op));task["partialIdentity"]=LanFileMutation.Identity(empty);task["partialStamp"]=FileMetadata.Stamp(empty.SafeFileHandle);SaveTask(scope,task,"uploading"); }
-        return UploadStatus(scope,op);
+        var result=UploadStatus(scope,op);
+        if(restarting!=null) { Interlocked.Increment(ref restartedUploads);result["restarted"]=true; }
+        return result;
     }
     public JsonObject UploadStatus(string scope,string op)
     {
@@ -178,7 +195,9 @@ internal sealed partial class LanFileSyncStore:IDisposable
     }
     public async Task<JsonObject> Chunk(string scope,JsonObject a,CancellationToken ct)
     {
-        var op=Operation(S(a["operation"]));var task=Task(scope,op)??throw new UnauthorizedAccessException();if(S(task["state"])!="uploading")return UploadStatus(scope,op);
+        var op=Operation(S(a["operation"]));var task=Task(scope,op)??throw new UnauthorizedAccessException();
+        if(S(task["state"]) is "expired" or "aborted" or "conflict")throw new LanFileDeferred("upload_restart_required");
+        if(S(task["state"])!="uploading")return UploadStatus(scope,op);
         var text=S(a["data"]);if(text.Length>349528)throw new IOException("Upload chunk budget exceeded");var bytes=Convert.FromBase64String(text);if(bytes.Length is <1 or >262144)throw new IOException("Upload chunk budget exceeded");
         var offset=N(a["offset"]);var file=Partial(scope,op);
         if(DateTimeOffset.UtcNow.ToUnixTimeSeconds()-(task["createdAt"]?.GetValue<long>()??0)>7200)throw new LanFileDeferred("upload_expired");
@@ -309,7 +328,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
         if(S(row["state"])=="prepared") { CleanupPartial(scope,row);SaveTask(scope,row,"aborted"); }
         return new JsonObject { ["restored"]=true,["baselineChanged"]=false };
     }
-    public JsonObject Diagnostics()=>new() { ["fileProtocol"]=3,["comparison"]="size+mtime-exact",["sidecarParseBytes"]=Interlocked.Read(ref FileMetadata.SidecarParseBytes),["metadataObservations"]=Interlocked.Read(ref FileMetadata.MetadataObservations),["hashBytes"]=Interlocked.Read(ref FileMetadata.HashBytes),["transferBytes"]=Interlocked.Read(ref FileMetadata.TransferBytes),["hashPurpose"]="none",["contentHashing"]=false,["schedules"]=Schedules(),["fileWorkLimit"]=1,["taskSeconds"]=900,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024,["actions"]=Interlocked.Read(ref actions),["conflicts"]=Interlocked.Read(ref conflicts),["peerConfirmedActions"]=new JsonObject(confirmations.Select(p=>new KeyValuePair<string,JsonNode?>(p.Key,JsonValue.Create(p.Value)))),["deferred"]=Interlocked.Read(ref deferred),["baselineRows"]=baselineCount,["operationRecords"]=operationCount,["retainedBackupBytes"]=backupTotal,["baselineRowsLimit"]=limits.Rows,["scopeRowsLimit"]=100000,["metadataBytesLimit"]=1024L*1024*1024,["fileBytesLimit"]=limits.FileBytes,["stagingBytesLimit"]=limits.StagingBytes,["backupBytesLimit"]=limits.BackupBytes };
+    public JsonObject Diagnostics()=>new() { ["fileProtocol"]=3,["comparison"]="size+mtime-exact",["sidecarParseBytes"]=Interlocked.Read(ref FileMetadata.SidecarParseBytes),["metadataObservations"]=Interlocked.Read(ref FileMetadata.MetadataObservations),["hashBytes"]=Interlocked.Read(ref FileMetadata.HashBytes),["transferBytes"]=Interlocked.Read(ref FileMetadata.TransferBytes),["hashPurpose"]="none",["contentHashing"]=false,["schedules"]=Schedules(),["fileWorkLimit"]=1,["taskSeconds"]=900,["deviceDailyUploadBytesLimit"]=64L*1024*1024*1024,["globalDailyUploadBytesLimit"]=256L*1024*1024*1024,["actions"]=Interlocked.Read(ref actions),["restartedUploads"]=Interlocked.Read(ref restartedUploads),["expiredUploadPolicy"]="fresh_admission_restart",["conflicts"]=Interlocked.Read(ref conflicts),["peerConfirmedActions"]=new JsonObject(confirmations.Select(p=>new KeyValuePair<string,JsonNode?>(p.Key,JsonValue.Create(p.Value)))),["deferred"]=Interlocked.Read(ref deferred),["baselineRows"]=baselineCount,["operationRecords"]=operationCount,["retainedBackupBytes"]=backupTotal,["baselineRowsLimit"]=limits.Rows,["scopeRowsLimit"]=100000,["metadataBytesLimit"]=1024L*1024*1024,["fileBytesLimit"]=limits.FileBytes,["stagingBytesLimit"]=limits.StagingBytes,["backupBytesLimit"]=limits.BackupBytes };
     public void Dispose()=>db.Dispose();
     public static bool BlocksScan(string directory,string root) {
         var file=Path.Combine(directory,"file-sync.db");if(!File.Exists(file))return false;

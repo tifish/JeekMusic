@@ -123,7 +123,8 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             local.put("dependencies",JSONArray(dependencies))
         }
         val begin=call(client,scope,"file_begin",JSONObject().put("operation",row.getString("operation")).put("path",path).put("stamp",desired).put("size",part.length()).put("modifiedNs",local.optLong("modifiedNs")).put("editedAtMs",local.optLong("editedAtMs")).put("expectedStamp",remoteHash ?: JSONObject.NULL).put("expectedVersion",row.opt("expectedVersion") ?: JSONObject.NULL).put("baselineVersion",baseline?.optString("version").orEmpty()).put("resolve",resolve))
-        var offset=begin.optLong("offset");require(offset in 0..part.length())
+        if(LanUploadProgress.restartRequired(begin))store(row,"aborted")
+        var offset=LanUploadProgress.start(begin,part.length())
         if(!begin.optBoolean("committed")) {
             store(row,"uploading")
             part.inputStream().use { input ->
@@ -132,7 +133,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                 while(offset<part.length()) {
                     currentCoroutineContext().ensureActive();val n=input.read(buffer);if(n<=0)throw IOException("Local upload source unavailable")
                     val next=call(client,scope,"file_chunk",JSONObject().put("operation",row.getString("operation")).put("offset",offset).put("data",Base64.encodeToString(buffer,0,n,Base64.NO_WRAP)))
-                    require(next.getLong("offset")==offset+n);offset+=n;report.bytes+=n;progress(path,report)
+                    LanUploadProgress.acknowledge(next,offset+n);offset+=n;report.bytes+=n;progress(path,report)
                 }
             }
             call(client,scope,"file_finish",JSONObject().put("operation",row.getString("operation")))
@@ -212,7 +213,8 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             var pending=db.transaction(key,path,scope)
                             if(pending?.optString("kind") in setOf("upload","delete_remote") && pending!!.optString("state") in setOf("captured","uploading","remote_committed")) {
                                 val status=call(client,scope,"file_upload_status",JSONObject().put("operation",pending.getString("operation")))
-                                if(status.optBoolean("committed")) { if(pending.optString("kind")=="upload" && pending.has("sourceVersion"))pending.put("localVersion",pending.getString("sourceVersion")).put("remoteVersion",status.opt("resultVersion") ?: JSONObject.NULL);if(pending.optString("kind")=="delete_remote")pending.put("localVersion",JSONObject.NULL).put("remoteVersion",JSONObject.NULL);store(pending,"remote_committed") }
+                                if(LanUploadProgress.restartRequired(status)) { store(pending,"aborted");pending=null }
+                                else if(status.optBoolean("committed")) { if(pending.optString("kind")=="upload" && pending.has("sourceVersion"))pending.put("localVersion",pending.getString("sourceVersion")).put("remoteVersion",status.opt("resultVersion") ?: JSONObject.NULL);if(pending.optString("kind")=="delete_remote")pending.put("localVersion",JSONObject.NULL).put("remoteVersion",JSONObject.NULL);store(pending,"remote_committed") }
                                 else if(pending.optString("kind")=="upload" && pending.optString("sourceVersion")!=meta(local)) {
                                     if(status.optString("state") in setOf("uploading","not_found")) { if(status.optString("state")!="not_found")call(client,scope,"file_abort",JSONObject().put("operation",pending.getString("operation")));store(pending,"aborted");pending=null }
                                     else if(status.optString("state")=="prepared") { call(client,scope,"file_finish",JSONObject().put("operation",pending.getString("operation")));store(pending,"remote_committed") }
@@ -331,7 +333,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             if(decision.action!="none")afterChange()
                         } catch(e: kotlinx.coroutines.CancellationException) { throw e }
                         catch(e: LanRemoteFileConflict) { report.defer("$path: ${e.reason}; refresh the snapshot");if(!cues)db.hold(key,path) }
-                        catch(e: LanLocalDeferred) { report.defer("$path: ${e.reason}");if(!cues)db.hold(key,path) }
+                        catch(e: LanLocalDeferred) { android.util.Log.w("LanFileSync","$path: ${e.reason}");report.defer("$path: ${e.reason}");if(!cues)db.hold(key,path) }
                         catch(e: SyncWifiRequiredException) { throw e }
                         catch(_: IOException) { report.defer("$path: peer_or_local_file_unavailable");if(!cues)db.hold(key,path) }
                         report.processed++

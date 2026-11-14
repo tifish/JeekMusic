@@ -53,6 +53,59 @@ public sealed class LanFileSyncStoreTests
         await store.Chunk(scope,first,default);await store.Chunk(scope,first,default); // Exact replay is harmless.
         await store.Chunk(scope,new() { ["operation"]=operation,["offset"]=32,["data"]=Convert.ToBase64String(bytes,32,32) },default);
     }
+    [Fact] public async Task ExpiredUploadRestartsAfterFreshAdmissionWithoutChangingTheLiveFile()
+    {
+        using var f=new Fixture();var original=Audio(1);var replacement=Audio(2);var path=Path.Combine(f.Root,"A.wav");Write(path,original);
+        string scope;JsonObject args;var operation=Id();
+        LanFileSyncStore Open()=>new(f.State,new(FileBytes:1024*1024,StagingBytes:2*1024*1024,BackupBytes:4*1024*1024,Operations:1));
+        using(var store=Open()) {
+            scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+            var baseline=await store.Ack(scope,f.Root,Ack("A.wav",Stamp(original),""),default,action=>action());
+            args=Upload("A.wav",replacement,Stamp(original),Text(baseline["version"]),operation);
+            store.Begin(scope,args);
+            Assert.Equal(32L,(await store.Chunk(scope,new() { ["operation"]=operation,["offset"]=0,["data"]=Convert.ToBase64String(replacement,0,32) },default))["offset"]!.GetValue<long>());
+        }
+        // Age only this isolated fixture, reproducing a phone returning after the upload TTL.
+        using(var db=new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(f.State,"file-sync.db")};Pooling=False")) {
+            db.Open();using var update=db.CreateCommand();update.CommandText="UPDATE operations SET created=$time,json=json_set(json,'$.createdAt',$time)";
+            update.Parameters.AddWithValue("$time",DateTimeOffset.UtcNow.ToUnixTimeSeconds()-7201);update.ExecuteNonQuery();
+        }
+        using(var store=Open()) {
+            var restarted=store.Begin(scope,args);
+            Assert.Equal("uploading",Text(restarted["state"]));Assert.Equal(0L,restarted["offset"]!.GetValue<long>());
+            Assert.Equal(original,File.ReadAllBytes(path));
+            await Feed(store,scope,operation,replacement);
+            Assert.True((await store.Finish(scope,f.Root,operation,default,action=>action()))["committed"]!.GetValue<bool>());
+            Assert.Equal(replacement,File.ReadAllBytes(path));
+            Assert.Equal("committed",Text(store.Begin(scope,args)["state"])); // A committed replay never restarts.
+        }
+    }
+    [Fact] public async Task RetiredUploadDoesNotBypassANewerBaseline()
+    {
+        using var f=new Fixture();using var store=f.Store();var original=Audio(1);Write(Path.Combine(f.Root,"A.wav"),original);
+        var scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+        var first=await store.Ack(scope,f.Root,Ack("A.wav",Stamp(original),""),default,action=>action());
+        var args=Upload("A.wav",Audio(2),Stamp(original),Text(first["version"]),Id());store.Begin(scope,args);store.Abort(scope,Text(args["operation"]));
+        await store.Ack(scope,f.Root,Ack("A.wav",Stamp(original),Text(first["version"])),default,action=>action());
+        var error=Assert.Throws<LanFileDeferred>(()=>store.Begin(scope,args));Assert.Equal("baseline_changed",error.Reason);
+        Assert.Equal(original,File.ReadAllBytes(Path.Combine(f.Root,"A.wav")));
+    }
+    [Fact] public async Task ExpiredUploadNeverTruncatesASubstitutedPrivatePart()
+    {
+        using var f=new Fixture();string scope;JsonObject args;
+        using(var store=f.Store()) {
+            scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);args=Upload("A.wav",Audio(2),null,"",Id());store.Begin(scope,args);
+            await store.Chunk(scope,new() { ["operation"]=args["operation"]!.DeepClone(),["offset"]=0,["data"]=Convert.ToBase64String(Audio(2),0,32) },default);
+        }
+        var part=Directory.GetFiles(Path.Combine(f.State,"uploads"),"*.part").Single();File.Move(part,part+".retained");File.WriteAllText(part,"external replacement");
+        using(var db=new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(f.State,"file-sync.db")};Pooling=False")) {
+            db.Open();using var age=db.CreateCommand();age.CommandText="UPDATE operations SET created=0,json=json_set(json,'$.createdAt',0)";age.ExecuteNonQuery();
+        }
+        using(var store=f.Store()) {
+            var error=Assert.Throws<LanFileDeferred>(()=>store.Begin(scope,args));Assert.Equal("private_staging_changed",error.Reason);
+            Assert.Equal("external replacement",File.ReadAllText(part));Assert.False(File.Exists(Path.Combine(f.Root,"A.wav")));
+        }
+    }
     [Fact] public async Task UploadDeleteAndAcknowledgementHaveDurableSeparateBoundaries()
     {
         using var f=new Fixture();var a=Audio(1);var b=Audio(2);var path=Path.Combine(f.Root,"A.wav");Write(path,a);

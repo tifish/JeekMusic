@@ -1,4 +1,7 @@
 <resources>
+    <string name="sync_wifi_only">仅在 Wi-Fi 下同步</string>
+    <string name="sync_wifi_only_summary">手动和自动同步音乐、用户数据及学习数据均使用 Wi-Fi。断开 Wi-Fi 后暂停，恢复连接后继续。</string>
+    <string name="sync_wifi_waiting">等待 Wi-Fi 连接，同步已暂停。</string>
     <string name="sync_connection">电脑连接</string>
     <string name="sync_not_paired">尚未配对电脑</string>
     <string name="sync_invitation">配对邀请</string>

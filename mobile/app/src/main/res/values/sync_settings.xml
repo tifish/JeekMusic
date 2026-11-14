@@ -1,4 +1,7 @@
 <resources>
+    <string name="sync_wifi_only">Sync only over Wi-Fi</string>
+    <string name="sync_wifi_only_summary">Use Wi-Fi for manual and automatic sync of music, user data and learning data. Pause when Wi-Fi disconnects and resume when it returns.</string>
+    <string name="sync_wifi_waiting">Waiting for Wi-Fi. Sync is paused.</string>
     <string name="sync_connection">Computer connection</string>
     <string name="sync_not_paired">No computer paired</string>
     <string name="sync_invitation">Pairing invitation</string>

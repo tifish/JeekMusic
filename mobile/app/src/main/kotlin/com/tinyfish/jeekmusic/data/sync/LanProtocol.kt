@@ -12,7 +12,8 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 
 /** Platform TLS only. The expected DER SHA-256 comes out of band from the PC's invitation. */
-internal class LanProtocol(private val connection: JSONObject) : java.io.Closeable {
+internal class LanProtocol(private val connection: JSONObject, private val networkPolicy: SyncNetworkPolicy? = null) : java.io.Closeable {
+    private var rawSocket: Socket? = null
     @Volatile var active: Socket? = null
     private var input: DataInputStream? = null
     private var output: DataOutputStream? = null
@@ -26,14 +27,15 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         val id=activePlan.getAndSet(null) ?: return
         remoteCancellationState="queued"
         try { remoteCancellation.execute {
-            remoteCancellationState=try { LanProtocol(connection).use { it.call("plan_cancel",JSONObject().put("job",id)).optString("state","unreachable") } } catch(_: Exception) { "unreachable" }
+            remoteCancellationState=try { LanProtocol(connection, networkPolicy).use { it.call("plan_cancel",JSONObject().put("job",id)).optString("state","unreachable") } } catch(_: Exception) { "unreachable" }
         } } catch(_: java.util.concurrent.RejectedExecutionException) { remoteCancellationState="unreachable" }
     }
     fun cancel() { cancelled = true; runCatching { active?.close() }; cancelRemotePlan() }
-    override fun close() { runCatching { active?.close() }; active = null; input = null; output = null; authenticated = false }
+    override fun close() { runCatching { active?.close() }; rawSocket?.let { networkPolicy?.release(it) }; rawSocket = null; active = null; input = null; output = null; authenticated = false }
     private fun pause(milliseconds: Long) {
         var remaining = milliseconds
         while(remaining > 0) { check(!cancelled) { "LAN transfer cancelled" }; val step=minOf(remaining,100L); Thread.sleep(step); remaining-=step }
+        networkPolicy?.requireAllowed()
         check(!cancelled) { "LAN transfer cancelled" }
     }
     @Synchronized fun call(op: String, args: JSONObject = JSONObject()): JSONObject {
@@ -88,9 +90,10 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
             }
             if(op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete")) activePlan.set(null)
             return result
-        } catch (e: Exception) { if(cancelled) cancelRemotePlan(); close(); throw e }
+        } catch (e: Exception) { if(cancelled) cancelRemotePlan(); close(); networkPolicy?.requireAllowed(); throw e }
     }
     private fun send(value: JSONObject, maximum: Int) {
+        networkPolicy?.requireAllowed()
         val bytes = value.toString().toByteArray(Charsets.UTF_8); require(bytes.size <= maximum)
         output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
     }
@@ -115,9 +118,11 @@ internal class LanProtocol(private val connection: JSONObject) : java.io.Closeab
         }
         val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         val socket = Socket()
+        rawSocket = socket
         active = socket
         try {
-            socket.connect(InetSocketAddress(connection.getString("host"), connection.getInt("port")), 10_000)
+            if (networkPolicy != null) networkPolicy.connect(socket, connection.getString("host"), connection.getInt("port"))
+            else socket.connect(InetSocketAddress(connection.getString("host"), connection.getInt("port")), 10_000)
             socket.soTimeout = 10_000
             val ssl = tls.socketFactory.createSocket(socket, connection.getString("host"), connection.getInt("port"), true) as SSLSocket
                 active = ssl

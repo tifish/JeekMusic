@@ -600,7 +600,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);

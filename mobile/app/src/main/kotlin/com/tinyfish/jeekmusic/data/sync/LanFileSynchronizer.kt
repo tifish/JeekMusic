@@ -322,6 +322,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                         } catch(e: kotlinx.coroutines.CancellationException) { throw e }
                         catch(e: LanRemoteFileConflict) { report.defer("$path: ${e.reason}; refresh the snapshot");if(!cues)db.hold(key,path) }
                         catch(e: LanLocalDeferred) { report.defer("$path: ${e.reason}");if(!cues)db.hold(key,path) }
+                        catch(e: SyncWifiRequiredException) { throw e }
                         catch(_: IOException) { report.defer("$path: peer_or_local_file_unavailable");if(!cues)db.hold(key,path) }
                         report.processed++
                     }

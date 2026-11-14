@@ -52,6 +52,7 @@ class LanSyncService @Inject constructor(
     private val playing: PlayingFiles,
     private val sync: SyncService,
     private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
+    val networkPolicy: SyncNetworkPolicy,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val gate = Mutex()
@@ -70,7 +71,7 @@ class LanSyncService @Inject constructor(
         io.watchDirectories(mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } })
     }
     internal fun pollFileRevision(mapping: JSONObject): String {
-        LanProtocol(store.read().getJSONObject("connection")).use { client ->
+        LanProtocol(store.read().getJSONObject("connection"), networkPolicy).use { client ->
             val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
             if(opened.optBoolean("deferred") || opened.optBoolean("conflict"))throw java.io.IOException("scope_unavailable")
             return client.call("file_revision",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope"))).getString("revision")
@@ -79,9 +80,13 @@ class LanSyncService @Inject constructor(
     internal fun reportFileSchedule(value: JSONObject) {
         val connection=store.read().optJSONObject("connection") ?: return
         for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) })runCatching {
-            LanProtocol(connection).use { client ->
+            LanProtocol(connection, networkPolicy).use { client ->
+                val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
+                if(!client.call("capabilities").optBoolean("syncNetworkPolicy")) {
+                    schedule.remove("wifiOnly");schedule.remove("waitingForWifi")
+                }
                 val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
-                client.call("file_schedule",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope")).put("schedule",JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))))
+                client.call("file_schedule",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope")).put("schedule",schedule))
             }
         }
     }
@@ -109,7 +114,7 @@ class LanSyncService @Inject constructor(
             val rows=if(id!=null)listOfNotNull(fileDatabase.issue(id)) else fileDatabase.issuePage(conflictOffset).also { conflictOffset=if(it.size<100)0 else conflictOffset+100 }
             val current=rows.filter { it.optString("mapping") in enabled && it.optString("scope").isNotEmpty() }
             if(current.isEmpty())return
-            LanProtocol(connection).use { client ->
+            LanProtocol(connection, networkPolicy).use { client ->
                 if(client.call("capabilities").optInt("conflictStatusProtocol")<1)return
                 for((scopeId,group) in current.groupBy { it.getString("scope") }) {
                     fun call(op: String,args: JSONObject)=client.call(op,args.put("fileProtocol",3).put("scope",scopeId))
@@ -154,11 +159,12 @@ class LanSyncService @Inject constructor(
     }
     private fun report() { _revision.update { it+1 } }
     init { fileDatabase.onIssuesChanged=::refreshConflicts;scope.launch(Dispatchers.IO) { refreshConflicts() } }
-    private fun problem(e: Exception): String = if(e is LanRemoteException && e.code=="unauthorized") context.getString(R.string.lan_pairing_revoked)
+    private fun problem(e: Exception): String = if(networkPolicy.waitingForWifi || e is SyncWifiRequiredException) context.getString(R.string.sync_wifi_waiting)
+        else if(e is LanRemoteException && e.code=="unauthorized") context.getString(R.string.lan_pairing_revoked)
         else if(e is LanRemoteException && e.code=="upgrade_required") context.getString(R.string.lan_paired_upgrade)
         else if (e is java.net.SocketException || e is java.net.SocketTimeoutException || e is javax.net.ssl.SSLException || e is java.io.EOFException) context.getString(R.string.lan_network_error)
         else e.message?.lineSequence()?.firstOrNull()?.take(240) ?: e.javaClass.simpleName
-    private fun protocol() = LanProtocol(store.read().getJSONObject("connection")).also { transport?.close(); transport = it }
+    private fun protocol() = LanProtocol(store.read().getJSONObject("connection"), networkPolicy).also { transport?.close(); transport = it }
 
     suspend fun pair(invitation: String) = withContext(Dispatchers.IO) {
         gate.withLock {
@@ -167,7 +173,7 @@ class LanSyncService @Inject constructor(
             require(store.mappings().isEmpty() || store.read().optJSONObject("connection")?.optString("pin") == uri.pin) { "Remove existing mappings before pairing another PC" }
             val id = sync.lanDeviceId()
             val connection = JSONObject().put("host", uri.host).put("port", uri.port).put("pin", uri.pin).put("deviceId", id)
-            val client = LanProtocol(connection); transport = client
+            val client = LanProtocol(connection, networkPolicy); transport = client
             val response = client.call("pair", JSONObject().put("invitation", uri.token).put("name", Build.MODEL))
             client.close()
             require(response.optInt("protocol") == 4) { "Upgrade the PC for LAN protocol 4" }
@@ -241,6 +247,7 @@ class LanSyncService @Inject constructor(
     fun start() { automation.hint("manual",manual=true) }
     @Synchronized internal fun startScheduled(reason: String) {
         if (job?.isActive == true) return
+        if (networkPolicy.waitingForWifi) { _status.update { it.copy(running=false,text=context.getString(R.string.sync_wifi_waiting)) };return }
         automation.begin(reason)
         // Status reporting is advisory. An offline PC must not delay the actual sync round
         // or occupy the mapping-edit gate before synchronization has even begun.

@@ -31,7 +31,7 @@ import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.objects
 import com.tinyfish.jeekmusic.data.preference.PreferenceStore.Companion.strings
 
 @Singleton
-class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService, private val feedback: DailyLearningFeedback, private val tags: com.tinyfish.jeekmusic.analysis.TagRepository) {
+class PreferenceService @Inject constructor(@param:ApplicationContext private val context: Context, private val library: JeekDatabase, private val lan: com.tinyfish.jeekmusic.data.sync.LanSyncStore, private val userData: com.tinyfish.jeekmusic.data.sync.SyncService, private val feedback: DailyLearningFeedback, private val tags: com.tinyfish.jeekmusic.analysis.TagRepository, private val networkPolicy: com.tinyfish.jeekmusic.data.sync.SyncNetworkPolicy) {
     // Lazy: adding the module does not touch storage or change settings-task startup behaviour.
     val store get()=feedback.store
     private var foregroundJob: kotlinx.coroutines.Job?=null
@@ -125,7 +125,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         val peer="pc:"+connection.getString("pin")
         var upload=(store.local("upload:$peer") ?: "0").toLong()
         var pages=0
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(connection).use { client ->
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(connection, networkPolicy).use { client ->
             transport=client
             com.tinyfish.jeekmusic.data.sync.LanProtocol.requirePairedCapabilities(client.call("capabilities"))
             if(includeUserData) userData.acceptLan(client.call("state",userData.exportLan(false).put("includeFeatures",false)))
@@ -173,7 +173,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     }
     private suspend fun synchronizeResults() {
         val generation=store.generation
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use { client ->
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection"), networkPolicy).use { client ->
             val cursor=DesktopResultCursor(store); var pages=0
             do {
                 currentCoroutineContext().ensureActive()
@@ -229,7 +229,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     suspend fun learningAction(action: String,downloadConfirmed: Boolean=false)=withContext(Dispatchers.IO) {
         require(action in listOf("status","learn","resume","cancel"))
         if(action!="status") synchronize()
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection")).use {
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection"), networkPolicy).use {
             val response=it.call("preference_training",JSONObject().put("protocol",PreferenceStore.VERSION).put("action",action).put("downloadConfirmed",downloadConfirmed))
             val state=if(action=="status") response.optJSONObject("learning") ?: response else response
             response.optJSONArray("heads")?.let { store.setLocal("desktop-head-summaries",it.toString()) }

@@ -9,9 +9,11 @@ internal sealed partial class LanFileSyncStore
     public JsonObject Schedule(string scope,JsonObject args)
     {
         var row=args["schedule"]?.AsObject()??throw new ArgumentException("Schedule required");
-        var allowed=new HashSet<string> { "trigger","dirty","running","paused","cancelled","foreground","backoffUntil","lastSuccess","nextReconcile","lastMetadataObservations","lastHashBytes","lastTransferBytes","state","watchDirectories","watchFailed" };
+        var allowed=new HashSet<string> { "trigger","dirty","running","paused","cancelled","foreground","backoffUntil","lastSuccess","nextReconcile","lastMetadataObservations","lastHashBytes","lastTransferBytes","state","watchDirectories","watchFailed","wifiOnly","waitingForWifi" };
         if(row.Count>allowed.Count || row.Any(p=>!allowed.Contains(p.Key)) || row.ToJsonString().Length>4096)throw new ArgumentException("Invalid schedule diagnostics");
         foreach(var p in row)if(p.Value is JsonObject or JsonArray || p.Value?.ToJsonString().Length>256)throw new ArgumentException("Invalid schedule diagnostic value");
+        foreach(var key in new[] { "wifiOnly","waitingForWifi" })
+            if(row.ContainsKey(key) && (row[key] is not JsonValue value || !value.TryGetValue<bool>(out _)))throw new ArgumentException("Network policy diagnostics must be boolean");
         var copy=row.DeepClone().AsObject();copy["reportedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();schedules[scope]=copy;
         return new() { ["accepted"]=true };
     }

@@ -1,8 +1,6 @@
 package com.tinyfish.jeekmusic.data.sync
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
 import android.os.FileObserver
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -15,17 +13,18 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0) {
-    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes)
+data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0,val wifiOnly: Boolean=true,val waitingForWifi: Boolean=false) {
+    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes).put("wifiOnly",wifiOnly).put("waitingForWifi",waitingForWifi)
 }
 
 /** Events are hints only. All writes/deletes go through the same serialized metadata reconciler. */
 internal class LanAutoSync(private val context: Context,private val scope: CoroutineScope,private val service: LanSyncService) {
     private val lock=Any()
-    private val _state=MutableStateFlow(LanSchedule())
+    private val _state=MutableStateFlow(LanSchedule(wifiOnly=service.networkPolicy.state.value.wifiOnly,waitingForWifi=service.networkPolicy.state.value.waitingForWifi))
     val state=_state.asStateFlow()
     @Volatile private var foreground=false
     private var initialized=false
@@ -47,9 +46,18 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
                 override fun onStop(owner: LifecycleOwner) { enterForeground(false) }
             })
         }
-        runCatching { context.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(object: ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) { if(foreground)hint("network_available") }
-        }) }
+        scope.launch(Dispatchers.IO) {
+            service.networkPolicy.state.collect { network ->
+                synchronized(lock) {
+                    _state.value=_state.value.copy(wifiOnly=network.wifiOnly,waitingForWifi=network.waitingForWifi)
+                    if(network.waitingForWifi) {
+                        timer?.cancel();firstHint=0
+                        _state.value=_state.value.copy(state="waiting_for_wifi")
+                    } else { failures=0;_state.value=_state.value.copy(backoffUntil=0) }
+                }
+                if(!network.waitingForWifi && foreground)hint("network_available")
+            }
+        }
         configure()
     }
     fun configure() {
@@ -81,7 +89,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         }
         conflictLoop=scope.launch(Dispatchers.IO) {
             while(isActive) {
-                try { if(eligible() && !held())service.exchangeConflictStatus() }
+                try { if(eligible() && !held() && !service.networkPolicy.waitingForWifi)service.exchangeConflictStatus() }
                 catch(e: CancellationException) { throw e }
                 catch(_: Exception) { /* Offline/busy retains local intent; no full-library retry storm. */ }
                 delay(2000)
@@ -91,7 +99,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             rebuildWatches();hint("foreground")
             while(isActive) {
                 delay(30_000)
-                if(!eligible() || held())continue
+                if(!eligible() || held() || service.networkPolicy.waitingForWifi)continue
                 if(System.currentTimeMillis()<_state.value.backoffUntil)continue
                 try {
                     var changed=false
@@ -112,6 +120,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             if(manual) { service.store.update { it.put("autoCancelled",false) };failures=0;_state.value=_state.value.copy(backoffUntil=0) }
             if(held())return
             _state.value=_state.value.copy(trigger=reason,dirty=true,cancelled=false)
+            if(service.networkPolicy.waitingForWifi) { _state.value=_state.value.copy(state="waiting_for_wifi");return }
             if(_state.value.running)return
             if(!foreground && !manual)return // WorkManager owns background execution, no wakeup loop.
             val now=System.currentTimeMillis();if(firstHint==0L)firstHint=now
@@ -129,7 +138,8 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
             _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,state=if(held())"cancelled" else if(success)"idle" else "backoff")
-            if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
+            if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
+            else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
             if(old.dirty && !held())hint("dirty_followup")
         }
         scope.launch(Dispatchers.IO) { rebuildWatches();service.reportFileSchedule(_state.value.json()) }
@@ -169,6 +179,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         }
     }
     suspend fun background(): Boolean {
+        if(service.networkPolicy.waitingForWifi)return true
         if(!eligible() || held())return true
         if(System.currentTimeMillis()<_state.value.backoffUntil)return true
         if(service.isSyncRunning())return true

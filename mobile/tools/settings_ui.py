@@ -15,7 +15,7 @@ P = argparse.ArgumentParser(description=__doc__)
 P.add_argument("--serial", required=True)
 P.add_argument("--package", default="com.tinyfish.jeekmusic.debug")
 P.add_argument("--output", type=Path, default=Path("output/settings-ui"))
-P.add_argument("action", choices=["show", "tap", "shot", "verify", "verify-sync", "verify-sync-offline", "verify-sync-mapping-order", "down", "up", "back"])
+P.add_argument("action", choices=["show", "tap", "shot", "verify", "verify-sync", "verify-sync-wifi", "verify-sync-offline", "verify-sync-mapping-order", "down", "up", "back"])
 P.add_argument("value", nargs="?")
 A = P.parse_args()
 assert A.serial.startswith("emulator-"), "This regression tool is restricted to an explicitly allocated emulator"
@@ -346,6 +346,54 @@ def verify_sync_offline():
     (A.output / "offline-results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result))
 
+def verify_sync_wifi():
+    def open_sync():
+        if nodes("open_settings"): tap("open_settings")
+        if nodes("settings_group_devices"):
+            find("settings_group_devices"); tap("settings_group_devices")
+        find("sync_wifi_only")
+
+    def wait_for(predicate):
+        end = time.monotonic() + 20
+        while not predicate():
+            assert time.monotonic() < end, "Wi-Fi UI transition timed out"
+            time.sleep(.3)
+
+    def waiting():
+        return any(n.get("text", "").startswith(("Waiting for Wi-Fi", "等待 Wi-Fi")) for n in nodes("lan_schedule"))
+
+    open_sync()
+    original = nodes("sync_wifi_only")[0].get("checked")
+    original_wifi = command("shell", "settings", "get", "global", "wifi_on").strip() != b"0"
+    try:
+        command("shell", "svc", "wifi", "enable")
+        if original == "false": tap("sync_wifi_only")
+        wait_for(lambda: not waiting())
+        shot("wifi-on")
+        tap("sync_wifi_only")
+        assert nodes("sync_wifi_only")[0].get("checked") == "false"
+        shot("wifi-off")
+        command("shell", "am", "force-stop", A.package)
+        command("shell", "am", "start", "-W", "-n", A.package + "/com.tinyfish.jeekmusic.MainActivity")
+        time.sleep(1)
+        open_sync()
+        assert nodes("sync_wifi_only")[0].get("checked") == "false", "Wi-Fi option lost across restart"
+        shot("wifi-off-restarted")
+        tap("sync_wifi_only")
+        command("shell", "svc", "wifi", "disable")
+        wait_for(waiting)
+        shot("wifi-waiting")
+        command("shell", "svc", "wifi", "enable")
+        wait_for(lambda: not waiting())
+        shot("wifi-restored")
+    finally:
+        command("shell", "svc", "wifi", "enable" if original_wifi else "disable")
+        if nodes("sync_wifi_only") and nodes("sync_wifi_only")[0].get("checked") != original:
+            tap("sync_wifi_only")
+    result = dict(realClient=True, toggleOnOff=True, persistedAcrossRestart=True, waitingForWifiVisible=True, wifiReturnClearsWaiting=True)
+    (A.output / "wifi-ui-results.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps(result))
+
 if A.action == "show":
     for n in dump().iter("node"):
         if n.get("text", "").startswith("jeeklan://"): continue
@@ -355,6 +403,7 @@ elif A.action == "tap": tap(A.value)
 elif A.action == "shot": shot(A.value)
 elif A.action == "verify": verify()
 elif A.action == "verify-sync": verify_sync()
+elif A.action == "verify-sync-wifi": verify_sync_wifi()
 elif A.action == "verify-sync-offline": verify_sync_offline()
 elif A.action == "verify-sync-mapping-order": verify_sync_mapping_order()
 elif A.action == "back": back()

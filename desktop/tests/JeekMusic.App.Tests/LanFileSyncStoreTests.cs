@@ -6,6 +6,16 @@ namespace JeekMusic.App.Tests;
 
 public sealed class LanFileSyncStoreTests
 {
+    [Fact] public void PeerNetworkPolicyDiagnosticsAreOptionalAndBoolean()
+    {
+        using var f=new Fixture();using var store=f.Store();
+        var scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+        Assert.True(store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["state"]="idle" } })["accepted"]!.GetValue<bool>());
+        Assert.True(store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["wifiOnly"]=true,["waitingForWifi"]=false } })["accepted"]!.GetValue<bool>());
+        var reported=Assert.Single(store.Diagnostics()["schedules"]!.AsArray())!["schedule"]!;
+        Assert.True(reported["wifiOnly"]!.GetValue<bool>());Assert.False(reported["waitingForWifi"]!.GetValue<bool>());
+        Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["wifiOnly"]="yes" } }));
+    }
     sealed class Fixture:IDisposable
     {
         public string Directory=Path.Combine(Path.GetTempPath(),"jeek-file-store-"+Guid.NewGuid().ToString("N"));

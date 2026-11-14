@@ -44,6 +44,7 @@ import org.json.JSONObject
 fun LanSyncSettings(lan: LanSyncService) {
     val status by lan.status.collectAsStateWithLifecycle()
     val schedule by lan.schedule.collectAsStateWithLifecycle()
+    val network by lan.networkPolicy.state.collectAsStateWithLifecycle()
     val revision by lan.revision.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -114,8 +115,12 @@ fun LanSyncSettings(lan: LanSyncService) {
             }
         }
         SettingsSectionHeader(stringResource(R.string.sync_automation))
+        SwitchRow(stringResource(R.string.sync_wifi_only), network.wifiOnly,
+            lan.networkPolicy::setWifiOnly, summary = stringResource(R.string.sync_wifi_only_summary),
+            modifier = Modifier.testTag("sync_wifi_only"))
         SettingSummary(stringResource(if(schedule.cancelled) R.string.lan_auto_cancelled else R.string.lan_auto_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_auto_status"))
         SettingSummary(stringResource(when {
+            network.waitingForWifi -> R.string.sync_wifi_waiting
             status.running -> R.string.settings_group_sync_running
             !paired -> R.string.sync_pair_first
             !enabledMappings -> R.string.sync_no_enabled_folders

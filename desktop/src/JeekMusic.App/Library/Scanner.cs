@@ -15,6 +15,8 @@ public sealed record ScanResult(int Added, int Updated, int Deleted, int Unsuppo
 /// </summary>
 public sealed class Scanner(LibraryDb db)
 {
+    readonly Sync.LanManifestCache? fileIndex;
+    internal Scanner(LibraryDb db,Sync.LanManifestCache fileIndex):this(db) { this.fileIndex=fileIndex; }
     /// <summary>支持的格式（需求 O-5）：libmpv 能解码的常见音频格式。</summary>
     public static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,6 +45,7 @@ public sealed class Scanner(LibraryDb db)
     ScanResult ScanCore(LibraryFolder folder, TrackBuilder builder, IReadOnlyCollection<string>? scopes, bool full, CancellationToken ct,IReadOnlySet<string>? forceFiles)
     {
         var root = folder.Root;
+        var metadataTicket=fileIndex?.BeginLibraryScan(folder.Id,root);
         if(Sync.LanFileSyncStore.BlocksScan(Path.Combine(AppPaths.DataDir,"lan-file-sync"),root))return new(0,0,0,0,1);
         if (!Online.TagWriteRecovery.RecoverBeforeScan(root)) return new(0, 0, 0, 0, 1);
         var audio = new Dictionary<string, (long mtime, long size)>(StringComparer.OrdinalIgnoreCase);
@@ -73,6 +76,7 @@ public sealed class Scanner(LibraryDb db)
                 if (!dirFiles.TryGetValue(relDir, out var names)) dirFiles[relDir] = names = new();
                 names.Add(f.Name);
                 var state = (f.LastWriteTimeUtc.Ticks, f.Length);
+                if(metadataTicket!=null)fileIndex!.ObserveLibraryFile(metadataTicket,rel,state.Ticks,state.Length);
                 if (AudioExtensions.Contains(ext)) audio[rel] = state;
                 else if (ext.Equals(".cue", StringComparison.OrdinalIgnoreCase)) cues[rel] = state;
                 else if (UnsupportedExtensions.Contains(ext)) unsupported++;

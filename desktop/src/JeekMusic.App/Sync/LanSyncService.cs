@@ -710,10 +710,14 @@ public sealed partial class LanSyncService : IDisposable
                 {
                     long folder;string watch;bool reliable;
                     lock(_gate) { folder=Roots[rootId]!["folderId"]!.GetValue<long>();watch=WatchRevision(rootId);reliable=_app.Library.Watcher.IsWatching(folder); }
-                    var cached=_manifestCache.TryGet(rootId,root,selected,watch,reliable,Environment.TickCount64,out var entries);
                     var elapsed=System.Diagnostics.Stopwatch.StartNew();
+                    var cacheVersion=_manifestCache.Version(folder);
+                    var cached=_manifestCache.TryGet(rootId,root,selected,watch,reliable,Environment.TickCount64,out var entries,recordMiss:false);
+                    var incremental=false;var refreshed=0;var shared=0;
+                    if(!cached)cached=incremental=_manifestCache.TryRefresh(folder,rootId,root,selected,watch,reliable,Environment.TickCount64,workCancel.Token,out entries,out refreshed,out shared);
                     if(!cached) {
                         RatePlan(device);
+                        _manifestCache.FullScanStarted();
                         entries=await LanFiles.Manifest(root,selected,workCancel.Token,metadataOnly:true,cueCacheDirectory:Path.Combine(AppPaths.DataDir,"lan-cue-metadata"));
                     }
                     var currentRoot=RootPath(rootId);
@@ -721,11 +725,11 @@ public sealed partial class LanSyncService : IDisposable
                     {
                         workCancel.Token.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "readMusic");
                         if (revision != _rootAuthorizationRevision || currentRoot != root) throw new UnauthorizedAccessException();
-                        if(!cached && watch==WatchRevision(rootId))_manifestCache.Store(folder,rootId,root,selected,watch,_app.Library.Watcher.IsWatching(folder),Environment.TickCount64,entries);
+                        if(!cached && watch==WatchRevision(rootId))_manifestCache.Store(folder,rootId,root,selected,watch,_app.Library.Watcher.IsWatching(folder),Environment.TickCount64,entries,cacheVersion);
                         foreach (var key in _plans.Where(p => p.Value.Device == device || p.Value.Expires < DateTime.UtcNow).Select(p => p.Key).ToArray()) _plans.Remove(key);
                         if (_plans.Count >= 16 || _plans.Values.Sum(p => p.Files.Count) + entries.Count > 200_000 || _plans.Values.Sum(p => ManifestMemory(p.Files)) + ManifestMemory(entries) > 128L * 1024 * 1024) throw Busy();
                         var id = Stamp(); _plans[id] = (device, rootId, DateTime.UtcNow.AddHours(2), entries,selected);
-                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact",["cacheHit"]=cached,["scanMs"]=cached?0:elapsed.ElapsedMilliseconds };
+                        return new JsonObject { ["plan"] = id, ["total"] = entries.Count, ["bytes"] = entries.Sum(e => e.Size), ["verification"] = "size+mtime-exact",["cacheHit"]=cached,["incremental"]=incremental,["refreshedPaths"]=refreshed,["libraryMetadataReused"]=shared,["scanMs"]=cached&&!incremental?0:elapsed.ElapsedMilliseconds };
                     }
                 }
                 catch (OperationCanceledException) { return BusyResponse(); }

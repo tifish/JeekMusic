@@ -26,6 +26,7 @@ public sealed class LibraryService : ITrackSource, IDisposable
 
     public LibraryDb Db { get; }
     public FolderWatcher Watcher { get; } = new();
+    internal Sync.LanManifestCache FileIndex { get; } = new();
     public LibrarySnapshot Snapshot { get; private set; } = LibrarySnapshot.Empty;
 
     public event Action? SnapshotChanged;
@@ -43,7 +44,9 @@ public sealed class LibraryService : ITrackSource, IDisposable
     {
         Db = db;
         _settings = settings;
-        _scanner = new Scanner(db);
+        _scanner = new Scanner(db,FileIndex);
+        Watcher.PathMetadataChanged+=FileIndex.Changed;
+        Watcher.MetadataInvalidated+=FileIndex.Invalidate;
         _scanner.Progress += (done, total) => Dispatcher.UIThread.Post(() => ScanProgress?.Invoke(done, total));
         Watcher.DirsChanged += (id, dirs) => _ = Enqueue(() => ScanFolder(id, dirs, full: false));
         Watcher.SyncChanged += id => SyncFolderChanged?.Invoke(id);

@@ -23,6 +23,9 @@ public sealed class FolderWatcher : IDisposable
     public event Action<long>? Failed;
     /// <summary>Immediate metadata invalidation, before the library's 2-second debounce.</summary>
     public event Action<long>? MetadataChanged;
+    /// <summary>Immediate relative leaf change; directory/link changes require a fresh inventory.</summary>
+    internal event Action<long,string,bool,bool>? PathMetadataChanged;
+    internal event Action<long>? MetadataInvalidated;
     readonly HashSet<long> _failed=new();
     public bool IsWatching(long folderId) { lock(_lock)return _watchers.ContainsKey(folderId)&&!_failed.Contains(folderId); }
 
@@ -40,11 +43,11 @@ public sealed class FolderWatcher : IDisposable
             {
                 IncludeSubdirectories = true,
                 InternalBufferSize = 64 * 1024,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.Attributes,
             };
             var id = folder.Id;
             var root = folder.Root;
-            void OnChange(string fullPath)
+            void OnChange(string fullPath,bool forceInventory=false)
             {
                 if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
                 var rel = fullPath[root.Length..];
@@ -53,6 +56,11 @@ public sealed class FolderWatcher : IDisposable
                     if (rel.Contains(@"sync\", StringComparison.OrdinalIgnoreCase)) lock (_lock) { _syncPending.Add(id); Arm(); }
                     return;
                 }
+                var directory=forceInventory;
+                var unavailable=false;
+                try { directory|=(File.GetAttributes(fullPath)&(FileAttributes.Directory|FileAttributes.ReparsePoint))!=0; }
+                catch(Exception e) when(e is IOException or UnauthorizedAccessException) { unavailable=true; }
+                PathMetadataChanged?.Invoke(id,rel.Replace('\\','/'),directory,unavailable);
                 MetadataChanged?.Invoke(id);
                 lock (_lock)
                     if (_ignored.TryGetValue(fullPath, out var until) && Environment.TickCount64 < until) return;
@@ -68,9 +76,10 @@ public sealed class FolderWatcher : IDisposable
             w.Created += (_, e) => OnChange(e.FullPath);
             w.Changed += (_, e) => OnChange(e.FullPath);
             w.Deleted += (_, e) => OnChange(e.FullPath);
-            w.Renamed += (_, e) => { OnChange(e.OldFullPath); OnChange(e.FullPath); };
+            w.Renamed += (_, e) => { var casing=e.OldFullPath.Equals(e.FullPath,StringComparison.OrdinalIgnoreCase);OnChange(e.OldFullPath,casing);OnChange(e.FullPath,casing); };
             w.Error += (_, e) =>
             {
+                MetadataInvalidated?.Invoke(id);
                 MetadataChanged?.Invoke(id);
                 if (e.GetException() is InternalBufferOverflowException)
                 {
@@ -83,12 +92,14 @@ public sealed class FolderWatcher : IDisposable
             };
             w.EnableRaisingEvents = true;
             lock(_lock) { _watchers[folder.Id]=w;_failed.Remove(folder.Id); }
+            MetadataInvalidated?.Invoke(id);
             MetadataChanged?.Invoke(id);
         }
         catch (Exception e) when (e is ArgumentException or IOException or PlatformNotSupportedException)
         {
             Log.Warn("watch", $"无法监听 {folder.Root}", e);
             lock(_lock)_failed.Add(folder.Id);
+            MetadataInvalidated?.Invoke(folder.Id);
             Failed?.Invoke(folder.Id);
         }
     }
@@ -120,7 +131,7 @@ public sealed class FolderWatcher : IDisposable
     {
         FileSystemWatcher? watcher;
         lock(_lock) { _watchers.Remove(folderId,out watcher);_failed.Remove(folderId); }
-        watcher?.Dispose();MetadataChanged?.Invoke(folderId);
+        watcher?.Dispose();MetadataInvalidated?.Invoke(folderId);MetadataChanged?.Invoke(folderId);
     }
 
     public void Dispose()

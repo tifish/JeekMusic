@@ -115,6 +115,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             }
         }
         SettingsSectionHeader(stringResource(R.string.sync_automation))
+        SettingSummary(stringResource(R.string.sync_audio_reuse_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SwitchRow(stringResource(R.string.sync_wifi_only), network.wifiOnly,
             lan.networkPolicy::setWifiOnly, summary = stringResource(R.string.sync_wifi_only_summary),
             modifier = Modifier.testTag("sync_wifi_only"))
@@ -140,6 +141,7 @@ fun LanSyncSettings(lan: LanSyncService) {
         if (status.running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
         if(status.fileProcessed>0) SettingSummary(stringResource(R.string.lan_file_summary,status.fileProcessed,status.fileActions.values.sum(),status.fileConflicts.size,status.fileDeferredCount),Modifier.padding(16.dp))
+        if(status.lastReusedFiles>0) SettingSummary(stringResource(R.string.sync_audio_reused,status.lastReusedFiles,java.text.NumberFormat.getIntegerInstance().format(status.lastReusedBytes)),Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_audio_reused"))
         for(conflict in status.fileConflicts.take(20)) SyncConflictCard(conflict) { lan.resolveConflict(conflict.getString("id"),it) }
         if (status.total > 0) Text(stringResource(R.string.sync_transfer_progress,status.done / 1024,status.total / 1024), Modifier.padding(horizontal = 16.dp))
         if (status.precisionNs > 0) Text(stringResource(R.string.lan_precision_summary, stringResource(when (status.precisionNs) {

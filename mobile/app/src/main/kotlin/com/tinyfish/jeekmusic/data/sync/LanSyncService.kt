@@ -35,7 +35,7 @@ import kotlin.coroutines.resume
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0)
+data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0,val fileReusedBytes: Long=0,val fileReusedFiles: Int=0,val lastReusedBytes: Long=0,val lastReusedFiles: Int=0)
 
 internal class LanMappingBusyException : IllegalStateException("Cancel sync before editing mappings")
 
@@ -85,6 +85,7 @@ class LanSyncService @Inject constructor(
             LanProtocol(connection, networkPolicy).use { client ->
                 val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
                 val capabilities=client.call("capabilities")
+                if(capabilities.optInt("fileAudioReuse")<1)for(field in listOf("lastAudioReusedBytes","lastAudioReusedFiles"))schedule.remove(field)
                 if(capabilities.optInt("fileDeltaProtocol")<1)for(field in listOf("lastMetadataRows","lastIncremental"))schedule.remove(field)
                 if(!capabilities.optBoolean("syncPerformanceDiagnostics"))for(field in listOf("lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastManifestCacheHit"))schedule.remove(field)
                 if(!capabilities.optBoolean("syncNetworkPolicy")) {
@@ -272,10 +273,10 @@ class LanSyncService @Inject constructor(
         automation.report()
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
-            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true
+            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true;var reusedBytes=0L;var reusedFiles=0
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
             try { gate.withLock {
-                _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage())
+                _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage(),lastReusedBytes=_status.value.lastReusedBytes,lastReusedFiles=_status.value.lastReusedFiles)
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
                     val obsolete=store.mappings().count { !LanMappingTargets.isCurrent(it) }
@@ -296,7 +297,7 @@ class LanSyncService @Inject constructor(
                                 val now=android.os.SystemClock.elapsedRealtime()
                                 if(now-lastProgress>=250) {
                                     lastProgress=now
-                                    _status.update { it.copy(running=true,text=path,done=done+progress.bytes,total=0,problems=problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed) }
+                                    _status.update { it.copy(running=true,text=path,done=done+progress.bytes,total=0,problems=problems.toList(),fileActions=(actions.keys+progress.actions.keys).associateWith { (actions[it] ?: 0)+(progress.actions[it] ?: 0) },fileDeferredCount=deferredCount+progress.deferredCount,fileProcessed=processed+progress.processed,fileReusedBytes=reusedBytes+progress.reusedBytes,fileReusedFiles=reusedFiles+progress.reusedFiles) }
                                 }
                             },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{},phase={ stage,count,total ->
                                 automation.phase(stage)
@@ -313,9 +314,9 @@ class LanSyncService @Inject constructor(
                             })
                             preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit;metadataRows+=result.metadataRows;incremental=incremental && result.incremental
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
-                            conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes
+                            conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes;reusedBytes+=result.reusedBytes;reusedFiles+=result.reusedFiles
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=fileProblem(reason)
-                            _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed) }
+                            _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed,fileReusedBytes=reusedBytes,fileReusedFiles=reusedFiles,lastReusedBytes=if(reusedFiles>0 && deferredCount==0)reusedBytes else it.lastReusedBytes,lastReusedFiles=if(reusedFiles>0 && deferredCount==0)reusedFiles else it.lastReusedFiles) }
                         } finally { client.close();activeFileRoot=null }
                         drainRefresh {
                             automation.phase("library_refresh")
@@ -353,7 +354,7 @@ class LanSyncService @Inject constructor(
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental)
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental,reusedBytes=reusedBytes,reusedFiles=reusedFiles)
             }
         }
     }

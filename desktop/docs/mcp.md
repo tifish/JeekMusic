@@ -661,7 +661,7 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 手机同步界面的版本大小、预估总大小及传输进度使用当前语言的千分位分隔符显示。MCP 和同步协议中的 `size/bytes` 继续返回原始整数，不转换为带分隔符的字符串；工具描述、参数类型和 Schema 无变化。
 
 
-`lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。hashBytes 保留兼容字段且始终为0；扫描、传输、条件提交、删除及恢复均不计算文件内容摘要，hashPurpose=none。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
+`lan_sync_status.fileSync` 的 `metadataObservations/hashBytes/transferBytes/sidecarParseBytes` 为当前进程累积计数；取同步前后差值，无变化对账 hashBytes=0、transferBytes=0。metadataObservations 是文件元数据观察数，不含 SQLite/目录元数据。原版本比较的 hashBytes 保留兼容字段且始终为0，hashPurpose=none；普通扫描、完整传输、条件提交、删除及恢复不依赖内容摘要。自动标签传输只对已经决定传输的文件核对媒体字节，另计 `audioReuse.hashBytes`，不混入扫描计数。证书、凭证或路径字符串的加密/散列不受影响。CUE 缓存未命中/变化解析单独计 sidecarParseBytes。开发与正式AOT共用服务和Schema；工具数量由实际 tools/list 读取，不硬编码。
 
 `lan_sync_status.manifestCache` 返回 PC 元数据清单的 `hits/misses/invalidated/entries/estimatedBytes`、`maximumEntries=16`、`maximumBytes=67108864`、`fallbackMs=900000`。只有目录 watcher 健康、根路径/选择范围/epoch/revision 相符时复用；目录事件立即失效，早于曲库的 2 秒合并；移除授权、停服务、监听失败或过期均不能复用。完整根缓存可筛选子目录并保留 CUE 依赖。`budgets.cachedPlansConsumeScanBudget=false`：缓存命中不占每设备每分钟 4 次的实际扫描预算，其他连接、请求、容量和提交限制不变。TLS plan 可选新增 `cacheHit` 和 `scanMs`。
 
@@ -682,6 +682,8 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 `lan_sync_status.fileSync.expiredUploadPolicy=fresh_admission_restart` 表示过期或已中止的上传在重新 `file_begin` 时按新上传准入；`restartedUploads` 是当前进程成功重新准入的次数。相同操作号必须匹配原路径、源版本和提交前提，重新检查基线、权限、并发、空间及每日上传预算，成功后从偏移 0 开始，可选返回 `restarted=true`。重用原事务行不再次占用事务行数配额；仍存活的可信断点继续续传。prepared/committed/acknowledged 事务保持原恢复或幂等路径，不重置；无法确认归属的私有部分文件保留并拒绝覆盖。对 expired/aborted/conflict 的 `file_chunk` 明确返回 `upload_restart_required`，不再返回可能误当作成功的偏移 0。旧手机调用兼容，无新增 MCP 参数，工具输入 Schema 不变，开发版与正式版共用实现。原因及验收见[过期上传恢复](../../docs/sync-expired-upload-recovery.md)。
 
 `lan_sync_status.fileSync.metadataDelta` 新增 protocol=1、policy=confirmed_snapshot_delta、history=false 和进程内 rounds/fullRounds/rowsSent。最新手机完成首次状态建立后只获取变化的文件信息与基线，包括删除及最后软件编辑时间变化，无变化返回 0 个路径；未确认/丢失的缓存才重新获取全量。手机仍在本地扫描元数据，不传输未变化文件的信息。协商 `capabilities.fileDeltaProtocol=1` 后，手机调度可报告非负整数 lastMetadataRows 与布尔 lastIncremental，含义及 reportedAt 边界见[增量文件信息](../../docs/sync-incremental-metadata.md)。工具描述同步更新，MCP 输入 Schema 不变。
+
+`capabilities.fileAudioReuse=1` 表示支持自动标签传输。`fileSync.audioReuse` 返回 protocol=1、policy=changed_files_only_exact_media_sha256、formats、unsupported=full_file、scanReadsAudio=false，以及 PC 进程内 hashBytes/reusedBytes/copies。媒体 SHA256 只在变化文件的传输优化中计算；确认字节一致后传送其余容器/元数据字节，并复用接收端现有媒体范围重建完整源文件。格式未知/不明确、小文件、媒体不一致或旧客户端均沿完整传输。PC reusedBytes/copies 是本机上传暂存复用计数；手机认证调度 lastAudioReusedBytes/lastAudioReusedFiles 汇总该轮双向复用，依然可能陈旧，以 reportedAt 为准。参数 Schema 不变，正式与开发共用实现。协议、恢复边界和验证见[自动标签传输](../../docs/sync-audio-reuse.md)。
 
 两端必须同时升级。文件版本用 `stamp=m2:size:modifiedNs` 表示，取代内容 hash；基线 comparisonProtocol=2 和已保存的两端落地时间对应关系保留，不清空基线。相同大小和精确修改时间即视为同一版本，即使内容不同。续传校验事务归属、文件身份和已持久化的部分文件大小/修改时间；无法确认的部分文件不覆盖用户文件。旧事务仅能从现存元数据迁移，无可靠元数据时保留并报告延期。认证、TLS、路径边界、撤销和配额不变。MCP 参数 Schema 无变化，新增诊断值两种构建一致。
 

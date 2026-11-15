@@ -19,6 +19,11 @@ import java.util.UUID
 class LanFileSynchronizerTest {
     private fun id()=UUID.randomUUID().toString().replace("-","")
     private fun audio(marker: Int,size: Int=64)=ByteArray(size).also { "RIFF".toByteArray().copyInto(it);"WAVE".toByteArray().copyInto(it,8);it[it.lastIndex]=marker.toByte() }
+    private fun taggedWave(padding: Int,marker: Int=17): ByteArray {
+        val bytes=ByteArray(52+padding+1024*1024);val b=java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()).putInt(bytes.size-8).put("WAVEfmt ".toByteArray()).putInt(16).putShort(1).putShort(1).putInt(16000).putInt(32000).putShort(2).putShort(16)
+        b.put("JUNK".toByteArray()).putInt(padding);b.position(44+padding);b.put("data".toByteArray()).putInt(1024*1024);bytes.fill(marker.toByte(),52+padding);return bytes
+    }
     private fun hash(bytes: ByteArray)=LanFileMetrics.token(bytes.size.toLong(),1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)
     private fun fixture(body: suspend Fixture.()->Unit)=runBlocking {
         val raw=InstrumentationRegistry.getArguments().getString("jeekFileFixture") ?: error("Explicit isolated fixture required")
@@ -45,7 +50,8 @@ class LanFileSynchronizerTest {
         var fixedTime: Long?=null
         fun time(bytes: ByteArray)=fixedTime ?: (1_800_000_000_000_000_000L+(bytes.last().toLong() and 255)*1_000_000_000L)
         fun hash(bytes: ByteArray)=LanFileMetrics.token(bytes.size.toLong(),time(bytes))
-        val path get()="$prefix/A.wav"
+        var fileName="A.wav"
+        val path get()="$prefix/$fileName"
         fun local(bytes: ByteArray?) { val f=File(root,path);f.parentFile!!.mkdirs();if(bytes==null)f.delete() else { f.writeBytes(bytes);LanFileMetrics.setModified(f,time(bytes)) } }
         fun localBytes()=File(root,path).takeIf { it.exists() }?.readBytes()
         fun recordLocalEdit(time: Long) {
@@ -86,6 +92,11 @@ class LanFileSynchronizerTest {
         }.also { check(!it.optBoolean("conflict") && !it.optBoolean("deferred")) { it.toString() } }
         fun scope(): String { if(otherScope==null)otherScope=call("file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",UUID.nameUUIDFromBytes(("synthetic-writer:"+connection.getString("deviceId")).toByteArray()).toString()).put("selection",JSONArray(listOf("")))).getString("scope");return otherScope!! }
         fun remoteHash(target: String=path): String? { val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",target));val r=call("file_verify",JSONObject().put("scope",scope()).put("path",target).put("expectedVersion",observed.opt("metadataVersion") ?: JSONObject.NULL));return if(r.isNull("stamp"))null else r.getString("stamp") }
+        fun remoteBytes(): ByteArray {
+            val observed=call("file_probe",JSONObject().put("scope",scope()).put("path",path));val out=java.io.ByteArrayOutputStream();val size=observed.getLong("size")
+            while(out.size().toLong()<size)out.write(Base64.decode(call("file_read",JSONObject().put("scope",scope()).put("path",path).put("size",size).put("sourceVersion",observed.getString("metadataVersion")).put("offset",out.size())).getString("data"),Base64.NO_WRAP))
+            return out.toByteArray()
+        }
         fun remote(bytes: ByteArray?,target: String=path,editedAtMs: Long=0) {
             val scope=scope();val before=remoteHash(target)
             var baseline=call("file_baseline",JSONObject().put("scope",scope).put("path",target))
@@ -134,6 +145,38 @@ class LanFileSynchronizerTest {
                 service.store.update { saved -> saved.keys().asSequence().toList().forEach(saved::remove);original.keys().forEach { saved.put(it,original.get(it)) } }
             }
         }
+    }
+    @Test fun mp3LeadingLyricsAndTrailingTagsReuseMediaBothDirections()=fixture {
+        fileName="A.mp3";fixedTime=1_800_000_000_000_000_000L
+        val original=File(context.cacheDir,"audio-reuse-source.mp3").apply { writeBytes(InstrumentationRegistry.getInstrumentation().context.assets.open("tag-writer-tone.mp3").use { it.readBytes() }) }
+        val media=original.inputStream().use { input ->
+            val envelope=LanAudioEnvelope.parse(input.channel,"A.mp3")!!;input.channel.position(envelope.start);ByteArray(envelope.length.toInt()).also { java.io.DataInputStream(input).readFully(it) }
+        }
+        val output=java.io.ByteArrayOutputStream()
+        while(output.size()<524288)output.write(media)
+        val mediaBytes=output.size().toLong();output.write("TAG".toByteArray());output.write(ByteArray(125));original.writeBytes(output.toByteArray())
+        try {
+            fun changed(text: String,footer: Int): ByteArray {
+                com.tinyfish.jeekmusic.data.tags.SafeTagWriter.write(original,com.tinyfish.jeekmusic.data.tags.TagEdit(lyrics=text),"mp3")
+                return original.readBytes().also { it[it.size-1]=footer.toByte();original.writeBytes(it) }
+            }
+            val first=changed("[00:00.00]first",1);remote(first,editedAtMs=1000);run();assertArrayEquals(first,localBytes())
+            val second=changed("[00:00.00]"+"second ".repeat(100),2);remote(second,editedAtMs=2000);var report=run()
+            assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(1,report.reusedFiles);assertEquals(mediaBytes,report.reusedBytes);assertEquals(second.size-mediaBytes,report.bytes);assertArrayEquals(second,localBytes())
+            val third=changed("[00:00.00]"+"third ".repeat(300),3);local(third);recordLocalEdit(3000);report=run()
+            assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(1,report.reusedFiles);assertEquals(mediaBytes,report.reusedBytes);assertEquals(third.size-mediaBytes,report.bytes);assertArrayEquals(third,remoteBytes())
+        }finally { original.delete() }
+    }
+    @Test fun changedTagsReuseExactAudioBothWaysAndChangedAudioFallsBackToFullTransfer()=fixture {
+        fixedTime=1_800_000_000_000_000_000L
+        val first=taggedWave(4);remote(first,editedAtMs=1000);var report=run();assertEquals(report.deferred.toString(),0,report.deferredCount);assertArrayEquals(first,localBytes())
+        val second=taggedWave(1024);remote(second,editedAtMs=2000);report=run()
+        assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(1,report.reusedFiles);assertEquals(1024L*1024,report.reusedBytes);assertEquals(1076L,report.bytes);assertArrayEquals(second,localBytes())
+        val third=taggedWave(2048);local(third);recordLocalEdit(3000);report=run()
+        assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(1,report.reusedFiles);assertEquals(1024L*1024,report.reusedBytes);assertEquals(2100L,report.bytes);assertArrayEquals(third,remoteBytes())
+        val fourth=taggedWave(4096,18);remote(fourth,editedAtMs=4000);report=run()
+        assertEquals(report.deferred.toString(),0,report.deferredCount);assertEquals(0,report.reusedFiles);assertEquals(fourth.size.toLong(),report.bytes);assertArrayEquals(fourth,localBytes())
+        val hashes=LanAudioEnvelope.hashedBytes.get();report=run();assertEquals(hashes,LanAudioEnvelope.hashedBytes.get());assertEquals(0L,report.bytes)
     }
     @Test fun incrementalMetadataSkipsUnchangedAndFindsOldDatedAddsAndDeletes()=fixture {
         remote(audio(11));var report=run();assertEquals(0,report.deferredCount);assertFalse(report.incremental)

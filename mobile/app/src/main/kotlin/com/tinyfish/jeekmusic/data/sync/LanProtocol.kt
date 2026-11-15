@@ -77,7 +77,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
             }
             output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
             var result = receive(if (op == "state") 32_000_000 else 2_000_000)
-            if (op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete")) {
+            if (op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete","file_audio_layout","file_reuse_audio")) {
                 if(result.optBoolean("pending")) activePlan.set(result.getString("job"))
                 if(cancelled) cancelRemotePlan()
                 val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(31)
@@ -91,7 +91,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
                     result = call("plan_status", JSONObject().put("job", result.getString("job")))
                 }
             }
-            if(op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete")) activePlan.set(null)
+            if(op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete","file_audio_layout","file_reuse_audio")) activePlan.set(null)
             return result
         } catch (e: Exception) { if(cancelled) cancelRemotePlan(); close(); networkPolicy?.requireAllowed(); throw e }
     }

@@ -62,6 +62,7 @@ public sealed partial class LanSyncService
     JsonObject FileDiagnostics() {
         var result=_fileDiagnostics.DeepClone().AsObject();
         result["admissionWaitMs"]=FileAdmissionWaitMs;
+        result["audioReuse"]=_fileStore?.AudioDiagnostics()??new JsonObject { ["protocol"]=1,["scanReadsAudio"]=false };
         result["metadataDelta"]=_fileStore?.DeltaStatus()??new JsonObject { ["protocol"]=1,["policy"]="confirmed_snapshot_delta",["history"]=false };
         result["fileComparisonPolicy"]="mtime_then_size_then_last_edit";result["lastFileEditTime"]=FileEditTimes.Diagnostics();
         result["pendingConflicts"]=ConflictCount;result["conflictProtocol"]=1;result["conflictStatusProtocol"]=1;
@@ -88,11 +89,11 @@ public sealed partial class LanSyncService
     {
         var op=a["op"]!.GetValue<string>();
         if(!modern || a["fileProtocol"]?.GetValue<int>()!=3)return Error("upgrade_required");
-        if(op is not ("file_delta" or "file_delta_rows" or "file_delta_commit" or "file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
+        if(op is not ("file_audio_layout" or "file_reuse_audio" or "file_delta" or "file_delta_rows" or "file_delta_commit" or "file_open" or "file_revision" or "file_schedule" or "file_rows" or "file_baseline" or "file_probe" or "file_verify" or "file_ack" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_upload_status" or "file_read" or "file_abort" or "file_conflict" or "file_conflict_choose" or "file_conflict_clear" or "file_conflict_status"))throw new ArgumentException("Unknown file operation");
         if(!await _fileWork.WaitAsync(TimeSpan.FromMilliseconds(FileAdmissionWaitMs),request))throw Busy();
         bool handedOff=false;
         // Metadata checks and acknowledgements no longer require a background content pass.
-        var independent=op is "file_finish" or "file_delete";
+        var independent=op is "file_finish" or "file_delete" or "file_audio_layout" or "file_reuse_audio";
         CancellationTokenSource? lifetime=null;
         try
         {
@@ -147,13 +148,16 @@ public sealed partial class LanSyncService
                         case "file_ack":if(!a.ContainsKey("remoteVersion"))throw new ArgumentException("Metadata acknowledgement required");result=await store.Ack(scope,root,a,token,Guard);break;
                         case "file_begin":if(!a.ContainsKey("expectedVersion"))throw new ArgumentException("Metadata precondition required");result=store.Begin(scope,a);break;
                         case "file_chunk":TransferBudget(auth.Device,Math.Min(262144,(a["data"]?.GetValue<string>().Length??0)*3/4));result=await store.Chunk(scope,a,token);break;
+                        case "file_audio_layout":result=await store.AudioLayout(scope,root,a["path"]!.GetValue<string>(),a,token);break;
+                        case "file_reuse_audio":result=await store.ReuseAudio(scope,root,a,token);break;
                         case "file_abort":result=store.Abort(scope,a["operation"]!.GetValue<string>());break;
                         case "file_read": {
                             var path=a["path"]!.GetValue<string>();store.PathAllowed(scope,path);
                             var offset=a["offset"]!.GetValue<long>();var size=a["size"]!.GetValue<long>();
                             if(offset<0 || size<0 || size>store.MaximumFileBytes || offset>size)throw new ArgumentException("Invalid file range");
                             await using var input=JeekMusic.Core.Sync.LanFiles.OpenRead(root,path);if(input.Length!=size || JeekMusic.Core.Sync.FileMetadata.Token(JeekMusic.Core.Sync.FileMetadata.Observe(root,path))!=a["sourceVersion"]?.GetValue<string>())throw new LanFileDeferred("source_changed");
-                            input.Position=offset;var bytes=new byte[(int)Math.Min(262144,size-offset)];TransferBudget(auth.Device,bytes.Length);await input.ReadExactlyAsync(bytes,token);
+                            var count=a["count"]?.GetValue<int>()??262144;if(count is <1 or >262144)throw new ArgumentException("Invalid read count");
+                            input.Position=offset;var bytes=new byte[(int)Math.Min(count,size-offset)];TransferBudget(auth.Device,bytes.Length);await input.ReadExactlyAsync(bytes,token);
                             Interlocked.Add(ref JeekMusic.Core.Sync.FileMetadata.TransferBytes,bytes.Length);result=new JsonObject { ["data"]=Convert.ToBase64String(bytes) };break;
                         }
                         case "file_upload_status":result=store.UploadStatus(scope,a["operation"]!.GetValue<string>());break;

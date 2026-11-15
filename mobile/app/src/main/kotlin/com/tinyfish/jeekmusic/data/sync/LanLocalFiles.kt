@@ -189,6 +189,47 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             }
         }
     }
+    suspend fun audioEnvelope(path: String,expected: String,hash: Boolean=false): LanAudioEnvelope? {
+        val p=parent(path) ?: throw LanLocalDeferred("source_changed")
+        return p.use { parent ->
+            val fd=LanAtomicFiles.openLeaf(parent.fd,path.substringAfterLast('/'),false,false);if(fd<0)throw LanLocalDeferred("source_changed")
+            ParcelFileDescriptor.adoptFd(fd).use { file ->
+                val before=LanAtomicFiles.identity(file.fd);if(LanFileMetrics.stamp(before)!=expected)throw LanLocalDeferred("source_changed")
+                val context=currentCoroutineContext()
+                val layout=ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(file.fileDescriptor)).use { stream ->
+                    val layout=LanAudioEnvelope.parse(stream.channel,path) ?: return@use null
+                    if(layout.length<262144)return@use null
+                    if(hash)layout.copy(digest=LanAudioEnvelope.digest(stream.channel,layout.start,layout.length) { context.ensureActive() }) else layout
+                }
+                if(!before.contentEquals(LanAtomicFiles.identity(file.fd)))throw LanLocalDeferred("source_changed")
+                layout
+            }
+        }
+    }
+    suspend fun copyAudio(path: String,expected: String,layout: LanAudioEnvelope,output: FileOutputStream): Boolean {
+        val original=output.channel.size();var valid=false
+        try {
+            val p=parent(path) ?: throw LanLocalDeferred("source_changed")
+            p.use { parent ->
+                val fd=LanAtomicFiles.openLeaf(parent.fd,path.substringAfterLast('/'),false,false);if(fd<0)throw LanLocalDeferred("source_changed")
+                ParcelFileDescriptor.adoptFd(fd).use { file ->
+                    val before=LanAtomicFiles.identity(file.fd);if(LanFileMetrics.stamp(before)!=expected)throw LanLocalDeferred("source_changed")
+                    ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(file.fileDescriptor)).use { stream ->
+                        val current=LanAudioEnvelope.parse(stream.channel,path)
+                        if(current==null || current.format!=layout.format || current.start!=layout.start || current.length!=layout.length)throw LanLocalDeferred("source_changed")
+                        val hash=java.security.MessageDigest.getInstance("SHA-256");val buffer=java.nio.ByteBuffer.allocate(131072);var remaining=layout.length;stream.channel.position(layout.start)
+                        while(remaining>0) {
+                            currentCoroutineContext().ensureActive();buffer.clear();buffer.limit(minOf(remaining,buffer.capacity().toLong()).toInt());val n=stream.channel.read(buffer);if(n<=0)throw IOException("Local audio source unavailable")
+                            hash.update(buffer.array(),0,n);LanAudioEnvelope.hashedBytes.addAndGet(n.toLong());output.write(buffer.array(),0,n);remaining-=n
+                        }
+                        valid=hash.digest().joinToString("") { "%02x".format(it) }==layout.digest
+                    }
+                    if(!before.contentEquals(LanAtomicFiles.identity(file.fd))) { valid=false;throw LanLocalDeferred("source_changed") }
+                }
+            }
+            return valid
+        }finally { if(!valid)output.channel.truncate(original) }
+    }
     private fun save(row: JSONObject,state: String) {
         if(state=="committed" && row.optString("kind")=="download") {
             val path=row.getString("path");val p=parent(path)

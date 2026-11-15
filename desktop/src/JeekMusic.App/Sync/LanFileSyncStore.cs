@@ -145,6 +145,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
         {
             if(S(existing["kind"])!="upload" || S(existing["path"])!=path || S(existing["stamp"])!=hash || existing["size"]!.GetValue<long>()!=size || Stamp(existing["expectedStamp"])!=expected || S(existing["baselineVersion"])!=S(a["baselineVersion"]))throw new IOException("Operation identity reused");
             if(a.ContainsKey("expectedVersion") && (V(existing["expectedVersion"])!=V(a["expectedVersion"]) || existing["modifiedNs"]?.ToJsonString()!=a["modifiedNs"]?.ToJsonString()))throw new IOException("Operation metadata identity reused");
+            RecoverAudioReuse(scope,existing);
             if(S(existing["state"]) is "expired" or "aborted") {
                 // The new begin is a fresh admission, never a continuation of a retired prefix.
                 // Prepared/committed operations stay on their existing recovery/idempotency path.
@@ -183,6 +184,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     public JsonObject UploadStatus(string scope,string op)
     {
         var t=Task(scope,Operation(op));if(t is null)return new JsonObject { ["state"]="not_found",["operation"]=op,["offset"]=0,["committed"]=false };
+        RecoverAudioReuse(scope,t);
         return new JsonObject { ["operation"]=op,["state"]=S(t["state"]),["offset"]=File.Exists(Partial(scope,op))?new FileInfo(Partial(scope,op)).Length:0,["stamp"]=t["stamp"]?.DeepClone(),["resultVersion"]=t["resultVersion"]?.DeepClone(),["committed"]=S(t["state"]) is "committed" or "acknowledged" };
     }
     public long MaximumFileBytes=>limits.FileBytes;
@@ -196,6 +198,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     public async Task<JsonObject> Chunk(string scope,JsonObject a,CancellationToken ct)
     {
         var op=Operation(S(a["operation"]));var task=Task(scope,op)??throw new UnauthorizedAccessException();
+        RecoverAudioReuse(scope,task);
         if(S(task["state"]) is "expired" or "aborted" or "conflict")throw new LanFileDeferred("upload_restart_required");
         if(S(task["state"])!="uploading")return UploadStatus(scope,op);
         var text=S(a["data"]);if(text.Length>349528)throw new IOException("Upload chunk budget exceeded");var bytes=Convert.FromBase64String(text);if(bytes.Length is <1 or >262144)throw new IOException("Upload chunk budget exceeded");
@@ -222,6 +225,7 @@ internal sealed partial class LanFileSyncStore:IDisposable
     public async Task<JsonObject> Finish(string scope,string root,string op,CancellationToken ct,Action<Action> commit)
     {
         var task=Task(scope,Operation(op))??throw new UnauthorizedAccessException();if(S(task["state"]) is "committed" or "acknowledged")return UploadStatus(scope,op);
+        if(RecoverAudioReuse(scope,task))throw new LanFileDeferred("upload_restart_required");
         task["rootPath"]=Path.GetFullPath(root);
         var path=S(task["path"]);PathAllowed(scope,path);RequireBaseline(scope,path,S(task["baselineVersion"]));var expected=Stamp(task["expectedStamp"]);var desired=S(task["stamp"]);var part=Partial(scope,op);
         if(!File.Exists(part) || new FileInfo(part).Length!=task["size"]!.GetValue<long>())throw new LanFileDeferred("upload_incomplete");

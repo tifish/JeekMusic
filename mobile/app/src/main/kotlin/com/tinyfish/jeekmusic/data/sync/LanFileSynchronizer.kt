@@ -13,7 +13,7 @@ import java.io.IOException
 import java.util.UUID
 
 internal class LanRemoteFileConflict(val reason: String): IOException(reason)
-internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false,var metadataRows: Int=0,var incremental: Boolean=false) {
+internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false,var metadataRows: Int=0,var incremental: Boolean=false,var canReuseAudio: Boolean=false,var reusedBytes: Long=0,var reusedFiles: Int=0) {
     fun defer(text: String) { deferredCount++;if(deferred.size<100)deferred+=text.take(2300) }
     fun conflict(row: JSONObject) { conflictCount++;if(conflicts.size<100)conflicts+=row }
 }
@@ -67,7 +67,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             if(file.name.matches(Regex("[0-9a-f]{64}\\.part\\.metadata(\\.bak|\\.new)?")) && !File(partials,file.name.substringBefore(".metadata")).exists()) { file.delete();continue }
             if(file.name.matches(Regex("[0-9a-f]{64}\\.part")) && maxOf(file.lastModified(),File(file.path+".metadata").lastModified())<old) { file.delete();File(file.path+".metadata").delete();continue };if(++count>4096)throw LanLocalDeferred("private_staging_count_budget");size=Math.addExact(size,file.length());if(size>16L*1024*1024*1024)throw LanLocalDeferred("private_staging_byte_budget") };return size
     }
-    private suspend fun download(client: LanProtocol,scope: String,mapping: JSONObject,path: String,remote: JSONObject,plan: String,inside: Boolean,report: LanFileReport,progress: (String,LanFileReport)->Unit): File {
+    private suspend fun download(client: LanProtocol,scope: String,mapping: JSONObject,path: String,remote: JSONObject,plan: String,inside: Boolean,report: LanFileReport,progress: (String,LanFileReport)->Unit,io: LanLocalFiles,localVersion: String?): File {
         val desired=remote.getString("stamp");val size=remote.getLong("size");if(size<0 || size>8L*1024*1024*1024)throw LanLocalDeferred("file_byte_budget")
         val part=privatePart(mapping,path,desired)
         val checkpoint=android.util.AtomicFile(File(part.path+".metadata"))
@@ -80,11 +80,34 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             catch(e: Exception) { checkpoint.failWrite(out);throw e }
         }
         if(privateBytes()+size-part.length()>16L*1024*1024*1024 || partials.usableSpace<size-part.length()+256L*1024*1024)throw LanLocalDeferred("private_staging_byte_budget")
+        var sourceAudio: LanAudioEnvelope?=null;var targetAudio: LanAudioEnvelope?=null;var reused=false
+        if(report.canReuseAudio && inside && localVersion!=null && LanAudioEnvelope.supports(path) && part.length()<size) {
+            val target=io.audioEnvelope(path,localVersion)
+            if(target!=null) {
+                val source=LanAudioEnvelope.from(call(client,scope,"file_audio_layout",JSONObject().put("path",path).put("expectedVersion",meta(remote)).put("mediaBytes",target.length)),size)
+                if(source!=null && source.digest!=null && source.format==target.format && source.length==target.length && part.length()<=source.start) {
+                    val checked=io.audioEnvelope(path,localVersion,true)
+                    if(checked!=null && source.matches(checked)) { sourceAudio=source;targetAudio=checked }
+                }
+            }
+        }
         FileOutputStream(part,true).use { output ->
             var offset=part.length();savePartial();var partialStamp=LanFileMetrics.stamp(part);var checkpointOffset=offset;var checkpointTime=android.os.SystemClock.elapsedRealtime()
             try { while(offset<size) {
                 currentCoroutineContext().ensureActive()
+                if(sourceAudio!=null && offset==sourceAudio.start) {
+                    if(LanFileMetrics.stamp(part)!=partialStamp)throw LanLocalDeferred("private_staging_changed")
+                    val copied=io.copyAudio(path,localVersion!!,targetAudio!!,output)
+                    partialStamp=LanFileMetrics.stamp(part)
+                    if(copied) {
+                        offset=sourceAudio.end;report.reusedBytes+=sourceAudio.length;reused=true
+                        output.fd.sync();savePartial();checkpointOffset=offset;checkpointTime=android.os.SystemClock.elapsedRealtime();progress(path,report)
+                    } else { sourceAudio=null;targetAudio=null }
+                    continue
+                }
                 val args=JSONObject().put("path",path).put("offset",offset)
+                val count=if(sourceAudio!=null && offset<sourceAudio.start)minOf(262144L,sourceAudio.start-offset).toInt() else 262144
+                if(sourceAudio!=null)args.put("count",count)
                 val result=if(inside)call(client,scope,"file_read",args.put("size",size).put("sourceVersion",meta(remote))) else client.call("read",args.put("rootId",mapping.getString("rootId")).put("plan",plan))
                 val bytes=Base64.decode(result.getString("data"),Base64.NO_WRAP)
                 require(bytes.isNotEmpty() && bytes.size<=262144 && offset+bytes.size<=size) { "Invalid file range" }
@@ -102,6 +125,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         }
         LanFileMetrics.setModified(part,remote.getLong("modifiedNs"));savePartial()
         if(LanFileMetrics.stamp(part)!=desired) { part.delete();throw LanLocalDeferred("download_integrity") }
+        if(reused)report.reusedFiles++
         return part
     }
     private suspend fun upload(client: LanProtocol,scope: String,mapping: JSONObject,path: String,local: JSONObject,remoteHash: String?,baseline: JSONObject?,row: JSONObject,io: LanLocalFiles,resolve: Boolean,report: LanFileReport,progress: (String,LanFileReport)->Unit) {
@@ -112,6 +136,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             io.capture(path,part,desired)
         }
         row.put("part",part.name);store(row,"captured")
+        var sourceAudio: LanAudioEnvelope?=null;var targetAudio: LanAudioEnvelope?=null;var reused=false
         if(path.endsWith(".cue",true)) {
             val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
             val dependencies=cueReferences(part,path)
@@ -125,13 +150,36 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         val begin=call(client,scope,"file_begin",JSONObject().put("operation",row.getString("operation")).put("path",path).put("stamp",desired).put("size",part.length()).put("modifiedNs",local.optLong("modifiedNs")).put("editedAtMs",local.optLong("editedAtMs")).put("expectedStamp",remoteHash ?: JSONObject.NULL).put("expectedVersion",row.opt("expectedVersion") ?: JSONObject.NULL).put("baselineVersion",baseline?.optString("version").orEmpty()).put("resolve",resolve))
         if(LanUploadProgress.restartRequired(begin))store(row,"aborted")
         var offset=LanUploadProgress.start(begin,part.length())
+        if(report.canReuseAudio && !begin.optBoolean("committed") && begin.optString("state")=="uploading" && offset<part.length() && !row.isNull("expectedVersion") && LanAudioEnvelope.supports(path)) {
+            val source=part.inputStream().use { LanAudioEnvelope.parse(it.channel,path) }
+            if(source!=null && source.length>=262144) {
+                val target=LanAudioEnvelope.from(call(client,scope,"file_audio_layout",JSONObject().put("path",path).put("expectedVersion",row.getString("expectedVersion")).put("mediaBytes",source.length)),row.getString("expectedVersion").split(':')[1].toLong())
+                if(target!=null && target.digest!=null && target.format==source.format && target.length==source.length) {
+                    val context=currentCoroutineContext()
+                    val digest=part.inputStream().use { LanAudioEnvelope.digest(it.channel,source.start,source.length) { context.ensureActive() } }
+                    if(LanFileMetrics.stamp(part)!=desired)throw LanLocalDeferred("private_staging_changed")
+                    val checked=source.copy(digest=digest)
+                    if(checked.matches(target)) { sourceAudio=checked;targetAudio=target }
+                }
+            }
+        }
         if(!begin.optBoolean("committed")) {
             store(row,"uploading")
             part.inputStream().use { input ->
-                var skipped=0L;while(skipped<offset) { val n=input.skip(offset-skipped);if(n<=0)throw IOException("Local upload source unavailable");skipped+=n }
                 val buffer=ByteArray(262144)
                 while(offset<part.length()) {
-                    currentCoroutineContext().ensureActive();val n=input.read(buffer);if(n<=0)throw IOException("Local upload source unavailable")
+                    currentCoroutineContext().ensureActive()
+                    if(sourceAudio!=null && offset>=sourceAudio.start && offset<sourceAudio.end) {
+                        val remaining=sourceAudio.end-offset;val context=currentCoroutineContext()
+                        val digest=if(offset==sourceAudio.start)sourceAudio.digest!! else part.inputStream().use { LanAudioEnvelope.digest(it.channel,offset,remaining) { context.ensureActive() } }
+                        val next=call(client,scope,"file_reuse_audio",JSONObject().put("operation",row.getString("operation")).put("offset",offset).put("sourceOffset",targetAudio!!.start+offset-sourceAudio.start).put("length",remaining).put("digest",digest))
+                        if(next.optBoolean("reused")) { LanUploadProgress.acknowledge(next,offset+remaining);offset+=remaining;report.reusedBytes+=remaining;reused=true;progress(path,report) }
+                        else { LanUploadProgress.acknowledge(next,offset);sourceAudio=null;targetAudio=null }
+                        continue
+                    }
+                    input.channel.position(offset)
+                    val count=if(sourceAudio!=null && offset<sourceAudio.start)minOf(buffer.size.toLong(),sourceAudio.start-offset).toInt() else buffer.size
+                    val n=input.read(buffer,0,count);if(n<=0)throw IOException("Local upload source unavailable")
                     val next=call(client,scope,"file_chunk",JSONObject().put("operation",row.getString("operation")).put("offset",offset).put("data",Base64.encodeToString(buffer,0,n,Base64.NO_WRAP)))
                     LanUploadProgress.acknowledge(next,offset+n);offset+=n;report.bytes+=n;progress(path,report)
                 }
@@ -140,6 +188,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         }
         val receipt=call(client,scope,"file_upload_status",JSONObject().put("operation",row.getString("operation")))
         row.put("localVersion",row.getString("sourceVersion")).put("remoteVersion",receipt.opt("resultVersion") ?: JSONObject.NULL);store(row,"remote_committed")
+        if(reused)report.reusedFiles++
     }
     private fun equivalent(mapping: JSONObject,path: String,local: JSONObject,remote: JSONObject?): Boolean {
         if(meta(local)==meta(remote))return true
@@ -169,6 +218,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         }
         val startMetadata=LanFileMetrics.metadataObservations.get();val startHash=LanFileMetrics.hashBytes.get()
         val capabilities=client.call("capabilities");require(capabilities.optInt("fileProtocol")==3) { "Upgrade both devices for size+mtime file sync" }
+        report.canReuseAudio=capabilities.optInt("fileAudioReuse")>=1
         val sharedConflicts=capabilities.optInt("conflictProtocol")>=1
         val newestWins=capabilities.optString("fileComparisonPolicy")=="mtime_then_size_then_last_edit"
         LanProtocol.requirePairedCapabilities(capabilities)
@@ -295,7 +345,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             }
                             when(decision.action) {
                                 "download" -> {
-                                    val part=download(client,scope,mapping,path,remote,planId,inside,report,notifyProgress)
+                                    val part=download(client,scope,mapping,path,remote,planId,inside,report,notifyProgress,io,meta(local))
                                     if(cues) {
                                         val dependencies=cueReferences(part,path)
                                         for(reference in dependencies) {

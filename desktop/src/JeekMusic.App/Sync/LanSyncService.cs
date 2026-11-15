@@ -334,7 +334,7 @@ public sealed partial class LanSyncService : IDisposable
         if (operation == "capabilities") return;
         if(operation?.StartsWith("file_",StringComparison.Ordinal)==true) {
             Require(device,"readMusic");
-            if(operation is "file_begin" or "file_chunk" or "file_finish")Require(device,"writeFiles");
+            if(operation is "file_begin" or "file_chunk" or "file_finish" or "file_reuse_audio")Require(device,"writeFiles");
             if(operation=="file_delete") { Require(device,"writeFiles");Require(device,"deleteFiles"); }
             return;
         }
@@ -606,7 +606,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileDeltaProtocol"]=1,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileDeltaProtocol"]=1,["fileAudioReuse"]=1,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);

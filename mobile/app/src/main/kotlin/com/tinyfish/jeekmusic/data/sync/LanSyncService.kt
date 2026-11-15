@@ -230,6 +230,26 @@ class LanSyncService @Inject constructor(
     }
     private fun protocol() = LanProtocol(store.read().getJSONObject("connection"), networkPolicy).also { transport?.close(); transport = it }
 
+    private suspend fun exchangeUserData(includeFeatures: Boolean) {
+        val client = protocol()
+        try {
+            client.use {
+                LanProtocol.requirePairedCapabilities(client.call("capabilities"))
+                sync.acceptLan(client.call("state", sync.exportLan(includeFeatures).put("includeFeatures", includeFeatures)))
+            }
+        } finally { if (transport === client) transport = null }
+    }
+
+    /** No scan, audio hashing, inference or learning work. Also runs on unchanged file checkpoints. */
+    internal suspend fun syncBackgroundMetadata() = withContext(Dispatchers.IO) {
+        gate.withLock {
+            if (!store.read().has("connection") || store.read().optBoolean("autoCancelled") ||
+                store.mappings().none { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }) return@withLock
+            networkPolicy.requireAllowed()
+            exchangeUserData(includeFeatures = false)
+        }
+    }
+
     suspend fun pair(invitation: String) = withContext(Dispatchers.IO) {
         gate.withLock {
             require(job?.isActive != true) { "Cancel sync first" }
@@ -382,12 +402,7 @@ class LanSyncService @Inject constructor(
                     ensureActive()
                     fileRoundCompleted=true
                     if(includeUserData) {
-                        val dataClient = protocol()
-                        dataClient.use {
-                            LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
-                            val remote = dataClient.call("state", sync.exportLan())
-                            sync.acceptLan(remote)
-                        }
+                        exchangeUserData(includeFeatures = true)
                         try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
                         store.update { it.remove("manualPending") }
                     }

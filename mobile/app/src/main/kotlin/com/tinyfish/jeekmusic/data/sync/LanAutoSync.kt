@@ -193,8 +193,17 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         try { service.checkScheduled("workmanager_fallback") }
         catch(e: CancellationException) { throw e }
         catch(_: Exception) { failed("offline_or_unavailable");return false }
-        return try { withTimeout(8*60_000L) { service.awaitSync() };service.status.value.problems.isEmpty() }
+        return try {
+            withTimeout(8*60_000L) {
+                service.awaitSync()
+                // File revisions do not change when the PC recognizes another song.
+                // Exchange metadata even when no file round was needed.
+                service.syncBackgroundMetadata()
+            }
+            service.status.value.problems.isEmpty()
+        }
         catch(e: CancellationException) { service.cancelScheduled("interrupted");throw e }
+        catch(_: Exception) { failed("offline_or_unavailable");false }
     }
     companion object {
         const val WORK="lan-metadata-sync"

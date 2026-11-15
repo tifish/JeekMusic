@@ -754,3 +754,6 @@ singing_language status 和 get_diagnostics.singingLanguages 兼容新增 automa
 lan_sync_status.metadataSync 独立于文件同步和 lastOperation，按已配对设备报告当前 PC 监听进程的元数据交换：requests、responsesSent、failedRequests、lastRequestAt、lastResponseAt、peerAppVersion、peerHasLanguageExtension、peerExportedLanguageTracks、lastSentLanguageTracks、lastErrorType。时间为 Unix 毫秒；版本号仅保留至多 64 个 ASCII 版本字符。不保存歌曲引用、路径、凭据或交换正文，不写入用户配置，重启计数清零。failedRequests 是已鉴权 state 请求进入处理后的格式校验或服务失败，不含连接正常关闭和鉴权前失败。
 
 responsesSent 表示已完成 TLS 响应写入，不能代替 Android 已导入、签名匹配或界面显示的确认。peerExportedLanguageTracks 是手机在下一次请求中实际导出的当前签名记录数，可能包含恢复自动墓碑；不是电脑对手机导入成功数的推测。无 state 请求时 devices 为空，不能从文件同步完成或 protocolFailures 推断语言交换是否成功。输入参数 Schema 和工具数量保持不变，两种 Windows 发布方式均完整提供。
+
+
+Android 语言结果显示与后台交换：新版本后台同步在文件检查后额外执行元数据交换，文件检查点未变化也执行；不重读音频、不运行识别或标签学习。遵守现有配对、同步开关、网络策略、取消和 Android 后台调度。手机筛选面板根据当前签名的实际缓存显示覆盖率，明确语种/纯音乐/未知计数与本机任务进度分开。可用 metadataSync 的请求、下发和下一轮手机导出数量辅助诊断，仍须以手机导入日志或缓存状态确认落库。

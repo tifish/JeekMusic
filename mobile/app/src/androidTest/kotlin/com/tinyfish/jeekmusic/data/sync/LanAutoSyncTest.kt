@@ -24,6 +24,69 @@ import java.util.UUID
 /** Real foreground scheduler, authenticated PC watcher revisions and public SAF. Never calls start(). */
 @RunWith(AndroidJUnit4::class)
 class LanAutoSyncTest {
+    @Test fun backgroundMetadataImportsLanguagesWithoutFileChanges()=runBlocking {
+        check(android.os.Build.HARDWARE in setOf("ranchu","goldfish"))
+        val raw=InstrumentationRegistry.getArguments().getString("jeekFileFixture") ?: error("Explicit isolated fixture required")
+        val config=JSONObject(String(Base64.decode(raw,Base64.NO_WRAP),Charsets.UTF_8))
+        require(config.getBoolean("isolated") && config.getBoolean("publicSaf") && config.getString("host")=="127.0.0.1")
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val service=EntryPointAccessors.fromApplication(context,LanSyncWorker.Dependencies::class.java).lan()
+        val original=service.store.read()
+        service.cancel();service.awaitSync()
+        val db=LanSyncService::class.java.getDeclaredField("db").apply { isAccessible=true }.get(service) as com.tinyfish.jeekmusic.data.db.JeekDatabase
+        val parentRelative="Documents/JeekLanFinalDirect/"
+        val relative=parentRelative
+        val target=File(android.os.Environment.getExternalStorageDirectory(),relative+"LanguageMetadata").apply { mkdirs() }
+        val uri="content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FJeekLanFinalDirect"
+        val existingFolder=db.folderDao().all().firstOrNull { it.treeUri==uri }
+        val folder=existingFolder?.id ?: db.folderDao().insert(com.tinyfish.jeekmusic.data.db.LibraryFolderEntity(
+            treeUri=uri,treeDocumentId="primary:Documents/JeekLanFinalDirect",volumeName="external_primary",relativePath=parentRelative,
+            displayName="Language background fixture",addedAt=0))
+        val fixture=config.getJSONObject("languageFixture")
+        val path=fixture.getString("path")
+        require(path=="LanguageMetadata/language-cache.wav")
+        val key="external_primary:$relative$path"
+        val mapping=JSONObject().put("layoutVersion",2).put("key",UUID.randomUUID().toString()).put("rootId",config.getString("rootId"))
+            .put("name","Background language fixture").put("selection",JSONArray(listOf(path.substringBeforeLast('/'))))
+            .put("treeUri",uri)
+            .put("documentId","primary:Documents/JeekLanFinalDirect").put("volume","external_primary").put("relative",relative).put("enabled",true)
+        val repository=com.tinyfish.jeekmusic.data.filter.LanguageRepository(db)
+        try {
+            service.store.update { it.put("connection",JSONObject(config.toString())).put("mappings",JSONArray(listOf(mapping))).put("autoCancelled",false).remove("manualPending") }
+            val initial=service.backgroundSync()
+            assertTrue("Initial background round: ${service.status.value} schedule=${service.schedule.value.json()}",initial)
+            val track=db.trackDao().byTrackKeys(listOf(key)).single()
+            assertEquals(listOf("en"),repository.result(track)!!.languages)
+            // Only the PC language record changes. Audio, mtime and file revisions stay fixed.
+            val writer=config.getJSONObject("writer")
+            val record=JSONObject().put("source","MANUAL").put("state","known").put("languages",JSONArray(listOf("zh")))
+                .put("confidence",JSONObject.NULL).put("updated_at",System.currentTimeMillis()+10_000)
+                .put("size",fixture.getLong("size")).put("duration_ms",fixture.getLong("duration_ms")).put("start_ms",0)
+            val remote=JSONObject().put("format",2).put("device",JSONObject().put("id",writer.getString("deviceId")).put("name","Isolated language writer"))
+                .put("written_at",0).put("playlists",JSONArray()).put("deleted_playlists",JSONArray())
+                .put("vocal_languages",JSONObject().put("version",1).put("items",JSONObject().put("root:${config.getString("rootId")}/$path",JSONArray().put(record))))
+            LanProtocol(writer,service.networkPolicy).use { it.call("state",JSONObject().put("state",remote).put("includeFeatures",false)) }
+            repeat(2) { service.checkScheduled("language_fixture_settle");service.awaitSync();delay(300) }
+            val completed=service.schedule.value.lastSuccess
+            val observations=LanFileMetrics.metadataObservations.get()
+            val scans=service.localFileIndex.fullScans.get()
+            assertFalse(service.checkScheduled("language_fixture_unchanged"))
+            val metadataOnly=service.backgroundSync()
+            assertTrue("Metadata-only background round: ${service.status.value} schedule=${service.schedule.value.json()}",metadataOnly)
+            assertEquals(listOf("zh"),repository.result(db.trackDao().byTrackKeys(listOf(key)).single())!!.languages)
+            assertEquals(completed,service.schedule.value.lastSuccess)
+            assertEquals(observations,LanFileMetrics.metadataObservations.get())
+            assertEquals(scans,service.localFileIndex.fullScans.get())
+            assertFalse(service.isSyncRunning())
+            println("LANGUAGE_BACKGROUND_EVIDENCE imported=en_then_zh unchangedFileRound=false audioReads=0 localInference=false")
+        } finally {
+            service.cancel();service.awaitSync()
+            db.trackDao().delete(db.trackDao().byTrackKeys(listOf(key)).map { it.id })
+            if(existingFolder==null)db.folderDao().delete(listOf(folder))
+            service.store.update { state -> state.keys().asSequence().toList().forEach(state::remove);original.keys().forEach { state.put(it,original.get(it)) } }
+            target.deleteRecursively()
+        }
+    }
     @Test fun backgroundHandoffWaitsForForegroundCleanup()=runBlocking {
         val raw=InstrumentationRegistry.getArguments().getString("jeekFileFixture") ?: error("Explicit isolated fixture required")
         val config=JSONObject(String(Base64.decode(raw,Base64.NO_WRAP),Charsets.UTF_8))

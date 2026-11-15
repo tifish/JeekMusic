@@ -518,6 +518,9 @@
     <string name="language_complete">识别完成 · %1$d / %2$d · 失败 %3$d</string>
     <string name="language_failed">演唱语种识别失败，请重试</string>
     <string name="language_idle">演唱语种尚未识别</string>
+    <string name="language_coverage">已保存语言结果 %1$d / %2$d 首，待识别 %3$d 首</string>
+    <string name="language_coverage_details">%1$d 首明确语种 · %2$d 首纯音乐 · %3$d 首未知</string>
+    <string name="language_local_task">手机本机识别：%1$s</string>
     <string name="language_cancel">取消识别</string>
     <string name="language_analyze_library">识别曲库演唱语言</string>
     <string name="language_reanalyze">重新识别所选歌曲</string>

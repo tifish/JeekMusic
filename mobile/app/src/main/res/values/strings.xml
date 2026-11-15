@@ -526,6 +526,9 @@
     <string name="language_complete">Recognition finished · %1$d / %2$d · %3$d failed</string>
     <string name="language_failed">Vocal-language recognition failed; retry</string>
     <string name="language_idle">Vocal languages not yet recognized</string>
+    <string name="language_coverage">Saved language results: %1$d / %2$d tracks · %3$d pending</string>
+    <string name="language_coverage_details">%1$d known · %2$d instrumental · %3$d unknown</string>
+    <string name="language_local_task">On-device recognition: %1$s</string>
     <string name="language_cancel">Cancel recognition</string>
     <string name="language_analyze_library">Recognize library vocal languages</string>
     <string name="language_reanalyze">Recognize selected songs again</string>

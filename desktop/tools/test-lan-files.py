@@ -1,5 +1,5 @@
 """Real production TLS and optional Android reconciler, synthetic loopback fixture only."""
-import argparse, base64, contextlib, hashlib, json, os, re, sqlite3, subprocess, sys, tempfile, time, uuid
+import argparse, base64, contextlib, hashlib, json, os, re, sqlite3, subprocess, sys, tempfile, time, uuid, wave
 from pathlib import Path
 from urllib.parse import urlsplit
 import importlib.util
@@ -40,7 +40,11 @@ def main():
             assert str(uuid.UUID(phone_id))==phone_id
     with tempfile.TemporaryDirectory(prefix='jeek-files-') as temp:
         work=Path(temp);data=work/'data';data.mkdir();music=work/'Music';music.mkdir()
-        (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoCheckUpdate=False,language='en')))
+        (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoUpdateCheck=False,analysisMode='Manual',language='en')))
+        if a.case == 'backgroundMetadataImportsLanguagesWithoutFileChanges':
+            (music/'LanguageMetadata').mkdir()
+            with wave.open(str(music/'LanguageMetadata/language-cache.wav'),'wb') as output:
+                output.setparams((1,2,16000,0,'NONE','not compressed'));output.writeframes(bytes(64000))
         (data/'lan-sync.json').write_text(json.dumps(dict(bindAddress='127.0.0.1',enabled=False,roots={},devices={})))
         with McpClient(a.exe,data=data,timeout=60) as c:
             pid=call(c,'get_diagnostics')['processId']
@@ -50,6 +54,10 @@ def main():
                 port=status['port'];root=status['roots'][0]['rootId']
                 u=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1')['invitation']);pin,secret=u.path.strip('/').split('/')
                 peer=dict(host='127.0.0.1',port=port,pin=pin,deviceId=phone_id or uuid.uuid4().hex)
+                if a.case == 'backgroundMetadataImportsLanguagesWithoutFileChanges':
+                    track=wait(lambda:next((t for t in call(c,'search_tracks',limit=20)['items'] if t['fileName']=='language-cache.wav'),None))
+                    call(c,'singing_language',action='set',trackIds=[track['id']],value='ENGLISH')
+                    peer['languageFixture']=dict(path='LanguageMetadata/language-cache.wav',size=(music/'LanguageMetadata/language-cache.wav').stat().st_size,duration_ms=2000)
                 w=Wire(peer,auth=False);w.send(dict(op='pair',deviceId=peer['deviceId'],name='Synthetic file fixture',invitation=secret));peer['token']=w.receive()['token'];w.close()
                 with_peer=lambda:Wire(peer)
                 def request_once(op,**args):

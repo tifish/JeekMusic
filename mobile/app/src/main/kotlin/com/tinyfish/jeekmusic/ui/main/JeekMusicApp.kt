@@ -493,7 +493,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                 )
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.semantics { testTagsAsResourceId = true }) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected=filter.onlyManual,onClick=viewModel::toggleManualFilter,label={Text(stringResource(R.string.filter_manual))},colors=selectedChipColors())

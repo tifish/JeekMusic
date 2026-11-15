@@ -59,6 +59,11 @@ class LanguageAnalysisService @Inject constructor(
                         val job = currentCoroutineContext().job
                         fun check() { job.ensureActive(); check(SystemClock.elapsedRealtime() < deadline) { "Language recognition timed out" } }
                         try {
+                            // PC results can arrive while this manually started queue is running.
+                            if (!force && repository.result(track) != null) {
+                                mutable.value = mutable.value.copy(processed = task.value.processed + 1)
+                                continue
+                            }
                             validate(track)
                             val start = track.startMs ?: 0
                             val duration = minOf(track.durationMs, (track.endMs ?: (start + track.durationMs)) - start).coerceAtLeast(0)
@@ -77,7 +82,7 @@ class LanguageAnalysisService @Inject constructor(
                                 }
                             }
                             check(); validate(track)
-                            repository.save(track, SingingLanguage.aggregate(samples))
+                            repository.save(track, SingingLanguage.aggregate(samples), onlyIfMissing = !force)
                         } catch (e: CancellationException) { throw e }
                         catch (e: Exception) {
                             currentCoroutineContext().ensureActive()

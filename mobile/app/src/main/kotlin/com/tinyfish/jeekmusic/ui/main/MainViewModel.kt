@@ -66,6 +66,7 @@ class MainViewModel @Inject constructor(
     private val sorter: SongSorter,
     private val updater: AppUpdater,
     val languageAnalysis: com.tinyfish.jeekmusic.analysis.LanguageAnalysisService,
+    languages: com.tinyfish.jeekmusic.data.filter.LanguageRepository,
     messageBus: MessageBus,
 ) : ViewModel(), Navigator {
 
@@ -74,6 +75,8 @@ class MainViewModel @Inject constructor(
 
     /** 还没分析的歌曲数；只在筛选菜单打开时订阅，避免启动时查询。 */
     val pendingAnalysis: StateFlow<Int> = tags.pendingCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val languageCoverage = languages.coverage.map { it as com.tinyfish.jeekmusic.data.filter.LanguageCoverage? }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun toggleFilter(tag: Tag) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggle(tag)) }
     fun toggleLanguage(value: com.tinyfish.jeekmusic.analysis.LanguageFilter) = viewModelScope.launch { tagFilters.set(tagFilter.value.toggleLanguage(value)) }

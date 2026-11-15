@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 @Composable fun LanguageFilterControls(vm: MainViewModel) {
     val filter by vm.tagFilter.collectAsStateWithLifecycle()
     val task by vm.languageAnalysis.task.collectAsStateWithLifecycle()
+    val coverage by vm.languageCoverage.collectAsStateWithLifecycle()
     var download by remember { mutableStateOf(false) }
     Text(stringResource(R.string.language_group), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.labelMedium)
     Text(stringResource(R.string.language_filter_hint), style = MaterialTheme.typography.bodySmall)
@@ -54,10 +55,16 @@ import kotlinx.coroutines.launch
                 label = { Text(languageFilterLabel(value)) }, colors = selectedChipColors(), modifier = Modifier.testTag("language_${value.name}"))
         }
     }
-    Text(languageTaskLabel(task), style = MaterialTheme.typography.bodySmall)
+    coverage?.let { current ->
+        Text(stringResource(R.string.language_coverage, current.cached, current.total, current.pending),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("language_coverage"))
+        Text(stringResource(R.string.language_coverage_details, current.known, current.instrumental, current.unknown),
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("language_coverage_details"))
+    }
+    if (task.state != "idle") Text(stringResource(R.string.language_local_task, languageTaskLabel(task)), style = MaterialTheme.typography.bodySmall)
     if (task.error != null) Text(task.error!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     TextButton(onClick = { if (task.busy) vm.languageAnalysis.cancel() else if (!vm.languageAnalysis.modelReady || task.state == "download_required") download = true else vm.languageAnalysis.start() },
-        enabled = task.state != "cancelling", modifier = Modifier.testTag("language_analyze")) {
+        enabled = task.state != "cancelling" && (task.busy || coverage?.pending?.let { it > 0 } == true), modifier = Modifier.testTag("language_analyze")) {
         Text(stringResource(if (task.busy) R.string.language_cancel else R.string.language_analyze_library))
     }
     if (download) LanguageDownloadDialog(onConfirm = { download = false; vm.languageAnalysis.start(true) }, onDismiss = { download = false })

@@ -35,6 +35,9 @@ class LibraryDaoTest {
         try {
             repo.save(targets[0],com.tinyfish.jeekmusic.analysis.SingingLanguage("known",listOf("zh"),confidence=.95))
             repo.save(targets[1],com.tinyfish.jeekmusic.analysis.SingingLanguage("unknown",emptyList()))
+            assertEquals(com.tinyfish.jeekmusic.data.filter.LanguageCoverage(2,2,1,0,1),repo.coverage.first())
+            repo.save(targets[0],com.tinyfish.jeekmusic.analysis.SingingLanguage("known",listOf("en")),onlyIfMissing=true)
+            assertEquals(listOf("zh"),repo.result(targets[0])!!.languages) // A late local result cannot replace committed PC evidence.
             settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(chinese=com.tinyfish.jeekmusic.analysis.LanguageFilter.NON_CHINESE))
             assertTrue(filters.allowedKeys.first()!!.isEmpty())
             settings.setTagFilter(com.tinyfish.jeekmusic.data.settings.TagFilter(chinese=com.tinyfish.jeekmusic.analysis.LanguageFilter.CHINESE))
@@ -51,8 +54,10 @@ class LibraryDaoTest {
             assertTrue(row.has("updated_at"))
             tracks.update(listOf(targets[0].copy(size=1)))
             assertTrue(repo.results.first().keys.none { it==targets[0].trackKey })
+            assertEquals(1,repo.coverage.first().pending)
             tracks.delete(ids)
             assertTrue(db.languageDao().all().isEmpty())
+            assertEquals(0,repo.coverage.first().total)
         } finally { settings.setTagFilter(original) }
     }
 

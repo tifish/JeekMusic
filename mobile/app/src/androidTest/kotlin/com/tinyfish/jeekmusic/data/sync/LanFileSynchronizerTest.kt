@@ -308,6 +308,43 @@ class LanFileSynchronizerTest {
         assertArrayEquals(b,localBytes());assertEquals(hash(a),remoteHash())
         val second=run();assertEquals(0L,second.hashBytes);assertTrue(second.actions.isEmpty())
     }
+    @Test fun watchedLocalInventoryAvoidsRescanAndSharesLibraryMetadataWithoutLosingDeletes()=fixture {
+        val a=audio(81);val b=audio(82)
+        local(a);remote(a)
+        val directory=File(root,prefix)
+        val index=com.tinyfish.jeekmusic.data.scanner.LocalFileIndex()
+        val events=java.util.concurrent.atomic.AtomicInteger()
+        val observer=object: android.os.FileObserver(directory,com.tinyfish.jeekmusic.data.scanner.LocalFileIndex.MASK) {
+            override fun onEvent(event: Int,name: String?) {
+                if(event and com.tinyfish.jeekmusic.data.scanner.LocalFileIndex.MASK!=0 && name?.startsWith('.')!=true) { index.changed(directory,name,event);events.incrementAndGet() }
+            }
+        }
+        val indexed=LanFileSynchronizer(context,db,PlayingFiles(),index) { m,pin -> if(connection.optBoolean("publicSaf"))LanLocalFiles.fromMapping(context,m,db,pin) else LanLocalFiles(root.path,m,db,pin) }
+        suspend fun round(): LanFileReport=LanProtocol(connection).use { indexed.synchronize(mapping,it,{}, { _,_-> },{ _,_,_-> },{}) }.also { assertEquals(it.deferred.toString(),0,it.deferredCount);assertEquals(0,it.conflictCount) }
+        suspend fun changed(before: Int) {
+            repeat(100) { if(events.get()==before)kotlinx.coroutines.delay(10) }
+            assertTrue(events.get()>before);kotlinx.coroutines.delay(100)
+        }
+        try {
+            observer.startWatching();index.watched(true)
+            assertFalse(round().localIndexHit)
+            // The PC returns the first round's newly acknowledged baseline once;
+            // that changed remote row still requires its live per-file precondition.
+            assertTrue(round().localIndexHit)
+            val unchanged=round();assertTrue(unchanged.localIndexHit);assertEquals(0L,unchanged.metadataObservations);assertEquals(0L,unchanged.bytes)
+            var before=events.get();local(b);changed(before)
+            android.os.ParcelFileDescriptor.open(File(root,path),android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { index.observeDescriptor(it.fd) }
+            val upload=round();assertTrue(upload.localIndexHit);assertEquals(1,upload.libraryMetadataReused);assertEquals(0,upload.localIndexRefreshed);assertEquals(1,upload.actions["upload"]);assertArrayEquals(b,remoteBytes())
+            before=events.get();local(null);changed(before)
+            val deleted=round();assertTrue(deleted.localIndexHit);assertEquals(1,deleted.localIndexRefreshed);assertEquals(1,deleted.actions["delete_remote"]);assertNull(remoteHash())
+            // A PC addition must invalidate the cached local absence synchronously,
+            // including when inotify has not yet delivered our own download's events.
+            remote(a);assertEquals(1,round().actions["download"]);assertArrayEquals(a,localBytes())
+            kotlinx.coroutines.delay(100);round()
+            remote(null);assertEquals(1,round().actions["delete_local"]);assertNull(localBytes())
+            println("LOCAL_INDEX_SYNC_EVIDENCE noChangeMetadataObservations=0 sharedLibraryRows=1 localAndRemoteDeletes=true remoteAddition=true")
+        } finally { index.stopWatching();observer.stopWatching() }
+    }
     @Test fun lastEditTimeBreaksOnlyEqualFileTimeAndDifferentSize()=fixture {
         fixedTime=1_800_000_000_000_000_000L
         val a=audio(71);val b=audio(72,65);val c=audio(73,66)

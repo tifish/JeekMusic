@@ -120,6 +120,9 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
     suspend fun verify(path: String,expectedVersion: String?): JSONObject {
         return observe(path,true).also { if(LanFileMetrics.version(it)!=expectedVersion)throw LanLocalDeferred("local_changed_before_verification") }
     }
+    fun indexChanged(index: com.tinyfish.jeekmusic.data.scanner.LocalFileIndex?,path: String) {
+        index?.changed(File(absoluteRoot),path,android.os.FileObserver.CLOSE_WRITE)
+    }
     /** Actual ExternalStorageProvider filesystem directories, never document URIs. Hints only. */
     suspend fun watchDirectories(selection: List<String>): List<File> {
         val result=linkedSetOf(File(absoluteRoot))
@@ -140,7 +143,19 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
                 }
             }
         }
-        for(path in selection.distinct()) { LanProtocol.relative(path,true);walk(path,0) }
+        for(path in selection.distinct()) {
+            LanProtocol.relative(path,true)
+            // A selected subtree may not exist yet. Watch every existing ancestor so
+            // creating the next directory cannot remain invisible until fallback.
+            val segments=path.split('/').filter { it.isNotEmpty() }
+            for(count in 1 until segments.size) {
+                if(result.size>=4096)throw LanLocalDeferred("watch_directory_budget")
+                val ancestor=segments.take(count).joinToString("/")
+                val fd=LanAtomicFiles.openParent(root.fd,ancestor,false);if(fd<0)break
+                ParcelFileDescriptor.adoptFd(fd).use { result+=File(absoluteRoot,ancestor) }
+            }
+            walk(path,0)
+        }
         return result.toList()
     }
     suspend fun scan(selection: List<String>,emit: suspend (JSONObject)->Unit,unavailable: (String)->Unit) {
@@ -174,6 +189,17 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
             }
         }
         for(path in selection.distinct()) { LanProtocol.relative(path,true);try { walk(path,0) }catch(e: LanLocalDeferred) { throw e }catch(_: IOException) { unavailable(path) } }
+    }
+    suspend fun indexedScan(index: com.tinyfish.jeekmusic.data.scanner.LocalFileIndex,selection: List<String>,emit: suspend (JSONObject)->Unit,unavailable: (String)->Unit): com.tinyfish.jeekmusic.data.scanner.LocalIndexResult {
+        currentRoot()
+        for(path in selection) LanProtocol.relative(path,true)
+        val edits=database.editSnapshot()
+        val cacheKey=mapping.getString("key")+":"+mapping.getString("directoryIdentity")+":"+rootIdentity[0]+":"+rootIdentity[1]
+        return index.read(cacheKey,absoluteRoot,selection,{ observe(it) },{ output,unknown -> scan(selection,output,unknown) },{ row ->
+            val edit=edits[File(absoluteRoot,row.getString("path")).absolutePath]
+            row.put("editedAtMs",if(edit!=null && edit.first==row.optLong("size") && edit.second==row.optLong("modifiedNs"))edit.third else 0L)
+            emit(row)
+        },unavailable)
     }
     suspend fun capture(path: String,target: File,expected: String): Long {
         val p=parent(path) ?: throw LanLocalDeferred("local_changed_before_upload")

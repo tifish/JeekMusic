@@ -4,7 +4,6 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
-import com.tinyfish.jeekmusic.data.sync.LanAtomicFiles
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,6 +27,7 @@ data class MediaStoreAudio(
 /** 从 MediaStore 发现音频文件（docs/design.md §4.1）。 */
 class MediaStoreSource @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val fileIndex: LocalFileIndex = LocalFileIndex(),
 ) {
     suspend fun query(volumeName: String, relativePath: String): List<MediaStoreAudio> = withContext(Dispatchers.IO) {
         val collection = MediaStore.Audio.Media.getContentUri(volumeName)
@@ -83,7 +83,7 @@ class MediaStoreSource @Inject constructor(
     // row must not be combined with the fractional timestamp of a different file version.
     internal fun readModifiedNanos(uri: Uri, seconds: Long, size: Long): Int? = try {
         context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-            val identity = LanAtomicFiles.identity(descriptor.fd)
+            val identity = fileIndex.observeDescriptor(descriptor.fd)
             matchingModifiedNanos(seconds, size, identity)
         }
     } catch (_: java.io.IOException) { null }

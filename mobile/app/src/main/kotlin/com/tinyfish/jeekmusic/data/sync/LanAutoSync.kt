@@ -14,11 +14,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0,val wifiOnly: Boolean=true,val waitingForWifi: Boolean=false,val lastPreparationMs: Long=0,val lastFirstTransferMs: Long=-1,val lastProtocolRequests: Long=0,val lastManifestCacheHit: Boolean=false,val lastMetadataRows: Long=0,val lastIncremental: Boolean=false,val lastAudioReusedBytes: Long=0,val lastAudioReusedFiles: Int=0) {
-    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes).put("wifiOnly",wifiOnly).put("waitingForWifi",waitingForWifi).put("lastPreparationMs",lastPreparationMs).put("lastFirstTransferMs",lastFirstTransferMs).put("lastProtocolRequests",lastProtocolRequests).put("lastManifestCacheHit",lastManifestCacheHit).put("lastMetadataRows",lastMetadataRows).put("lastIncremental",lastIncremental).put("lastAudioReusedBytes",lastAudioReusedBytes).put("lastAudioReusedFiles",lastAudioReusedFiles)
+data class LanSchedule(val trigger: String="startup",val dirty: Boolean=false,val running: Boolean=false,val paused: Boolean=false,val cancelled: Boolean=false,val foreground: Boolean=false,val backoffUntil: Long=0,val lastSuccess: Long=0,val nextReconcile: Long=0,val state: String="idle",val watchDirectories: Int=0,val watchFailed: Boolean=false,val lastMetadataObservations: Long=0,val lastHashBytes: Long=0,val lastTransferBytes: Long=0,val wifiOnly: Boolean=true,val waitingForWifi: Boolean=false,val lastPreparationMs: Long=0,val lastFirstTransferMs: Long=-1,val lastProtocolRequests: Long=0,val lastManifestCacheHit: Boolean=false,val lastMetadataRows: Long=0,val lastIncremental: Boolean=false,val lastAudioReusedBytes: Long=0,val lastAudioReusedFiles: Int=0,val lastLocalIndexHits: Int=0,val lastLocalIndexMisses: Int=0,val lastLocalIndexRefreshedFiles: Int=0,val lastLibraryMetadataReusedFiles: Int=0) {
+    fun json()=JSONObject().put("trigger",trigger).put("dirty",dirty).put("running",running).put("paused",paused).put("cancelled",cancelled).put("foreground",foreground).put("backoffUntil",backoffUntil).put("lastSuccess",lastSuccess).put("nextReconcile",nextReconcile).put("state",state).put("watchDirectories",watchDirectories).put("watchFailed",watchFailed).put("lastMetadataObservations",lastMetadataObservations).put("lastHashBytes",lastHashBytes).put("lastTransferBytes",lastTransferBytes).put("wifiOnly",wifiOnly).put("waitingForWifi",waitingForWifi).put("lastPreparationMs",lastPreparationMs).put("lastFirstTransferMs",lastFirstTransferMs).put("lastProtocolRequests",lastProtocolRequests).put("lastManifestCacheHit",lastManifestCacheHit).put("lastMetadataRows",lastMetadataRows).put("lastIncremental",lastIncremental).put("lastAudioReusedBytes",lastAudioReusedBytes).put("lastAudioReusedFiles",lastAudioReusedFiles).put("lastLocalIndexHits",lastLocalIndexHits).put("lastLocalIndexMisses",lastLocalIndexMisses).put("lastLocalIndexRefreshedFiles",lastLocalIndexRefreshedFiles).put("lastLibraryMetadataReusedFiles",lastLibraryMetadataReusedFiles)
 }
 
 /** Events are hints only. All writes/deletes go through the same serialized metadata reconciler. */
@@ -37,6 +39,8 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var failures=0
     private var workerOwned=false
     private val watches=mutableListOf<FileObserver>()
+    private val watchGate=Mutex()
+    @Volatile private var watchEpoch=0L
     private val revisions=mutableMapOf<String,String>()
     private fun eligible()=service.store.read().has("connection") && service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }
     private fun held()=service.store.read().optBoolean("autoCancelled")
@@ -71,6 +75,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
                 PeriodicWorkRequestBuilder<LanSyncWorker>(15,TimeUnit.MINUTES).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).build())
             else WorkManager.getInstance(context).cancelUniqueWork(WORK)
             synchronized(lock) { _state.value=_state.value.copy(paused=!enabled,cancelled=held()) }
+            service.localFileIndex.stopWatching()
             rebuildWatches()
             if(enabled)hint("mapping_or_startup")
             report()
@@ -81,6 +86,8 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         loop?.cancel()
         conflictLoop?.cancel()
         if(!value) {
+            watchEpoch++
+            service.localFileIndex.stopWatching()
             synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear();timer?.cancel() }
             val needsHandoff=synchronized(lock) { if(_state.value.running)!workerOwned else _state.value.dirty }
             val userRequested=synchronized(lock) { _state.value.trigger=="manual" }
@@ -166,10 +173,10 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     fun phase(stage: String) { synchronized(lock) {
         if(_state.value.running && _state.value.state!=stage) { _state.value=_state.value.copy(state=stage);report() }
     } }
-    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false,metadataRows: Long=0,incremental: Boolean=false,reusedBytes: Long=0,reusedFiles: Int=0) {
+    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false,metadataRows: Long=0,incremental: Boolean=false,reusedBytes: Long=0,reusedFiles: Int=0,indexHits: Int=0,indexMisses: Int=0,indexRefreshed: Int=0,libraryReused: Int=0) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
-            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,lastMetadataRows=metadataRows,lastIncremental=incremental,lastAudioReusedBytes=reusedBytes,lastAudioReusedFiles=reusedFiles,state=if(held())"cancelled" else if(success)"idle" else "backoff")
+            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,lastMetadataRows=metadataRows,lastIncremental=incremental,lastAudioReusedBytes=reusedBytes,lastAudioReusedFiles=reusedFiles,lastLocalIndexHits=indexHits,lastLocalIndexMisses=indexMisses,lastLocalIndexRefreshedFiles=indexRefreshed,lastLibraryMetadataReusedFiles=libraryReused,state=if(held())"cancelled" else if(success)"idle" else "backoff")
             if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
             else if(handoff && !held())_state.value=_state.value.copy(state="waiting_for_background",backoffUntil=0)
             else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
@@ -186,29 +193,37 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         _state.value=_state.value.copy(dirty=false,cancelled=true,state="cancelled")
     } }
     fun resume() { service.store.update { it.put("autoCancelled",false) };synchronized(lock) { failures=0;_state.value=_state.value.copy(backoffUntil=0) };configure() }
-    private suspend fun rebuildWatches() {
+    internal suspend fun ensureWatches()=rebuildWatches()
+    private suspend fun rebuildWatches()=watchGate.withLock {
+        if(!service.localFileIndex.needsWatches)return@withLock
+        service.localFileIndex.stopWatching()
+        val ticket=service.localFileIndex.watchTicket()
+        val epoch=++watchEpoch
         synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear() }
-        if(!foreground || !eligible())return
+        if(!foreground || !eligible())return@withLock
         var failed=false
         val paths=mutableListOf<java.io.File>()
         for(mapping in service.store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }) {
             try { paths+=service.localWatchDirectories(mapping) }catch(_: Exception) { failed=true }
         }
         synchronized(lock) {
-            if(!foreground)return
+            if(!foreground)return@withLock
             for(path in paths.distinct().take(4096)) {
                 val observer=object: FileObserver(path,CLOSE_WRITE or MOVED_FROM or MOVED_TO or CREATE or DELETE or DELETE_SELF or MOVE_SELF or ATTRIB or MODIFY) {
                     override fun onEvent(event: Int,name: String?) {
-                        // inotify also delivers lifecycle flags (notably IN_IGNORED when we
-                        // replace a watch). Those are not file changes and must not self-trigger.
-                        if(event and WATCH_MASK==0)return
+                        // Retired watches must not self-trigger. Unexpected watch loss on
+                        // the active generation invalidates the index like an overflow.
+                        if(watchEpoch!=epoch || event and WATCH_MASK==0)return
                         if(name?.startsWith(".")==true)return
+                        service.localFileIndex.changed(path,name,event)
                         hint(if(event and 0x4000!=0)"watch_overflow" else "local_directory")
                     }
                 }
                 try { observer.startWatching();watches+=observer }catch(_: Exception) { failed=true }
             }
-            _state.value=_state.value.copy(watchDirectories=watches.size,watchFailed=failed || paths.size>4096)
+            val unhealthy=failed || paths.size>4096
+            service.localFileIndex.watched(!unhealthy,ticket)
+            _state.value=_state.value.copy(watchDirectories=watches.size,watchFailed=unhealthy)
         }
     }
     suspend fun background(): Boolean {
@@ -222,7 +237,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     }
     companion object {
         const val WORK="lan-metadata-sync"
-        const val WATCH_MASK=FileObserver.CLOSE_WRITE or FileObserver.MOVED_FROM or FileObserver.MOVED_TO or FileObserver.CREATE or FileObserver.DELETE or FileObserver.DELETE_SELF or FileObserver.MOVE_SELF or FileObserver.ATTRIB or FileObserver.MODIFY or 0x4000
+        const val WATCH_MASK=com.tinyfish.jeekmusic.data.scanner.LocalFileIndex.MASK
     }
 }
 

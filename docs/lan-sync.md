@@ -92,6 +92,8 @@ PC 清单缓存最多 16 项/估算 64MiB，目录事件立即失效，15 分钟
 
 ## 验证与限制
 
+手机端的日常扫描与同步现在共享精确文件观察，并复用监听维护的完整本地索引；无变化轮次不再重新遍历目录或逐文件 stat。旁文件、删除及监听间断的回退规则见[手机本地索引复用](sync-local-file-index.md)。
+
 `desktop/tools/test-lan-security.py`在新私有数据、合成文件和回环临时端口运行真实TLS慢握手/帧/限流/撤销/恢复。`test-lan-files.py --exe <candidate> --android emulator-...`运行真实服务文件合同与Android生产调解器的变化矩阵，不读取生产凭证或真实曲库。Core/Android复用元数据合同`shared/testcases/file-reconciliation-v2.json`，保留v1历史兼容矩阵，另有Windows句柄事务测试与Android原生句柄instrumentation。
 
 最新结果以[公网验收记录](lan-public-acceptance.md)与交付记录为准。旧候选文档描述历史行为，不能代替当前双向合同。隔离负载不等于完整审计；真实公网、分布式耗尽、所有OEM/SD卡和系统崩溃组合未据此宣称验证。TLS是自定义TCP协议，不是HTTP，部署须TCP透传，不终止TLS或导出私钥。

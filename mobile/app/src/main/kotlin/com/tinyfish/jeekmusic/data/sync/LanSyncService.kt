@@ -45,6 +45,7 @@ class LanSyncService @Inject constructor(
     val store: LanSyncStore,
     private val ledgerStore: LanSyncLedger,
     private val fileDatabase: LanFileDatabase,
+    internal val localFileIndex: com.tinyfish.jeekmusic.data.scanner.LocalFileIndex,
     private val tree: DocumentTree,
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
@@ -60,7 +61,7 @@ class LanSyncService @Inject constructor(
     private class StopState { @Volatile var reason = "" }
     @Volatile private var stopState = StopState()
     @Volatile private var activeFileRoot: String? = null
-    private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing) }
+    private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing,localFileIndex) }
     private val automation by lazy { LanAutoSync(context,scope,this) }
     val schedule get()=automation.state
     fun initializeAutomation()=automation.initialize()
@@ -85,6 +86,7 @@ class LanSyncService @Inject constructor(
             LanProtocol(connection, networkPolicy).use { client ->
                 val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
                 val capabilities=client.call("capabilities")
+                if(capabilities.optInt("localFileIndex")<1)for(field in listOf("lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles"))schedule.remove(field)
                 if(capabilities.optInt("fileAudioReuse")<1)for(field in listOf("lastAudioReusedBytes","lastAudioReusedFiles"))schedule.remove(field)
                 if(capabilities.optInt("fileDeltaProtocol")<1)for(field in listOf("lastMetadataRows","lastIncremental"))schedule.remove(field)
                 if(!capabilities.optBoolean("syncPerformanceDiagnostics"))for(field in listOf("lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastManifestCacheHit"))schedule.remove(field)
@@ -273,9 +275,10 @@ class LanSyncService @Inject constructor(
         automation.report()
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
-            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true;var reusedBytes=0L;var reusedFiles=0
+            val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true;var reusedBytes=0L;var reusedFiles=0;var indexHits=0;var indexMisses=0;var indexRefreshed=0;var libraryReused=0
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
             try { gate.withLock {
+                automation.ensureWatches()
                 _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage(),lastReusedBytes=_status.value.lastReusedBytes,lastReusedFiles=_status.value.lastReusedFiles)
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
@@ -312,6 +315,7 @@ class LanSyncService @Inject constructor(
                                 }
                                 _status.update { it.copy(text=text) }
                             })
+                            if(result.localIndexHit)indexHits++ else indexMisses++;indexRefreshed+=result.localIndexRefreshed;libraryReused+=result.libraryMetadataReused
                             preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit;metadataRows+=result.metadataRows;incremental=incremental && result.incremental
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes;reusedBytes+=result.reusedBytes;reusedFiles+=result.reusedFiles
@@ -354,7 +358,7 @@ class LanSyncService @Inject constructor(
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental,reusedBytes=reusedBytes,reusedFiles=reusedFiles)
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental,reusedBytes=reusedBytes,reusedFiles=reusedFiles,indexHits=indexHits,indexMisses=indexMisses,indexRefreshed=indexRefreshed,libraryReused=libraryReused)
             }
         }
     }

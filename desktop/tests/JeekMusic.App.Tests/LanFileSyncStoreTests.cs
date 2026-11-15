@@ -20,16 +20,18 @@ public sealed class LanFileSyncStoreTests
     {
         using var f=new Fixture();using var store=f.Store();
         var scope=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
-        var performance=new JsonObject { ["lastPreparationMs"]=120L,["lastFirstTransferMs"]=-1L,["lastProtocolRequests"]=8L,["lastManifestCacheHit"]=true };
+        var performance=new JsonObject { ["lastPreparationMs"]=120L,["lastFirstTransferMs"]=-1L,["lastProtocolRequests"]=8L,["lastManifestCacheHit"]=true,["lastLocalIndexHits"]=1L,["lastLocalIndexMisses"]=0L,["lastLocalIndexRefreshedFiles"]=2L,["lastLibraryMetadataReusedFiles"]=3L };
         Assert.True(store.Schedule(scope,new() { ["schedule"]=performance })["accepted"]!.GetValue<bool>());
         var reported=Assert.Single(store.Diagnostics()["schedules"]!.AsArray())!["schedule"]!;
         Assert.Equal(-1L,reported["lastFirstTransferMs"]!.GetValue<long>());
         Assert.Equal(120L,reported["lastPreparationMs"]!.GetValue<long>());
         Assert.True(reported["lastManifestCacheHit"]!.GetValue<bool>());
-        foreach(var key in new[] { "lastPreparationMs","lastFirstTransferMs","lastProtocolRequests" }) {
+        Assert.Equal(3L,reported["lastLibraryMetadataReusedFiles"]!.GetValue<long>());
+        foreach(var key in new[] { "lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles" }) {
             Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { [key]="1" } }));
             Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { [key]=-2L } }));
         }
+        Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["lastLocalIndexHits"]=-1L } }));
         Assert.Throws<ArgumentException>(()=>store.Schedule(scope,new() { ["schedule"]=new JsonObject { ["lastManifestCacheHit"]=1 } }));
     }
     sealed class Fixture:IDisposable

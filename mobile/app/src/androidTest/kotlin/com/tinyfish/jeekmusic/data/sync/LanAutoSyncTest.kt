@@ -119,15 +119,33 @@ class LanAutoSyncTest {
                 waitFor("startup_auto") { !service.isSyncRunning() && service.schedule.value.lastSuccess>0 && service.store.mappings().first().optString("directoryIdentity").isNotEmpty() }
                 remoteBytes(audio(1))
                 waitFor("PC_watch_download") { local.exists() && local.readBytes().contentEquals(audio(1)) && !service.isSyncRunning() }
-                local.writeBytes(audio(2));local.setLastModified(System.currentTimeMillis()+2000)
+                // Use the same ordered synthetic clock as remoteBytes. Wall time can
+                // be older than the fixture's PC files under the newer-mtime policy.
+                local.writeBytes(audio(2));LanFileMetrics.setModified(local,1_800_000_002_000_000_000L)
                 waitFor("phone_watch_upload") { remote().optString("metadataVersion")==LanFileMetrics.token(local.length(),local.lastModified()*1_000_000) && !service.isSyncRunning() }
+                assertArrayEquals(audio(2),local.readBytes())
                 // A burst of same-directory changes is a hint, never one task per event.
-                repeat(12) { local.writeBytes(audio(3));local.setLastModified(System.currentTimeMillis()+3000) }
-                waitFor("burst_coalesced") { service.schedule.value.lastSuccess>0 && !service.isSyncRunning() && service.status.value.fileActions["upload"]==1 && remote().optString("metadataVersion")==LanFileMetrics.token(local.length(),local.lastModified()*1_000_000) }
+                val beforeBurst=service.schedule.value.lastSuccess
+                repeat(12) { local.writeBytes(audio(3));LanFileMetrics.setModified(local,1_800_000_003_000_000_000L) }
+                // A fast empty follow-up may already replace the per-round action summary.
+                // Assert the durable remote version and a new successful round instead.
+                waitFor("burst_coalesced") { service.schedule.value.lastSuccess>beforeBurst && !service.isSyncRunning() && service.status.value.problems.isEmpty() && remote().optString("metadataVersion")==LanFileMetrics.token(local.length(),local.lastModified()*1_000_000) }
+                assertArrayEquals(audio(3),local.readBytes())
                 delay(6000)
                 assertTrue(service.schedule.value.watchDirectories>0)
+                // Drain our own baseline update, then verify the production service
+                // retains watches and its local index across manual no-change rounds.
+                repeat(2) {
+                    val previous=service.schedule.value.lastSuccess;service.start()
+                    waitFor("manual_local_index_$it") { service.schedule.value.lastSuccess>previous && !service.isSyncRunning() }
+                }
+                assertEquals(1,service.schedule.value.lastLocalIndexHits)
+                assertEquals(0,service.schedule.value.lastLocalIndexMisses)
+                assertEquals(0L,service.schedule.value.lastMetadataObservations)
+                assertEquals(0L,service.schedule.value.lastMetadataRows)
+                assertEquals(0L,service.schedule.value.lastTransferBytes)
                 service.cancel();service.awaitSync();val held=remote().optString("metadataVersion")
-                local.writeBytes(audio(4));local.setLastModified(System.currentTimeMillis()+4000);delay(6000)
+                local.writeBytes(audio(4));LanFileMetrics.setModified(local,1_800_000_004_000_000_000L);delay(6000)
                 assertEquals(held,remote().optString("metadataVersion"));assertTrue(service.schedule.value.cancelled)
                 service.setEnabled(config.getString("rootId"),true)
                 waitFor("cancel_resume") { remote().optString("metadataVersion")==LanFileMetrics.token(local.length(),local.lastModified()*1_000_000) && !service.isSyncRunning() }

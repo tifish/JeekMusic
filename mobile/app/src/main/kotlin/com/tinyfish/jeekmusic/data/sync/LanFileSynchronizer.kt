@@ -13,14 +13,14 @@ import java.io.IOException
 import java.util.UUID
 
 internal class LanRemoteFileConflict(val reason: String): IOException(reason)
-internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false,var metadataRows: Int=0,var incremental: Boolean=false,var canReuseAudio: Boolean=false,var reusedBytes: Long=0,var reusedFiles: Int=0) {
+internal data class LanFileReport(val actions: MutableMap<String,Int> = mutableMapOf(),val conflicts: MutableList<JSONObject> = mutableListOf(),val deferred: MutableList<String> = mutableListOf(),var bytes: Long=0,var processed: Int=0,var conflictCount: Int=0,var deferredCount: Int=0,var metadataObservations: Long=0,var hashBytes: Long=0,var preparationMillis: Long=-1,var firstTransferMillis: Long=-1,var protocolRequests: Long=0,var manifestCacheHit: Boolean=false,var metadataRows: Int=0,var incremental: Boolean=false,var canReuseAudio: Boolean=false,var reusedBytes: Long=0,var reusedFiles: Int=0,var localIndexHit: Boolean=false,var localIndexRefreshed: Int=0,var libraryMetadataReused: Int=0) {
     fun defer(text: String) { deferredCount++;if(deferred.size<100)deferred+=text.take(2300) }
     fun conflict(row: JSONObject) { conflictCount++;if(conflicts.size<100)conflicts+=row }
 }
 
 /** One production implementation for initial sync, retries and explicit conflict choices.
  * Snapshots are paged to SQLite; only one file and bounded transport blocks enter memory. */
-internal class LanFileSynchronizer(private val context: Context,private val db: LanFileDatabase,private val playing: PlayingFiles,private val localFactory: (JSONObject,Boolean)->LanLocalFiles={ mapping,pin -> LanLocalFiles.fromMapping(context,mapping,db,pin) }) {
+internal class LanFileSynchronizer(private val context: Context,private val db: LanFileDatabase,private val playing: PlayingFiles,private val fileIndex: com.tinyfish.jeekmusic.data.scanner.LocalFileIndex?=null,private val localFactory: (JSONObject,Boolean)->LanLocalFiles={ mapping,pin -> LanLocalFiles.fromMapping(context,mapping,db,pin) }) {
     private val partials=File(context.filesDir,"lan-file-parts").apply { mkdirs() }
     private fun id()=UUID.randomUUID().toString().replace("-","")
     private fun stamp(row: JSONObject?)=row?.optString("stamp")?.takeUnless { row.isNull("stamp") || it.isEmpty() }
@@ -253,6 +253,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
             while(true) {
                 val rows=db.transactions(key,journalOffset);if(rows.isEmpty())break
                 for(row in rows.filter { it.optString("scope")==scope && it.optString("kind") in setOf("download","delete_local") }) {
+                    if(row.optString("state") !in setOf("acknowledged","aborted"))io.indexChanged(fileIndex,row.getString("path"))
                     val part=row.optString("part").takeIf { it.matches(Regex("[0-9a-f]{64}\\.part")) }?.let { File(partials,it) }
                     io.recover(row,part)?.let { report.defer(row.getString("path")+": "+it);db.hold(key,row.getString("path")) }
                 }
@@ -355,7 +356,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                         remote.put("dependencies",JSONArray(dependencies))
                                     }
                                     transaction=transaction(mapping,scope,path,"download",stamp(local),stamp(remote),version,remote.getLong("size")).put("part",part.name).put("modifiedNs",remote.getLong("modifiedNs")).put("editedAtMs",remote.optLong("editedAtMs")).put("sourceVersion",meta(remote)).put("expectedVersion",meta(local) ?: JSONObject.NULL)
-                                    store(transaction,"created");beforeChange(path,remote,false)
+                                    store(transaction,"created");io.indexChanged(fileIndex,path);beforeChange(path,remote,false)
                                     io.install(path,part,transaction) {
                                         busy(mapping,path)
                                         if(inside) { val current=call(client,scope,"file_probe",JSONObject().put("path",path));if(meta(current)!=meta(remote))throw LanLocalDeferred("remote_changed_before_commit") } else client.call("read",JSONObject().put("rootId",mapping.getString("rootId")).put("plan",planId).put("path",path).put("offset",0))
@@ -370,7 +371,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                     if(meta(io.observe(path))!=meta(local))throw LanLocalDeferred("local_changed_during_upload")
                                 }
                                 "delete_local" -> {
-                                    transaction=transaction(mapping,scope,path,"delete_local",stamp(local),null,version,0).put("expectedVersion",meta(local) ?: JSONObject.NULL);beforeChange(path,null,true)
+                                    transaction=transaction(mapping,scope,path,"delete_local",stamp(local),null,version,0).put("expectedVersion",meta(local) ?: JSONObject.NULL);io.indexChanged(fileIndex,path);beforeChange(path,null,true)
                                     io.delete(path,transaction) { busy(mapping,path);if(meta(call(client,scope,"file_probe",JSONObject().put("path",path)))!=null)throw LanLocalDeferred("remote_changed_before_commit") }
                                     local=LanFileMetrics.absent()
                                 }
@@ -461,7 +462,13 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                 }
                 phase("phone_scan",scannedCount,0)
             }
-            io.scan(selection,{ scanned.add(it);if(scanned.size==200)flushScan() },{ report.defer("$it: local_directory_unknown") });flushScan();db.requirePortableLayout(key)
+            val emit: suspend (JSONObject)->Unit={ scanned.add(it);if(scanned.size==200)flushScan() }
+            val unavailable: (String)->Unit={ report.defer("$it: local_directory_unknown") }
+            if(fileIndex!=null) {
+                val indexResult=io.indexedScan(fileIndex,selection,emit,unavailable)
+                report.localIndexHit=indexResult.hit;report.localIndexRefreshed=indexResult.refreshed;report.libraryMetadataReused=indexResult.shared
+            } else io.scan(selection,emit,unavailable)
+            flushScan();db.requirePortableLayout(key)
             if(deltaEnabled) {
                 // CUE may refer to audio outside the selected subtree. Those files are not
                 // visited by the regular scan; retain the existing read-only dependency repair.

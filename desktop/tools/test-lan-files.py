@@ -158,7 +158,7 @@ def main():
                     fixture=base64.b64encode(json.dumps(dict(peer,rootId=root,isolated=True,prefix='Matrix',publicSaf=a.public_saf)).encode()).decode()
                     try:
                         test_class=('LanAutoSyncTest' if a.auto else 'LanFileSynchronizerTest')+('#'+a.case if a.case else '')
-                        result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,timeout=900)
+                        result=device('shell','am','instrument','-w','-e','class','com.tinyfish.jeekmusic.data.sync.'+test_class,'-e','jeekFileFixture',fixture,'com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner',capture_output=True,text=True,encoding='utf-8',timeout=900)
                         print(result.stdout,flush=True);assert ('OK (1 test)' if a.case else 'OK (') in result.stdout and 'FAILURES!!!' not in result.stdout
                     finally:device('reverse','--remove',f'tcp:{port}',capture_output=True)
                 # Administrative recovery uses the same private store and never a remote endpoint.

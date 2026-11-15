@@ -97,7 +97,7 @@
     <string name="settings_version">Version %s</string>
     <string name="update_check_now">Check for updates</string>
     <string name="update_auto_check">Check for updates automatically</string>
-    <string name="update_auto_check_summary">At most once a day, from GitHub Releases</string>
+    <string name="update_auto_check_summary">Check GitHub Releases at most once a day; download updates over Wi-Fi</string>
     <string name="update_up_to_date">You have the latest version</string>
     <string name="update_checking">Checking…</string>
     <string name="update_check_failed">Couldn’t check for updates</string>

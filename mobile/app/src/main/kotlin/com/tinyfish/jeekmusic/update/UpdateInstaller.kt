@@ -33,6 +33,7 @@ internal class UpdateFailure(val code: String) : Exception(code)
 @InstallIn(SingletonComponent::class)
 interface UpdateInstallerAccess {
     fun updateInstaller(): UpdateInstaller
+    fun appUpdater(): AppUpdater
 }
 
 /** The same install path is used by downloads, permission recovery and device instrumentation.
@@ -56,6 +57,28 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
 
     fun permissionIntent() = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
         Uri.parse("package:${context.packageName}"))
+
+    @Synchronized
+    internal fun offer(info: UpdateInfo) {
+        saveInfo(info)
+        record.remove("error")
+        record.remove("status")
+        record.remove("reason")
+        record.remove("capability")
+        record.put("sessionId", -1)
+        event("available")
+        state.value = UpdateState.Available(info)
+    }
+
+    @Synchronized
+    internal fun pendingDownload(): UpdateInfo? = readInfo()?.takeIf {
+        record.optString("stage") in setOf("available", "dismissed") && installedVersion() < it.versionCode
+    }
+
+    @Synchronized
+    internal fun downloadProgress(info: UpdateInfo, progress: Float) {
+        if ((state.value as? UpdateState.Downloading)?.info == info) state.value = UpdateState.Downloading(info, progress)
+    }
 
     @Synchronized
     internal fun downloading(info: UpdateInfo) {
@@ -189,6 +212,10 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
             return
         }
         when (stage) {
+            "available" -> {
+                if (installedVersion() >= info.versionCode) complete()
+                else state.value = UpdateState.Available(info)
+            }
             "permission_required" -> state.value = UpdateState.PermissionRequired(info)
             "failed" -> state.value = UpdateState.Failed(info, failureMessage(record.optString("error")))
             "submitted", "confirmation_required" -> {
@@ -218,6 +245,7 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
 
     @Synchronized
     internal fun dismiss() {
+        if (state.value is UpdateState.Available) event("dismissed")
         if (state.value is UpdateState.PermissionRequired) event("dismissed")
         if (state.value is UpdateState.Failed) event("dismissed")
         state.value = UpdateState.Idle

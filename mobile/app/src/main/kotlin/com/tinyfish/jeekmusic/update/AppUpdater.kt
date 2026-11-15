@@ -1,11 +1,16 @@
 package com.tinyfish.jeekmusic.update
 
-import android.content.Context
 import android.util.Log
 import com.tinyfish.jeekmusic.BuildConfig
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
@@ -13,10 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,45 +54,91 @@ enum class CheckResult { UPDATE_AVAILABLE, UP_TO_DATE, FAILED }
  */
 @Singleton
 class AppUpdater @Inject constructor(
-    @param:ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
     val installer: UpdateInstaller,
+    val downloads: UpdateDownload,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = installer.state
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
-    /** 启动后在后台调用：开关打开、且距上次检查超过一天时才联网。网络错误静默忽略。 */
-    suspend fun checkIfDue() {
+    private val checking = Mutex()
+    private var lastAutomaticAttempt = 0L
+    private var delayedCheck: Job? = null
+    private var prefetch: Job? = null
+
+    init {
+        scope.launch { downloads.wifi.collect { if (it != null) scheduleCheck() } }
+        scope.launch {
+            settings.settings.map { it.autoUpdateCheck }.distinctUntilChanged().collect {
+                downloads.automaticEnabled = it
+                if (it) scheduleCheck()
+            }
+        }
+    }
+
+    @Synchronized
+    private fun scheduleCheck() {
+        if (delayedCheck?.isActive == true) return
+        delayedCheck = scope.launch { delay(5_000); checkIfDue() }
+    }
+
+    /** Startup, foreground and Wi-Fi return share the daily check and short failure backoff. */
+    suspend fun checkIfDue() = checking.withLock {
         installer.reconcile()
-        if (state.value != UpdateState.Idle) return
         val current = settings.current()
-        if (!current.autoUpdateCheck) return
-        if (System.currentTimeMillis() - current.lastUpdateCheck < CHECK_INTERVAL_MS) return
-        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed: ${it.javaClass.simpleName}") }.getOrNull() ?: return
+        downloads.automaticEnabled = current.autoUpdateCheck
+        installer.pendingDownload()?.takeIf { it.versionCode != current.skippedUpdateVersion }?.let { prepareDownload(it) }
+        if (!current.autoUpdateCheck) return@withLock
+        if (state.value != UpdateState.Idle) return@withLock
+        val now = System.currentTimeMillis()
+        if (now - current.lastUpdateCheck in 0 until CHECK_INTERVAL_MS ||
+            now - lastAutomaticAttempt in 0 until RETRY_INTERVAL_MS) return@withLock
+        lastAutomaticAttempt = now
+        val info = latestOrNull() ?: return@withLock
         settings.setLastUpdateCheck(System.currentTimeMillis())
         if (state.value == UpdateState.Idle && info.versionCode > BuildConfig.VERSION_CODE && info.versionCode != current.skippedUpdateVersion) {
-            _state.value = UpdateState.Available(info)
+            installer.offer(info)
+            prepareDownload(info)
         }
     }
 
     /** 设置里的"检查更新"：忽略检查间隔和"跳过此版本"。 */
-    suspend fun checkNow(): CheckResult {
-        val info = runCatching { fetchLatest() }.onFailure { Log.i(TAG, "update check failed: ${it.javaClass.simpleName}") }.getOrNull()
-            ?: return CheckResult.FAILED
+    suspend fun checkNow(): CheckResult = checking.withLock {
+        val info = latestOrNull() ?: return@withLock CheckResult.FAILED
         settings.setLastUpdateCheck(System.currentTimeMillis())
-        if (info.versionCode <= BuildConfig.VERSION_CODE) return CheckResult.UP_TO_DATE
+        if (info.versionCode <= BuildConfig.VERSION_CODE) return@withLock CheckResult.UP_TO_DATE
         if (state.value is UpdateState.Installing || state.value is UpdateState.Downloading ||
-            state.value is UpdateState.ConfirmationRequired || state.value is UpdateState.PermissionRequired) return CheckResult.UPDATE_AVAILABLE
-        _state.value = UpdateState.Available(info)
-        return CheckResult.UPDATE_AVAILABLE
+            state.value is UpdateState.ConfirmationRequired || state.value is UpdateState.PermissionRequired) return@withLock CheckResult.UPDATE_AVAILABLE
+        installer.offer(info)
+        downloads.automaticEnabled = settings.current().autoUpdateCheck
+        prepareDownload(info) // A verified cache can be shown even when automatic downloads are off.
+        CheckResult.UPDATE_AVAILABLE
+    }
+
+    private suspend fun latestOrNull(): UpdateInfo? = try { fetchLatest() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { Log.i(TAG, "update check failed: ${error.javaClass.simpleName}"); null }
+
+    @Synchronized
+    private fun prepareDownload(info: UpdateInfo) {
+        if (prefetch?.isActive == true) return
+        prefetch = scope.launch {
+            try { downloads.obtain(info, automatic = true) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { Log.i(TAG, "update preparation paused: ${error.javaClass.simpleName}") }
+        }
     }
 
     /** 关闭更新提示；[skip] 为 true 时以后不再自动提示这个版本。 */
     fun dismiss(skip: Boolean) {
         val info = (state.value as? UpdateState.Available)?.info ?: (state.value as? UpdateState.Failed)?.info
         installer.dismiss()
-        if (skip && info != null) scope.launch { settings.setSkippedUpdateVersion(info.versionCode) }
+        if (skip && info != null) {
+            prefetch?.cancel()
+            downloads.stopAutomatic()
+            scope.launch { settings.setSkippedUpdateVersion(info.versionCode) }
+        }
     }
 
     @Synchronized
@@ -98,8 +147,10 @@ class AppUpdater @Inject constructor(
         installer.downloading(info)
         scope.launch {
             try {
-                val apk = download(info)
+                val apk = downloads.obtain(info, automatic = false)
                 installer.install(info, apk)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 installer.fail(info, (e as? UpdateFailure)?.code ?: "download_or_install_error")
             }
@@ -113,6 +164,7 @@ class AppUpdater @Inject constructor(
             installer.reconcile()
             val pending = state.value as? UpdateState.PermissionRequired
             if (pending != null && installer.canInstall()) downloadAndInstall(pending.info)
+            scheduleCheck()
         }
     }
 
@@ -121,6 +173,11 @@ class AppUpdater @Inject constructor(
         installer.cancel()
         downloadAndInstall(pending.info)
     }
+
+    fun diagnostics(): JSONObject = installer.diagnostics().put("download", JSONObject()
+        .put("wifiConnected", downloads.wifi.value != null).put("automaticEnabled", downloads.automaticEnabled)
+        .put("versionCode", downloads.status.value.versionCode).put("ready", downloads.status.value.ready)
+        .put("progress", downloads.status.value.progress ?: JSONObject.NULL))
 
     private suspend fun fetchLatest(): UpdateInfo? = withContext(Dispatchers.IO) {
         val json = JSONObject(get(LATEST_URL))
@@ -150,64 +207,6 @@ class AppUpdater @Inject constructor(
         }
     }
 
-    private fun updatesDir() = File(context.cacheDir, "updates")
-
-    private fun download(info: UpdateInfo): File {
-        val dir = updatesDir().apply { mkdirs() }
-        val file = installer.apkFile
-        dir.listFiles()?.filter { it != file }?.forEach { it.delete() }
-        // 已经下载过（比如第一次安装时去设置里允许了"安装未知应用"，回来再点更新），校验通过就直接用
-        if (file.length() == info.sizeBytes && runCatching { installer.validate(info, file) }.isSuccess) return file
-        val digest = MessageDigest.getInstance("SHA-256")
-        // GitHub 的下载地址会重定向到另一个 https 域名，HttpURLConnection 默认会跟随
-        val connection = open(info.apkUrl)
-        try {
-            if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: info.sizeBytes
-            connection.inputStream.use { input ->
-                file.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var done = 0L
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        output.write(buffer, 0, n)
-                        digest.update(buffer, 0, n)
-                        done += n
-                        if (total > 0) _state.value = UpdateState.Downloading(info, (done.toFloat() / total).coerceIn(0f, 1f))
-                    }
-                }
-            }
-        } finally {
-            connection.disconnect()
-        }
-        val actual = digest.digest().toHex()
-        if (info.sha256 != null && !info.sha256.equals(actual, ignoreCase = true)) {
-            file.delete()
-            throw UpdateFailure("digest_mismatch")
-        }
-        if (info.sizeBytes <= 0 || file.length() != info.sizeBytes) {
-            file.delete()
-            throw UpdateFailure("size_mismatch")
-        }
-        return file
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val n = input.read(buffer)
-                if (n < 0) break
-                digest.update(buffer, 0, n)
-            }
-        }
-        return digest.digest().toHex()
-    }
-
-    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
-
     private fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = TIMEOUT_MS
         readTimeout = TIMEOUT_MS
@@ -218,6 +217,7 @@ class AppUpdater @Inject constructor(
         const val TAG = "AppUpdater"
         const val LATEST_URL = "https://api.github.com/repos/tifish/JeekMusic/releases/latest"
         const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
+        const val RETRY_INTERVAL_MS = 5 * 60 * 1000L
         const val TIMEOUT_MS = 15_000
         val VERSION_CODE = Regex("""\d+$""")
     }

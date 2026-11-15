@@ -30,7 +30,7 @@ fun UpdateDiagnosticsAction(viewModel: UpdateViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var diagnostics by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth().clickable {
-        diagnostics = viewModel.updater.installer.diagnostics().toString(2)
+        diagnostics = viewModel.updater.diagnostics().toString(2)
     }.padding(horizontal = 16.dp, vertical = 14.dp).testTag("update_diagnostics")) {
         Text(stringResource(R.string.update_diagnostics), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.update_diagnostics_summary), style = MaterialTheme.typography.bodySmall,

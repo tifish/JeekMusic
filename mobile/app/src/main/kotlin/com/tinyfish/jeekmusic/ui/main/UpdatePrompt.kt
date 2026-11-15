@@ -39,6 +39,7 @@ class UpdateViewModel @Inject constructor(val updater: AppUpdater) : ViewModel()
 fun UpdatePrompt(viewModel: UpdateViewModel = hiltViewModel()) {
     val updater = viewModel.updater
     val state by updater.state.collectAsStateWithLifecycle()
+    val download by updater.downloads.status.collectAsStateWithLifecycle()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { updater.onForeground() }
     val confirmation = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { updater.onForeground() }
     LifecycleResumeEffect(updater, state is UpdateState.ConfirmationRequired) {
@@ -70,6 +71,15 @@ fun UpdatePrompt(viewModel: UpdateViewModel = hiltViewModel()) {
                             Modifier.padding(top = 8.dp).heightIn(max = 240.dp).verticalScrollWithScrollbar(rememberScrollState()),
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                    }
+                    val prepared = download.takeIf { it.versionCode == s.info.versionCode }
+                    Text(stringResource(when {
+                        prepared?.ready == true -> R.string.update_download_ready
+                        prepared?.progress != null -> R.string.update_download_wifi_progress
+                        else -> R.string.update_download_wifi_summary
+                    }), Modifier.padding(top = 12.dp).testTag("update_preparation"), style = MaterialTheme.typography.bodySmall)
+                    if (prepared?.progress != null && !prepared.ready) {
+                        LinearProgressIndicator(progress = { prepared.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                     }
                 }
             },

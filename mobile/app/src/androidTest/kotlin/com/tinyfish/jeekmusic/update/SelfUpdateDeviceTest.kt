@@ -7,6 +7,7 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dagger.hilt.android.EntryPointAccessors
 import org.junit.Assert.*
@@ -14,6 +15,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import org.json.JSONObject
+import kotlinx.coroutines.runBlocking
+import java.io.FilterInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 /** Host-driven bridge, installed only as a signed instrumentation APK. All installs invoke the
  * production singleton inside the target package UID. It does not grant shell identity and never
@@ -25,6 +30,38 @@ class SelfUpdateDeviceTest {
     private val context get() = instrumentation.targetContext
     private val arguments get() = InstrumentationRegistry.getArguments()
     private val installer get() = EntryPointAccessors.fromApplication(context, UpdateInstallerAccess::class.java).updateInstaller()
+
+    /** Host captures the real Compose prompt while this deterministic transfer runs, then clicks
+     * its real Update button. No release URL override or production component is exposed. */
+    @Test
+    fun prefetchForUi() = runBlocking {
+        ActivityScenario.launch(com.tinyfish.jeekmusic.MainActivity::class.java).use {
+            val source = File(requireNotNull(arguments.getString("updateApk")))
+            val info = info(source).copy(notes = "WiFi update preparation fixture")
+            val updater = EntryPointAccessors.fromApplication(context, UpdateInstallerAccess::class.java).appUpdater()
+            installer.apkFile.delete()
+            installer.offer(info)
+            updater.downloads.obtain(info, true) { _, network ->
+                assertNotNull(network)
+                object : HttpURLConnection(URL(info.apkUrl)) {
+                    override fun connect() = Unit
+                    override fun disconnect() = Unit
+                    override fun usingProxy() = false
+                    override fun getResponseCode() = 200
+                    override fun getInputStream() = object : FilterInputStream(source.inputStream()) {
+                        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                            val count = super.read(buffer, offset, length)
+                            if (count > 0) Thread.sleep((count * 60_000L / source.length()).coerceAtLeast(1))
+                            return count
+                        }
+                    }
+                }
+            }
+            assertTrue(updater.downloads.status.value.ready)
+            assertEquals("available", installer.diagnostics().getString("stage"))
+            assertEquals(-1, installer.diagnostics().getInt("sessionId"))
+        }
+    }
 
     @Test
     fun bridge() {

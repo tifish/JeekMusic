@@ -1,5 +1,21 @@
 # Android 自更新：免确认与可验证结果
 
+## WiFi 提前下载
+
+自动检查开关同时控制版本检查和 WiFi 预下载。启动、返回前台、默认 WiFi 网络变化均复用到期检查；成功检查间隔 24 小时，失败不记为成功，至少隔 5 分钟再由下次事件尝试。手动检查仍忽略间隔及跳过版本。未下载完时点击更新会等待同一传输，已经下载好则直接使用缓存进入安装；不会因发现新版本或下载完成而自动安装。
+
+自动连接绑定当前有互联网能力的 WiFi Network，网络切换或关闭开关会断开，绝不转到移动数据；不绕过 VPN。选择“以后再说”可继续预下载，选择“跳过此版本”取消自动准备。用户主动点击更新且缓存缺失时仍允许通过当前网络下载。应用进程被回收会中断未完成的下载，下次从头尝试；这里没有承诺断点下载或后台进程存活。系统可能清理缓存，使用前必须重新验证。
+
+下载写入私有 update.apk.part，大小、发布摘要（存在时）、实际包名、递增版本与签名全部验证后，原子替换 update.apk。自动下载阶段只持久保存可用版本和提示状态，不创建安装会话；冷启动可恢复可用提示并离线验证已下载包。“更新诊断”兼容追加 download 对象，含 wifiConnected、automaticEnabled、versionCode、ready、progress，不含地址或路径。该实现同时用于 debug/release，无额外开发开关或导出控制接口。
+
+回归入口：给明确指定的模拟器安装正常 debug 与 androidTest，再把同包名、同签名且版本更高的 fixture APK 放到 `/data/local/tmp/jeek-wifi-candidate.apk`，运行 `am instrument -w -e class com.tinyfish.jeekmusic.update.UpdateDownloadDeviceTest -e updateApk /data/local/tmp/jeek-wifi-candidate.apk com.tinyfish.jeekmusic.debug.test/androidx.test.runner.AndroidJUnitRunner`。三项设备回归覆盖实际 PackageManager 校验、自动/手动共用一次传输、冷启动离线复用、真实 WiFi 断开、损坏/错误版本拒绝。传输使用可控流夹具，不能把它说成已验证 GitHub 下载性能。
+
+`SelfUpdateDeviceTest#prefetchForUi` 在真实 ActivityScenario 中运行可控慢传输，供代理实际截图检查进度和完成提示。先前直接异步启动 Activity 的夹具出现空树及 ANR，未计为 UI 通过；改用 ActivityScenario 等待界面就绪后再开始传输。
+
+2026-11-15 在 emulator-5584/API35 实际查看中文下载中与已下载截图；关闭 WiFi、强停并重启客户端后，界面仍显示已下载并校验，点击真实“更新”按钮后完成 278→279（同签名 debug 夹具）。该模拟器首次尚未允许来源安装，代理实际操作来源授权页，返回后自动复用缓存继续安装；没有点击系统安装确认按钮，实际 installerPackageName 为自身。重启和安装阶段 WiFi 保持关闭，更新来源为不可联网获取的夹具地址，确认点击后复用了缓存；不能泛化为所有系统/OEM都免确认。
+
+137 项单元测试、正常 debug/release 构建、lint 及三项下载专项回归通过。UI 的慢传输夹具单独一项通过，安装由真实客户端而非 ADB 覆盖执行。随后模拟器 debug 恢复正常构建和原来源授权状态，不清理应用数据；正常签名 release 已覆盖安装及重启，并实际进入关于与更新，截图核对 WiFi 自动下载开关说明。全部证据在本机忽略目录 desktop/artifacts/update-wifi*：progress.png、ready.png、ready-after-restart-offline.png、install-permission.png、system-install-source.png、ui-result.json、release-ui/about-updates.png 和构建/设备日志。未使用实体手机。
+
 ## 定位与边界
 
 JeekMusic 原实现已请求 `USER_ACTION_NOT_REQUIRED` 并声明 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`，但没有预检 `canRequestPackageInstalls()`，没有授权返回续装，也没有持久保存安装结果；`PENDING_USER_ACTION` 直接从广播启动系统界面。JeekAIChat 有未知来源授权引导和返回续装，两者请求免确认的参数相同。它采用 activity 回调和后台启动 options，这影响结果界面是否能显示，不改变系统的免确认资格。

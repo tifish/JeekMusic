@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="update_download_ready">Downloaded and verified. Tap Update to install.</string>
+    <string name="update_download_wifi_progress">Downloading over Wi-Fi… You can keep using JeekMusic.</string>
+    <string name="update_download_wifi_summary">With automatic updates enabled, this update downloads over Wi-Fi. Tap Update to download and install now.</string>
     <string name="update_permission_title">Allow JeekMusic to update itself</string>
     <string name="update_permission_summary">Enable “Allow from this source” for JeekMusic in Android settings. The downloaded update will resume when you return. Android may still require confirmation under its install policy.</string>
     <string name="update_open_settings">Open settings</string>

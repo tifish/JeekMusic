@@ -1,6 +1,6 @@
 # Jeek Music 移动端（Android）
 
-简洁的 Android 本地音乐播放器。围绕你选择的音乐文件夹组织曲库，不做任何统计或追踪；默认只有"检查更新"会联网（每天最多一次，可以关闭）。
+简洁的 Android 本地音乐播放器。围绕你选择的音乐文件夹组织曲库，不做任何统计或追踪；默认只有应用更新会联网（每天最多成功检查一次，WiFi 下提前下载安装包，可以关闭；安装由用户点击确认）。
 
 <p>
 <img src="fastlane/metadata/android/zh-CN/images/phoneScreenshots/1.png" width="200">

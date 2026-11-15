@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="update_download_ready">已下载并校验，点击更新即可安装。</string>
+    <string name="update_download_wifi_progress">正在 WiFi 下下载，可继续使用 JeekMusic。</string>
+    <string name="update_download_wifi_summary">开启自动检查更新后，会在 WiFi 下提前下载。点击更新可立即下载并安装。</string>
     <string name="update_permission_title">允许 JeekMusic 更新自身</string>
     <string name="update_permission_summary">请在 Android 设置中为 JeekMusic 开启“允许来自此来源的应用”。返回后会继续安装已下载的更新。系统安装策略仍可能要求确认。</string>
     <string name="update_open_settings">打开设置</string>

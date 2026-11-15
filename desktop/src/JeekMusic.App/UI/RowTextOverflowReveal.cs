@@ -24,6 +24,7 @@ namespace JeekMusic.UI;
 /// </summary>
 internal sealed class RowTextOverflowReveal : IDisposable
 {
+    const double RightClearance = 32;
     readonly Window _window;
     readonly Control _host;
     readonly bool _songs;
@@ -48,6 +49,7 @@ internal sealed class RowTextOverflowReveal : IDisposable
     string? _theme, _background, _foreground;
     double _contrast;
     bool _foregroundAdjusted;
+    string? _column;
 
     public RowTextOverflowReveal(Window window, Control host, Func<bool> collapsed)
     {
@@ -80,6 +82,8 @@ internal sealed class RowTextOverflowReveal : IDisposable
         ["automaticReading"] = _readingScroll is not null, ["readingOffset"] = _readingScroll?.Offset.X ?? 0,
         ["hitTestVisible"] = false, ["delayMs"] = 0,
         ["rowHeight"] = _rowRect.Height, ["borderThickness"] = 0, ["readingAxis"] = "horizontal",
+        ["rightClearance"] = RightClearance, ["column"] = _column,
+        ["textViewportWidth"] = Math.Max(0, (_surface?.Bounds.Width ?? 0) - RightClearance),
         ["theme"] = _theme, ["background"] = _background, ["foreground"] = _foreground,
         ["contrastRatio"] = _contrast, ["foregroundAdjusted"] = _foregroundAdjusted
     };
@@ -96,8 +100,11 @@ internal sealed class RowTextOverflowReveal : IDisposable
         {
             row = visual?.FindAncestorOfType<DataGridRow>(includeSelf: true);
             if (row?.FindAncestorOfType<DataGrid>() != _host) { Close("pointer-left"); return; }
-            field = row.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Classes.Contains("song-title") &&
-                new Rect(t.Bounds.Size).Contains(e.GetPosition(t)));
+            // Resolve the hovered cell, including template/button content, instead
+            // of searching the title across the whole row. Icons are not text fields.
+            var cell = visual?.FindAncestorOfType<DataGridCell>(includeSelf: true);
+            field = cell?.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t =>
+                t.IsEffectivelyVisible && !t.Classes.Contains("glyph") && !string.IsNullOrEmpty(t.Text));
         }
         else
         {
@@ -114,6 +121,7 @@ internal sealed class RowTextOverflowReveal : IDisposable
         Close("candidate-changed");
         if (field is null || !TryClipped(field, out var source, out var visible, out var width)) { _reason = "fits"; return; }
         _source = field; _row = row; _identity = row.DataContext;
+        _column = _songs ? DataGridColumn.GetColumnContainingElement(field)?.Tag as string : null;
         _rowBackground = RowBackground(field, row);
         if (_rowBackground.TransformToVisual(_window) is not { } rowTransform) { Close("no-row"); return; }
         _rowRect = new Rect(_rowBackground.Bounds.Size).TransformToAABB(rowTransform);
@@ -187,7 +195,8 @@ internal sealed class RowTextOverflowReveal : IDisposable
         _background = palette.Background.ToString(); _foreground = palette.Foreground.ToString();
         _contrast = palette.Contrast; _foregroundAdjusted = palette.Adjusted;
         _rowColor = palette.Background;
-        // The surface continues the painted row, without tooltip chrome or padding.
+        // Continue the painted row, with a blank trailing area separating this
+        // text from the other fields underneath. Keep the original text origin.
         // Position the text explicitly so its baseline is independent of row height.
         var content = new Canvas { IsHitTestVisible = false };
         Canvas.SetTop(text, _sourceRect.Top - _rowRect.Top);
@@ -207,12 +216,13 @@ internal sealed class RowTextOverflowReveal : IDisposable
         var scale = _window.RenderScaling;
         var left = Math.Ceiling(available.Left * scale) / scale;
         var right = Math.Floor(available.Right * scale) / scale;
-        var naturalWidth = Math.Ceiling(_naturalWidth * scale) / scale;
+        var naturalWidth = Math.Ceiling((_naturalWidth + RightClearance) * scale) / scale;
         var x = Math.Clamp(Math.Floor(_sourceRect.X * scale) / scale, left, Math.Max(left, right - 40));
         var y = _rowRect.Top;
         // Prefer moving left over shortening a run near the right screen edge.
         if (naturalWidth > right - x) x = Math.Max(left, right - naturalWidth);
         var width = Math.Min(naturalWidth, right - x);
+        var textWidth = Math.Max(0, width - RightClearance);
         _wrapped = false;
         _surface.Width = width;
         if (_row is DataGridRow songRow)
@@ -236,13 +246,13 @@ internal sealed class RowTextOverflowReveal : IDisposable
         text.Width = _naturalWidth;
         text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         text.Height = text.DesiredSize.Height;
-        if (_naturalWidth > width + .5 / Math.Max(1, _window.RenderScaling))
+        if (_naturalWidth > textWidth + .5 / Math.Max(1, _window.RenderScaling))
         {
             // Keep the row height even for arbitrarily long text. Read horizontally
             // at the original font size rather than growing a second card over rows.
             _readingScroll = new ScrollViewer
             {
-                Content = text, Width = width, Height = text.Height,
+                Content = text, Width = textWidth, Height = text.Height,
                 IsHitTestVisible = false, Focusable = false,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
@@ -412,6 +422,7 @@ internal sealed class RowTextOverflowReveal : IDisposable
         if (_surface is not null) _layer?.Children.Remove(_surface);
         if (_rowBackground is not null) _rowBackground.PropertyChanged -= OnRowBackgroundChanged;
         _surface = null; _layer = null; _source = null; _row = null; _rowBackground = null; _identity = null;
+        _column = null;
         _reason = reason;
     }
 

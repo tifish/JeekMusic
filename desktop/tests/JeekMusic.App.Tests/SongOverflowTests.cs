@@ -18,6 +18,44 @@ public sealed class SongOverflowTests
 {
     const string LongTitle = "远方的灯火 — 夜航与归途（管弦乐现场录音 / The Long Journey Home, Live）";
 
+    [Fact]
+    public Task EverySongColumnRevealsOnlyClippedTextAndKeepsTrailingClearance() => Run(() =>
+    {
+        using var h = new PlayingVisibilityTests.Harness(LongTitle);
+        // Exercise text columns and the four button/template columns through the
+        // actual cell hit targets, not by calling the reveal implementation.
+        foreach (var column in h.Table.Columns) { column.IsVisible = true; column.Width = new DataGridLength(100); }
+        h.Pump();
+        foreach (var column in h.Table.Columns)
+        {
+            h.Window.MouseMove(new Point(700, 80)); h.Pump();
+            h.Table.ScrollIntoView(h.Rows[5], column); h.Pump();
+            var row = h.Realized.Single(r => ReferenceEquals(r.DataContext, h.Rows[5]));
+            var cell = row.GetVisualDescendants().OfType<DataGridCell>().Single(c => DataGridColumn.GetColumnContainingElement(c) == column);
+            var text = cell.GetVisualDescendants().OfType<TextBlock>().First(t => !t.Classes.Contains("glyph"));
+            text.Text = LongTitle; h.Pump();
+            var point = cell.TranslatePoint(new Point(cell.Bounds.Width / 2, cell.Bounds.Height / 2), h.Window)!.Value;
+            h.Window.MouseMove(point); h.Pump();
+            var d = D(h);
+            Assert.True(d["visible"]!.GetValue<bool>(), $"{column.Tag}: {d}");
+            Assert.Equal(column.Tag, d["column"]!.GetValue<string>());
+            var surface = Surface(h);
+            var clone = surface.GetVisualDescendants().OfType<TextBlock>().Single();
+            Assert.Equal(LongTitle, clone.Text);
+            Assert.InRange(surface.Bounds.Width - d["naturalWidth"]!.GetValue<double>(), 32, 33);
+            var textRight = clone.TranslatePoint(new Point(clone.Bounds.Width, 0), h.Window)!.Value.X;
+            var surfaceRight = surface.TranslatePoint(new Point(surface.Bounds.Width, 0), h.Window)!.Value.X;
+            Assert.InRange(surfaceRight - textRight, 32, 33);
+            Assert.Equal(row.Bounds.Height, surface.Bounds.Height);
+            Assert.False(surface.IsHitTestVisible);
+            Assert.Equal(32, d["rightClearance"]!.GetValue<double>());
+            text.Text = "A"; h.Pump();
+            Assert.False(D(h)["visible"]!.GetValue<bool>());
+            h.Window.MouseMove(point + new Vector(1, 0)); h.Pump();
+            Assert.False(D(h)["visible"]!.GetValue<bool>(), column.Tag?.ToString());
+        }
+    });
+
     [Theory]
     [InlineData(false, 1.0)]
     [InlineData(true, 1.25)]
@@ -127,6 +165,8 @@ public sealed class SongOverflowTests
         title.Text = string.Concat(Enumerable.Repeat("漫长的旅程 Long journey ", 100)); h.Pump();
         Assert.False(D(h)["visible"]!.GetValue<bool>());
         h.Window.MouseMove(point); h.Pump(); Assert.True(D(h)["automaticReading"]!.GetValue<bool>());
+        var reading = Surface(h).GetVisualDescendants().OfType<ScrollViewer>().Single();
+        Assert.Equal(Surface(h).Bounds.Width - 32, reading.Bounds.Width, 4);
         Assert.False(D(h)["wrapped"]!.GetValue<bool>()); Assert.Equal(row.Bounds.Height, Surface(h).Bounds.Height);
         Assert.False(Surface(h).IsHitTestVisible);
         Assert.Equal(43, h.Tools.Catalog.Count);

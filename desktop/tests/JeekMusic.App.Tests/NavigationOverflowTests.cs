@@ -65,6 +65,8 @@ public sealed class NavigationOverflowTests
         Assert.Equal(new Thickness(0), h.Surface.BorderThickness);
         Assert.Null(h.Surface.BorderBrush); Assert.Equal(new Thickness(0), h.Surface.Padding);
         Assert.Equal(h.D["rowHeight"]!.GetValue<double>(), h.Surface.Bounds.Height, 4);
+        Assert.Equal(32, h.D["rightClearance"]!.GetValue<double>());
+        Assert.InRange(h.Surface.Bounds.Width - h.D["naturalWidth"]!.GetValue<double>(), 32, 32 + 1 / scale);
         var painted = original.GetVisualAncestors().OfType<Border>().First(v =>
             ReferenceEquals(v.TemplatedParent, h.Row(h.Long)) && v.Name == "PART_LayoutRoot");
         Assert.Equal(painted.Bounds.Height, h.Surface.Bounds.Height, 4);
@@ -114,6 +116,8 @@ public sealed class NavigationOverflowTests
         h.Hover(row); await Task.CompletedTask; Assert.True(h.Visible);
         Assert.False(h.D["wrapped"]!.GetValue<bool>()); Assert.True(h.D["automaticReading"]!.GetValue<bool>()); Assert.Equal(text.FontSize, h.RevealText.FontSize);
         Assert.Equal(text.Text, h.RevealText.Text); Assert.Equal(TextTrimming.None, h.RevealText.TextTrimming);
+        var reading = h.Surface.GetVisualDescendants().OfType<ScrollViewer>().Single();
+        Assert.Equal(h.Surface.Bounds.Width - 32, reading.Bounds.Width, 4);
         var bounds = new Rect(h.Surface.Bounds.Size).TransformToAABB(h.Surface.TransformToVisual(h.Window)!.Value);
         Assert.InRange(bounds.Left, 0, h.Window.ClientSize.Width); Assert.True(bounds.Right <= h.Window.ClientSize.Width);
         Assert.True(bounds.Bottom <= h.Window.ClientSize.Height); Assert.True(bounds.Top >= 0);

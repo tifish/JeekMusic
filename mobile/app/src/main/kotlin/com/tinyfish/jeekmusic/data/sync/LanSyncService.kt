@@ -35,7 +35,7 @@ import kotlin.coroutines.resume
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0,val fileReusedBytes: Long=0,val fileReusedFiles: Int=0,val lastReusedBytes: Long=0,val lastReusedFiles: Int=0)
+data class LanStatus(val running: Boolean = false, val text: String = "", val done: Long = 0, val total: Long = 0, val problems: List<String> = emptyList(), val timeDetails: List<String> = emptyList(), val precisionNs: Long = 0,val fileActions: Map<String,Int> = emptyMap(),val fileConflicts: List<JSONObject> = emptyList(),val fileDeferredCount: Int=0,val fileProcessed: Int=0,val fileReusedBytes: Long=0,val fileReusedFiles: Int=0,val lastReusedBytes: Long=0,val lastReusedFiles: Int=0,val quiet: Boolean=false)
 
 internal class LanMappingBusyException : IllegalStateException("Cancel sync before editing mappings")
 
@@ -54,6 +54,7 @@ class LanSyncService @Inject constructor(
     private val sync: SyncService,
     private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
     val networkPolicy: SyncNetworkPolicy,
+    private val mediaChanges: com.tinyfish.jeekmusic.data.scanner.SyncMediaChanges,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val gate = Mutex()
@@ -69,9 +70,53 @@ class LanSyncService @Inject constructor(
     internal suspend fun awaitSync() { job?.join() }
     internal fun cancelScheduled(reason: String="cancelled") { stopState.reason=reason;job?.cancel();transport?.cancel() }
     internal suspend fun backgroundSync()=automation.background()
-    internal suspend fun localWatchDirectories(mapping: JSONObject): List<File> = LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { io ->
-        // Only synchronization may persist a new directory pin. Watching never initializes one.
-        io.watchDirectories(mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } })
+    /** A cheap preflight. No directory enumeration and no file job when both sides
+     * still match their checkpoints. The mapping gate also serializes manual starts. */
+    internal suspend fun checkScheduled(reason: String): Boolean {
+        if(isSyncRunning() || store.read().optBoolean("autoCancelled"))return false
+        var needed=store.read().optBoolean("manualPending")
+        gate.withLock {
+            if(isSyncRunning())return false
+            for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }) {
+                mediaChanges.check(mapping)
+                if(mapping.optString("directoryIdentity").isEmpty() || mapping.optBoolean("syncPending",true) || fileDatabase.pendingIssueCount(mapping.getString("key"))>0)needed=true
+                else if(localChanges(mapping))needed=true
+                if(pollFileRevision(mapping)!=mapping.optString("remoteRevision"))needed=true
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        if(store.read().optBoolean("autoCancelled") || networkPolicy.waitingForWifi)return false
+        if(needed)startScheduled(reason)
+        return needed
+    }
+    /** Refresh only known paths, then compare them to the acknowledged baseline.
+     * Our own completed downloads and late MediaStore events normally match already. */
+    private suspend fun localChanges(mapping: JSONObject): Boolean = LanLocalFiles.fromMapping(context,mapping,fileDatabase,false).use { io ->
+        val key=io.indexKey
+        val pending=localFileIndex.pendingPaths(key) ?: return@use true
+        if(pending.isEmpty()) { localFileIndex.confirm(key,Long.MAX_VALUE);return@use false }
+        val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
+        val refreshed=io.indexedScan(localFileIndex,selection,{}, { throw LanLocalDeferred("local_snapshot_incomplete") })
+        val compared=localFileIndex.pendingPaths(key,refreshed.revision) ?: return@use true
+        val different=compared.any { path ->
+            val row=localFileIndex.row(key,path)
+            val baseline=fileDatabase.baseline(mapping.getString("key"),path)
+            val old=baseline?.optString("localVersion")?.takeUnless { baseline.isNull("localVersion") }
+            LanFileMetrics.version(row)!=old || baseline?.optString("migration").orEmpty().isNotEmpty()
+        }
+        if(!different)localFileIndex.confirm(key,refreshed.revision)
+        different
+    }
+    /** Runtime checkpoints must not overwrite a pause or mapping edit made by the UI. */
+    private fun saveMappingRuntime(mapping: JSONObject) {
+        store.update { state ->
+            val rows=state.optJSONArray("mappings") ?: return@update
+            repeat(rows.length()) { i ->
+                val current=rows.getJSONObject(i)
+                if(current.optString("key")==mapping.getString("key"))for(field in listOf("directoryIdentity","syncPending","remoteRevision"))
+                    if(mapping.has(field))current.put(field,mapping.get(field))
+            }
+        }
     }
     internal fun pollFileRevision(mapping: JSONObject): String {
         LanProtocol(store.read().getJSONObject("connection"), networkPolicy).use { client ->
@@ -262,12 +307,14 @@ class LanSyncService @Inject constructor(
         store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root })) }; report()
         automation.configure()
     }
-    fun cancel() { automation.cancel();cancelScheduled();automation.report() }
-    fun start() { automation.hint("manual",manual=true) }
+    fun cancel() { store.update { it.remove("manualPending") };automation.cancel();cancelScheduled();automation.report() }
+    fun start() { store.update { it.put("manualPending",true) };automation.hint("manual",manual=true) }
+    fun refresh() { scope.launch(Dispatchers.IO) { localFileIndex.requestRefresh();start() } }
     @Synchronized internal fun startScheduled(reason: String) {
         if (job?.isCompleted == false) return
         if (networkPolicy.waitingForWifi) { _status.update { it.copy(running=false,text=context.getString(R.string.sync_wifi_waiting)) };return }
         val stop=StopState();stopState=stop
+        val includeUserData=reason=="manual" || store.read().optBoolean("manualPending")
         fun stoppedText()=context.getString(when(stop.reason) { "background"->R.string.lan_background_waiting;"cancelled"->R.string.lan_cancelled;else->R.string.lan_interrupted })
         automation.begin(reason)
         // Status reporting is advisory. An offline PC must not delay the actual sync round
@@ -276,10 +323,9 @@ class LanSyncService @Inject constructor(
         job = scope.launch(Dispatchers.IO) {
             val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
             val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true;var reusedBytes=0L;var reusedFiles=0;var indexHits=0;var indexMisses=0;var indexRefreshed=0;var libraryReused=0
-            _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying)) }
+            _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying),quiet=reason!="manual") }
             try { gate.withLock {
-                automation.ensureWatches()
-                _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage(),lastReusedBytes=_status.value.lastReusedBytes,lastReusedFiles=_status.value.lastReusedFiles)
+                _status.value = LanStatus(true, context.getString(R.string.lan_verifying),fileConflicts=fileDatabase.issuePage(),lastReusedBytes=_status.value.lastReusedBytes,lastReusedFiles=_status.value.lastReusedFiles,quiet=reason!="manual")
                 val problems = mutableListOf<String>(); val timeDetails = mutableListOf<String>(); var precisionNs = 0L; var done = 0L; var total = 0L
                 try {
                     val obsolete=store.mappings().count { !LanMappingTargets.isCurrent(it) }
@@ -293,9 +339,11 @@ class LanSyncService @Inject constructor(
                         ensureActive()
                         if(store.mappings().none { it.optString("key")==mapping.getString("key") && it.optBoolean("enabled",true) })continue
                         activeFileRoot=mapping.getString("rootId")
+                        mapping.put("syncPending",true);saveMappingRuntime(mapping)
+                        val remoteRevision=pollFileRevision(mapping)
                         val client=protocol()
                         try {
-                            val result=fileSynchronizer.synchronize(mapping,client,{ store.saveMapping(mapping);report() },{ path,progress ->
+                            val result=fileSynchronizer.synchronize(mapping,client,{ saveMappingRuntime(mapping);report() },{ path,progress ->
                                 if(progress.bytes>0 && firstTransferMs<0)firstTransferMs=(System.nanoTime()-roundStarted)/1_000_000
                                 val now=android.os.SystemClock.elapsedRealtime()
                                 if(now-lastProgress>=250) {
@@ -304,6 +352,7 @@ class LanSyncService @Inject constructor(
                                 }
                             },{ path,entry,deleted -> queueRefresh(mapping,path,entry,deleted) },{},phase={ stage,count,total ->
                                 automation.phase(stage)
+                                if(stage=="transferring")_status.update { it.copy(quiet=false) }
                                 val text=when(stage) {
                                     "reading_baseline"->context.getString(R.string.sync_reading_baseline,count,total)
                                     "pc_scan"->context.getString(R.string.sync_pc_scan)
@@ -315,6 +364,9 @@ class LanSyncService @Inject constructor(
                                 }
                                 _status.update { it.copy(text=text) }
                             })
+                            val pendingLocal=localChanges(mapping)
+                            mapping.put("remoteRevision",remoteRevision).put("syncPending",result.deferredCount>0 || pendingLocal)
+                            saveMappingRuntime(mapping)
                             if(result.localIndexHit)indexHits++ else indexMisses++;indexRefreshed+=result.localIndexRefreshed;libraryReused+=result.libraryMetadataReused
                             preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit;metadataRows+=result.metadataRows;incremental=incremental && result.incremental
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
@@ -329,7 +381,7 @@ class LanSyncService @Inject constructor(
                     }
                     ensureActive()
                     fileRoundCompleted=true
-                    if(reason=="manual") {
+                    if(includeUserData) {
                         val dataClient = protocol()
                         dataClient.use {
                             LanProtocol.requirePairedCapabilities(dataClient.call("capabilities"))
@@ -337,6 +389,7 @@ class LanSyncService @Inject constructor(
                             sync.acceptLan(remote)
                         }
                         try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
+                        store.update { it.remove("manualPending") }
                     }
                     _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: CancellationException) {

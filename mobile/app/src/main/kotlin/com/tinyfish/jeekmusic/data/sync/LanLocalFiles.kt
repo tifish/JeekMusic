@@ -194,13 +194,13 @@ internal class LanLocalFiles(private val absoluteRoot: String,private val mappin
         currentRoot()
         for(path in selection) LanProtocol.relative(path,true)
         val edits=database.editSnapshot()
-        val cacheKey=mapping.getString("key")+":"+mapping.getString("directoryIdentity")+":"+rootIdentity[0]+":"+rootIdentity[1]
-        return index.read(cacheKey,absoluteRoot,selection,{ observe(it) },{ output,unknown -> scan(selection,output,unknown) },{ row ->
+        return index.read(indexKey,absoluteRoot,selection,{ observe(it) },{ output,unknown -> scan(selection,output,unknown) },{ row ->
             val edit=edits[File(absoluteRoot,row.getString("path")).absolutePath]
             row.put("editedAtMs",if(edit!=null && edit.first==row.optLong("size") && edit.second==row.optLong("modifiedNs"))edit.third else 0L)
             emit(row)
         },unavailable)
     }
+    val indexKey get()=mapping.getString("key")+":"+mapping.getString("directoryIdentity")+":"+rootIdentity[0]+":"+rootIdentity[1]
     suspend fun capture(path: String,target: File,expected: String): Long {
         val p=parent(path) ?: throw LanLocalDeferred("local_changed_before_upload")
         return p.use { parent ->

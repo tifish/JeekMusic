@@ -15,10 +15,17 @@ import javax.inject.Singleton
 @Singleton
 class DocumentTree @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val fileIndex: com.tinyfish.jeekmusic.data.scanner.LocalFileIndex = com.tinyfish.jeekmusic.data.scanner.LocalFileIndex(context),
 ) {
     data class Child(val documentId: String, val name: String, val isDirectory: Boolean)
 
     internal val resolver get() = context.contentResolver
+
+    internal fun changed(documentId: String) {
+        val path=com.tinyfish.jeekmusic.data.scanner.SafPaths.fromTreeDocumentId(documentId) ?: return
+        val volume=context.getSystemService(android.os.storage.StorageManager::class.java).storageVolumes.singleOrNull { it.mediaStoreVolumeName==path.volumeName }?.directory ?: return
+        fileIndex.changed(volume,path.relativePath.trimEnd('/'),android.os.FileObserver.CLOSE_WRITE)
+    }
 
     fun list(folder: LibraryFolderEntity, relativePath: String): List<Child> = runCatching {
         val treeUri = Uri.parse(folder.treeUri)
@@ -111,11 +118,13 @@ fun DocumentTree.create(folder: LibraryFolderEntity, parentDocumentId: String, m
 }.getOrNull()
 
 fun DocumentTree.write(folder: LibraryFolderEntity, documentId: String, bytes: ByteArray): Boolean = runCatching {
-    resolver.openOutputStream(documentUri(folder, documentId), "wt")?.use { it.write(bytes) } != null
+    changed(documentId)
+    try { resolver.openOutputStream(documentUri(folder, documentId), "wt")?.use { it.write(bytes) } != null }
+    finally { changed(documentId) }
 }.getOrDefault(false)
 
 fun DocumentTree.delete(folder: LibraryFolderEntity, documentId: String): Boolean =
-    runCatching { DocumentsContract.deleteDocument(resolver, documentUri(folder, documentId)) }.getOrDefault(false)
+    runCatching { changed(documentId);try { DocumentsContract.deleteDocument(resolver, documentUri(folder, documentId)) } finally { changed(documentId) } }.getOrDefault(false)
 
 /** 音乐文件夹根下 `.jeekmusic/<name>/` 的 documentId，没有时创建；失败返回 null。 */
 fun DocumentTree.appDirectory(folder: LibraryFolderEntity, name: String): String? {
@@ -146,4 +155,8 @@ fun DocumentTree.writeFile(folder: LibraryFolderEntity, dirId: String, name: Str
 fun childDocumentId(dirId: String, name: String) = if (dirId.endsWith(":")) dirId + name else "$dirId/$name"
 
 fun DocumentTree.rename(folder: LibraryFolderEntity, documentId: String, newName: String): Boolean =
-    runCatching { DocumentsContract.renameDocument(resolver, documentUri(folder, documentId), newName) != null }.getOrDefault(false)
+    runCatching {
+        changed(documentId)
+        val renamed=DocumentsContract.renameDocument(resolver, documentUri(folder, documentId), newName) ?: return@runCatching false
+        changed(documentId);changed(DocumentsContract.getDocumentId(renamed));true
+    }.getOrDefault(false)

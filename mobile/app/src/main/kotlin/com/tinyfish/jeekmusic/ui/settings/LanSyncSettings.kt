@@ -116,13 +116,14 @@ fun LanSyncSettings(lan: LanSyncService) {
         }
         SettingsSectionHeader(stringResource(R.string.sync_automation))
         SettingSummary(stringResource(R.string.sync_audio_reuse_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        SettingSummary(stringResource(R.string.sync_incremental_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SwitchRow(stringResource(R.string.sync_wifi_only), network.wifiOnly,
             lan.networkPolicy::setWifiOnly, summary = stringResource(R.string.sync_wifi_only_summary),
             modifier = Modifier.testTag("sync_wifi_only"))
         SettingSummary(stringResource(if(schedule.cancelled) R.string.lan_auto_cancelled else R.string.lan_auto_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_auto_status"))
         SettingSummary(stringResource(when {
             network.waitingForWifi -> R.string.sync_wifi_waiting
-            status.running -> R.string.settings_group_sync_running
+            status.running && !status.quiet -> R.string.settings_group_sync_running
             !paired -> R.string.sync_pair_first
             !enabledMappings -> R.string.sync_no_enabled_folders
             schedule.cancelled -> R.string.sync_cancelled
@@ -136,11 +137,12 @@ fun LanSyncSettings(lan: LanSyncService) {
             java.text.DateFormat.getDateTimeInstance().format(java.util.Date(schedule.lastSuccess))), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = paired && !busy && !status.running && enabledMappings, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
+            OutlinedButton(enabled = paired && !busy && !status.running && enabledMappings, onClick = lan::refresh, modifier = Modifier.testTag("lan_refresh")) { Text(stringResource(R.string.sync_refresh_external)) }
             OutlinedButton(enabled = status.running || (paired && enabledMappings && !schedule.cancelled), onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
         }
-        if (status.running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        if (status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
-        if(status.fileProcessed>0) SettingSummary(stringResource(R.string.lan_file_summary,status.fileProcessed,status.fileActions.values.sum(),status.fileConflicts.size,status.fileDeferredCount),Modifier.padding(16.dp))
+        if (status.running && !status.quiet) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("lan_progress"))
+        if (!status.quiet && status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
+        if(!status.quiet && status.fileProcessed>0) SettingSummary(stringResource(R.string.lan_file_summary,status.fileProcessed,status.fileActions.values.sum(),status.fileConflicts.size,status.fileDeferredCount),Modifier.padding(16.dp))
         if(status.lastReusedFiles>0) SettingSummary(stringResource(R.string.sync_audio_reused,status.lastReusedFiles,java.text.NumberFormat.getIntegerInstance().format(status.lastReusedBytes)),Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_audio_reused"))
         for(conflict in status.fileConflicts.take(20)) SyncConflictCard(conflict) { lan.resolveConflict(conflict.getString("id"),it) }
         if (status.total > 0) Text(stringResource(R.string.sync_transfer_progress,status.done / 1024,status.total / 1024), Modifier.padding(horizontal = 16.dp))

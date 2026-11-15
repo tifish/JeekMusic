@@ -121,6 +121,7 @@ class LibraryScanner @Inject constructor(
     suspend fun refreshFiles(fileKeys: Set<String>): ScanResult = scan(full = true, recheckCue = true, onlyFiles = fileKeys)
 
     suspend fun scan(full: Boolean, recheckCue: Boolean = false, onlyFiles: Set<String>? = null): ScanResult = mutex.withLock {
+        if(onlyFiles==null && (full || recheckCue)) mediaStore.requestFileRefresh()
         val start = System.currentTimeMillis()
         val config = settings.current().scan
         val factory = TrackFactory(config)

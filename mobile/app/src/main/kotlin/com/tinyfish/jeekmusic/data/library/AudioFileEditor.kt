@@ -87,6 +87,7 @@ class AudioFileEditor @Inject constructor(
                     .singleOrNull { it.mediaStoreVolumeName == track.volumeName }?.directory ?: error("No local storage volume")
                 val source = File(volume, track.relativePath + track.fileName).canonicalFile
                 require(source.path.startsWith(volume.canonicalPath + File.separator)) { "Invalid local path" }
+                tree.changed(fileId)
                 val changed = AtomicAudioFile.replace(source, pfd.fileDescriptor, { stage ->
                     SafeTagWriter.write(stage, change, track.fileName.substringAfterLast('.'))
                 }, { stage ->
@@ -100,6 +101,7 @@ class AudioFileEditor @Inject constructor(
                     val landed=Os.stat(source.path);newSize=landed.st_size
                     runCatching { fileState.lastEdit(source.path,landed.st_size,Math.addExact(Math.multiplyExact(landed.st_mtim.tv_sec,1_000_000_000),landed.st_mtim.tv_nsec),System.currentTimeMillis()) }
                         .onFailure { Log.w(TAG,"Committed tags; last edit time could not be saved",it) }
+                    tree.changed(fileId)
                 }
                 changed
             } ?: false

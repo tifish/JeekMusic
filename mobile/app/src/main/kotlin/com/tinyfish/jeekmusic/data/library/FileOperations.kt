@@ -166,12 +166,16 @@ class FileOperations @Inject constructor(
 
     private fun moveDocument(source: LibraryFolderEntity, documentId: String, sourceDir: String, target: LibraryFolderEntity, targetDir: String): Boolean =
         runCatching {
-            DocumentsContract.moveDocument(
+            tree.changed(documentId)
+            val moved=DocumentsContract.moveDocument(
                 context.contentResolver,
                 tree.documentUri(source, documentId),
                 tree.documentUri(source, sourceDir),
                 tree.documentUri(target, targetDir),
-            ) != null
+            )
+            tree.changed(documentId)
+            if(moved!=null)tree.changed(DocumentsContract.getDocumentId(moved))
+            moved!=null
         }.onFailure { Log.w(TAG, "move failed: $documentId", it) }.getOrDefault(false)
 
     /** 歌曲旁边以 "<文件名>." 开头的歌词、图片。 */

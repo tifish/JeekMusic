@@ -326,7 +326,7 @@ class LanFileSynchronizerTest {
             assertTrue(events.get()>before);kotlinx.coroutines.delay(100)
         }
         try {
-            observer.startWatching();index.watched(true)
+            observer.startWatching()
             assertFalse(round().localIndexHit)
             // The PC returns the first round's newly acknowledged baseline once;
             // that changed remote row still requires its live per-file precondition.
@@ -343,7 +343,7 @@ class LanFileSynchronizerTest {
             kotlinx.coroutines.delay(100);round()
             remote(null);assertEquals(1,round().actions["delete_local"]);assertNull(localBytes())
             println("LOCAL_INDEX_SYNC_EVIDENCE noChangeMetadataObservations=0 sharedLibraryRows=1 localAndRemoteDeletes=true remoteAddition=true")
-        } finally { index.stopWatching();observer.stopWatching() }
+        } finally { observer.stopWatching() }
     }
     @Test fun lastEditTimeBreaksOnlyEqualFileTimeAndDifferentSize()=fixture {
         fixedTime=1_800_000_000_000_000_000L

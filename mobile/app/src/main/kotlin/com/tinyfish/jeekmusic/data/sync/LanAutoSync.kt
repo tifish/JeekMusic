@@ -1,7 +1,6 @@
 package com.tinyfish.jeekmusic.data.sync
 
 import android.content.Context
-import android.os.FileObserver
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -14,8 +13,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -38,10 +35,6 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var firstHint=0L
     private var failures=0
     private var workerOwned=false
-    private val watches=mutableListOf<FileObserver>()
-    private val watchGate=Mutex()
-    @Volatile private var watchEpoch=0L
-    private val revisions=mutableMapOf<String,String>()
     private fun eligible()=service.store.read().has("connection") && service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }
     private fun held()=service.store.read().optBoolean("autoCancelled")
     fun initialize() {
@@ -64,19 +57,19 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
                 if(!network.waitingForWifi && foreground)hint("network_available")
             }
         }
+        scope.launch(Dispatchers.IO) { service.localFileIndex.changed.collect { hint("local_edit") } }
         configure()
     }
     fun configure() {
         scope.launch(Dispatchers.IO) {
             val enabled=eligible()
+            service.localFileIndex.retainMappings(service.store.mappings().map { it.getString("key") }.toSet())
             // LAN-only Wi-Fi need not have validated internet. The production socket policy
             // checks the actual transport before any DNS/TCP; CONNECTED would block such LANs.
             if(enabled)WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK,ExistingPeriodicWorkPolicy.UPDATE,
                 PeriodicWorkRequestBuilder<LanSyncWorker>(15,TimeUnit.MINUTES).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,15,TimeUnit.MINUTES).build())
             else WorkManager.getInstance(context).cancelUniqueWork(WORK)
             synchronized(lock) { _state.value=_state.value.copy(paused=!enabled,cancelled=held()) }
-            service.localFileIndex.stopWatching()
-            rebuildWatches()
             if(enabled)hint("mapping_or_startup")
             report()
         }
@@ -86,9 +79,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         loop?.cancel()
         conflictLoop?.cancel()
         if(!value) {
-            watchEpoch++
-            service.localFileIndex.stopWatching()
-            synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear();timer?.cancel() }
+            synchronized(lock) { timer?.cancel();firstHint=0 }
             val needsHandoff=synchronized(lock) { if(_state.value.running)!workerOwned else _state.value.dirty }
             val userRequested=synchronized(lock) { _state.value.trigger=="manual" }
             if(eligible() && !held() && needsHandoff) {
@@ -116,21 +107,12 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             }
         }
         loop=scope.launch(Dispatchers.IO) {
-            rebuildWatches();hint("foreground")
+            hint("foreground")
             while(isActive) {
                 delay(30_000)
                 if(!eligible() || held() || service.networkPolicy.waitingForWifi)continue
                 if(System.currentTimeMillis()<_state.value.backoffUntil)continue
-                try {
-                    var changed=false
-                    service.store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }.forEach { mapping ->
-                        val revision=service.pollFileRevision(mapping)
-                        val key=mapping.getString("key")
-                        synchronized(lock) { if(revisions.put(key,revision)!=revision)changed=true }
-                    }
-                    if(changed)hint("remote_revision")
-                    else if(System.currentTimeMillis()>=_state.value.nextReconcile)hint("metadata_fallback")
-                }catch(_: Exception) { failed("offline_or_unavailable") }
+                hint("periodic_check")
             }
         }
     }
@@ -151,7 +133,17 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
             timer=scope.launch(Dispatchers.IO) {
                 delay(maxOf(wait,(_state.value.backoffUntil-System.currentTimeMillis()).coerceAtLeast(0)))
                 synchronized(lock) { firstHint=0 }
-                if(!held() && eligible())service.startScheduled(reason)
+                if(!held() && eligible()) {
+                    try {
+                        if(manual)service.startScheduled(reason)
+                        else {
+                            synchronized(lock) { _state.value=_state.value.copy(state="checking",dirty=false) }
+                            val started=service.checkScheduled(reason)
+                            if(!started)synchronized(lock) { _state.value=_state.value.copy(state="idle") }
+                        }
+                    } catch(e: CancellationException) { throw e }
+                    catch(_: Exception) { failed("offline_or_unavailable") }
+                }
             }
         }
     }
@@ -176,13 +168,13 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false,metadataRows: Long=0,incremental: Boolean=false,reusedBytes: Long=0,reusedFiles: Int=0,indexHits: Int=0,indexMisses: Int=0,indexRefreshed: Int=0,libraryReused: Int=0) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
-            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=now+900_000,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,lastMetadataRows=metadataRows,lastIncremental=incremental,lastAudioReusedBytes=reusedBytes,lastAudioReusedFiles=reusedFiles,lastLocalIndexHits=indexHits,lastLocalIndexMisses=indexMisses,lastLocalIndexRefreshedFiles=indexRefreshed,lastLibraryMetadataReusedFiles=libraryReused,state=if(held())"cancelled" else if(success)"idle" else "backoff")
+            _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=0,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,lastMetadataRows=metadataRows,lastIncremental=incremental,lastAudioReusedBytes=reusedBytes,lastAudioReusedFiles=reusedFiles,lastLocalIndexHits=indexHits,lastLocalIndexMisses=indexMisses,lastLocalIndexRefreshedFiles=indexRefreshed,lastLibraryMetadataReusedFiles=libraryReused,state=if(held())"cancelled" else if(success)"idle" else "backoff")
             if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
             else if(handoff && !held())_state.value=_state.value.copy(state="waiting_for_background",backoffUntil=0)
             else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
             if(old.dirty && !held())hint("dirty_followup")
         }
-        scope.launch(Dispatchers.IO) { rebuildWatches();report() }
+        report()
     }
     private fun failed(reason: String) { synchronized(lock) {
         failures=(failures+1).coerceAtMost(6)
@@ -193,51 +185,19 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
         _state.value=_state.value.copy(dirty=false,cancelled=true,state="cancelled")
     } }
     fun resume() { service.store.update { it.put("autoCancelled",false) };synchronized(lock) { failures=0;_state.value=_state.value.copy(backoffUntil=0) };configure() }
-    internal suspend fun ensureWatches()=rebuildWatches()
-    private suspend fun rebuildWatches()=watchGate.withLock {
-        if(!service.localFileIndex.needsWatches)return@withLock
-        service.localFileIndex.stopWatching()
-        val ticket=service.localFileIndex.watchTicket()
-        val epoch=++watchEpoch
-        synchronized(lock) { watches.forEach { it.stopWatching() };watches.clear() }
-        if(!foreground || !eligible())return@withLock
-        var failed=false
-        val paths=mutableListOf<java.io.File>()
-        for(mapping in service.store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }) {
-            try { paths+=service.localWatchDirectories(mapping) }catch(_: Exception) { failed=true }
-        }
-        synchronized(lock) {
-            if(!foreground)return@withLock
-            for(path in paths.distinct().take(4096)) {
-                val observer=object: FileObserver(path,CLOSE_WRITE or MOVED_FROM or MOVED_TO or CREATE or DELETE or DELETE_SELF or MOVE_SELF or ATTRIB or MODIFY) {
-                    override fun onEvent(event: Int,name: String?) {
-                        // Retired watches must not self-trigger. Unexpected watch loss on
-                        // the active generation invalidates the index like an overflow.
-                        if(watchEpoch!=epoch || event and WATCH_MASK==0)return
-                        if(name?.startsWith(".")==true)return
-                        service.localFileIndex.changed(path,name,event)
-                        hint(if(event and 0x4000!=0)"watch_overflow" else "local_directory")
-                    }
-                }
-                try { observer.startWatching();watches+=observer }catch(_: Exception) { failed=true }
-            }
-            val unhealthy=failed || paths.size>4096
-            service.localFileIndex.watched(!unhealthy,ticket)
-            _state.value=_state.value.copy(watchDirectories=watches.size,watchFailed=unhealthy)
-        }
-    }
     suspend fun background(): Boolean {
         if(!service.networkPolicy.hasSyncNetwork)return true
         if(!eligible() || held())return true
         if(System.currentTimeMillis()<_state.value.backoffUntil)return true
         if(service.isSyncRunning())return true
-        service.startScheduled("workmanager_fallback")
+        try { service.checkScheduled("workmanager_fallback") }
+        catch(e: CancellationException) { throw e }
+        catch(_: Exception) { failed("offline_or_unavailable");return false }
         return try { withTimeout(8*60_000L) { service.awaitSync() };service.status.value.problems.isEmpty() }
         catch(e: CancellationException) { service.cancelScheduled("interrupted");throw e }
     }
     companion object {
         const val WORK="lan-metadata-sync"
-        const val WATCH_MASK=com.tinyfish.jeekmusic.data.scanner.LocalFileIndex.MASK
     }
 }
 

@@ -16,6 +16,6 @@
 <string name="lan_change_unknown">Not available</string>
     <string name="lan_pairing_revoked">This pairing is no longer valid. Pair again if the device was revoked.</string>
     <string name="lan_paired_upgrade">Upgrade the PC app for all paired-device sync capabilities. Individual PC permissions are no longer needed.</string>
-    <string name="lan_auto_help">Enabled mappings sync automatically. Folder events trigger foreground sync; background checks use Android WorkManager (15 minutes or later). Offline, Doze and force-stop can delay sync. Newer file modification time wins. Equal time and size are skipped. Equal time with different size uses the last embedded edit time.</string>
+    <string name="lan_auto_help">Enabled folders automatically check known changes. Android schedules background checks. Unchanged files do not start sync. Newer modification time wins; equal time and size are skipped. Equal time with different size uses the last embedded edit time.</string>
     <string name="lan_auto_cancelled">Automatic file sync is cancelled until Sync now or a mapping is enabled again. Paused mappings stay paused.</string>
 </resources>

@@ -1,4 +1,6 @@
 <resources>
+    <string name="sync_incremental_help">自动同步检查系统媒体变化和本软件内的编辑。在其他软件中修改歌词、封面或 CUE 后，请点击“刷新外部文件”，完整检查一次所选目录。</string>
+    <string name="sync_refresh_external">刷新外部文件</string>
     <string name="sync_audio_reuse_help">音频相同时只传输变化的标签；其他变化自动传输完整文件。</string>
     <string name="sync_audio_reused">最近一次音频复用：%1$d 个文件，节省 %2$s 字节传输。</string>
     <string name="sync_reading_delta">正在读取变更文件信息：%1$d / %2$d 个路径</string>
@@ -30,7 +32,7 @@
     <string name="sync_retry_waiting">等待重试，请检查电脑连接和下方问题提示</string>
     <string name="sync_watch_limited">目录监控受限，仍会按计划定期检查。</string>
     <string name="sync_watching">正在前台监控目录变化</string>
-    <string name="sync_waiting">等待目录变化，Android 可能延迟后台检查</string>
+    <string name="sync_waiting">等待文件变化，Android 可能延迟后台检查</string>
     <string name="sync_last_success">上次完成文件检查：%1$s</string>
     <string name="sync_advanced">高级</string>
     <string name="sync_advanced_summary">本机名称与旧版目录交换</string>

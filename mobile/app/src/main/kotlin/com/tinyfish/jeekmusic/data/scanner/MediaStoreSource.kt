@@ -8,6 +8,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import javax.inject.Singleton
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class MediaStoreAudio(
     val mediaStoreId: Long,
@@ -25,11 +28,20 @@ data class MediaStoreAudio(
 }
 
 /** 从 MediaStore 发现音频文件（docs/design.md §4.1）。 */
+@Singleton
 class MediaStoreSource @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val fileIndex: LocalFileIndex = LocalFileIndex(),
 ) {
+    fun requestFileRefresh()=fileIndex.requestRefresh()
     suspend fun query(volumeName: String, relativePath: String): List<MediaStoreAudio> = withContext(Dispatchers.IO) {
+        val cacheKey="library:$volumeName:$relativePath"
+        val version=MediaStore.getVersion(context,volumeName)
+        val generation=MediaStore.getGeneration(context,volumeName)
+        val cached=fileIndex.mediaCheckpoint(cacheKey)?.takeIf { it.optString("version")==version && it.optLong("generation")<=generation }
+        val previous=cached?.getJSONArray("rows")?.let { rows -> List(rows.length()) { fromJson(rows.getJSONObject(it)) } }.orEmpty()
+        if(cached?.optLong("generation")==generation)return@withContext previous
+        val byId=previous.associateBy { it.mediaStoreId }
         val collection = MediaStore.Audio.Media.getContentUri(volumeName)
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -40,13 +52,14 @@ class MediaStoreSource @Inject constructor(
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.BITRATE,
+            MediaStore.Audio.Media.GENERATION_MODIFIED,
         )
         val (selection, args) = if (relativePath.isEmpty()) {
             null to null
         } else {
             "${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ? ESCAPE '\\'" to arrayOf(escapeLike(relativePath) + "%")
         }
-        context.contentResolver.query(collection, projection, selection, args, null)?.use { c ->
+        val result: List<MediaStoreAudio> = context.contentResolver.query(collection, projection, selection, args, null)?.use { c ->
             val id = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val path = c.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
             val name = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
@@ -55,9 +68,11 @@ class MediaStoreSource @Inject constructor(
             val duration = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val mime = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
             val bitrate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.BITRATE)
-            buildList(c.count) {
+            val modifiedGeneration=c.getColumnIndexOrThrow(MediaStore.Audio.Media.GENERATION_MODIFIED)
+            buildList<MediaStoreAudio>(c.count) {
                 while (c.moveToNext()) {
                     val fileName = c.getString(name) ?: continue
+                    val retained=byId[c.getLong(id)]?.takeIf { old -> old.dateModified==c.getLong(modified) && old.size==c.getLong(size) && c.getLong(modifiedGeneration)<=cached!!.optLong("generation") }
                     add(
                         MediaStoreAudio(
                             mediaStoreId = c.getLong(id),
@@ -65,7 +80,7 @@ class MediaStoreSource @Inject constructor(
                             relativePath = c.getString(path).orEmpty(),
                             fileName = fileName,
                             dateModified = c.getLong(modified),
-                            modifiedNanos = readModifiedNanos(contentUri(volumeName, c.getLong(id)), c.getLong(modified), c.getLong(size)),
+                            modifiedNanos = if(retained!=null)retained.modifiedNanos else readModifiedNanos(contentUri(volumeName, c.getLong(id)), c.getLong(modified), c.getLong(size)),
                             size = c.getLong(size),
                             durationMs = c.getLong(duration),
                             mimeType = c.getString(mime),
@@ -74,7 +89,9 @@ class MediaStoreSource @Inject constructor(
                     )
                 }
             }
-        }.orEmpty()
+        } ?: throw java.io.IOException("Media index unavailable")
+        fileIndex.mediaCheckpoint(cacheKey,JSONObject().put("version",version).put("generation",generation).put("rows",JSONArray(result.map(::toJson))))
+        result
     }
 
     private fun Long.toIntOrNullSafe(): Int? = if (this in 1..Int.MAX_VALUE) toInt() else null
@@ -90,6 +107,8 @@ class MediaStoreSource @Inject constructor(
       catch (_: SecurityException) { null }
 
     companion object {
+        private fun toJson(row: MediaStoreAudio)=JSONObject().put("id",row.mediaStoreId).put("volume",row.volumeName).put("path",row.relativePath).put("name",row.fileName).put("modified",row.dateModified).put("size",row.size).put("duration",row.durationMs).put("mime",row.mimeType).put("bitrate",row.bitrate).put("nanos",row.modifiedNanos)
+        private fun fromJson(row: JSONObject)=MediaStoreAudio(row.getLong("id"),row.getString("volume"),row.getString("path"),row.getString("name"),row.getLong("modified"),row.getLong("size"),row.getLong("duration"),row.optString("mime").takeUnless { row.isNull("mime") },row.optInt("bitrate").takeUnless { row.isNull("bitrate") },row.optInt("nanos").takeUnless { row.isNull("nanos") })
         internal fun matchingModifiedNanos(seconds: Long, size: Long, identity: LongArray): Int? =
             if (identity.size == 5 && identity[2] == size && identity[3] == seconds && identity[4] in 0..999_999_999L)
                 identity[4].toInt() else null

@@ -1,5 +1,5 @@
 """Real production TLS and optional Android reconciler, synthetic loopback fixture only."""
-import argparse, base64, hashlib, json, os, re, subprocess, sys, tempfile, time, uuid
+import argparse, base64, contextlib, hashlib, json, os, re, sqlite3, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 import importlib.util
@@ -22,6 +22,22 @@ def main():
             print('CASE '+case,flush=True);subprocess.run(command,check=True)
         print(f'PASS all {len(cases)} isolated Android reconciler cases',flush=True)
         return
+    phone_id=None
+    if a.android:
+        assert a.android.startswith('emulator-'), 'Android regression requires an explicit emulator'
+    if a.android and a.auto:
+        # Manual sync includes user data, whose identity must match the paired client.
+        # Inspect a stopped, initialized synthetic debug DB read-only; never log it.
+        phone_adb=[str(Path(os.environ.get('ANDROID_HOME','C:/Android/sdk'))/'platform-tools/adb.exe'),'-s',a.android]
+        subprocess.run(phone_adb+['shell','am','force-stop','com.tinyfish.jeekmusic.debug'],check=True,capture_output=True)
+        with tempfile.TemporaryDirectory(prefix='jeek-auto-identity-') as identity:
+            for name in ('jeek.db','jeek.db-wal'):
+                copied=subprocess.run(phone_adb+['exec-out','run-as','com.tinyfish.jeekmusic.debug','cat','databases/'+name],capture_output=True)
+                if copied.returncode==0:Path(identity,name).write_bytes(copied.stdout)
+                elif name=='jeek.db':raise AssertionError('Initialized synthetic debug database required')
+            with contextlib.closing(sqlite3.connect(Path(identity,'jeek.db').as_uri()+'?mode=ro',uri=True)) as database:
+                phone_id=json.loads(database.execute('SELECT content FROM sync_journal WHERE id=1').fetchone()[0])['id']
+            assert str(uuid.UUID(phone_id))==phone_id
     with tempfile.TemporaryDirectory(prefix='jeek-files-') as temp:
         work=Path(temp);data=work/'data';data.mkdir();music=work/'Music';music.mkdir()
         (data/'settings.json').write_text(json.dumps(dict(closeAction='Exit',autoCheckUpdate=False,language='en')))
@@ -33,7 +49,7 @@ def main():
                 status=wait(lambda:(lambda s:s if s['roots'] else None)(call(c,'lan_sync_status')))
                 port=status['port'];root=status['roots'][0]['rootId']
                 u=urlsplit(call(c,'lan_sync_control',action='invite',host='127.0.0.1')['invitation']);pin,secret=u.path.strip('/').split('/')
-                peer=dict(host='127.0.0.1',port=port,pin=pin,deviceId=uuid.uuid4().hex)
+                peer=dict(host='127.0.0.1',port=port,pin=pin,deviceId=phone_id or uuid.uuid4().hex)
                 w=Wire(peer,auth=False);w.send(dict(op='pair',deviceId=peer['deviceId'],name='Synthetic file fixture',invitation=secret));peer['token']=w.receive()['token'];w.close()
                 with_peer=lambda:Wire(peer)
                 def request_once(op,**args):

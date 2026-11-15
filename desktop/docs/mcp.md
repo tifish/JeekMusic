@@ -671,6 +671,8 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 `fileWatch` 报告复用曲库 watcher 的 epoch/events/lastTrigger、2秒合并、30秒轮询和900秒兜底合同。`fileSync.schedules[]` 是通过现有配对认证收到的手机调度报告，带 scope/reportedAt（可陈旧）：trigger、dirty、running、paused、cancelled、foreground、backoffUntil、lastSuccess、nextReconcile（Unix ms，意图时间，受Android系统约束）、watchDirectories/watchFailed、lastMetadataObservations/lastHashBytes/lastTransferBytes。报告不代表Windows主动连接或唤醒手机；没有新的远程MCP桥。映射暂停和取消语义、时间精度映射、旧基线迁移及局限见[同步合同](../../docs/lan-sync.md)。
 
+Windows `lan_sync_status` 工具描述同步说明以上手机策略；输入 Schema 和工具参数不变。既有手机调度报告的 `state=checking` 表示轻量预检（`running=false`），`transferring` 表示进入文件动作。`nextReconcile=0` 表示没有定期手机全量补查，`watchDirectories=0` 在新策略下是正常状态。现有 `lastLocalIndexHits/Misses` 等计数仍描述上次完成的对账，不能把未启动的预检算成新同步。开发版、正式版共用实现。 [Phone change detection and manual refresh](../../docs/sync-event-driven.md).
+
 ### 文件同步协议3：仅大小和修改时间
 
 最新客户端增加独立能力 `capabilities.fileComparisonPolicy=mtime_then_size_then_last_edit`，物理版本合同仍是文件协议 3 / `m2:size:modifiedNs`，无需重配。两端都存在时先比较实际文件 mtime，较新者胜；相同 mtime 与大小视为一致，不读内容、不查软件时间；只有相同 mtime 且大小不同才通过已有 `file_probe` 读取 `editedAtMs` 并比较。缺失为 0，相同记录无法判定时产生 `same_time_different_size` 冲突。已确认且未再变化的时间舍入落地对保持稳定；删除、未知/离线仍按基线处理。旧客户端没有协商该能力时保持旧比较方式。

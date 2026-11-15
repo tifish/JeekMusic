@@ -18,6 +18,41 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Real filesystem notifications and descriptors on the emulator; no user pairings or files. */
 @RunWith(AndroidJUnit4::class)
 class LocalFileIndexDeviceTest {
+    @Test fun durableInventoryAndPendingPathsSurviveRecreation() = runBlocking {
+        check(android.os.Build.HARDWARE in setOf("ranchu", "goldfish"))
+        val base=InstrumentationRegistry.getInstrumentation().targetContext
+        val parent=File(base.cacheDir,"durable-index-${UUID.randomUUID()}").apply { mkdirs() }
+        val context=object: ContextWrapper(base) { override fun getNoBackupFilesDir()=File(parent,"private").apply { mkdirs() } }
+        val root=File(parent,"music").apply { mkdirs() }.canonicalFile
+        val song=File(root,"A.wav").apply { writeBytes(ByteArray(100)) }
+        val db=LanFileDatabase(context)
+        try {
+            LanLocalFiles(root.path,JSONObject().put("key","durable"),db,true).use { io ->
+                val first=LocalFileIndex(context)
+                val initial=io.indexedScan(first,listOf(""),{}, { fail(it) })
+                assertFalse(initial.hit);first.confirm(io.indexKey,initial.revision)
+                song.writeBytes(ByteArray(120));first.changed(root,song.name,FileObserver.CLOSE_WRITE)
+                val recreated=LocalFileIndex(context)
+                assertEquals(setOf(song.name),recreated.pendingPaths(io.indexKey))
+                val refreshed=io.indexedScan(recreated,listOf(""),{}, { fail(it) })
+                assertTrue(refreshed.hit);assertEquals(1,refreshed.refreshed);assertEquals(0L,recreated.fullScans.get())
+                assertEquals(120L,recreated.row(io.indexKey,song.name)!!.getLong("size"))
+                // A second process restart before acknowledgement must retain the hint.
+                val interrupted=LocalFileIndex(context)
+                assertEquals(setOf(song.name),interrupted.pendingPaths(io.indexKey))
+                interrupted.confirm(io.indexKey,refreshed.revision)
+                val settled=LocalFileIndex(context)
+                assertTrue(settled.pendingPaths(io.indexKey)!!.isEmpty())
+                assertTrue(io.indexedScan(settled,listOf(""),{}, { fail(it) }).hit)
+                settled.changed(root,song.name,FileObserver.CLOSE_WRITE)
+                settled.requestRefresh()
+                val afterRefresh=LocalFileIndex(context)
+                assertFalse(io.indexedScan(afterRefresh,listOf(""),{}, { fail(it) }).hit)
+                assertEquals(setOf(song.name),afterRefresh.pendingPaths(io.indexKey))
+                println("DURABLE_INDEX_EVIDENCE restartFullScans=0 changedPathStats=1 pendingSurvivesCrash=true manualRefresh=true")
+            }
+        } finally { db.close();parent.deleteRecursively() }
+    }
     @Test fun unchangedInventorySharesDailyMetadataAndRefreshesOnlyChangedFiles() = runBlocking {
         check(android.os.Build.HARDWARE in setOf("ranchu", "goldfish"))
         val base = InstrumentationRegistry.getInstrumentation().targetContext
@@ -34,7 +69,7 @@ class LocalFileIndexDeviceTest {
         }
         val db = LanFileDatabase(context)
         try {
-            watch.startWatching(); index.watched(true)
+            watch.startWatching()
             LanLocalFiles(root.path, JSONObject().put("key", "test"), db, true).use { io ->
                 val rows = mutableListOf<JSONObject>()
                 suspend fun scan(): com.tinyfish.jeekmusic.data.scanner.LocalIndexResult {
@@ -57,12 +92,13 @@ class LocalFileIndexDeviceTest {
                 repeat(100) { if (events.get() == beforeDelete) delay(10) }; assertTrue(events.get() > beforeDelete); delay(100)
                 val deleted = scan(); assertTrue(deleted.hit); assertEquals(1, deleted.refreshed); assertEquals(listOf("A.wav"), rows.map { it.getString("path") })
                 assertEquals(afterFirst + 1, LanFileMetrics.metadataObservations.get())
-                index.stopWatching(); assertFalse(scan().hit)
+                assertTrue(scan().hit)
+                index.requestRefresh(); assertFalse(scan().hit)
                 File(root, "Parent").mkdirs()
                 val ancestors = io.watchDirectories(listOf("Parent/Missing/Leaf"))
                 assertTrue(ancestors.contains(root)); assertTrue(ancestors.contains(File(root, "Parent")))
-                println("LOCAL_INDEX_EVIDENCE unchangedStats=0 libraryShared=1 editedAtVisible=true sidecarDeleteStats=1 stoppedWatcherFullScan=true")
+                println("LOCAL_INDEX_EVIDENCE unchangedStats=0 libraryShared=1 editedAtVisible=true sidecarDeleteStats=1 lifecycleRetainsIndex=true manualRefreshFullScan=true")
             }
-        } finally { index.stopWatching(); watch.stopWatching(); db.close(); parent.deleteRecursively() }
+        } finally { watch.stopWatching(); db.close(); parent.deleteRecursively() }
     }
 }

@@ -340,6 +340,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                             val version=baseline?.optString("version").orEmpty()
                             var transaction: JSONObject?=null
                             if(decision.action in setOf("download","upload","delete_local","delete_remote")) {
+                                phase("transferring",report.processed,0)
                                 busy(mapping,path)
                                 local=io.verify(path,meta(local))
                                 remote=if(inside)call(client,scope,"file_verify",JSONObject().put("path",path).put("expectedVersion",meta(remote) ?: JSONObject.NULL)) else client.call("verify",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("plan",planId).put("path",path).put("expectedVersion",meta(remote)))
@@ -382,6 +383,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
                                     remote=LanFileMetrics.absent()
                                 }
                             }
+                            if(decision.action in setOf("download","delete_local"))io.indexChanged(fileIndex,path)
                             if(decision.action!="none") {
                                 // Recheck both metadata snapshots after all transfer I/O, before persisting the mapping.
                                 if(meta(io.observe(path))!=meta(local))throw LanLocalDeferred("local_changed_before_ack")

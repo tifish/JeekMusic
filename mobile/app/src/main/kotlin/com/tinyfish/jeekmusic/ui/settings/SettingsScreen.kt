@@ -277,7 +277,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             val lyricsStatus = fetchSummary(lyricsProgress)
             val coversStatus = fetchSummary(coverProgress)
             val deviceSummary = stringResource(when {
-                lanStatus.running -> R.string.settings_group_sync_running
+                lanStatus.running && !lanStatus.quiet -> R.string.settings_group_sync_running
                 paired -> R.string.settings_group_device_paired
                 else -> R.string.settings_group_device_summary
             })

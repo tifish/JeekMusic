@@ -1,4 +1,6 @@
 <resources>
+    <string name="sync_incremental_help">Automatic sync checks system media changes and edits made in JeekMusic. Use Refresh external files after editing lyrics, covers or CUE files in another app. Refresh scans the selected folders once.</string>
+    <string name="sync_refresh_external">Refresh external files</string>
     <string name="sync_audio_reuse_help">When audio is identical, only changed tags are transferred. Other changes use the complete file.</string>
     <string name="sync_audio_reused">Most recent audio reuse: %1$d files, saving %2$s bytes of transfer.</string>
     <string name="sync_reading_delta">Reading changed file information: %1$d / %2$d paths</string>

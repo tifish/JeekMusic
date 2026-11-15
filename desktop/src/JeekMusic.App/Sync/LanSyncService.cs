@@ -408,6 +408,7 @@ public sealed partial class LanSyncService : IDisposable
             ["tasks"] = new JsonArray(_jobs.Select(j => (JsonNode)new JsonObject { ["id"] = j.Key, ["deviceId"] = j.Value.Device,["kind"]=j.Value.Kind,["reason"]=j.Value.Task.IsCompletedSuccessfully?j.Value.Task.Result["reason"]?.DeepClone():null, ["state"] = j.Value.Cancel.IsCancellationRequested ? "cancelled" : j.Value.Task.IsFaulted || j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result.ContainsKey("error") ? "failed" : j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["conflict"]?.GetValue<bool>()==true?"conflict":j.Value.Task.IsCompletedSuccessfully && j.Value.Task.Result["deferred"]?.GetValue<bool>()==true?"deferred":j.Value.Task.IsCompleted ? "complete" : "running" }).ToArray()),
             ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
+            ["metadataSync"] = MetadataDiagnostics(),
             ["sharingMode"] = "library", ["libraryFolderCount"] = folders.Count,
             ["sharedFolderCount"] = Port == 0 ? 0 : Roots.Count(p => p.Value?["enabled"]?.GetValue<bool>() == true && p.Value?["revoked"]?.GetValue<bool>() != true),
             ["addresses"] = new JsonArray(NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
@@ -566,6 +567,7 @@ public sealed partial class LanSyncService : IDisposable
                         lifetime.Token.ThrowIfCancellationRequested();
                         deadline.CancelAfter(TimeSpan.FromSeconds(15));
                         await WriteFrame(ssl, response, deadline.Token, LanLimits.Response(kind));
+                        if(kind=="state") MetadataSent(auth.Device,response);
                     }
                     finally { if (large) _largeFrames.Release(); }
                 }
@@ -617,14 +619,19 @@ public sealed partial class LanSyncService : IDisposable
         if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>()).Select(n => n!.DeepClone()).ToArray()) };
         if (op == "state")
         {
-            if (Merge is null) throw Busy(); // Startup readiness is temporary, never a permission failure.
-            var file = a["state"] as JsonObject ?? throw new ArgumentException("Missing state");
-            if (file["format"]?.GetValue<int>() != 2 || file["device"]?["id"]?.GetValue<string>() != device) throw new UnauthorizedAccessException();
-            if (SyncMerge.ParseFile(file.ToJsonString()) is null) throw new ArgumentException("Invalid sync state");
+            var file = a["state"] as JsonObject;
+            MetadataRequested(device,file??new());
             // Compatibility format-2 transport calls the domain merge directly; no disk inbox or directory writes.
-            if (!_work.Wait(0)) throw Busy();
-            try { return await Dispatcher.UIThread.InvokeAsync(() => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); return Merge?.LanExchange(file, a["features"] as JsonObject, a["includeFeatures"]?.GetValue<bool>()??true, cancel, commit => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); commit(); } }) ?? throw new IOException("Sync merge not ready"); } }); }
-            finally { _work.Release(); }
+            var admitted=false;
+            try {
+                if (Merge is null) throw Busy(); // Startup readiness is temporary, never a permission failure.
+                if(file is null) throw new ArgumentException("Missing state");
+                if (file["format"]?.GetValue<int>() != 2 || file["device"]?["id"]?.GetValue<string>() != device) throw new UnauthorizedAccessException();
+                if (SyncMerge.ParseFile(file.ToJsonString()) is null) throw new ArgumentException("Invalid sync state");
+                if (!(admitted=_work.Wait(0))) throw Busy();
+                return await Dispatcher.UIThread.InvokeAsync(() => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); return Merge?.LanExchange(file, a["features"] as JsonObject, a["includeFeatures"]?.GetValue<bool>()??true, cancel, commit => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); commit(); } }) ?? throw new IOException("Sync merge not ready"); } });
+            } catch(Exception ex) { MetadataFailed(device,ex);throw; }
+            finally { if(admitted) _work.Release(); }
         }
         if (op is "preference_training" or "preference_results")
         {

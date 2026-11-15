@@ -747,3 +747,10 @@ PC 演唱语言识别随启动、曲库变化、电源/前台程序变化、睡�
 自动队列仅处理当前签名缺少有效结果且曲库路径可用的歌曲。unknown、instrumental 和手工结果均算已完成；导入结果或修正先于提交到达时跳过已有结果。单曲失败不阻断其余歌曲，同一签名等待 300 秒再自动重试，模型准备/任务失败也退避 300 秒；版本变化可立即重新排队。每首结果立即保存，重启后重建队列继续补齐，无需再次点击。手动 force 重新识别仍保留手工覆盖。
 
 singing_language status 和 get_diagnostics.singingLanguages 兼容新增 automation：enabled、analysisMode、reason（not_started/manual_mode/fullscreen/battery/ready/running/manual_task/cancelled_by_user/retry_wait/complete/offline）、active、suppressedUntilRestart、modelDownload、retrySeconds、nextRetryAt（Unix 毫秒或 null）、restartPolicy。cancel 会停止当前识别并在本进程内阻止自动重启；显式 start/prepare 或下次重启解除该暂停。分析条件暂停不设置此标记，条件恢复自动继续。没有后台轮询完整曲库，完成后仅等待相关事件；退避期间仅设一个到期计时器。工具数量、动作枚举和参数 Schema 不变，开发版和 NativeAOT 共用服务与调度器。
+
+
+### 语言元数据交换诊断
+
+lan_sync_status.metadataSync 独立于文件同步和 lastOperation，按已配对设备报告当前 PC 监听进程的元数据交换：requests、responsesSent、failedRequests、lastRequestAt、lastResponseAt、peerAppVersion、peerHasLanguageExtension、peerExportedLanguageTracks、lastSentLanguageTracks、lastErrorType。时间为 Unix 毫秒；版本号仅保留至多 64 个 ASCII 版本字符。不保存歌曲引用、路径、凭据或交换正文，不写入用户配置，重启计数清零。failedRequests 是已鉴权 state 请求进入处理后的格式校验或服务失败，不含连接正常关闭和鉴权前失败。
+
+responsesSent 表示已完成 TLS 响应写入，不能代替 Android 已导入、签名匹配或界面显示的确认。peerExportedLanguageTracks 是手机在下一次请求中实际导出的当前签名记录数，可能包含恢复自动墓碑；不是电脑对手机导入成功数的推测。无 state 请求时 devices 为空，不能从文件同步完成或 protocolFailures 推断语言交换是否成功。输入参数 Schema 和工具数量保持不变，两种 Windows 发布方式均完整提供。

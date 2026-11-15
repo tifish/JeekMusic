@@ -69,7 +69,7 @@ def main():
                     wire.close()
                 wire = Wire(peer)
                 try:
-                    state = dict(format=2, device=dict(id=peer["deviceId"], name="Language fixture"), written_at=0, playlists=[], deleted_playlists=[])
+                    state = dict(format=2, device=dict(id=peer["deviceId"], name="Language fixture", app_version="fixture-1.0"), written_at=0, playlists=[], deleted_playlists=[])
 
                     def exchange(extension=None):
                         nonlocal wire
@@ -94,6 +94,13 @@ def main():
                     ref, rows = next(iter(exported["items"].items()))
                     original = rows[0]
                     assert original["source"] == "MANUAL" and original["languages"] == ["zh"]
+                    metadata = wait(lambda: (lambda rows: next((r for r in rows if r["deviceId"] == peer["deviceId"] and r["responsesSent"] >= 1), None))(
+                        call(client, "lan_sync_status")["metadataSync"]["devices"]))
+                    assert metadata["requests"] >= metadata["responsesSent"] >= 1
+                    assert metadata["peerAppVersion"] == "fixture-1.0"
+                    assert metadata["peerHasLanguageExtension"] is False and metadata["peerExportedLanguageTracks"] == 0
+                    assert metadata["lastSentLanguageTracks"] == 1
+                    assert ref not in json.dumps(metadata)
 
                     def language():
                         return call(client, "singing_language", action="status", trackIds=[track_id])["tracks"]["items"][0]["language"]
@@ -113,7 +120,9 @@ def main():
                     wrong["items"][ref][0].update(size=original["size"] + 1, updated_at=record["updated_at"] + 2)
                     exchange(wrong)
                     assert language() is None
-                    report.update(fullRebuildPreservesIdentityAndLanguage=True, coverageDiagnostics=True,
+                    metadata = next(r for r in call(client, "lan_sync_status")["metadataSync"]["devices"] if r["deviceId"] == peer["deviceId"])
+                    assert metadata["peerHasLanguageExtension"] and metadata["peerExportedLanguageTracks"] == 1
+                    report.update(fullRebuildPreservesIdentityAndLanguage=True, coverageDiagnostics=True, metadataExchangeDiagnostics=True,
                                   metadataOnly=True, roundTrip=True, manualOverride=True, restoreAutoTombstone=True,
                                   oldReplayIgnored=True, mismatchedRecordingIgnored=True, noPlayback=True)
                 finally:

@@ -18,6 +18,7 @@ public static class Features
         new Update.UpdateFeature(),
         new Online.OnlineFeature(),
         new Analysis.AnalysisFeature(),
+        new Analysis.SingingLanguageFeature(),
         new Sync.SyncFeature(),
         new Preferences.PreferenceFeature(),
     ];

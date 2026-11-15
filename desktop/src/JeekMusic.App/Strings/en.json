@@ -754,5 +754,9 @@
   "恢复自动识别": "Restore automatic recognition",
   "保存失败，歌曲可能已改变，请刷新后重试。": "Could not save. The track may have changed; refresh and retry.",
   "识别所选歌曲的演唱语言…": "Recognize selected vocal languages…",
-  "演唱语种识别完成 {0} / {1}，失败 {2}": "Vocal language recognition complete {0} / {1}, failed {2}"
+  "演唱语种识别完成 {0} / {1}，失败 {2}": "Vocal language recognition complete {0} / {1}, failed {2}",
+  "演唱语言自动识别已暂停（分析条件尚未满足）": "Automatic vocal language recognition paused (analysis conditions not met)",
+  "演唱语言已全部识别": "All vocal languages recognized",
+  "演唱语言自动识别等待音乐文件可用": "Automatic vocal language recognition is waiting for music files",
+  "演唱语言识别失败，稍后自动重试": "Vocal language recognition failed; will retry automatically"
 }

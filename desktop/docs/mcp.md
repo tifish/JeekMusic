@@ -713,9 +713,9 @@ Windows `lan_sync_status` 工具描述同步说明以上手机策略；输入 Sc
 | cancel | 仅 action；协作取消，保留已完成结果，不回滚。|
 | set | trackIds（1–1000）和 value=CHINESE/ENGLISH/CHINESE_ENGLISH/OTHER/INSTRUMENTAL/UNKNOWN/AUTO。一次校验并原子保存手工覆盖；AUTO 删除该手工覆盖，恢复有效自动结果，没有自动结果则回到未识别。|
 
-任务 state：idle/preparing/running/cancelling/completed/completed_with_errors/cancelled/failed。`failed`、`error`、`errorDetail` 及 `recentResults` 用于定位部分失败；界面也显示失败数量。`get_diagnostics.singingLanguages` 复用同一状态；`songFilter.singingLanguagePolicy` 说明新策略，旧 `titleTextPolicy` 已移除。`get_track` / 搜索 / 列表输出增加 singingLanguage。missing 为 null，其余 state 为 known/unknown/instrumental，source 为 AUTO/MANUAL。
+任务 state：idle/preparing/running/cancelling/paused/completed/completed_with_errors/cancelled/failed。`failed`、`error`、`errorDetail` 及 `recentResults` 用于定位部分失败；界面也显示失败数量。`get_diagnostics.singingLanguages` 复用同一状态；`songFilter.singingLanguagePolicy` 说明新策略，旧 `titleTextPolicy` 已移除。`get_track` / 搜索 / 列表输出增加 singingLanguage。missing 为 null，其余 state 为 known/unknown/instrumental，source 为 AUTO/MANUAL。
 
-`libraryCoverage` 独立报告全曲库的 `totalTracks/validCachedTracks/pendingTracks`，以及有效结果中的 `knownTracks/unknownTracks/instrumentalTracks/manualTracks/automaticTracks`；不受 trackIds 或分页影响。unknown 和 instrumental 是已保存结果，计入有效缓存；仅有恢复自动的墓碑或签名过期的记录仍待识别。`total/processed/failed` 是当前进程中的任务进度，idle 或 processed=0 不能证明全库完成。`resumesAfterRestart=false` 表示重启不自动恢复任务，重新 start 默认只处理缺失有效结果的歌曲。上述字段同样由 get_diagnostics 提供；参数 Schema 和工具数量不变。
+`libraryCoverage` 独立报告全曲库的 `totalTracks/validCachedTracks/pendingTracks`，以及有效结果中的 `knownTracks/unknownTracks/instrumentalTracks/manualTracks/automaticTracks`；不受 trackIds 或分页影响。unknown 和 instrumental 是已保存结果，计入有效缓存；仅有恢复自动的墓碑或签名过期的记录仍待识别。`total/processed/failed` 是当前进程中的任务进度，idle 或 processed=0 不能证明全库完成。`resumesAfterRestart` 在 PC 自动分析启用时为 true：启动后从已提交结果重建缺失队列，任务进度计数不跨进程恢复；分析模式为 Manual 时为 false。重新 start 默认只处理缺失有效结果的歌曲。上述字段同样由 get_diagnostics 提供；参数 Schema 和工具数量不变。
 
 普通更新和 `rescan_library full=true` 重建均保留未变化录音的 ID、自动/手工语种与恢复自动墓碑，不再用替换父记录或清空曲库的方式触发级联删除。全量重建仍重新解析所有文件；录音签名变化仍使旧证据失效，真实删除仍清理记录。已被旧版删除的结果无法由此修复重建。
 
@@ -738,3 +738,12 @@ Windows `lan_sync_status` 工具描述同步说明以上手机策略；输入 Sc
 每首逻辑歌曲（包括 CUE）最多取三个不重叠的 20 秒片段，2 个 CPU 线程，120 秒单曲协作预算。用现有 mpv PCM 解码及 YAMNet 人声支持门槛后，执行不限制候选语言的音频识别，再检查转写的人声/字符支持。语言分数至少 .6，须两个片段支持同种语言，或一个片段达到 .9；证据不足保留 unknown。分数是模型参考值，未校准为歌唱语种正确率；老录音、重伴奏、方言、短人声及混合语种可能无法识别或误判。仅采样，不能保证发现全曲所有语种。原始转写不保存，手工纠正优先。纯音乐也不得依赖语种检测器的任意输出（[whisper.cpp 对非语音的说明](https://github.com/ggml-org/whisper.cpp/tree/master/examples/cli)）。
 
 右键所选歌曲可重新识别（force）或手工设置；筛选菜单的全曲库识别可继续处理未完成歌曲。文件修改时间、大小及 CUE 范围/时长变化会使旧自动和手工语种记录失效。删除歌曲级联移除记录。
+
+
+### PC 演唱语言自动分析
+
+PC 演唱语言识别随启动、曲库变化、电源/前台程序变化、睡眠恢复及任务结束自动调度，沿用设置中的分析模式：PluggedIn 仅接通电源，Always 随时，Manual 仅手动；全屏程序运行时暂停自动任务。初次需要模型时自动下载并校验约 78 MB 的 Whisper tiny，音频仍完全留在本机。显式 MCP prepare/start 的 downloadConfirmed 约束保持兼容。Android 仍手动识别，并接受已有配对元数据同步。
+
+自动队列仅处理当前签名缺少有效结果且曲库路径可用的歌曲。unknown、instrumental 和手工结果均算已完成；导入结果或修正先于提交到达时跳过已有结果。单曲失败不阻断其余歌曲，同一签名等待 300 秒再自动重试，模型准备/任务失败也退避 300 秒；版本变化可立即重新排队。每首结果立即保存，重启后重建队列继续补齐，无需再次点击。手动 force 重新识别仍保留手工覆盖。
+
+singing_language status 和 get_diagnostics.singingLanguages 兼容新增 automation：enabled、analysisMode、reason（not_started/manual_mode/fullscreen/battery/ready/running/manual_task/cancelled_by_user/retry_wait/complete/offline）、active、suppressedUntilRestart、modelDownload、retrySeconds、nextRetryAt（Unix 毫秒或 null）、restartPolicy。cancel 会停止当前识别并在本进程内阻止自动重启；显式 start/prepare 或下次重启解除该暂停。分析条件暂停不设置此标记，条件恢复自动继续。没有后台轮询完整曲库，完成后仅等待相关事件；退避期间仅设一个到期计时器。工具数量、动作枚举和参数 Schema 不变，开发版和 NativeAOT 共用服务与调度器。

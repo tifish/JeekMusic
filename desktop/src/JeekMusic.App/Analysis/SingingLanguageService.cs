@@ -9,14 +9,16 @@ using Whisper.net.LibraryLoader;
 
 namespace JeekMusic.Analysis;
 
-/// <summary>Local, explicit vocal-language analysis. No title/lyrics heuristics or audio uploads.</summary>
-public sealed class SingingLanguageService : IDisposable
+/// <summary>Local vocal-language analysis shared by automatic scheduling, UI and MCP.</summary>
+public sealed partial class SingingLanguageService : IDisposable
 {
     public const string ModelSha256="be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21";
     public const long ModelBytes=77691713;
     readonly LibraryService library;
     readonly string model;
     readonly object gate=new();
+    readonly Func<CancellationToken,Task>? prepareEngine;
+    readonly Func<Track,CancellationToken,Task<SingingLanguage>>? analyzeTrack;
     CancellationTokenSource? stop;
     Task? work;
     bool disposed;
@@ -27,14 +29,18 @@ public sealed class SingingLanguageService : IDisposable
     int total, processed, failed;
     long? current;
     public event Action? Changed;
-    public SingingLanguageService(LibraryService library, string? modelDirectory=null)
+    public SingingLanguageService(LibraryService library, string? modelDirectory=null) : this(library,modelDirectory,null,null) { }
+    internal SingingLanguageService(LibraryService library,string? modelDirectory,Func<CancellationToken,Task>? prepare,
+        Func<Track,CancellationToken,Task<SingingLanguage>>? analyze)
     {
         this.library=library;
+        prepareEngine=prepare; analyzeTrack=analyze;
         model=Path.Combine(modelDirectory??Path.Combine(AppPaths.DataDir,"models","singing-language"),"ggml-tiny.bin");
     }
     public bool ModelReady => File.Exists(model) && new FileInfo(model).Length==ModelBytes;
     public bool Busy { get { lock(gate) return state is "preparing" or "running" or "cancelling"; } }
-    public string StatusText { get { lock(gate) return state switch {
+    public string StatusText { get { lock(gate) return automationAttached && !Busy && !automaticSuppressed && automaticWaiting is not null && state!="failed"
+        ? L.T(automaticWaiting) : state switch {
         "preparing"=>L.T("正在下载演唱语种识别模型…"),
         "running"=>L.F($"正在识别演唱语言 {processed} / {total}"),
         "cancelling"=>L.T("正在取消语种识别…"), "failed"=>L.T("演唱语种识别失败，请重试"),
@@ -45,7 +51,8 @@ public sealed class SingingLanguageService : IDisposable
         ["state"]=state,["modelReady"]=ModelReady,["modelBytes"]=ModelBytes,["modelSha256"]=ModelSha256,
         ["total"]=total,["processed"]=processed,["failed"]=failed,["currentTrackId"]=current,["error"]=error,
         ["errorDetail"]=errorDetail,["recentResults"]=new JsonArray(recentResults.Select(r=>r.DeepClone()).ToArray()),
-        ["libraryCoverage"]=coverage,["resumesAfterRestart"]=false,
+        ["libraryCoverage"]=coverage,["resumesAfterRestart"]=automationAttached && automaticMode!=Settings.AnalysisMode.Manual,
+        ["automation"]=AutomaticStatus(),
         ["policy"]=SingingLanguage.Policy,["audioUploaded"]=false,["writesAudio"]=false,
         ["model"]="whisper-tiny-multilingual",["sampleSecondsAtMost"]=60,["threads"]=2,
         ["unknownMatchesNegatives"]=false,["instrumentalMatchesLanguageFilters"]=false,
@@ -60,12 +67,14 @@ public sealed class SingingLanguageService : IDisposable
         foreach(var track in captured) ValidateRecording(track);
         Begin(captured,downloadConfirmed,force);
     }
-    void Begin(Track[] tracks,bool downloadConfirmed,bool force)
+    void Begin(Track[] tracks,bool downloadConfirmed,bool force,bool automatic=false)
     {
         lock(gate) {
             ObjectDisposedException.ThrowIf(disposed,this);
             if(Busy) throw new InvalidOperationException("Vocal-language analysis already running");
             if(!ModelReady && !downloadConfirmed) throw new InvalidOperationException("Initial local model download (78 MB) requires downloadConfirmed=true");
+            automaticRun=automatic; automaticSuspended=false;
+            if(!automatic) { automaticSuppressed=false; modelRetryAt=DateTimeOffset.MinValue; }
             var existing=library.Db.Languages(tracks);
             var pending=tracks.Where(t=>force || !existing.ContainsKey(t.TrackKey)).ToArray();
             stop?.Dispose(); stop=new();
@@ -74,26 +83,33 @@ public sealed class SingingLanguageService : IDisposable
             state=ModelReady?"running":"preparing";
             work=Task.Run(async()=> {
                 try {
-                    await EnsureModel(token);
+                    if(prepareEngine is not null) await prepareEngine(token); else await EnsureModel(token);
                     token.ThrowIfCancellationRequested();
                     if(pending.Length>0) {
                         RuntimeOptions.RuntimeLibraryOrder=[RuntimeLibrary.CpuNoAvx];
-                        using var factory=WhisperFactory.FromPath(model,new() { UseGpu=false });
-                        await using var processor=factory.CreateBuilder().WithThreads(2).WithLanguageDetection()
+                        using var factory=analyzeTrack is null?WhisperFactory.FromPath(model,new() { UseGpu=false }):null;
+                        await using var processor=factory?.CreateBuilder().WithThreads(2).WithLanguageDetection()
                             .WithNoContext().WithTemperature(0).WithTemperatureInc(0).WithNoSpeechThreshold(.6f)
                             .WithProbabilities().Build();
-                        using var tagger=new AudioTagger();
+                        using var tagger=analyzeTrack is null?new AudioTagger():null;
                         foreach(var track in pending) {
                             token.ThrowIfCancellationRequested();
                             lock(gate) { current=track.Id; state="running"; } Notify();
                             try {
                                 using var budget=CancellationTokenSource.CreateLinkedTokenSource(token);
                                 budget.CancelAfter(TimeSpan.FromSeconds(120));
-                                var result=await Analyze(track,processor,tagger,budget.Token);
+                                // A paired import or correction may have filled this item since capture.
+                                if(!force && Result(track) is not null) { lock(gate) processed++; continue; }
+                                ValidateRecording(track);
+                                var result=analyzeTrack is not null?await analyzeTrack(track,budget.Token):await Analyze(track,processor!,tagger!,budget.Token);
                                 lock(gate) {
                                     token.ThrowIfCancellationRequested();
                                     if(disposed) return;
-                                    library.Db.InTransaction(()=> { ValidateRecording(track); library.Db.SaveLanguage(track,result,"AUTO"); });
+                                    library.Db.InTransaction(()=> {
+                                        ValidateRecording(track);
+                                        if(force || Result(track) is null) library.Db.SaveLanguage(track,result,"AUTO");
+                                    });
+                                    automaticRetries.Remove(track.TrackKey);
                                 }
                                 await library.RefreshAsync();
                                 RecordOutcome(track.Id,"committed",null);
@@ -101,7 +117,10 @@ public sealed class SingingLanguageService : IDisposable
                             catch(OperationCanceledException) when(token.IsCancellationRequested) { throw; }
                             catch(Exception ex) {
                                 Log.Warn("singing-language","演唱语种识别失败",ex);
-                                lock(gate) { failed++; error=ex.GetType().Name; errorDetail=ex.Message; }
+                                lock(gate) {
+                                    failed++; error=ex.GetType().Name; errorDetail=ex.Message;
+                                    automaticRetries[track.TrackKey]=(SingingLanguage.Signature(track),DateTimeOffset.UtcNow+AutomaticRetryDelay);
+                                }
                                 RecordOutcome(track.Id,"failed",ex.Message);
                             }
                             lock(gate) processed++;
@@ -110,8 +129,11 @@ public sealed class SingingLanguageService : IDisposable
                     }
                     lock(gate) { token.ThrowIfCancellationRequested(); state=failed==0?"completed":"completed_with_errors"; current=null; }
                 }
-                catch(OperationCanceledException) when(token.IsCancellationRequested) { lock(gate) { state="cancelled"; current=null; } }
-                catch(Exception ex) { Log.Warn("singing-language","演唱语种任务失败",ex); lock(gate) { state="failed"; error=ex.GetType().Name; errorDetail=ex.Message; current=null; } }
+                catch(OperationCanceledException) when(token.IsCancellationRequested) { lock(gate) { state=automaticSuspended?"paused":"cancelled"; current=null; } }
+                catch(Exception ex) { Log.Warn("singing-language","演唱语种任务失败",ex); lock(gate) {
+                    state="failed"; error=ex.GetType().Name; errorDetail=ex.Message; current=null;
+                    modelRetryAt=DateTimeOffset.UtcNow+AutomaticRetryDelay;
+                } }
                 finally { Notify(); }
             });
         }
@@ -221,6 +243,9 @@ public sealed class SingingLanguageService : IDisposable
         }
     }
     void Notify() { if(!disposed) Dispatcher.UIThread.Post(()=> { if(!disposed) Changed?.Invoke(); }); }
-    public void Cancel() { lock(gate) if(Busy) { state="cancelling"; stop?.Cancel(); } Notify(); }
+    public void Cancel() { lock(gate) {
+        automaticSuppressed=true; automaticSuspended=false;
+        if(Busy) { state="cancelling"; stop?.Cancel(); }
+    } Notify(); }
     public void Dispose() { lock(gate) { disposed=true; stop?.Cancel(); } }
 }

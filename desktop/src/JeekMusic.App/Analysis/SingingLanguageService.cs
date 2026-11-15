@@ -41,10 +41,11 @@ public sealed class SingingLanguageService : IDisposable
         "completed"=>L.F($"演唱语种识别完成 {processed} / {total}"),
         "completed_with_errors"=>L.F($"演唱语种识别完成 {processed} / {total}，失败 {failed}"),
         "cancelled"=>L.T("演唱语种识别已取消"), _=>L.T("演唱语种尚未识别") }; } }
-    public JsonObject Read() { lock(gate) return new() {
+    public JsonObject Read() { var coverage=library.Db.LanguageCoverage();lock(gate) return new() {
         ["state"]=state,["modelReady"]=ModelReady,["modelBytes"]=ModelBytes,["modelSha256"]=ModelSha256,
         ["total"]=total,["processed"]=processed,["failed"]=failed,["currentTrackId"]=current,["error"]=error,
         ["errorDetail"]=errorDetail,["recentResults"]=new JsonArray(recentResults.Select(r=>r.DeepClone()).ToArray()),
+        ["libraryCoverage"]=coverage,["resumesAfterRestart"]=false,
         ["policy"]=SingingLanguage.Policy,["audioUploaded"]=false,["writesAudio"]=false,
         ["model"]="whisper-tiny-multilingual",["sampleSecondsAtMost"]=60,["threads"]=2,
         ["unknownMatchesNegatives"]=false,["instrumentalMatchesLanguageFilters"]=false,

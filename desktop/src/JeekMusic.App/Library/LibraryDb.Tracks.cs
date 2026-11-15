@@ -53,6 +53,7 @@ public sealed partial class LibraryDb
         "id, track_key, folder_id, dir, file_name, title_tag, title, album, album_artist, album_key, artist_raw, artist_display, " +
         "artist_inferred, artists, track_no, disc_no, year, genre, duration_ms, codec, bitrate, sample_rate, bits_per_sample, channels, " +
         "has_lyrics, has_cover, cue_track_no, start_ms, end_ms, mtime, size, sort_title, sort_file, sort_artist";
+    static readonly string TrackUpdates=string.Join(", ",TrackColumns.Split(',').Skip(1).Select(c=>$"{c.Trim()}=excluded.{c.Trim()}"));
 
     public List<Track> AllTracks()
     {
@@ -142,7 +143,7 @@ public sealed partial class LibraryDb
     public void DeleteSideFile(SqliteTransaction tx, long folderId, string relPath) =>
         Exec("DELETE FROM side_file WHERE folder_id = $f AND rel_path = $p", tx, ("$f", folderId), ("$p", relPath));
 
-    /// <summary>重建曲库（需求 L-6）：清空这个音乐文件夹的歌曲和 .cue 记录，之后全量解析。</summary>
+    /// <summary>显式清空文件夹的歌曲和 .cue 记录，同时级联删除依赖数据；普通重建不得使用。</summary>
     public void ClearFolder(long folderId)
     {
         lock (Gate)
@@ -177,10 +178,10 @@ public sealed partial class LibraryDb
     void Upsert(SqliteTransaction tx, Track t)
     {
         using var cmd = Command(
-            (t.Id == 0 ? "INSERT INTO track(" + TrackColumns[4..] + ") VALUES(" : "INSERT OR REPLACE INTO track(" + TrackColumns + ") VALUES($id, ") +
+            (t.Id == 0 ? "INSERT INTO track(" + TrackColumns[4..] + ") VALUES(" : "INSERT INTO track(" + TrackColumns + ") VALUES($id, ") +
             "$key, $folder, $dir, $file, $titleTag, $title, $album, $albumArtist, $albumKey, $artistRaw, $artistDisplay, $inferred, $artists, " +
             "$trackNo, $discNo, $year, $genre, $duration, $codec, $bitrate, $rate, $bits, $channels, $lyrics, $cover, $cueNo, $start, $end, " +
-            "$mtime, $size, $sortTitle, $sortFile, $sortArtist)", tx);
+            "$mtime, $size, $sortTitle, $sortFile, $sortArtist)" + (t.Id==0?"":" ON CONFLICT(id) DO UPDATE SET "+TrackUpdates), tx);
         void P(string name, object? value) => cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
         if (t.Id != 0) P("$id", t.Id);
         P("$key", t.TrackKey); P("$folder", t.FolderId); P("$dir", t.Dir); P("$file", t.FileName);

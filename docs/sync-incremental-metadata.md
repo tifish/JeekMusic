@@ -43,3 +43,11 @@ PC 日常客户端已保存状态、部署并重启；实体手机同签名覆�
 已实际查看最终完成界面 `desktop/artifacts/sync-expired-physical/delta-manual-complete.png`；前后原始报告为同目录 `delta-manual-before.json`、`delta-manual-after.json`。构建、回归及实际交互记录在忽略的 `desktop/artifacts/delta-*` 中，实体设备原始状态、歌曲路径及凭据不进入提交。首次整组运行曾在 Android 用例开始前的夹具删除断言中止，补充具体返回值诊断后，最终整组与专项通过；未放宽生产重试或保护条件。
 
 语种结果属于独立元数据扩展，由立即同步及前台元数据轮询交换；后台文件任务自身只处理文件。识别任务空闲或某次任务完成，不表示当前全库均有有效缓存。手机的 LanguageExchange 日志新增 receivedTracks/matchedTracks/savedRows/metadataMismatchRows/validCachedTracks/pendingTracks 数量诊断，不包含路径、音频或凭据。本次实体设备未能读到这组日志，因此未将手机实际匹配数量标为已核实。语种识别的计算与有效性规则没有改变。
+
+### PC 语种记录丢失修复
+
+2026-11-15 只读核查：PC 当前 1,940 首中有 519 首有效语种结果，另有 1,421 首缺少有效结果。有效结果含 known 142、instrumental 321、unknown 56。此数字表示现存记录，不能断言其余歌曲从未识别，也不能据此确认手机实际收到多少条。
+
+隔离回归已复现：原有歌曲更新使用 SQLite INSERT OR REPLACE，删除旧父记录时触发 track_language 的 ON DELETE CASCADE，同一首歌仅更新标题也会丢失自动和手工结果。原有全量重建还会先 ClearFolder，直接删除所有依赖语种。修复改为原位 UPSERT，并取消全量重建前的清空；Scanner 仍全量解析、保留原 ID 并清理真实消失的曲目。签名失效规则与同步匹配条件保持原样。
+
+修复只阻止后续丢失，不能恢复已删除记录。保留日志不足以重建过去每首歌的识别/丢失过程。识别任务在退出时取消，完成的单曲结果已持久化，队列在重启后不自动恢复，这也可能导致未完成。未擅自启动全库识别，也未把缺失结果标记为已完成。MCP 新增 libraryCoverage 与 resumesAfterRestart 诊断，区分当前任务与全库覆盖率；日常版和正式版共用实现。

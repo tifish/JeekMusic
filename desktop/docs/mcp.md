@@ -713,6 +713,10 @@ Android直接SAF映射需手机本人选目录；旧映射不可执行，旧文�
 
 任务 state：idle/preparing/running/cancelling/completed/completed_with_errors/cancelled/failed。`failed`、`error`、`errorDetail` 及 `recentResults` 用于定位部分失败；界面也显示失败数量。`get_diagnostics.singingLanguages` 复用同一状态；`songFilter.singingLanguagePolicy` 说明新策略，旧 `titleTextPolicy` 已移除。`get_track` / 搜索 / 列表输出增加 singingLanguage。missing 为 null，其余 state 为 known/unknown/instrumental，source 为 AUTO/MANUAL。
 
+`libraryCoverage` 独立报告全曲库的 `totalTracks/validCachedTracks/pendingTracks`，以及有效结果中的 `knownTracks/unknownTracks/instrumentalTracks/manualTracks/automaticTracks`；不受 trackIds 或分页影响。unknown 和 instrumental 是已保存结果，计入有效缓存；仅有恢复自动的墓碑或签名过期的记录仍待识别。`total/processed/failed` 是当前进程中的任务进度，idle 或 processed=0 不能证明全库完成。`resumesAfterRestart=false` 表示重启不自动恢复任务，重新 start 默认只处理缺失有效结果的歌曲。上述字段同样由 get_diagnostics 提供；参数 Schema 和工具数量不变。
+
+普通更新和 `rescan_library full=true` 重建均保留未变化录音的 ID、自动/手工语种与恢复自动墓碑，不再用替换父记录或清空曲库的方式触发级联删除。全量重建仍重新解析所有文件；录音签名变化仍使旧证据失效，真实删除仍清理记录。已被旧版删除的结果无法由此修复重建。
+
 ```json
 {"action":"start","scope":"library","downloadConfirmed":true}
 ```

@@ -192,7 +192,8 @@ public sealed class LibraryService : ITrackSource, IDisposable
         var changed = full;
         foreach (var f in Db.Folders().Where(f => f.Available))
         {
-            if (full) Db.ClearFolder(f.Id);
+            // full already reparses every file. Preserve existing IDs and dependent
+            // results; Scanner removes only recordings that actually disappeared.
             changed |= ScanFolderCore(f, null, full).Changed;
         }
         if (changed) RebuildSnapshot();

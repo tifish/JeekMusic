@@ -161,4 +161,52 @@ public sealed class SingingLanguageTests
             }
         } finally { File.Delete(path); }
     }
+    [Fact]
+    public void CoverageCountsEffectiveResultsAndPendingVersionsRatherThanTaskProgress()
+    {
+        using var db=new LibraryDb(":memory:");var folder=db.AddFolder("fixture","\\","Z:\\","fixture");
+        using(var tx=db.Begin()) {
+            for(var i=1;i<=5;i++) db.ReplaceFile(tx,folder,"",$"{i}.wav",[new() { FolderId=folder,TrackKey=$"{i}",Title="Fixture",FileName=$"{i}.wav",Dir="",ArtistDisplay="",Mtime=42,Size=100,DurationMs=50000 }]);
+            tx.Commit();
+        }
+        var tracks=db.AllTracks().OrderBy(t=>t.TrackKey).ToArray();
+        db.SaveLanguage(tracks[0],new("known",["en"],"AUTO"),"AUTO");
+        db.SaveLanguage(tracks[0],SingingLanguage.Manual("CHINESE"),"MANUAL");
+        db.SaveLanguage(tracks[1],new("unknown",[],"AUTO"),"AUTO");
+        db.SaveLanguage(tracks[2],new("instrumental",[],"AUTO"),"AUTO");
+        db.SaveLanguage(tracks[3],null,"MANUAL"); // Restore-auto without evidence is pending.
+        db.SaveLanguage(tracks[4],new("known",["en"],"AUTO"),"AUTO");
+        db.Exec("UPDATE track SET size=size+1 WHERE track_key=$k",null,("$k",tracks[4].TrackKey));
+        var coverage=db.LanguageCoverage();
+        Assert.Equal(5,coverage["totalTracks"]!.GetValue<int>());
+        Assert.Equal(3,coverage["validCachedTracks"]!.GetValue<int>());
+        Assert.Equal(2,coverage["pendingTracks"]!.GetValue<int>());
+        Assert.Equal(1,coverage["knownTracks"]!.GetValue<int>());
+        Assert.Equal(1,coverage["unknownTracks"]!.GetValue<int>());
+        Assert.Equal(1,coverage["instrumentalTracks"]!.GetValue<int>());
+        Assert.Equal(1,coverage["manualTracks"]!.GetValue<int>());
+        Assert.Equal(2,coverage["automaticTracks"]!.GetValue<int>());
+    }
+    [Fact]
+    public void UpdatingAnExistingTrackDoesNotCascadeDeleteAutomaticManualOrRestoreAutoRecords()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"jeek-language-retain-"+Guid.NewGuid()+".db");
+        try {
+            using var db=new LibraryDb(path);var folder=db.AddFolder("test","\\","Z:\\","fixture");
+            using(var tx=db.Begin()) { db.ReplaceFile(tx,folder,"","A.wav",[new() { FolderId=folder,TrackKey="fixture",Title="A",FileName="A.wav",Dir="",ArtistDisplay="",Mtime=42,Size=100,DurationMs=50000 }]);tx.Commit(); }
+            var track=db.AllTracks().Single();
+            Track Replacement(string title,long size)=>new() { Id=track.Id,FolderId=folder,TrackKey=track.TrackKey,Title=title,FileName=track.FileName,Dir="",ArtistDisplay="",Mtime=track.Mtime,Size=size,DurationMs=track.DurationMs };
+            db.SaveLanguage(track,new("known",["en"],"AUTO",.95),"AUTO");db.SaveLanguage(track,SingingLanguage.Manual("CHINESE"),"MANUAL");
+            using(var tx=db.Begin()) { db.ReplaceFile(tx,folder,"","A.wav",[Replacement("Updated title",100)]);tx.Commit(); }
+            Assert.Equal(2L,db.Scalar("SELECT count(*) FROM track_language"));
+            Assert.True(db.Languages(db.AllTracks())[track.TrackKey].Matches("CHINESE"));
+            db.SaveLanguage(track,null,"MANUAL");
+            using(var tx=db.Begin()) { db.ReplaceFile(tx,folder,"","A.wav",[track]);tx.Commit(); }
+            Assert.Equal(2L,db.Scalar("SELECT count(*) FROM track_language"));Assert.True(db.Languages(db.AllTracks())[track.TrackKey].Matches("ENGLISH"));
+            using(var tx=db.Begin()) { db.ReplaceFile(tx,folder,"","A.wav",[Replacement("Updated title",101)]);tx.Commit(); }
+            Assert.Equal(2L,db.Scalar("SELECT count(*) FROM track_language"));Assert.Empty(db.Languages(db.AllTracks()));
+            using(var tx=db.Begin()) { db.DeleteFile(tx,folder,"A.wav");tx.Commit(); }
+            Assert.Equal(0L,db.Scalar("SELECT count(*) FROM track_language"));
+        } finally { File.Delete(path); }
+    }
 }

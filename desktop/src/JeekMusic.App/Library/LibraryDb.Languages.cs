@@ -1,9 +1,20 @@
 using JeekMusic.Analysis;
+using System.Text.Json.Nodes;
 
 namespace JeekMusic.Library;
 
 public sealed partial class LibraryDb
 {
+    public JsonObject LanguageCoverage()
+    {
+        lock(Gate) {
+            var tracks=AllTracks();var cached=Languages(tracks);
+            return new() { ["totalTracks"]=tracks.Count,["validCachedTracks"]=cached.Count,["pendingTracks"]=tracks.Count-cached.Count,
+                ["knownTracks"]=cached.Values.Count(v=>v.State=="known"),["unknownTracks"]=cached.Values.Count(v=>v.State=="unknown"),
+                ["instrumentalTracks"]=cached.Values.Count(v=>v.State=="instrumental"),["manualTracks"]=cached.Values.Count(v=>v.Source=="MANUAL"),
+                ["automaticTracks"]=cached.Values.Count(v=>v.Source=="AUTO") };
+        }
+    }
     internal Track? TrackById(long id)
     {
         lock(Gate) {

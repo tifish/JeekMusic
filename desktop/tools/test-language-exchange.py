@@ -45,6 +45,17 @@ def main():
                 tracks = wait(lambda: (lambda r: r["items"] if r["total"] == 1 else None)(call(client, "search_tracks", limit=10)))
                 track_id = tracks[0]["id"]
                 call(client, "singing_language", action="set", trackIds=[track_id], value="CHINESE")
+                # Await a completed reparse of the unchanged recording, rather than
+                # treating the queued response (or an early scanning=false) as done.
+                call(client, "rescan_library", full=True)
+                wait(lambda: "更新 1，删除 0，读取失败 0" in call(client, "get_logs", lines=200)["text"])
+                rebuilt = call(client, "search_tracks", limit=10)["items"]
+                assert len(rebuilt) == 1 and rebuilt[0]["id"] == track_id
+                recognition = call(client, "singing_language", action="status", trackIds=[track_id])
+                assert recognition["tracks"]["items"][0]["language"]["languages"] == ["zh"]
+                coverage = recognition["libraryCoverage"]
+                assert coverage["totalTracks"] == coverage["validCachedTracks"] == coverage["manualTracks"] == 1
+                assert coverage["pendingTracks"] == 0 and recognition["resumesAfterRestart"] is False
                 call(client, "lan_sync_control", action="start", port=0)
                 status = wait(lambda: (lambda s: s if s["userDataSyncReady"] else None)(call(client, "lan_sync_status")))
                 invitation = urlsplit(call(client, "lan_sync_control", action="invite", host="127.0.0.1")["invitation"])
@@ -102,7 +113,8 @@ def main():
                     wrong["items"][ref][0].update(size=original["size"] + 1, updated_at=record["updated_at"] + 2)
                     exchange(wrong)
                     assert language() is None
-                    report.update(metadataOnly=True, roundTrip=True, manualOverride=True, restoreAutoTombstone=True,
+                    report.update(fullRebuildPreservesIdentityAndLanguage=True, coverageDiagnostics=True,
+                                  metadataOnly=True, roundTrip=True, manualOverride=True, restoreAutoTombstone=True,
                                   oldReplayIgnored=True, mismatchedRecordingIgnored=True, noPlayback=True)
                 finally:
                     wire.close()

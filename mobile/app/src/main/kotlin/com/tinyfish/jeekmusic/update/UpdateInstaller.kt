@@ -59,7 +59,8 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
         Uri.parse("package:${context.packageName}"))
 
     @Synchronized
-    internal fun offer(info: UpdateInfo) {
+    internal fun offer(info: UpdateInfo): Boolean {
+        if (alreadyInstalled(info)) return false
         saveInfo(info)
         record.remove("error")
         record.remove("status")
@@ -68,6 +69,7 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
         record.put("sessionId", -1)
         event("available")
         state.value = UpdateState.Available(info)
+        return true
     }
 
     @Synchronized
@@ -81,7 +83,8 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
     }
 
     @Synchronized
-    internal fun downloading(info: UpdateInfo) {
+    internal fun downloading(info: UpdateInfo): Boolean {
+        if (alreadyInstalled(info)) return false
         saveInfo(info)
         record.remove("error")
         record.remove("reason")
@@ -92,6 +95,7 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
         record.remove("requireUserAction")
         event("downloading")
         state.value = UpdateState.Downloading(info, 0f)
+        return true
     }
 
     /** Validate the actual archive, not the URL/tag or setAppPackageName hint. Android's package
@@ -117,6 +121,7 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
 
     @Synchronized
     internal fun install(info: UpdateInfo, apk: File = apkFile) {
+        if (alreadyInstalled(info)) return
         validate(info, apk)
         saveInfo(info)
         record.remove("error")
@@ -206,16 +211,11 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
     fun reconcile(recoverInterrupted: Boolean = false) {
         val info = readInfo() ?: return
         val stage = record.optString("stage")
-        if (stage == "succeeded" || stage == "dismissed") return
-        if (stage in setOf("submitted", "confirmation_required") && installedVersion() >= info.versionCode) {
-            complete()
-            return
-        }
+        if (stage == "succeeded") return
+        if (alreadyInstalled(info)) return
+        if (stage == "dismissed") return
         when (stage) {
-            "available" -> {
-                if (installedVersion() >= info.versionCode) complete()
-                else state.value = UpdateState.Available(info)
-            }
+            "available" -> state.value = UpdateState.Available(info)
             "permission_required" -> state.value = UpdateState.PermissionRequired(info)
             "failed" -> state.value = UpdateState.Failed(info, failureMessage(record.optString("error")))
             "submitted", "confirmation_required" -> {
@@ -253,6 +253,7 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
 
     @Synchronized
     internal fun fail(info: UpdateInfo, code: String) {
+        if (alreadyInstalled(info)) return
         abandon()
         saveInfo(info)
         record.put("error", code)
@@ -308,6 +309,23 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
         return pm.getPackageInfo(context.packageName, 0).longVersionCode
     }
 
+    /** Package replacement and callbacks may race. A reached target is fulfilled even if its
+     * journal still says failed/downloading/permission_required. Never reopen an install or
+     * download an equal/older target. A stale job must not dismiss a newer pending update.
+     */
+    private fun alreadyInstalled(info: UpdateInfo): Boolean {
+        val installed = installedVersion()
+        if (info.versionCode <= 0 || installed < info.versionCode) return false
+        if ((readInfo()?.versionCode ?: 0) > installed) return true
+        val unchanged = readInfo() == info && record.optString("stage") == "succeeded"
+        if (!unchanged || record.has("error")) {
+            abandon()
+            saveInfo(info)
+            complete()
+        }
+        return true
+    }
+
     private fun complete() {
         record.remove("error")
         event("succeeded")
@@ -329,6 +347,9 @@ class UpdateInstaller @Inject constructor(@param:ApplicationContext private val 
         for (i in maxOf(0, prior.length() - 23) until prior.length()) events.put(prior.get(i))
         events.put(JSONObject().put("stage", stage).put("at", System.currentTimeMillis())
             .put("sessionId", record.optInt("sessionId", -1)).put("status", record.opt("status") ?: JSONObject.NULL)
+            .put("error", record.opt("error") ?: JSONObject.NULL)
+            .put("targetVersion", readInfo()?.versionCode ?: JSONObject.NULL)
+            .put("installedVersion", runCatching { installedVersion() }.getOrNull() ?: JSONObject.NULL)
             .put("canRequestPackageInstalls", canInstall()))
         record.put("events", events)
         persist()

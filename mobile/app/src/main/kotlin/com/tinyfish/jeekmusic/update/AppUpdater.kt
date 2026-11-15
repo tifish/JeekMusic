@@ -98,8 +98,7 @@ class AppUpdater @Inject constructor(
         val info = latestOrNull() ?: return@withLock
         settings.setLastUpdateCheck(System.currentTimeMillis())
         if (state.value == UpdateState.Idle && info.versionCode > BuildConfig.VERSION_CODE && info.versionCode != current.skippedUpdateVersion) {
-            installer.offer(info)
-            prepareDownload(info)
+            if (installer.offer(info)) prepareDownload(info)
         }
     }
 
@@ -110,7 +109,7 @@ class AppUpdater @Inject constructor(
         if (info.versionCode <= BuildConfig.VERSION_CODE) return@withLock CheckResult.UP_TO_DATE
         if (state.value is UpdateState.Installing || state.value is UpdateState.Downloading ||
             state.value is UpdateState.ConfirmationRequired || state.value is UpdateState.PermissionRequired) return@withLock CheckResult.UPDATE_AVAILABLE
-        installer.offer(info)
+        if (!installer.offer(info)) return@withLock CheckResult.UP_TO_DATE
         downloads.automaticEnabled = settings.current().autoUpdateCheck
         prepareDownload(info) // A verified cache can be shown even when automatic downloads are off.
         CheckResult.UPDATE_AVAILABLE
@@ -144,7 +143,7 @@ class AppUpdater @Inject constructor(
     @Synchronized
     fun downloadAndInstall(info: UpdateInfo) {
         if (state.value is UpdateState.Downloading || state.value is UpdateState.Installing || state.value is UpdateState.ConfirmationRequired) return
-        installer.downloading(info)
+        if (!installer.downloading(info)) return
         scope.launch {
             try {
                 val apk = downloads.obtain(info, automatic = false)

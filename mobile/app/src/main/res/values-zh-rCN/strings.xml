@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_collection_binding">集合：%1$s</string>
+    <string name="sync_collection_bind_help">加入组后，选择主 PC 已创建的集合，并显式绑定本机目录。原有未关联集合的映射保持暂停，重新保存后启用。文件同步仅使用组的主 PC 连接。</string>
+    <string name="sync_collection_rebind_required">请重新保存此目录绑定，将它关联到组内集合。</string>
     <string name="sync_group_title">多设备同步组</string>
     <string name="sync_group_recover">恢复组检查点</string>
     <string name="sync_group_recover_help">先在主 PC 允许本成员恢复。只重新提交尚未确认的本地修改，并保留原编辑时间。</string>

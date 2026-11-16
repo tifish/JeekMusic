@@ -16,6 +16,19 @@ public static class GroupUserData
     static long Stamp(JsonNode? node) => SyncMerge.Number(node);
     public static string TupleKey(string kind, string reference, string suffix) => kind + ":" + reference.Length.ToString(CultureInfo.InvariantCulture) + ":" + reference + ":" + suffix;
 
+    public static string RebindKey(string key,string sourcePrefix,string targetPrefix)
+        =>RebindKey(key,reference=>reference.StartsWith(sourcePrefix,StringComparison.Ordinal)?targetPrefix+reference[sourcePrefix.Length..]:reference);
+    public static string RebindKey(string key,Func<string,string> referenceMap)
+    {
+        if(key.StartsWith("offset:",StringComparison.Ordinal))return "offset:"+referenceMap(key[7..]);
+        foreach(var kind in new[] { "tag","language","features" })
+            if(key.StartsWith(kind+":",StringComparison.Ordinal))
+            {
+                var tuple=ReadTuple(key,kind);return TupleKey(kind,referenceMap(tuple.Reference),tuple.Suffix);
+            }
+        return key;
+    }
+
     static (string Reference, string Suffix) ReadTuple(string key, string kind)
     {
         var rest = key[(kind.Length + 1)..];

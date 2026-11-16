@@ -10,6 +10,13 @@ data class GroupSeed(val payload: String?, val editedAtMs: Long = 0)
 object GroupUserData {
     private fun invalid(): Nothing = throw GroupSyncException("invalid_user_data")
     fun tupleKey(kind: String, reference: String, suffix: String) = "$kind:${reference.length}:$reference:$suffix"
+    fun rebindKey(key: String,referenceMap: (String)->String): String {
+        if(key.startsWith("offset:"))return "offset:"+referenceMap(key.removePrefix("offset:"))
+        for(kind in listOf("tag","language","features"))if(key.startsWith("$kind:")) {
+            val (reference,suffix)=readTuple(key,kind);return tupleKey(kind,referenceMap(reference),suffix)
+        }
+        return key
+    }
     private fun readTuple(key: String, kind: String): Pair<String, String> {
         var rest=key.substring(kind.length+1)
         val colon=rest.indexOf(':')

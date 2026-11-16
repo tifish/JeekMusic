@@ -1,18 +1,28 @@
 # Windows MCP 接口
 
+## 曲库集合与 Windows 文件副本（P3）
+
+新增 `sync_collections`、`sync_control`、`sync_status`、`sync_conflicts`、`sync_backups`，完整工具集为 **50 个**。与设置页共用正式服务，详见[副本行为与恢复边界](../../docs/windows-replicas.md)。
+
+- `sync_collections`：list 仅 action；create 必填 folderId/name，主 PC 才能创建；bind 必填 collectionId/folderId，新映射保持暂停；unbind 必填 mappingId，要求已暂停且事务已确认。拒绝无关字段。
+- `sync_control`：必填 action/mappingId；start/resume 启用指定映射，sync 执行一轮，pause/cancel 中断该映射并保留检查点。不会默认控制全部连接。
+- `sync_status`：可选 mappingId；最多 8 个保留映射，返回作用域、阶段、游标、退避、未确认事务与冲突数，不输出凭证或原生目录身份。
+- `sync_conflicts`：必填 action/mappingId；list 可选 offset，最多 100 行；choose 必填 id/replicaId/version，version=null 表示该副本已删除。捕获的双方版本再次校验后才执行。
+- `sync_backups`：必填 action/mappingId；list 可选 offset；restore/purge 必填 receipt，禁止 offset。写操作要求暂停；恢复拒绝再次编辑的现文件，清理要求事务已确认。
+
 ## 个人数据同步组（P2）
 
-新增 `sync_peers`、`sync_groups`，与设置页共用正式业务服务，完整工具集为 45 个。LAN 能力增加 `syncGroupProtocol=1`、`userDataFormat=3`，TLS v4／文件协议 3 保持独立。
+P2 新增 `sync_peers`、`sync_groups`，与设置页共用正式业务服务；计入上述 P3 工具后完整工具集为 50 个。LAN 能力增加 `syncGroupProtocol=1`、`userDataFormat=3`，TLS v4／文件协议 3 保持独立。
 
 `sync_peers`：list 无其他参数；pair 必填 invitation；forget 必填 peerId，拒绝活动组上游。最多 32 个脱敏连接，邀请属于敏感输入。
 
 `sync_groups`：status/create/sync/pause/resume/recover/compact 仅接受 action；join 必填 peerId；remove/allow_recovery 必填 actorId。无关字段拒绝。状态包括 generation、durable cursor、pendingUploads、成员确认、clockAheadMs 和安全错误。加入保留旧编辑时间并停用 format 2／目录交换。compact 等待所有有效成员确认，不删除墓碑。恢复需主 PC 先 allow_recovery，只重提未确认修改并保留原 HLC。
 
-个人数据无需文件映射即可同步。Windows 主动文件副本属于 P3，本阶段不注册未实现的集合／文件控制工具。详情及验证脚本见[个人数据组说明](../../docs/personal-data-groups.md)。以下 P0／P1 小节保留各阶段历史边界。
+个人数据无需文件映射即可同步。P2 当时未注册集合／文件控制工具；这些能力现已由上方 P3 接入。详情及验证脚本见[个人数据组说明](../../docs/personal-data-groups.md)。以下 P0／P1 小节保留各阶段历史边界。
 
 ## 多设备同步准备（P0）
 
-当前增加了[多设备共享合同基础](../../docs/sync-group-contract.md)和跨 Windows／Android 回归测试，尚未接入客户端服务或发布新的 LAN capabilities。现有 MCP 工具、参数 Schema 和同步行为保持原样；不提供尚未实现的 sync_groups、sync_collections 等占位工具。后续设备／组操作复用同一业务服务，并按[实施计划](../../docs/multi-device-sync-plan.md#7-界面与-windows-mcp)同时交付运行时描述、严格参数 Schema、文档与真实客户端验证。
+P0 阶段只增加了[多设备共享合同基础](../../docs/sync-group-contract.md)和跨 Windows／Android 回归测试，当时没有接入客户端服务或发布新的 LAN capabilities，也没有注册组和集合占位工具。当前 P2/P3 已交付的接口见上文；实现仍按[实施计划](../../docs/multi-device-sync-plan.md#7-界面与-windows-mcp)同步维护运行时描述、严格 Schema、文档及真实客户端验证。
 
 ## 手机多 PC 连接（P1）
 

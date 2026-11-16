@@ -129,6 +129,7 @@ fun LanSyncSettings(lan: LanSyncService) {
             } })
         SettingsSectionHeader(stringResource(R.string.sync_folders))
         SettingSummary(stringResource(R.string.sync_folders_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        if(group.optBoolean("joined"))SettingSummary(stringResource(R.string.sync_collection_bind_help),Modifier.padding(horizontal=16.dp,vertical=8.dp))
         SettingItem(stringResource(R.string.lan_files_access), summary = stringResource(if (mtimeAllowed) R.string.lan_files_access_allowed else R.string.lan_files_access_needed), modifier = Modifier.testTag("lan_files_access"), onClick = {
             context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}")))
         })
@@ -140,9 +141,11 @@ fun LanSyncSettings(lan: LanSyncService) {
             key(m.getString("key")) {
                 val selected = m.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it).ifEmpty { "/" } }.joinToString(", ") }
                 val current=LanMappingTargets.isCurrent(m)
+                val groupBound=!group.optBoolean("joined") || m.optString("collectionId").isNotEmpty() && m.optString("peerId")==group.optString("peerId")
+                if(group.optBoolean("joined"))SettingSummary(if(groupBound)stringResource(R.string.sync_collection_binding,m.getString("collectionId").take(8)) else stringResource(R.string.sync_collection_rebind_required),Modifier.padding(horizontal=16.dp))
                 SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
                 SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
-                    checked = current && m.optBoolean("enabled", true), enabled = current,
+                    checked = current && groupBound && m.optBoolean("enabled", true), enabled = current && groupBound,
                     modifier = Modifier.testTag("lan_mapping_enabled_${m.getString("rootId")}"),
                     onChange = { lan.setEnabled(m.getString("rootId"), it, m.getString("peerId")) })
                 FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

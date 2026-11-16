@@ -1,8 +1,8 @@
 # 多 PC、多手机同步设计与实施计划
 
-状态：整体设计草案；[P0 基础合同](sync-group-contract.md)已增加独立实现和共享夹具，尚未接入运行时。本文记录建议默认值和交付门槛，不表示客户端已经提供多设备同步组、PC 同步客户端或下述新协议、MCP 工具。
+状态：第一版设计与实施记录。[P0 基础合同](sync-group-contract.md)、多连接、个人数据组及 Windows 文件副本均已接入运行时。本文保留最初设计时的基线和后续扩展建议，实际支持范围及验收限制以各阶段文档为准。
 
-进度：[P1 多 PC 独立连接](multi-peer-connections.md)已接入 Android 和 Windows 调度诊断，并完成双 PC／单模拟手机专项及原有真实 SAF 调度回归；P2/P3 继续实施。下表的“当前行为”保留最初设计时的基线，已交付行为以各阶段文档为准。
+进度：P0 合同、[P1 多 PC 独立连接](multi-peer-connections.md)、[P2 个人数据组](personal-data-groups.md)及 [P3 Windows 曲库副本](windows-replicas.md)已实现。下表的“当前行为”保留最初设计时的基线；真实客户端验收与跨主机验证限制见 P3 文档。
 
 ## 1. 目标与建议默认值
 
@@ -155,7 +155,7 @@ capabilities 本身不能替代版本校验。传输 4、当前文件协议 3 �
 
 已有 lan_sync_* 工具继续管理原 LAN 服务，不静默扩展为所有新组。新工具参数使用严格 Schema、枚举和分页上限；错误包含 peerId/groupId/collectionId/mappingId 及稳定错误码，但不包含凭证。开发版与正式版使用同一业务服务和完整工具集。
 
-本次只编写设计，不注册以上工具，也不将它们写成当前 MCP 已有能力。各实现阶段交付时必须同步更新 [MCP 使用文档](../desktop/docs/mcp.md)、运行时描述和 Schema，并验证开发／正式包一致。
+上表保留最初接口草案。当前已实现的参数范围以 [MCP 使用文档](../desktop/docs/mcp.md)及运行时严格 Schema 为准；Windows 文件控制显式指定 mappingId，组控制仍由 sync_groups 负责，新增 sync_backups 提供文件副本备份恢复与清理。日常版与 NativeAOT 正式包共用完整的 50 个工具。
 
 ## 8. 实施顺序与交付门槛
 
@@ -197,4 +197,4 @@ Windows 使用独立数据目录的真实客户端实例模拟两台 PC；另外
 
 ## 10. 本轮范围
 
-P0 共享合同和 P1 多连接已提交；当前已接入 [P2 个人数据组](personal-data-groups.md)的持久化、PC 出站客户端、Android、UI 和 MCP。两台 Windows 实例及两台 Android 模拟器的个人数据传播、删除、无回环和离线恢复已做实际客户端验证。Windows 文件副本和显式集合绑定仍为 P3 待完成项，跨真实主机验证仍需单独记录。完整第一版门槛继续为 P0–P3，不能提前标记完成。
+P0–P3 第一版实现包含独立连接、[个人数据组](personal-data-groups.md)、[Windows 文件副本与显式集合绑定](windows-replicas.md)、Android、UI 和 MCP。第一版采用一台主 PC 汇聚转发，成员可离线编辑；不包含 P4 的多中心、主 PC 自动接管或新的文件因果版本。已验证项目、真实客户端证据及跨真实主机网络未验收项统一记录在 P3 文档。

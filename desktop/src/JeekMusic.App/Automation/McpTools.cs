@@ -33,6 +33,21 @@ public sealed class McpTools
     internal JsonArray Catalog { get; } = BuildCatalog();
 
     internal static JsonArray BuildCatalog() => new(
+        Tool("sync_backups", "List, restore or purge durable backups for one outgoing Windows mappingId. List pages at most 100 retained receipts. Restore/purge requires paused mapping and receipt, checks native directory identity, and reuses conditional file recovery; restore refuses a live file edited since this backup. Purge requires an acknowledged transaction. Never deletes music during unbind. Production and development share this service.", """
+        "action":{"type":"string","enum":["list","restore","purge"]},"mappingId":{"type":"string","minLength":32,"maxLength":32},"receipt":{"type":"string","minLength":64,"maxLength":64},"offset":{"type":"integer","minimum":0}
+        """, ["action","mappingId"], destructive:true),
+        Tool("sync_collections", "Explicit group music collections. list returns coordinator definitions and this PC's bindings. create requires coordinator, registered folderId and name; captures native directory identity. bind requires member, collectionId and registered folderId; preserves historical metadata clocks, rejects overlapping directories and duplicate collection replicas, and creates a paused file mapping. unbind requires paused mappingId with no unfinished transactions; keeps music and personal-data references. No folder-name inference or automatic mesh.", """
+        "action":{"type":"string","enum":["list","create","bind","unbind"]},"collectionId":{"type":"string","minLength":32,"maxLength":32},"folderId":{"type":"integer","minimum":1},"name":{"type":"string","minLength":1,"maxLength":200},"mappingId":{"type":"string","minLength":32,"maxLength":32}
+        """, ["action"]),
+        Tool("sync_control", "Control one explicit Windows outgoing file mappingId through the production scheduler. start/resume enables this mapping; sync runs a bounded round, requiring enabled state. pause/cancel persists pause and interrupts only its current network/file work, retaining pending receipts and backups. Group pause also blocks work. File comparison uses mtime, size, then last edit, with conditional commits. Cancellation never means a committed file was undone. A prepared receipt whose target was edited after a crash becomes a retained conflict; retry creates a new conditional operation and keeps all backups.", """
+        "action":{"type":"string","enum":["start","resume","sync","pause","cancel"]},"mappingId":{"type":"string","minLength":32,"maxLength":32}
+        """, ["action","mappingId"]),
+        Tool("sync_status", "Read bounded Windows outgoing file mapping diagnostics (at most eight retained mappings): peer/group/collection identity, phase, cursor, retry time, last error, pending transactions and conflicts. Optional mappingId restricts scope. No credentials or native file identity. An idle state means the last round completed; waiting preserves unfinished work.", """
+        "mappingId":{"type":"string","minLength":32,"maxLength":32}
+        """, [], true),
+        Tool("sync_conflicts", "List or choose immutable Windows outgoing file conflict versions for one mappingId. list pages 100 rows. choose requires id, replicaId and version (null selects the captured deletion). Explicit localDeviceId/remoteDeviceId and localReplicaId/remoteReplicaId identify both PCs; no PHONE semantics. A choice queues intent only. Reconciliation rechecks both versions and rejects stale intent; first recorded choice wins.", """
+        "action":{"type":"string","enum":["list","choose"]},"mappingId":{"type":"string","minLength":32,"maxLength":32},"id":{"type":"string","minLength":64,"maxLength":64},"replicaId":{"type":"string","minLength":32,"maxLength":32},"version":{"type":["string","null"],"maxLength":100},"offset":{"type":"integer","minimum":0}
+        """, ["action","mappingId"]),
         Tool("sync_peers", "Manage outgoing Windows PC connections using the production TLS pairing service. list returns at most 32 redacted peers. pair requires a single-use jeeklan invitation (sensitive input; never log it); forget requires peerId and refuses the active group upstream. Does not remove music or revoke the remote credential.", "\"action\":{\"type\":\"string\",\"enum\":[\"list\",\"pair\",\"forget\"]},\"peerId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"invitation\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":450}", ["action"]),
         Tool("sync_groups", "Manage the one explicit personal-data group through the same service as Settings. status returns role, generation, durable cursor, pending uploads, member acknowledgments and safe errors. create makes this PC the coordinator; join requires a paired outgoing peerId and preserves original timestamps on initial import. Joining disables legacy format-2 and directory writes. sync performs bounded push/receipt/snapshot/pull/ack; pause/resume affect group networking while local edits remain durable. remove requires actorId and coordinator role; advances generation and preserves tombstones. allow_recovery requires coordinator actorId approval; recover rebases only pending edits with original HLC and retains originals until receipt. compact waits for all active members. clockAheadMs diagnoses observed clock skew. No automatic mesh, implicit primary change or credentials in output.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"create\",\"join\",\"sync\",\"pause\",\"resume\",\"remove\",\"allow_recovery\",\"recover\",\"compact\"]},\"peerId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"actorId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
         Tool("open_files", "Open existing absolute local audio paths through the same file-association service. Requests playback before reading the first successfully opened file's immediate directory, then displays a session-only temporary folder with supported sibling audio files. No recursive scan, library registration or window activation. Explicit multi-file play order is preserved until a song is played from the folder list. Latest open wins; a late folder result never navigates away from user browsing. Response means scheduled; observe get_diagnostics.externalFiles (opening/loading/ready/failed), song_filter and get_status. Same service in development and production.", "\"paths\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":1000,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767,\"description\":\"Existing absolute local audio file path; directories are not accepted.\"}}", ["paths"]),
@@ -157,6 +172,36 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if(name=="sync_backups")
+        {
+            McpSession.Validate(a,Catalog.OfType<JsonObject>().Single(t=>t["name"]!.GetValue<string>()==name)["inputSchema"]!.AsObject());
+            var action=a["action"]!.GetValue<string>();
+            if(action=="list"?a.ContainsKey("receipt"):!a.ContainsKey("receipt") || a.ContainsKey("offset"))throw new ArgumentException("Invalid backup action fields");
+            return await app.WindowsReplicas.Backups(a["mappingId"]!.GetValue<string>(),action,a["receipt"]?.GetValue<string>(),a["offset"]?.GetValue<int>()??0);
+        }
+        if(name is "sync_collections" or "sync_control" or "sync_status" or "sync_conflicts")
+        {
+            McpSession.Validate(a,Catalog.OfType<JsonObject>().Single(t=>t["name"]!.GetValue<string>()==name)["inputSchema"]!.AsObject());
+            var action=a["action"]?.GetValue<string>()??"list";
+            var fields=(name,action) switch {
+                ("sync_status",_)=>new[] { "mappingId" },
+                ("sync_collections","list")=>Array.Empty<string>(),
+                ("sync_collections","create")=>["folderId","name"],
+                ("sync_collections","bind")=>["collectionId","folderId"],
+                ("sync_collections","unbind")=>["mappingId"],
+                ("sync_control",_)=>["mappingId"],
+                ("sync_conflicts","choose")=>["mappingId","id","replicaId","version"],
+                ("sync_conflicts","list")=>["mappingId","offset"],_=>throw new ArgumentException("Invalid action") };
+            if(a.Any(p=>p.Key!="action" && !fields.Contains(p.Key)) || fields.Where(f=>f!="offset" && !(name=="sync_status" && f=="mappingId")).Any(f=>!a.ContainsKey(f)))throw new ArgumentException("Invalid action arguments");
+            var mapping=a["mappingId"]?.GetValue<string>();
+            if(name=="sync_status")return app.WindowsReplicas.Status(mapping);
+            if(name=="sync_conflicts")return app.WindowsReplicas.Conflicts(mapping!,a["id"]?.GetValue<string>(),a["replicaId"]?.GetValue<string>(),a["version"]?.GetValue<string>(),a["offset"]?.GetValue<int>()??0);
+            if(name=="sync_control")return action=="sync"?await app.WindowsReplicas.Synchronize(mapping!):app.WindowsReplicas.Control(mapping!,action);
+            return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(()=>action switch {
+                "create"=>app.GroupSync.CreateCollection(a["folderId"]!.GetValue<long>(),a["name"]!.GetValue<string>()),
+                "bind"=>app.WindowsReplicas.Bind(a["collectionId"]!.GetValue<string>(),a["folderId"]!.GetValue<long>()),
+                "unbind"=>app.WindowsReplicas.Control(mapping!,"unbind"),_=>app.GroupSync.Collections() });
+        }
         if(name is "sync_peers" or "sync_groups")
         {
             McpSession.Validate(a,Catalog.OfType<JsonObject>().Single(t=>t["name"]!.GetValue<string>()==name)["inputSchema"]!.AsObject());

@@ -73,6 +73,19 @@ internal sealed class LanFileMutation : IDisposable
         if(!GetFileInformationByHandleEx(file.SafeFileHandle,18,out FileIdentity info,24))throw new IOException("File identity unavailable");
         return $"{info.Volume:x16}{info.Low:x16}{info.High:x16}";
     }
+    internal static (SafeFileHandle Handle,string Identity) PinRoot(string path,string? expected=null)
+    {
+        var handle=Open(path,0x80,3,3,0x02200000);
+        try
+        {
+            Verify(handle,path,true);
+            if(!GetFileInformationByHandleEx(handle,18,out FileIdentity info,24))throw new IOException("Directory identity unavailable");
+            var identity=$"{info.Volume:x16}:{info.Low:x16}:{info.High:x16}";
+            if(expected is not null && expected!=identity)throw new LanFileDeferred("local_directory_identity_changed");
+            return (handle,identity);
+        }
+        catch { handle.Dispose();throw; }
+    }
     internal static void DeleteOwned(FileStream file,string identity)
     {
         if(Identity(file)!=identity || !SetFileInformationByHandle(file.SafeFileHandle,4,[1],1))throw new IOException("Owned staging cleanup deferred");

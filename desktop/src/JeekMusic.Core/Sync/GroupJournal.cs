@@ -171,6 +171,34 @@ public sealed class GroupJournal(IGroupRows rows, Func<long> now)
         try { _ = GroupUserData.Materialize([mutation],1); }
         catch (System.Text.Json.JsonException) { throw new GroupSyncException("invalid_user_data"); }
     }
+
+    /// <summary>Explicit identity binding copies history without making it a fresh edit.
+    /// Source registers remain independently valid; only this device's projection aliases move.</summary>
+    public void RebindReferences(Func<string,string> referenceMap,IReadOnlyDictionary<string,GroupSeed> actual)
+    {
+        var meta=Meta;string after="";
+        while(true)
+        {
+            var page=rows.Scan(Kind(meta,"register"),after);
+            foreach(var row in page)
+            {
+                var target=GroupUserData.RebindKey(row.Key,referenceMap);
+                if(target==row.Key)continue;
+                var source=GroupSyncContract.ReadMutation(JsonNode.Parse(row.Value)!.AsObject());
+                long sequence=checked(N(meta["nextOrigin"])+1);Check(sequence<=GroupSyncContract.MaxInteger,"origin_exhausted");
+                var copy=source with { Key=target,Generation=N(meta["generation"]),Version=new(source.Version.Clock,S(meta["actorId"]),S(meta["incarnation"]),sequence) };
+                ValidateBusiness(copy);meta["nextOrigin"]=sequence;
+                if(S(meta["role"])=="coordinator")Accept(meta,copy);
+                else { Put(Kind(meta,"outbox"),Sequence(sequence),GroupSyncContract.WriteMutation(copy),sequence);Register(meta,copy,0); }
+                rows.Delete(Kind(meta,"projection"),row.Key);
+                Put(Kind(meta,"projection"),target,new() { ["payload"]=actual.GetValueOrDefault(target)?.Payload });
+                // Even a losing historical copy must project the existing target winner.
+                Put(Kind(meta,"apply"),target,GroupSyncContract.WriteMutation(RegisterValue(meta,target)));
+            }
+            if(page.Count==0)break;after=page[^1].Key;
+        }
+        SaveMeta(meta);
+    }
     GroupMutation RegisterValue(JsonObject meta,string key) => GroupSyncContract.ReadMutation(Read(Kind(meta,"register"),key)!) with { Generation = N(meta["generation"]) };
     void Register(JsonObject meta,GroupMutation mutation,long receipt)
     {

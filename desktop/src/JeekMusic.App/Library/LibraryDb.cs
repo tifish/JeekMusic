@@ -9,6 +9,7 @@ namespace JeekMusic.Library;
 public sealed partial class LibraryDb : IDisposable
 {
     readonly SqliteConnection _conn;
+    internal string StoragePath=>_conn.DataSource;
     SqliteTransaction? _transaction;
     public readonly Lock Gate = new();
 

@@ -110,6 +110,7 @@ public sealed partial class LanSyncService
                     string scope=a["scope"]?.GetValue<string>()??"";
                     string rootId=op=="file_open"?a["rootId"]!.GetValue<string>():store.Root(scope,owner);
                     var root=RootPath(rootId);
+                    using var collectionHandle=_app.GroupSync.PinCollectionRoot(rootId,root);
                     var mutationPath=op=="file_finish"?store.OperationPath(scope,a["operation"]!.GetValue<string>()):op=="file_delete"?a["path"]!.GetValue<string>():null;
                     void MutationGuard(Action action) {
                         var path=Path.Combine(root,(mutationPath??throw new InvalidOperationException()).Replace('/',Path.DirectorySeparatorChar));

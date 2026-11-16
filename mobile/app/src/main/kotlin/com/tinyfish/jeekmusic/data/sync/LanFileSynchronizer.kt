@@ -224,6 +224,7 @@ internal class LanFileSynchronizer(private val context: Context,private val db: 
         LanProtocol.requirePairedCapabilities(capabilities)
         val scopeInfo=call(client,"","file_open",JSONObject().put("rootId",mapping.getString("rootId")).put("mapping",key).put("selection",mapping.getJSONArray("selection")))
         val scope=scopeInfo.getString("scope");val revision=scopeInfo.getString("revision")
+        if(db.hasPendingTransactions(key,scope))throw LanLocalDeferred("mapping_scope_changed")
         val selection=mapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) } }
         val deltaEnabled=capabilities.optInt("fileDeltaProtocol")>=1
         var offset=0

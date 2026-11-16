@@ -40,6 +40,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     public Automation.McpServer Mcp { get; }
     public Sync.LanSyncService LanSync { get; }
     public Sync.GroupSyncService GroupSync { get; }
+    public Sync.WindowsReplicaService WindowsReplicas { get; }
     public Preferences.PreferenceService Preferences { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();
@@ -83,6 +84,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
         using (LifecycleTimings.Measure("startupWork.preferences")) Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
         GroupSync = new Sync.GroupSyncService(this);
         using (LifecycleTimings.Measure("startupWork.lan")) LanSync = createLan?.Invoke(this) ?? new Sync.LanSyncService(this);
+        WindowsReplicas=new(this,db is null?null:Path.Combine(Path.GetDirectoryName(Db.StoragePath)??Path.GetTempPath(),"windows-replicas"));
         using (LifecycleTimings.Measure("startupWork.mcp")) Mcp = new Automation.McpServer(new Automation.McpTools(this));
         LifecycleTimings.Mark("startup.servicesReady");
     }
@@ -90,6 +92,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     Task StopServices()
     {
         Mcp.Dispose();
+        WindowsReplicas.StopForExit();
         // Close the listener now and overlap verified rule cleanup with local persistence.
         var lanStopped = LanSync.StopForExit();
         using (LifecycleTimings.Measure("shutdown.preferences")) Preferences.Dispose();

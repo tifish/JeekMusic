@@ -2,9 +2,9 @@
 
 文件同步在两端都存在时按文件修改时间、大小、软件最后编辑时间决定方向；删除与未知状态仍使用最后一次双方确认的基线。用户数据沿用 format 2 / SyncMerge，个人学习事件沿用协议3。无需云账号、中继或自动发现。公网监听、预算、部署边界见[公网部署说明](lan-public-deployment.md)，不会自动开放公网或桥接MCP。
 
-多 PC、多手机的架构、迁移和分期验收见[实施计划](multi-device-sync-plan.md)。当前已接入[个人数据同步组（P2）](personal-data-groups.md)：主 PC 汇聚成员 PC／手机的个人数据，新增 sync_peers、sync_groups。Windows 主动文件副本与显式集合绑定仍属 P3；未加入组的链路继续使用下述旧格式行为。
+多 PC、多手机的架构、迁移和分期验收见[实施计划](multi-device-sync-plan.md)。[个人数据同步组（P2）](personal-data-groups.md)与 [Windows 曲库副本（P3）](windows-replicas.md)已经接入：主 PC 汇聚成员 PC／手机的个人资料及显式绑定集合的文件。加入组后仅公布主 PC 已创建的集合，Android 旧映射须重新保存以确认关联；未加入组的链路继续使用下述旧格式行为。具体验收与未验证项在各阶段文档中记录。
 
-Android 的[多 PC 独立连接（P1）](multi-peer-connections.md)已实现：新增电脑不覆盖原配对，文件映射和退避按设备隔离；个人数据仍只与主电脑同步。同步组及 PC 出站同步继续按后续阶段交付。
+未加入组时，Android 的[多 PC 独立连接（P1）](multi-peer-connections.md)继续保留：新增电脑不覆盖原配对，文件映射和退避按设备隔离，旧个人数据只与指定主电脑交换。加入组后统一使用 P2 的资料组及 P3 的主 PC 文件汇聚。
 
 ## 目录、映射和旧数据
 

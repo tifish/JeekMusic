@@ -41,7 +41,9 @@ internal static class LanSyncSettings
                 _ => "防火墙未就绪。点击修复；若仍失败，请检查管理员权限、系统策略或第三方防火墙。"
             });
             sharing.Text = L.T("已共享音乐文件夹") + ": " + status["sharedFolderCount"]!.GetValue<int>();
-            guidance.Text = service.Port == 0 ? L.T("局域网服务已关闭。开启后会自动共享所有已添加的音乐文件夹。")
+            guidance.Text = c.App.GroupSync.Active
+                ? c.App.GroupSync.Coordinator?L.T("同步组仅提供显式创建的曲库集合。请在上方创建集合。"):L.T("当前为组成员，文件使用上方绑定的主 PC 连接。")
+                : service.Port == 0 ? L.T("局域网服务已关闭。开启后会自动共享所有已添加的音乐文件夹。")
                 : status["libraryFolderCount"]!.GetValue<int>() == 0 ? L.T("尚未添加音乐文件夹。请前往曲库添加，手机再点击“刷新共享文件夹”，无需重新扫码。")
                 : L.T("已添加的音乐文件夹会自动共享，新增文件夹也会自动纳入。手机点击“刷新共享文件夹”即可看到更改，无需重新配对。");
             folders.Children.Clear();

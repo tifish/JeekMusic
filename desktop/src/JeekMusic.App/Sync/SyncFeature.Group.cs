@@ -46,7 +46,7 @@ public sealed partial class SyncFeature
         try
         {
             Apply(new(CaptureGroupState(context),[],[]),context.Match,prune:false);
-            foreach(var key in oldKeys.Where(k=>context.Canonical(k[8..])!=k[8..]))
+            foreach(var key in oldKeys.Where(k=>context.Match(context.Canonical(k[8..])) is not null || context.Canonical(k[8..])!=k[8..]))
             {
                 _app.Db.Exec("DELETE FROM tag_override WHERE track_key=$key",null,("$key",key));
                 _app.Db.Exec("DELETE FROM lyrics_offset WHERE track_key=$key",null,("$key",key));

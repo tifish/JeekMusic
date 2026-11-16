@@ -264,6 +264,18 @@ public sealed partial class LanSyncService : IDisposable
             return root.Key is null ? null : "root:" + root.Key + "/" + relative.Replace('\\', '/');
         }
     }
+    internal string EnsureRootIdentity(long folderId)
+    {
+        var folder=_app.Db.Folders().Single(f=>f.Id==folderId);
+        lock(_gate)
+        {
+            var existing=Roots.FirstOrDefault(p=>p.Value?["folderIdentity"]?.ToString()==folder.Identity && p.Value?["revoked"]?.GetValue<bool>()!=true);
+            if(existing.Key is not null)return existing.Key;
+            var id=Guid.NewGuid().ToString("N");
+            Roots[id]=new JsonObject { ["folderId"]=folder.Id,["folderIdentity"]=folder.Identity,["name"]=folder.DisplayName,["enabled"]=Port!=0 };
+            RootRevision++;Save();return id;
+        }
+    }
     public string Invite(string host, int? advertisedPort = null, JsonObject? permissions = null, int credentialDays = 90)
     {
         if (Port == 0) throw new InvalidOperationException("LAN service is disabled. Enable it to pair and automatically share registered music folders.");
@@ -399,6 +411,7 @@ public sealed partial class LanSyncService : IDisposable
     {
         ReconcileRoots();
         var folders = _app.Db.Folders();
+        var collectionRoots=_app.GroupSync.Active?_app.GroupSync.CollectionDefinitions().OfType<JsonObject>().Select(r=>r["rootId"]!.ToString()).ToHashSet(StringComparer.Ordinal):null;
         lock (_gate) return new JsonObject
         {
             ["starting"] = Starting,
@@ -414,8 +427,8 @@ public sealed partial class LanSyncService : IDisposable
             ["invitationActive"] = _invitation is not null && DateTime.UtcNow < _invitationUntil,
             ["lastOperation"] = _lastOperation, ["bytesServed"] = _bytesServed,
             ["metadataSync"] = MetadataDiagnostics(),
-            ["sharingMode"] = "library", ["libraryFolderCount"] = folders.Count,
-            ["sharedFolderCount"] = Port == 0 ? 0 : Roots.Count(p => p.Value?["enabled"]?.GetValue<bool>() == true && p.Value?["revoked"]?.GetValue<bool>() != true),
+            ["sharingMode"] = _app.GroupSync.Active?"collections":"library", ["libraryFolderCount"] = folders.Count,
+            ["sharedFolderCount"] = Port == 0 ? 0 : Roots.Count(p => p.Value?["enabled"]?.GetValue<bool>() == true && p.Value?["revoked"]?.GetValue<bool>() != true && (collectionRoots is null || collectionRoots.Contains(p.Key))),
             ["addresses"] = new JsonArray(NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
                 .OrderByDescending(n => n.GetIPProperties().GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any)))
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses).Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a.Address))
@@ -436,6 +449,7 @@ public sealed partial class LanSyncService : IDisposable
         }
         // Filesystem/driver waits never retain the service gate used by UI authorization.
         if(!Directory.Exists(folder.Root))throw new IOException("Root offline; no deletions inferred");
+        using var collectionHandle=_app.GroupSync.PinCollectionRoot(id,folder.Root);
         return LanFiles.Resolve(folder.Root,"",true);
     }
     void ReconcileRoots() => ReconcileRoots(Port != 0);
@@ -634,7 +648,7 @@ public sealed partial class LanSyncService : IDisposable
         if(op?.StartsWith("file_",StringComparison.Ordinal)==true)return await DispatchFile(a,cancel,modern);
         if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read" or "verify")) throw new ArgumentException("Unknown operation");
         lock (_gate) _lastOperation = op;
-        if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>()).Select(n => n!.DeepClone()).ToArray()) };
+        if (op == "roots") return new JsonObject { ["roots"] = new JsonArray(Diagnostics()["roots"]!.AsArray().Where(n => n!["enabled"]!.GetValue<bool>() && (!_app.GroupSync.Active || _app.GroupSync.CollectionForRoot(n["rootId"]!.ToString()) is not null)).Select(n => { var row=n!.DeepClone().AsObject();var id=row["rootId"]!.ToString();row["collectionId"]=_app.GroupSync.CollectionForRoot(id);if(_app.GroupSync.CollectionNameForRoot(id) is { } name)row["name"]=name;return (JsonNode)row; }).ToArray()) };
         if (op == "state")
         {
             var file = a["state"] as JsonObject;

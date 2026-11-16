@@ -96,8 +96,16 @@ class LanSyncService @Inject constructor(
         val state=store.read()
         val target=state.optString("manualPeerId").takeIf { state.optBoolean("manualPending") }.orEmpty()
         return store.mappings().filter {
-            LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) && peerReady(mappingPeer(it)) && (target.isEmpty() || mappingPeer(it)==target)
+            LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) && peerReady(mappingPeer(it)) && (target.isEmpty() || mappingPeer(it)==target) && groupMappingReady(it)
         }
+    }
+    private fun groupMappingReady(mapping: JSONObject): Boolean {
+        val group=groups.status.value
+        if(!group.optBoolean("joined"))return true
+        if(group.optBoolean("paused") || mappingPeer(mapping)!=group.optString("peerId"))return false
+        val definitions=group.optJSONArray("collections") ?: return false
+        return (0 until definitions.length()).any { index -> val definition=definitions.getJSONObject(index)
+            definition.optString("rootId")==mapping.optString("rootId") && definition.optString("collectionId")==mapping.optString("collectionId") }
     }
     private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing,localFileIndex) }
     private val automation by lazy { LanAutoSync(context,scope,this) }
@@ -366,6 +374,16 @@ class LanSyncService @Inject constructor(
             selected.forEach { LanProtocol.relative(it, true) }
             val rootId = root.getString("rootId"); require(rootId.matches(Regex("[0-9a-f]{32}")))
             val peerId = root.optString("peerId").ifEmpty { store.selectedPeerId() }
+            val previousMapping=store.mappings().firstOrNull { mappingPeer(it)==peerId && it.optString("rootId")==rootId }
+            val unchanged=previousMapping!=null && previousMapping.optString("treeUri")==target.toString() && previousMapping.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) }.toSet()==selected }
+            if(!unchanged && previousMapping!=null && fileDatabase.hasPendingTransactions(previousMapping.getString("key")))throw LanLocalDeferred("confirm_transactions_before_rebind")
+            val group=groups.refresh()
+            var collectionId=""
+            if(group.optBoolean("joined")) {
+                require(group.getString("peerId")==peerId) { "group_upstream_required" }
+                val definitions=group.optJSONArray("collections") ?: JSONArray()
+                collectionId=(0 until definitions.length()).map { definitions.getJSONObject(it) }.singleOrNull { it.optString("rootId")==rootId }?.getString("collectionId") ?: throw GroupSyncException("collection_unavailable")
+            }
             store.connection(peerId)
             context.contentResolver.takePersistableUriPermission(target, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             val id = DocumentsContract.getTreeDocumentId(target)
@@ -379,8 +397,9 @@ class LanSyncService @Inject constructor(
             val mapping = JSONObject().put("layoutVersion",LanMappingTargets.VERSION).put("rootId", rootId).put("name", root.getString("name")).put("selection", JSONArray(selected.toList().sorted()))
                 .put("treeUri", target.toString()).put("documentId", id).put("volume", path.volumeName).put("relative", path.relativePath)
                 .put("key", old?.getString("key") ?: java.util.UUID.randomUUID().toString()).put("enabled", true).put("peerId", peerId)
+            if(collectionId.isNotEmpty())mapping.put("collectionId",collectionId).put("groupId",group.getString("groupId"))
             old?.optString("directoryIdentity")?.takeIf { it.isNotEmpty() }?.let { mapping.put("directoryIdentity",it) }
-            store.saveMapping(mapping); report()
+            sync.bindGroupMapping(mapping); report()
             resumePeer(peerId)
             automation.resume()
         } finally { gate.unlock() }
@@ -392,6 +411,7 @@ class LanSyncService @Inject constructor(
     }
     fun forget(root: String, peerId: String = store.selectedPeerId()) {
         check(job?.isActive != true) { "Cancel sync first" }
+        store.mappings().firstOrNull { it.optString("rootId")==root && mappingPeer(it)==peerId }?.let { if(fileDatabase.hasPendingTransactions(it.getString("key")))throw LanLocalDeferred("confirm_transactions_before_unbind") }
         store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root && mappingPeer(m) == peerId })) }; report()
         automation.configure()
     }

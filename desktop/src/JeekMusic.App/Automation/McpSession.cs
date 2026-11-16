@@ -111,6 +111,15 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
 
     static void ValidateValue(string name, JsonNode? node, JsonObject rule)
     {
+        if(rule["type"] is JsonArray alternatives)
+        {
+            foreach(var alternative in alternatives)
+            {
+                var candidate=rule.DeepClone().AsObject();candidate["type"]=alternative!.DeepClone();
+                try { ValidateValue(name,node,candidate);return; }catch(ArgumentException) { }
+            }
+            throw new ArgumentException($"{name} does not match an allowed type");
+        }
         var value = node as JsonValue;
         var type = rule["type"]!.GetValue<string>();
         var valid = type switch
@@ -121,6 +130,7 @@ internal sealed class McpSession(JsonArray catalog, Func<string, JsonObject, Tas
             "number" => value is not null && value.TryGetValue<double>(out var n) && double.IsFinite(n),
             "array" => node is JsonArray,
             "object" => node is JsonObject,
+            "null" => node is null,
             _ => false
         };
         if (!valid) throw new ArgumentException($"{name} must be {type}");

@@ -151,8 +151,10 @@ class SyncService @Inject constructor(
         val rules = SyncRules(scan.split.separators.sorted(), scan.split.exceptions, scan.inferFromFileName, scan.fileNameFormat.name, scan.legacyCharset?.name())
         val nav = SyncFormat.normalizeNavigation(db.tabDao().all().map { NavRef(it.type, it.ref.takeIf(String::isNotEmpty)) })
         val overrides = previous.tagOverrides.mapValues { it.value.toMutableMap() }.toMutableMap()
+        val groupNull=groupReplica.active
         val actual = db.tagDao().overrides().sortedBy { !it.trackKey.startsWith("foreign:") }.associate { (canonical(reference(it.trackKey, roots)) to it.dimension) to when {
             it.value != null -> it.value
+            groupNull -> null
             it.dimension == "MOOD" -> "NON_SPORT"
             it.dimension == "GENRE" -> "NON_CLASSICAL"
             else -> null
@@ -398,16 +400,17 @@ class SyncService @Inject constructor(
         mutex.withLock { ensureLoaded();groupFrameUnlocked(operation=operation) }
     }
     internal suspend fun joinGroup(server: JSONObject,actor: String,incarnation: String,peer: String)=withContext(Dispatchers.IO) { mutex.withLock {
-        ensureLoaded();metadata.put("group_root_bindings",server.optJSONObject("rootAliases") ?: JSONObject())
+        ensureLoaded();acceptGroupDefinitions(server)
         groupFrameUnlocked(peerHint=peer) { it.join(server,actor,incarnation,peer) }
     } }
     internal suspend fun updateGroupAliases(server: JSONObject)=withContext(Dispatchers.IO) { mutex.withLock {
-        ensureLoaded();metadata.put("group_root_bindings",server.optJSONObject("rootAliases") ?: JSONObject());saveJournal()
+        ensureLoaded();acceptGroupDefinitions(server);saveJournal()
     } }
     suspend fun groupStatus(): JSONObject = withContext(Dispatchers.IO) { mutex.withLock {
         ensureLoaded()
         (if(groupReplica.active)groupReplica.info().put("joined",true) else JSONObject().put("joined",false))
             .put("paused",metadata.optBoolean("group_paused"))
+            .put("collections",metadata.optJSONArray("group_collections") ?: JSONArray())
     } }
     internal suspend fun groupJoinIncarnation(peer: String): String = withContext(Dispatchers.IO) { mutex.withLock {
         ensureLoaded();check(!groupReplica.active) { "Already joined a sync group" }
@@ -427,24 +430,55 @@ class SyncService @Inject constructor(
     internal suspend fun recoverGroup(server: JSONObject,incarnation: String)=groupFrame {
         it.recover(server,incarnation);metadata.remove("group_recovery_incarnation")
     }
+    private fun acceptGroupDefinitions(server: JSONObject) {
+        val definitions=server.optJSONArray("collections") ?: JSONArray()
+        if(definitions.length()>128)throw GroupSyncException("collection_limit")
+        val ids=mutableSetOf<String>()
+        repeat(definitions.length()) { index ->
+            val definition=definitions.getJSONObject(index)
+            if(!definition.getString("collectionId").matches(Regex("[0-9a-f]{32}")) || !definition.getString("rootId").matches(Regex("[0-9a-f]{32}")) || definition.getString("name").length !in 1..200 || !ids.add(definition.getString("collectionId")))throw GroupSyncException("invalid_collection")
+        }
+        metadata.put("group_root_bindings",server.optJSONObject("rootAliases") ?: JSONObject()).put("group_collections",definitions)
+    }
+    private fun canonicalGroupReference(value: String,peer: String,bindings: JSONObject): String {
+        var reference=value;val prefix="peer:$peer/"
+        if(peer.isNotEmpty() && reference.startsWith(prefix))reference=reference.removePrefix(prefix)
+        if(reference.startsWith("root:") && peer.isNotEmpty() && (value.startsWith(prefix) || lan.primaryPeerId()==peer)) {
+            val collection=bindings.optString(reference.substringAfter("root:").substringBefore('/'))
+            return if(collection.isNotEmpty())"collection:$collection/"+reference.substringAfter('/') else "peer:$peer/$reference"
+        }
+        if(reference.startsWith("root:"))return "peer:${lan.primaryPeerId()}/$reference"
+        return if(BackupRefs.isManagedReference(reference))reference else "device:${device.id}/$reference"
+    }
+    internal suspend fun bindGroupMapping(mapping: JSONObject)=withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded()
+        if(!groupReplica.active) { lan.saveMapping(mapping);return@withLock }
+        groupFrameUnlocked { true }
+        val peer=groupReplica.info().getString("peerId");val bindings=metadata.optJSONObject("group_root_bindings") ?: JSONObject()
+        val roots=db.folderDao().all().map { BackupRefs.Root(it.volumeName,it.relativePath) }
+        val rows=GroupSqlRows(db)
+        db.withTransaction {
+            for(track in db.trackDao().all()) {
+                val raw=reference(track.trackKey,roots)
+                val old=if(BackupRefs.isManagedReference(raw))canonicalGroupReference(raw,peer,bindings) else "device:${device.id}/local:${track.trackKey}"
+                rows.put("binding-references",track.trackKey,JSONObject().put("reference",old).toString())
+            }
+            metadata.put("group_pending_binding",mapping);saveJournal()
+        }
+        // The mapping JSON and Room DB are separate durable stores. The intent above repairs
+        // an interruption here before the next group projection can capture a false fresh edit.
+        lan.saveMapping(mapping);groupFrameUnlocked { true }
+    } }
     private suspend fun <T> groupFrameUnlocked(peerHint: String?=null,operation: suspend (GroupReplica)->T): T {
         applyPendingRules()
+        val pendingBinding=metadata.optJSONObject("group_pending_binding")
+        if(pendingBinding!=null)lan.saveMapping(pendingBinding)
         val folders=db.folderDao().all()
         val roots=folders.map { BackupRefs.Root(it.volumeName,it.relativePath) }
         val peer=peerHint ?: if(groupReplica.active)groupReplica.info().getString("peerId") else ""
         val bindings=metadata.optJSONObject("group_root_bindings") ?: JSONObject()
-        fun canonical(value: String): String {
-            var reference=value
-            val prefix="peer:$peer/"
-            if(peer.isNotEmpty() && reference.startsWith(prefix))reference=reference.removePrefix(prefix)
-            if(reference.startsWith("root:") && peer.isNotEmpty() && (value.startsWith(prefix) || lan.primaryPeerId()==peer)) {
-                val root=reference.substringAfter("root:").substringBefore('/')
-                val collection=bindings.optString(root)
-                return if(collection.isNotEmpty())"collection:$collection/"+reference.substringAfter('/') else "peer:$peer/$reference"
-            }
-            if(reference.startsWith("root:"))return "peer:${lan.primaryPeerId()}/$reference"
-            return if(BackupRefs.isManagedReference(reference))reference else "device:${device.id}/$reference"
-        }
+        var historicalMap=emptyMap<String,String>()
+        fun canonical(value: String): String = canonicalGroupReference(value,peer,bindings).let { historicalMap[it] ?: historicalMap[value] ?: it }
         val tracks=db.trackDao().all()
         val librarySignatures=tracks.map { "${it.trackKey}:${it.size}:${it.dateModified}:${it.durationMs}:${it.startMs}" }
         val references=tracks.associate { track ->
@@ -452,6 +486,16 @@ class SyncService @Inject constructor(
             track.trackKey to if(BackupRefs.isManagedReference(reference))canonical(reference) else "device:${device.id}/local:${track.trackKey}"
         }
         val index=references.entries.groupBy { it.value }.filterValues { it.size==1 }.mapValues { it.value.single().key }
+        val bindingRows=GroupSqlRows(db)
+        if(pendingBinding!=null) {
+            val moves=mutableMapOf<String,String>();var after=""
+            while(true) {
+                val page=bindingRows.scan("binding-references",after)
+                for(row in page)references[row.key]?.let { next -> val old=JSONObject(row.value).getString("reference");if(old!=next)moves[old]=next }
+                if(page.isEmpty())break;after=page.last().key
+            }
+            historicalMap=moves
+        }
         fun match(value: String)=index[value] ?: index[canonical(value)]
         suspend fun projection(): SyncState {
             val captured=capture(folders,::canonical)
@@ -476,12 +520,13 @@ class SyncService @Inject constructor(
             val result=db.withTransaction {
                 val existed=groupReplica.active
                 previous=SyncMerge.normalizeReferences(previous,::canonical)
-                if(existed && groupLibrarySignatures!=librarySignatures) { apply(MergeResult(projection(),emptyList(),emptyList()),::match);changed=true }
+                if(existed && (groupLibrarySignatures!=librarySignatures || pendingBinding!=null)) { apply(MergeResult(projection(),emptyList(),emptyList()),::match);changed=true }
+                if(existed && historicalMap.isNotEmpty())groupReplica.rebindReferences({ historicalMap[it] ?: it },seeds())
                 if(existed)groupReplica.capture(seeds())
                 val result=operation(groupReplica)
                 if(groupReplica.active) {
                     if(!existed)groupReplica.capture(seeds())
-                    if(groupLibrarySignatures!=librarySignatures)groupReplica.reapplyCaches()
+                    if(groupLibrarySignatures!=librarySignatures || pendingBinding!=null)groupReplica.reapplyCaches()
                     while(true) {
                         val mutations=groupReplica.pendingApply();if(mutations.isEmpty())break
                         val local=projection()
@@ -510,6 +555,10 @@ class SyncService @Inject constructor(
                         changed=true
                     }
                     metadata.put("initialized",true)
+                    if(pendingBinding!=null) {
+                        while(true) { val page=bindingRows.scan("binding-references");if(page.isEmpty())break;for(row in page)bindingRows.delete("binding-references",row.key) }
+                        metadata.remove("group_pending_binding")
+                    }
                     saveJournal()
                 }
                 result

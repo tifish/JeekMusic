@@ -60,6 +60,7 @@ internal static class GroupSyncSettings
             var peerId=peer["peerId"]!.GetValue<string>();panel.Children.Add(Note($"{peer["name"]} · {peer["host"]}:{peer["port"]}"));
             if(!service.Active)panel.Children.Add(Action(L.T("加入此 PC 的同步组"),async ()=>await Run(async ()=> { await service.Join(peerId);await service.Synchronize(); })));
         }
+        CollectionSyncSettings.Build(panel,context);
         panel.Children.Add(error);Refresh();
         void Updated()=>Dispatcher.UIThread.Post(Refresh);
         service.Changed+=Updated;

@@ -5,7 +5,7 @@ using JeekMusic.Core.Sync;
 namespace JeekMusic.Sync;
 
 /// <summary>One upstream per group. Business projection and protocol checkpoints share the library commit.</summary>
-public sealed class GroupSyncService
+public sealed partial class GroupSyncService
 {
     readonly AppServices app;
     readonly GroupJournal journal;
@@ -77,6 +77,7 @@ public sealed class GroupSyncService
         if(operation=="state")throw new GroupSyncException("upgrade_required");
         if(!coordinator)throw new GroupSyncException("not_coordinator");
         if(paused && (operation?.StartsWith("group_",StringComparison.Ordinal)==true && operation!="group_info" || operation=="preference_delta"))throw new GroupSyncException("group_paused");
+        if(paused && operation is "file_open" or "file_delta_commit" or "file_begin" or "file_chunk" or "file_finish" or "file_delete" or "file_ack" or "file_reuse_audio")throw new GroupSyncException("group_paused");
         if(operation is "group_info" or "group_join" or "group_recover")return;
         if(!members.Contains(actor))throw new GroupSyncException("member_not_active");
     }
@@ -97,12 +98,12 @@ public sealed class GroupSyncService
             return result;
         }
     }
-    T Frame<T>(Func<T> operation,Action<Action>? authorization=null)
+    T Frame<T>(Func<T> operation,Action<Action>? authorization=null,SyncFeature.GroupContext? initialContext=null,SyncFeature.GroupContext? resultingContext=null)
     {
         Dispatcher.UIThread.VerifyAccess();
         var bridge=feature??throw new GroupSyncException("sync_not_ready");
         bridge.ApplyPendingGroupRules();
-        var context=bridge.PrepareGroupContext(Bindings());
+        var context=initialContext??bridge.PrepareGroupContext(Bindings());
         var libraryVersion=app.Library.Snapshot.Version;
         T result=default!;bool changed=false;
         void Commit()=>app.Db.InTransaction(()=>
@@ -115,6 +116,7 @@ public sealed class GroupSyncService
             }
             result=operation();
             if(!journal.Active)return;
+            if(resultingContext is not null)context=resultingContext;
             if(!existed)journal.Capture(bridge.GroupProjection(context));
             if(projectedLibraryVersion!=libraryVersion)journal.ReapplyCaches();
             while(true)
@@ -184,6 +186,7 @@ public sealed class GroupSyncService
         return await Dispatcher.UIThread.InvokeAsync(()=>Frame(()=>
         {
             journal.JoinClient(server,feature!.DeviceId,incarnation,peer);
+            ReceiveCollections(server);
             app.Db.SetValue("legacy_directory_sync","0");
             return journal.Info();
         }));
@@ -207,7 +210,7 @@ public sealed class GroupSyncService
         var bindings=Bindings();var aliases=new JsonObject();
         foreach(var root in app.LanSync.Diagnostics()["roots"]!.AsArray().OfType<JsonObject>())
             if(root["revoked"]?.GetValue<bool>()!=true && root["rootId"] is { } id)aliases[id.ToString()]=bindings.GetValueOrDefault(id.ToString(),id.ToString());
-        JsonObject Describe(JsonObject value) { value["rootAliases"]=aliases.DeepClone();return value; }
+        JsonObject Describe(JsonObject value) { value["rootAliases"]=aliases.DeepClone();value["collections"]=CollectionDefinitions();return value; }
         return Frame(()=>
         {
             if(operation=="group_join")return Describe(journal.JoinMember(actor,S(request["incarnation"])));
@@ -250,7 +253,7 @@ public sealed class GroupSyncService
             }
             var remote=await Call("group_info");
             if(S(remote["groupId"])!=S(local["groupId"]) || S(remote["coordinatorDeviceId"])!=S(local["coordinatorDeviceId"]))throw new GroupSyncException("group_mismatch");
-            await Dispatcher.UIThread.InvokeAsync(()=>Frame(()=> { journal.ResetGeneration(Integer(remote,"generation",1));return true; }));
+            await Dispatcher.UIThread.InvokeAsync(()=>Frame(()=> { journal.ResetGeneration(Integer(remote,"generation",1));ReceiveCollections(remote);return true; }));
             for(int batch=0;batch<100;batch++)
             {
                 var outbox=await Dispatcher.UIThread.InvokeAsync(()=> { lock(app.Db.Gate)return journal.Outbox(); });

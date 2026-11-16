@@ -102,5 +102,33 @@ internal sealed class LanPeerClient(JsonObject connection) : IAsyncDisposable
         catch { Cancel();throw; }
         finally { serial.Release(); }
     }
+    public async Task<JsonObject> Operation(string operation,JsonObject arguments,CancellationToken cancellation)
+    {
+        string? job=null;
+        try
+        {
+            var result=await Call(operation,arguments,cancellation);var started=Environment.TickCount64;int delay=50;
+            while(result["pending"]?.GetValue<bool>()==true)
+            {
+                job=S(result["job"]);
+                if(job.Length!=32 || Environment.TickCount64-started>31*60_000)throw new LanFileDeferred("remote_job_time_budget");
+                await Task.Delay(delay,cancellation);delay=Math.Min(500,delay*2);
+                result=await Call("plan_status",new() { ["job"]=job },cancellation);
+            }
+            job=null;
+            if(result["conflict"]?.GetValue<bool>()==true)throw new LanFileConflict(S(result["reason"]));
+            if(result["deferred"]?.GetValue<bool>()==true)throw new LanFileDeferred(S(result["reason"]));
+            return result;
+        }
+        finally
+        {
+            if(job is not null)
+            {
+                using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try { await using var control=new LanPeerClient(connection);await control.Call("plan_cancel",new() { ["job"]=job },deadline.Token); }
+                catch(Exception e) when(e is IOException or OperationCanceledException or SocketException) { }
+            }
+        }
+    }
     public ValueTask DisposeAsync() { Cancel();return ValueTask.CompletedTask; }
 }

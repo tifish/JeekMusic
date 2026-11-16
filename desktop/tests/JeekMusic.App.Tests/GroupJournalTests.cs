@@ -22,6 +22,25 @@ public sealed class GroupJournalTests
         new("group-a",generation,key,new(new(time,0),actor,incarnation,sequence),payload);
     static JsonObject Read(GroupRow row)=>JsonNode.Parse(row.Value)!.AsObject();
     static void Setup(Fixture server)=>server.Tx(()=> { server.Journal.Create("group-a","pc-a","inc-pc");server.Journal.JoinMember("phone-a","inc-a"); });
+    [Fact] public void ExplicitBindingPreservesHistoricalClockAndDoesNotDeleteIndependentSource()
+    {
+        using var server=new Fixture();Setup(server);
+        var oldKey=GroupUserData.TupleKey("tag","collection:old/song.flac","MOOD");
+        var newKey=GroupUserData.TupleKey("tag","collection:shared/song.flac","MOOD");
+        server.Tx(()=>server.Journal.Capture(new Dictionary<string,GroupSeed> { [oldKey]=new("\"SPORT\"",10),[newKey]=new("\"NON_SPORT\"",30) }));
+        var historical=GroupSyncContract.ReadMutation(JsonNode.Parse(server.Rows.Read("register:group-a",oldKey)!)!.AsObject());
+        historical=historical with { Version=historical.Version with { Clock=new(10,7) } };
+        server.Tx(()=>server.Rows.Put("register:group-a",oldKey,GroupSyncContract.WriteMutation(historical).ToJsonString()));
+        var actual=new Dictionary<string,GroupSeed> { [newKey]=new("\"SPORT\"",10) };
+        server.Tx(()=> { server.Journal.RebindReferences(r=>r.Replace("collection:old/","collection:shared/",StringComparison.Ordinal),actual);server.Journal.Capture(actual); });
+        var copied=server.Rows.Scan("journal:group-a").Select(r=>GroupSyncContract.ReadMutation(Read(r))).Last();
+        Assert.Equal(new GroupClock(10,7),copied.Version.Clock);
+        Assert.Equal(newKey,copied.Key);
+        Assert.Equal("\"NON_SPORT\"",server.Journal.PendingApply().Single(m=>m.Key==newKey).Payload);
+        Assert.Equal("\"SPORT\"",GroupSyncContract.ReadMutation(JsonNode.Parse(server.Rows.Read("register:group-a",oldKey)!)!.AsObject()).Payload);
+        Assert.Null(server.Rows.Read("projection:group-a",oldKey));
+        Assert.Equal(3,server.Rows.Count("journal:group-a"));
+    }
     [Fact] public void ExplicitRecoveryRetainsPendingOriginalClockUntilVerifiedReceipt()
     {
         using var server=new Fixture();using var client=new Fixture();Setup(server);

@@ -7,6 +7,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GroupReplicaTest {
+    @Test fun bindingCopiesHistoryWithoutMakingItANewEditOrDeletingItsSource() {
+        val rows=MemoryRows();val replica=GroupReplica(rows) { 9000L }
+        replica.join(JSONObject().put("groupId","group-a").put("generation",1).put("coordinatorDeviceId","pc-a"),"phone-a","inc-a","peer-a")
+        val source=GroupUserData.tupleKey("tag","device:phone-a/local:song","MOOD")
+        val target=GroupUserData.tupleKey("tag","collection:shared/song.flac","MOOD")
+        replica.capture(mapOf(source to GroupSeed("\"SPORT\"",10),target to GroupSeed("\"NON_SPORT\"",30)))
+        val actual=mapOf(target to GroupSeed("\"SPORT\"",10))
+        replica.rebindReferences({ if(it=="device:phone-a/local:song")"collection:shared/song.flac" else it },actual)
+        replica.capture(actual)
+        val copy=replica.outbox().last();assertEquals(GroupClock(10,0),copy.version.clock);assertEquals(target,copy.key)
+        assertEquals(3L,replica.info().getLong("pendingUploads"))
+        assertEquals("\"NON_SPORT\"",replica.pendingApply().single { it.key==target }.payload)
+        assertNotNull(rows.read("register:group-a",source));assertNull(rows.read("projection:group-a",source))
+    }
     @Test fun explicitRecoveryKeepsOriginalClockAndArchivesUntilVerifiedReceipt() {
         val rows=MemoryRows();val replica=GroupReplica(rows) { 9000L }
         val server=JSONObject().put("groupId","group-a").put("generation",1).put("coordinatorDeviceId","pc-a")

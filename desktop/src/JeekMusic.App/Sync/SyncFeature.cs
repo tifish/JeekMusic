@@ -130,15 +130,20 @@ public sealed partial class SyncFeature : IFeature
         }).ToArray());
         state["deleted_playlists"] = new JsonArray(_app.Db.Tombstones("PLAYLIST").Select(d => (JsonNode)new JsonObject { ["uid"] = d.Key, ["deleted_at"] = d.Value }).ToArray());
         var overrides = new JsonObject();
-        foreach (var o in _app.Db.TagOverrides())
+        foreach (var o in _app.Db.TagOverrides().OrderBy(o=>o.TrackKey.StartsWith("foreign:",StringComparison.Ordinal)?0:1))
         {
             var reference = Reference(o.TrackKey);
             if (overrides[reference] is null) overrides[reference] = new JsonObject();
-            overrides[reference]![o.Dimension] = new JsonObject { ["value"] = o.Value, ["updated_at"] = o.UpdatedAt };
+            if(overrides[reference]![o.Dimension] is not { } previous || Number(previous["updated_at"])<=o.UpdatedAt)
+                overrides[reference]![o.Dimension] = new JsonObject { ["value"] = o.Value, ["updated_at"] = o.UpdatedAt };
         }
         state["tag_overrides"] = overrides;
         var offsets = new JsonObject();
-        foreach (var o in _app.Db.LyricsOffsets()) offsets[Reference(o.TrackKey)] = new JsonObject { ["offset_ms"] = o.OffsetMs, ["updated_at"] = o.UpdatedAt };
+        foreach (var o in _app.Db.LyricsOffsets().OrderBy(o=>o.TrackKey.StartsWith("foreign:",StringComparison.Ordinal)?0:1))
+        {
+            var reference=Reference(o.TrackKey);
+            if(offsets[reference] is not { } previous || Number(previous["updated_at"])<=o.UpdatedAt)offsets[reference]=new JsonObject { ["offset_ms"]=o.OffsetMs,["updated_at"]=o.UpdatedAt };
+        }
         state["lyrics_offsets"] = offsets;
         // Keep references for user data when songs later disappear; the entire library need not be duplicated in SQLite JSON.
         var retained = new JsonObject();

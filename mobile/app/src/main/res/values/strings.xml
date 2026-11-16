@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_collection_binding">Collection: %1$s</string>
+    <string name="sync_collection_bind_help">In a group, select a collection created on the main PC and explicitly bind it to a local folder. Existing bindings without a collection stay paused until you save them again. File sync uses only the group upstream.</string>
+    <string name="sync_collection_rebind_required">Save this folder binding again to associate it with a group collection.</string>
     <string name="sync_group_title">Multi-device group</string>
     <string name="sync_group_recover">Recover group checkpoint</string>
     <string name="sync_group_recover_help">First allow this member to recover on the main PC. Only unacknowledged local edits are resubmitted, keeping their original edit times.</string>

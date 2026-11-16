@@ -96,6 +96,25 @@ class GroupReplica(private val rows: GroupRows,private val now: ()->Long) {
         }
         meta.put("seeded",true);save(meta)
     }
+    fun rebindReferences(referenceMap: (String)->String,actual: Map<String,GroupSeed>) {
+        val meta=meta();var after=""
+        while(true) {
+            val page=rows.scan(kind(meta,"register"),after)
+            for(row in page) {
+                val target=GroupUserData.rebindKey(row.key,referenceMap);if(target==row.key)continue
+                val source=GroupSyncContract.readMutation(JSONObject(row.value))
+                val sequence=meta.getLong("nextOrigin")+1;check(sequence<=GroupSyncContract.MAX_INTEGER,"origin_exhausted")
+                val copy=source.copy(key=target,generation=meta.getLong("generation"),version=GroupVersion(source.version.clock,meta.getString("actorId"),meta.getString("incarnation"),sequence))
+                validateBusiness(copy);meta.put("nextOrigin",sequence)
+                put(kind(meta,"outbox"),sequence(sequence),GroupSyncContract.writeMutation(copy),sequence);register(meta,copy,0)
+                rows.delete(kind(meta,"projection"),row.key)
+                put(kind(meta,"projection"),target,JSONObject().put("payload",actual[target]?.payload ?: JSONObject.NULL))
+                put(kind(meta,"apply"),target,GroupSyncContract.writeMutation(registerValue(meta,target)))
+            }
+            if(page.isEmpty())break;after=page.last().key
+        }
+        save(meta)
+    }
     private fun registerValue(meta: JSONObject,key: String)=GroupSyncContract.readMutation(read(kind(meta,"register"),key)!!).copy(generation=meta.getLong("generation"))
     private fun register(meta: JSONObject,mutation: GroupMutation,receipt: Long) {
         val old=read(kind(meta,"register"),mutation.key)

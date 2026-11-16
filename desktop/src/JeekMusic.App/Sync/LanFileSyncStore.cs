@@ -245,7 +245,13 @@ internal sealed partial class LanFileSyncStore:IDisposable
         if(task["modifiedNs"] is not null)mutation.SetModified(N(task["modifiedNs"]));
         var current=await mutation.Observe(limits.FileBytes,ct,true);
         if(current==FileMetadata.Version(N(task["size"]),N(task["modifiedNs"])/100*100)) { SaveTask(scope,task,"committed");CleanupPartial(scope,task);return UploadStatus(scope,op); }
-        if(task.ContainsKey("expectedVersion") && current!=null && FileMetadata.Token(FileMetadata.Observe(root,path))!=V(task["expectedVersion"]))throw Conflict("concurrent_remote_metadata_change");
+        if(task.ContainsKey("expectedVersion") && current!=null && FileMetadata.Token(FileMetadata.Observe(root,path))!=V(task["expectedVersion"]))
+        {
+            // A crash may leave a prepared receipt after the rename. If the live file was
+            // edited again, retrying the old precondition can never finish. Retain every
+            // backup and the conflict receipt, but release its active upload admission.
+            SaveTask(scope,task,"conflict");CleanupPartial(scope,task);throw Conflict("concurrent_remote_metadata_change");
+        }
         var resumedBackup=current is null && expected!=null && S(task["state"])=="prepared"?await mutation.VerifiedBackup(op,expected,limits.FileBytes,ct):null;
         if(current!=expected && resumedBackup is null) { SaveTask(scope,task,"conflict");CleanupPartial(scope,task);throw Conflict("concurrent_remote_change"); }
         var backupBytes=resumedBackup??(current is null?0:new FileInfo(mutation.FullPath).Length);BackupBudget(backupBytes,Key(scope,op));

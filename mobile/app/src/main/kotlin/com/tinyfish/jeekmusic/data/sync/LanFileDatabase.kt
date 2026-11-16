@@ -230,6 +230,9 @@ class LanFileDatabase @Inject constructor(@ApplicationContext context: Context):
         stageTotal=stageTotal?.let { Math.addExact(it-stageSize(existing),stageSize(row)) }
     }
     @Synchronized fun transactions(mapping: String,offset: Int=0): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? ORDER BY operation LIMIT 200 OFFSET ?",arrayOf(mapping,offset.toString())).use { c -> buildList { while(c.moveToNext())add(metadataTransaction(JSONObject(c.getString(0)))) } }
+    @Synchronized fun hasPendingTransactions(mapping: String,otherThanScope: String?=null): Boolean = db.rawQuery(
+        "SELECT 1 FROM transactions WHERE mapping=? AND json_extract(json,'$.state') NOT IN ('acknowledged','aborted')"+(if(otherThanScope!=null)" AND scope<>?" else "")+" LIMIT 1",
+        if(otherThanScope!=null)arrayOf(mapping,otherThanScope) else arrayOf(mapping)).use { it.moveToFirst() }
     @Synchronized fun backupRows(mapping: String): List<JSONObject> = db.rawQuery("SELECT json FROM transactions WHERE mapping=? AND json_type(json,'$.backupIdentity')='array' ORDER BY operation LIMIT 100",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext())add(metadataTransaction(JSONObject(c.getString(0)))) } }
     @Synchronized fun receipt(operation: String): JSONObject?=one("SELECT json FROM transactions WHERE operation=?",arrayOf(operation))?.let(::metadataTransaction)
     @Synchronized fun pendingPaths(mapping: String): List<String> = db.rawQuery("SELECT path FROM transactions WHERE mapping=? AND json_extract(json,'$.state') IN ('prepared','old_moved','vault_prepared','vault_old_moved','copying') LIMIT 4097",arrayOf(mapping)).use { c -> buildList { while(c.moveToNext()) { check(size<4096) { "Pending file work budget exceeded" };add(c.getString(0)) } } }

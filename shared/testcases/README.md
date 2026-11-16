@@ -20,6 +20,7 @@
 | `folder-tree.json` | 子文件夹折叠 | `FolderTree` | 同名 |
 | `m3u.json` | m3u 读写 | `M3u` | 同名 |
 | `backup-refs.json` | 备份 / 同步的歌曲引用 | `BackupRefs` | 同名 |
+| `sync-group-contract.json` | 多设备 P0：来源版本、逻辑时钟、逻辑引用、墓碑重放和检查点边界 | `GroupSyncContractTest` | `GroupSyncContractTests` |
 | `cover-matcher.json` | 在线结果匹配 | `CoverMatcher` | 同名 |
 | `classical-titles.json` | 曲名补救古典 | `ClassicalTitles` | 同名 |
 | `tag-classifier.json` | 智能标签分类 | `TagClassifier` | 同名 |

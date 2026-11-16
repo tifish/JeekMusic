@@ -1,0 +1,1828 @@
+{
+  "description": "P0 revision 1 pure contract primitives; not a deployed format 3 wire protocol. See docs/sync-group-contract.md.",
+  "cases": [
+    {
+      "description": "identical version",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 0
+    },
+    {
+      "description": "physical time wins",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 101,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 1
+    },
+    {
+      "description": "logical counter wins",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 1,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 1
+    },
+    {
+      "description": "device ordinal tie",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "phone-b",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 1
+    },
+    {
+      "description": "incarnation ordinal tie",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-b",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 1
+    },
+    {
+      "description": "sequence final tie",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 2
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": 1
+    },
+    {
+      "description": "physical precedes origin",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 99,
+        "logicalCounter": 0,
+        "originDeviceId": "zz",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": -1
+    },
+    {
+      "description": "max exact JSON integer",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 9007199254740991,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 9007199254740991
+      },
+      "right": {
+        "physicalMs": 9007199254740991,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 9007199254740990
+      },
+      "expected": 1
+    },
+    {
+      "description": "ASCII dash before underscore",
+      "operation": "compare",
+      "left": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "right": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc_a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": -1
+    },
+    {
+      "description": "wall clock advances",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "now": 11,
+      "observed": null,
+      "expected": {
+        "physicalMs": 11,
+        "logicalCounter": 0
+      }
+    },
+    {
+      "description": "same wall time increments",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "now": 10,
+      "observed": null,
+      "expected": {
+        "physicalMs": 10,
+        "logicalCounter": 9
+      }
+    },
+    {
+      "description": "backwards wall time",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "now": 1,
+      "observed": null,
+      "expected": {
+        "physicalMs": 10,
+        "logicalCounter": 9
+      }
+    },
+    {
+      "description": "observed newer",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "now": 11,
+      "observed": {
+        "physicalMs": 12,
+        "logicalCounter": 5
+      },
+      "expected": {
+        "physicalMs": 12,
+        "logicalCounter": 6
+      }
+    },
+    {
+      "description": "local newer",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 12,
+        "logicalCounter": 5
+      },
+      "now": 11,
+      "observed": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "expected": {
+        "physicalMs": 12,
+        "logicalCounter": 6
+      }
+    },
+    {
+      "description": "both clocks tie local larger",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 12,
+        "logicalCounter": 8
+      },
+      "now": 11,
+      "observed": {
+        "physicalMs": 12,
+        "logicalCounter": 5
+      },
+      "expected": {
+        "physicalMs": 12,
+        "logicalCounter": 9
+      }
+    },
+    {
+      "description": "both clocks tie remote larger",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 12,
+        "logicalCounter": 5
+      },
+      "now": 12,
+      "observed": {
+        "physicalMs": 12,
+        "logicalCounter": 8
+      },
+      "expected": {
+        "physicalMs": 12,
+        "logicalCounter": 9
+      }
+    },
+    {
+      "description": "wall ahead of both",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 8
+      },
+      "now": 13,
+      "observed": {
+        "physicalMs": 12,
+        "logicalCounter": 5
+      },
+      "expected": {
+        "physicalMs": 13,
+        "logicalCounter": 0
+      }
+    },
+    {
+      "description": "counter carries into physical",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 12,
+        "logicalCounter": 2147483647
+      },
+      "now": 1,
+      "observed": null,
+      "expected": {
+        "physicalMs": 13,
+        "logicalCounter": 0
+      }
+    },
+    {
+      "description": "remote counter carries",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 5
+      },
+      "now": 1,
+      "observed": {
+        "physicalMs": 12,
+        "logicalCounter": 2147483647
+      },
+      "expected": {
+        "physicalMs": 13,
+        "logicalCounter": 0
+      }
+    },
+    {
+      "description": "last representable clock exhausted",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 9007199254740991,
+        "logicalCounter": 2147483647
+      },
+      "now": 9007199254740991,
+      "observed": null,
+      "error": "clock_exhausted"
+    },
+    {
+      "description": "negative wall clock",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": 0
+      },
+      "now": -1,
+      "observed": null,
+      "error": "invalid_contract"
+    },
+    {
+      "description": "negative logical counter",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 10,
+        "logicalCounter": -1
+      },
+      "now": 11,
+      "observed": null,
+      "error": "invalid_contract"
+    },
+    {
+      "description": "physical outside exact range",
+      "operation": "clock",
+      "local": {
+        "physicalMs": 9007199254740992,
+        "logicalCounter": 0
+      },
+      "now": 1,
+      "observed": null,
+      "error": "invalid_contract"
+    },
+    {
+      "description": "normal version",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "expected": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      }
+    },
+    {
+      "description": "max fields",
+      "operation": "version",
+      "input": {
+        "physicalMs": 9007199254740991,
+        "logicalCounter": 2147483647,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 9007199254740991
+      },
+      "expected": {
+        "physicalMs": 9007199254740991,
+        "logicalCounter": 2147483647,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 9007199254740991
+      }
+    },
+    {
+      "description": "invalid version physicalMs -1",
+      "operation": "version",
+      "input": {
+        "physicalMs": -1,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version physicalMs 9007199254740992",
+      "operation": "version",
+      "input": {
+        "physicalMs": 9007199254740992,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version physicalMs 1.5",
+      "operation": "version",
+      "input": {
+        "physicalMs": 1.5,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version physicalMs '100'",
+      "operation": "version",
+      "input": {
+        "physicalMs": "100",
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version physicalMs True",
+      "operation": "version",
+      "input": {
+        "physicalMs": true,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version logicalCounter -1",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": -1,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version logicalCounter 2147483648",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 2147483648,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originSequence 0",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 0
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originSequence 9007199254740992",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 9007199254740992
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originDeviceId 'PC-A'",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "PC-A",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originDeviceId ''",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originDeviceId '../pc'",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "../pc",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version deviceIncarnation '_boot'",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "_boot",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version deviceIncarnation 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "originSequence": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid version originSequence None",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": null
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "unknown version field",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a",
+        "originSequence": 1,
+        "future": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "missing origin sequence",
+      "operation": "version",
+      "input": {
+        "physicalMs": 100,
+        "logicalCounter": 0,
+        "originDeviceId": "pc-a",
+        "deviceIncarnation": "boot-a"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "reference Album/song.flac",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "Album/song.flac"
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "Album/song.flac"
+      }
+    },
+    {
+      "description": "reference Chinese/song.flac#02",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "Chinese/song.flac#02",
+        "cueTrackNo": 2
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "Chinese/song.flac#02",
+        "cueTrackNo": 2
+      }
+    },
+    {
+      "description": "reference Album/01.flac",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "Album/01.flac",
+        "cueTrackNo": 99
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "Album/01.flac",
+        "cueTrackNo": 99
+      }
+    },
+    {
+      "description": "reference Album/%2e%2e.flac",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "Album/%2e%2e.flac"
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "Album/%2e%2e.flac"
+      }
+    },
+    {
+      "description": "reference Music/曲目🎵.flac",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "Music/曲目🎵.flac"
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "Music/曲目🎵.flac"
+      }
+    },
+    {
+      "description": "reference aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expected": {
+        "collectionId": "collection-a",
+        "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "description": "invalid reference ''",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": ""
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference '/a.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "/a.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a//b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a//b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a/./b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a/./b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a/../b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a/../b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a/'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a/"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'C:/a.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "C:/a.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a\\\\b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a\\b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a\\x00b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a\u0000b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a/..'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a/.."
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a.'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a."
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a '",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a "
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a?.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a?.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'a|b.flac'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a|b.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference cueTrackNo 0",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a.flac",
+        "cueTrackNo": 0
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference cueTrackNo 100",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a.flac",
+        "cueTrackNo": 100
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference cueTrackNo None",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a.flac",
+        "cueTrackNo": null
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference cueTrackNo '2'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a.flac",
+        "cueTrackNo": "2"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference collectionId 'COLLECTION'",
+      "operation": "reference",
+      "input": {
+        "collectionId": "COLLECTION",
+        "path": "a.flac"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid reference extra 1",
+      "operation": "reference",
+      "input": {
+        "collectionId": "collection-a",
+        "path": "a.flac",
+        "extra": 1
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "mutation value",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": "CALM"
+      },
+      "expected": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": "CALM"
+      }
+    },
+    {
+      "description": "mutation tombstone",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": null
+      },
+      "expected": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": null
+      }
+    },
+    {
+      "description": "mutation empty payload",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": ""
+      },
+      "expected": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": ""
+      }
+    },
+    {
+      "description": "mutation opaque JSON payload",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": " {\"value\":null}\n"
+      },
+      "expected": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": " {\"value\":null}\n"
+      }
+    },
+    {
+      "description": "invalid mutation missing payload",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        }
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid mutation object payload",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": {
+          "value": 1
+        }
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid mutation invalid group",
+      "operation": "mutation",
+      "input": {
+        "groupId": "Group-A",
+        "generation": 1,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": "CALM"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid mutation zero generation",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 0,
+        "key": "tag/song/mood",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": "CALM"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "invalid mutation empty key",
+      "operation": "mutation",
+      "input": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "",
+        "version": {
+          "physicalMs": 100,
+          "logicalCounter": 0,
+          "originDeviceId": "pc-a",
+          "deviceIncarnation": "boot-a",
+          "originSequence": 1
+        },
+        "payload": "CALM"
+      },
+      "error": "invalid_contract"
+    },
+    {
+      "description": "out of order and duplicate",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "NEW"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "NEW"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        }
+      ],
+      "permutations": true,
+      "expected": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "NEW"
+        }
+      ]
+    },
+    {
+      "description": "delete survives replay",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 30,
+            "logicalCounter": 0,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": null
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        }
+      ],
+      "permutations": true,
+      "expected": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 30,
+            "logicalCounter": 0,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": null
+        }
+      ]
+    },
+    {
+      "description": "explicit recreation after delete",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 30,
+            "logicalCounter": 0,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": null
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 31,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "RECREATED"
+        }
+      ],
+      "permutations": true,
+      "expected": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 31,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "RECREATED"
+        }
+      ]
+    },
+    {
+      "description": "equal time deterministic device winner",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OTHER"
+        }
+      ],
+      "permutations": true,
+      "expected": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OTHER"
+        }
+      ]
+    },
+    {
+      "description": "higher source sequence for another key does not suppress gap",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        }
+      ],
+      "permutations": true,
+      "expected": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "playlist/list-a",
+          "version": {
+            "physicalMs": 5,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 2
+          },
+          "payload": "[\"song\"]"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        }
+      ]
+    },
+    {
+      "description": "reused origin different value",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "DIFFERENT"
+        }
+      ],
+      "permutations": true,
+      "error": "origin_reused"
+    },
+    {
+      "description": "reused origin different clock",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 11,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        }
+      ],
+      "permutations": true,
+      "error": "origin_reused"
+    },
+    {
+      "description": "reused origin different key",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "other",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        }
+      ],
+      "permutations": true,
+      "error": "origin_reused"
+    },
+    {
+      "description": "reused origin hidden by newer winner",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "OLD"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 20,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-b",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "NEW"
+        },
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": null
+        }
+      ],
+      "permutations": true,
+      "error": "origin_reused"
+    },
+    {
+      "description": "different group",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 1,
+      "changes": [
+        {
+          "groupId": "group-b",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 100,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        }
+      ],
+      "permutations": true,
+      "error": "group_mismatch"
+    },
+    {
+      "description": "old generation",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 2,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 100,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        }
+      ],
+      "permutations": true,
+      "error": "reset_required"
+    },
+    {
+      "description": "future generation",
+      "operation": "merge",
+      "groupId": "group-a",
+      "generation": 2,
+      "changes": [
+        {
+          "groupId": "group-a",
+          "generation": 3,
+          "key": "tag/song/mood",
+          "version": {
+            "physicalMs": 100,
+            "logicalCounter": 0,
+            "originDeviceId": "pc-a",
+            "deviceIncarnation": "boot-a",
+            "originSequence": 1
+          },
+          "payload": "CALM"
+        }
+      ],
+      "permutations": true,
+      "error": "reset_required"
+    },
+    {
+      "description": "checkpoint at compacted boundary",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 2,
+      "cursor": 5,
+      "expected": "ok"
+    },
+    {
+      "description": "checkpoint at head",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 2,
+      "cursor": 10,
+      "expected": "ok"
+    },
+    {
+      "description": "checkpoint before retained stream",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 2,
+      "cursor": 4,
+      "error": "reset_required"
+    },
+    {
+      "description": "previous generation",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 1,
+      "cursor": 10,
+      "error": "reset_required"
+    },
+    {
+      "description": "future generation",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 3,
+      "cursor": 10,
+      "error": "invalid_checkpoint"
+    },
+    {
+      "description": "cursor after head",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 2,
+      "cursor": 11,
+      "error": "invalid_checkpoint"
+    },
+    {
+      "description": "negative cursor",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-a",
+      "requestGeneration": 2,
+      "cursor": -1,
+      "error": "invalid_contract"
+    },
+    {
+      "description": "checkpoint wrong group",
+      "operation": "checkpoint",
+      "groupId": "group-a",
+      "generation": 2,
+      "compactedThrough": 5,
+      "head": 10,
+      "requestGroup": "group-b",
+      "requestGeneration": 2,
+      "cursor": 5,
+      "error": "group_mismatch"
+    },
+    {
+      "description": "slow offline member holds compaction",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        10,
+        3,
+        9
+      ],
+      "expected": 3
+    },
+    {
+      "description": "unacknowledged member holds compaction",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        10,
+        null
+      ],
+      "expected": 0
+    },
+    {
+      "description": "all members acknowledged",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        10,
+        10
+      ],
+      "expected": 10
+    },
+    {
+      "description": "no members is not proof",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [],
+      "expected": 0
+    },
+    {
+      "description": "zero cursor holds compaction",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        0,
+        10
+      ],
+      "expected": 0
+    },
+    {
+      "description": "ack after head",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        11
+      ],
+      "error": "invalid_checkpoint"
+    },
+    {
+      "description": "negative ack",
+      "operation": "compaction",
+      "head": 10,
+      "acknowledgements": [
+        -1
+      ],
+      "error": "invalid_contract"
+    }
+  ]
+}

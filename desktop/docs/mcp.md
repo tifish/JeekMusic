@@ -1,5 +1,9 @@
 # Windows MCP 接口
 
+## 多设备同步准备（P0）
+
+当前增加了[多设备共享合同基础](../../docs/sync-group-contract.md)和跨 Windows／Android 回归测试，尚未接入客户端服务或发布新的 LAN capabilities。现有 MCP 工具、参数 Schema 和同步行为保持原样；不提供尚未实现的 sync_groups、sync_collections 等占位工具。后续设备／组操作复用同一业务服务，并按[实施计划](../../docs/multi-device-sync-plan.md#7-界面与-windows-mcp)同时交付运行时描述、严格参数 Schema、文档与真实客户端验证。
+
 ## 外网扫码地址
 
 `lan_sync_control action=external_address`、必填 `externalAddress`，保存独立于监听地址的手机连接端点。例如 `{"action":"external_address","externalAddress":"music.example.com:45678"}`。接受 `域名:端口`、`tls://域名:端口`、`https://域名:端口`（https 省略端口时为 443），统一保存为 `tls://host:port`；空字符串清除。拒绝路径、账号、查询参数、IPv6、回环、未指定及广播/组播地址。保存不依赖 DNS 在线，不改监听、路由器或现有设备凭证，并使尚未使用的邀请码失效。

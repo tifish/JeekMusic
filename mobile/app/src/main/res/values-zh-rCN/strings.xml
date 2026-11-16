@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_group_title">多设备同步组</string>
+    <string name="sync_group_recover">恢复组检查点</string>
+    <string name="sync_group_recover_help">先在主 PC 允许本成员恢复。只重新提交尚未确认的本地修改，并保留原编辑时间。</string>
+    <string name="sync_group_help">先在主 PC 创建组，再让其他 PC 和手机显式加入。个人数据无需文件映射也可同步；加入后停用旧格式个人数据及目录同步。</string>
+    <string name="sync_group_pending">待上传：%1$d</string>
+    <string name="sync_group_enabled">组网络同步</string>
+    <string name="sync_group_now">立即同步组数据</string>
+    <string name="sync_group_join">加入所选 PC 的同步组</string>
+    <string name="sync_group_join_help">所选的已配对 PC 必须已创建同步组并担任主 PC。</string>
     <string name="sync_conflict_queued">已排队：%1$s。同步会提交此选择，校验双方版本后执行。其他冲突仍可继续选择。</string>
     <string name="sync_conflict_larger">较大</string>
     <string name="sync_conflict_smaller">较小</string>

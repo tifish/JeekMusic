@@ -132,6 +132,11 @@ public sealed partial class LibraryDb : IDisposable
         );
         """,
         "ALTER TABLE track_language ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;",
+        """
+        CREATE TABLE sync_group_row(kind TEXT NOT NULL,key TEXT NOT NULL,value TEXT NOT NULL,cursor INTEGER NOT NULL,PRIMARY KEY(kind,key));
+        CREATE INDEX index_sync_group_row_kind_cursor_key ON sync_group_row(kind,cursor,key);
+        INSERT INTO sync_group_row(kind,key,value,cursor) VALUES('quota','global','{"rows":0,"bytes":0}',0);
+        """,
     ];
 
     void Migrate()

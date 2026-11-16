@@ -5,7 +5,7 @@ package com.tinyfish.jeekmusic.data.backup
  * 音乐文件夹换了卷或换了上级目录（比如拷到新手机、挪到 SD 卡），依然能对上。
  */
 object BackupRefs {
-    fun isManagedReference(reference: String) = listOf("root:", "peer:", "collection:").any { reference.startsWith(it, ignoreCase = true) }
+    fun isManagedReference(reference: String) = listOf("root:", "peer:", "collection:", "device:").any { reference.startsWith(it, ignoreCase = true) }
 
     data class Root(val volumeName: String, val relativePath: String)
 

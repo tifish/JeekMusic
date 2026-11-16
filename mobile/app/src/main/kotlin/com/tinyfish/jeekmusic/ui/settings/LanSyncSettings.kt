@@ -46,6 +46,7 @@ fun LanSyncSettings(lan: LanSyncService) {
     val schedule by lan.schedule.collectAsStateWithLifecycle()
     val network by lan.networkPolicy.state.collectAsStateWithLifecycle()
     val revision by lan.revision.collectAsStateWithLifecycle()
+    val group by lan.groups.status.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -71,6 +72,7 @@ fun LanSyncSettings(lan: LanSyncService) {
     var editing by remember { mutableStateOf<JSONObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(revision) { lan.groups.refresh() }
     var forget by remember { mutableStateOf<JSONObject?>(null) }
     var forgetPeer by remember { mutableStateOf<JSONObject?>(null) }
     var details by rememberSaveable { mutableStateOf(false) }
@@ -108,6 +110,23 @@ fun LanSyncSettings(lan: LanSyncService) {
         SettingItem(stringResource(R.string.lan_pair_manual), modifier = Modifier.testTag("lan_pair_manual"),
             enabled = !busy && !status.running, onClick = { pairing = true })
         notice?.let { SettingSummary(it, Modifier.padding(horizontal = 16.dp)) }
+        SettingsSectionHeader(stringResource(R.string.sync_group_title))
+        SettingSummary(stringResource(R.string.sync_group_help),Modifier.padding(horizontal=16.dp,vertical=8.dp))
+        if(group.optBoolean("joined")) {
+            SettingSummary("${group.optString("groupId")}\n${stringResource(R.string.sync_group_pending,group.optLong("pendingUploads"))}\n${group.optString("lastError")}",Modifier.padding(horizontal=16.dp).testTag("sync_group_status"))
+            SwitchRow(title=stringResource(R.string.sync_group_enabled),checked=!group.optBoolean("paused"),enabled=!busy,
+                onChange={ value -> scope.launch { lan.groups.pause(!value) } })
+            SettingItem(stringResource(R.string.sync_group_now),enabled=!busy && !status.running,modifier=Modifier.testTag("sync_group_now"),onClick={
+                scope.launch { busy=true;try { lan.synchronizeGroup() }catch(e: Exception) { if(e is CancellationException)throw e;error=e.message }finally { busy=false } }
+            })
+            SettingItem(stringResource(R.string.sync_group_recover),summary=stringResource(R.string.sync_group_recover_help),enabled=!busy && !status.running,
+                modifier=Modifier.testTag("sync_group_recover"),onClick={ scope.launch {
+                    busy=true;try { lan.groups.recover();lan.synchronizeGroup() }catch(e: Exception) { if(e is CancellationException)throw e;error=e.message }finally { busy=false }
+                } })
+        } else SettingItem(stringResource(R.string.sync_group_join),summary=stringResource(R.string.sync_group_join_help),enabled=paired && !busy && !status.running,
+            modifier=Modifier.testTag("sync_group_join"),onClick={ scope.launch {
+                busy=true;try { lan.joinGroup(selectedPeer) }catch(e: Exception) { if(e is CancellationException)throw e;error=e.message }finally { busy=false }
+            } })
         SettingsSectionHeader(stringResource(R.string.sync_folders))
         SettingSummary(stringResource(R.string.sync_folders_help), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SettingItem(stringResource(R.string.lan_files_access), summary = stringResource(if (mtimeAllowed) R.string.lan_files_access_allowed else R.string.lan_files_access_needed), modifier = Modifier.testTag("lan_files_access"), onClick = {

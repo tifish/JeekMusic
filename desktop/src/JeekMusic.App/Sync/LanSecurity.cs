@@ -60,8 +60,8 @@ internal static class LanLimits
     public const int SmallFrame = 64 * 1024;
     public const int AuthFrame = 4096;
     public const int LargeFrame = 32_000_000;
-    public static int Request(string? op) => op switch { "state" => LargeFrame, "preference_delta" => 4_000_000, "file_chunk"=>512*1024, _ => SmallFrame };
-    public static int Response(string? op) => op == "state" ? LargeFrame : 2_000_000;
+    public static int Request(string? op) => op switch { "state" => LargeFrame, "preference_delta" or "group_push" => 4_000_000, "file_chunk"=>512*1024, _ => SmallFrame };
+    public static int Response(string? op) => op == "state" ? LargeFrame : op?.StartsWith("group_",StringComparison.Ordinal)==true ? 4_000_000 : 2_000_000;
     public static void Validate(JsonObject value, bool authentication)
     {
         var count = 0;

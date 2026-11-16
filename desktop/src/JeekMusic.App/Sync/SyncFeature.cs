@@ -14,7 +14,7 @@ using static JeekMusic.UI.SettingsWindow;
 namespace JeekMusic.Sync;
 
 /// <summary>每台设备仅写自己的文件；文件变化后合并，写入采用临时文件和上一版备份。</summary>
-public sealed class SyncFeature : IFeature
+public sealed partial class SyncFeature : IFeature
 {
     AppServices _app = null!;
     Shell _shell = null!;
@@ -32,6 +32,7 @@ public sealed class SyncFeature : IFeature
     IReadOnlyList<JsonObject> _devices = [];
     public string Status { get; private set; } = L.T("等待曲库");
     public event Action? Changed;
+    internal string DeviceId => Str(_device?["id"]);
 
     public void Start(AppServices app, Shell shell)
     {
@@ -46,6 +47,7 @@ public sealed class SyncFeature : IFeature
         _device["app_version"] = typeof(SyncFeature).Assembly.GetName().Version?.ToString();
         File.WriteAllText(AppPaths.Device, _device.ToJsonString());
         _timer = UiTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, () => { _timer.Stop(); _ = Synchronize(); });
+        app.GroupSync.Bind(this);
         app.Library.SnapshotChanged += Schedule;
         app.Library.SyncFolderChanged += _ => Dispatcher.UIThread.Post(Schedule);
         app.Playlists.Changed += _ => Schedule();
@@ -53,6 +55,7 @@ public sealed class SyncFeature : IFeature
         app.Lyrics.OffsetChanged += Schedule;
         app.Settings.Changed += c => { if (c == "rules") Schedule(); };
         AnalysisFeature.Current.ResultsChanged += Schedule;
+        app.SingingLanguages.Changed += Schedule;
         app.OnExit += Stop;
         SettingsWindow.Register(L.T("同步"), 80, BuildSettings);
         Schedule();
@@ -70,7 +73,7 @@ public sealed class SyncFeature : IFeature
         lock (_fileGate)
         {
             _stopped = true;
-            if (_app.Db.GetValue("sync_initialized") is null || !DirectoryEnabled) return;
+            if (_app.GroupSync.Active || _app.Db.GetValue("sync_initialized") is null || !DirectoryEnabled) return;
             try
             {
                 var state = Capture(References());
@@ -184,6 +187,11 @@ public sealed class SyncFeature : IFeature
     public async Task Synchronize(bool directory = true, JsonObject? incoming = null, JsonObject? incomingFeatures = null, CancellationToken cancel = default, Action<Action>? authorizedCommit = null)
     {
         if (_stopped) return;
+        if (_app.GroupSync.Active)
+        {
+            if(incoming is not null)throw new GroupSyncException("upgrade_required");
+            _app.GroupSync.CaptureLocal();return;
+        }
         if (_running && incoming is null) { _again = true; return; }
         await _mergeGate.WaitAsync(cancel);
         _running = true;
@@ -195,6 +203,11 @@ public sealed class SyncFeature : IFeature
             var files = await Task.Run(() => (directory ? ReadFiles(folders, false).Concat(_app.LanSync.Incoming(false)) : incoming is null ? [] : new[] { incoming }).ToList());
             cancel.ThrowIfCancellationRequested();
             if (_stopped) return;
+            if(_app.GroupSync.Active)
+            {
+                if(incoming is not null)throw new GroupSyncException("upgrade_required");
+                _app.GroupSync.CaptureLocal();return;
+            }
             _devices = LatestPerDevice(files, Str(_device["id"]));
             var refs = References();
             var reverse = refs.Where(p => _app.Library.Snapshot.ByKey.ContainsKey(p.Key)).GroupBy(p => p.Value.ToLowerInvariant()).Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.First().Key);
@@ -237,7 +250,7 @@ public sealed class SyncFeature : IFeature
                 try
                 {
                     var json = ForWire(state).ToJsonString();
-                    await Task.Run(() => { lock (_fileGate) { if (!_stopped) AtomicWrite(path, json); } });
+                    await Task.Run(() => { lock (_fileGate) { if (!_stopped && !_app.GroupSync.Active) AtomicWrite(path, json); } });
                     if (_stopped) return;
                     _lastWritten[path] = content; written++;
                 }
@@ -270,7 +283,7 @@ public sealed class SyncFeature : IFeature
         finally { _running = false; _mergeGate.Release(); if (_again) { _again = false; Schedule(); } }
     }
 
-    void Apply(MergeResult result, Func<string, string?> match)
+    void Apply(MergeResult result, Func<string, string?> match, bool prune = true)
     {
         var state = result.State; var db = _app.Db;
         db.InTransaction(() =>
@@ -328,7 +341,7 @@ public sealed class SyncFeature : IFeature
                 s.FileNameFormat = Str(r["file_name_format"]); s.LegacyCharset = r["legacy_charset"]?.GetValue<string>();
                 s.RulesUpdatedAt = Number(rules["updated_at"]); _app.Settings.Save("sync-rules");
             }
-            db.PruneSyncData();
+            if(prune)db.PruneSyncData();
         });
     }
 
@@ -398,9 +411,10 @@ public sealed class SyncFeature : IFeature
     Control BuildSettings(SettingsContext c)
     {
         var panel = new StackPanel { Spacing = 8 };
+        GroupSyncSettings.Build(panel,c);
         LanSyncSettings.Build(panel, c);
         panel.Children.Add(Note(L.T("主动 LAN 直接合并数据库用户数据，不经过每设备 inbox。目录同步是独立兼容适配器；关闭不删除旧文件，也不影响 LAN。布局、播放位置、输出设备、路径与凭证始终留在本机。")));
-        panel.Children.Add(Toggle(L.T("目录同步兼容（Syncthing / format 2）"), DirectoryEnabled, enabled => { _app.Db.SetValue("legacy_directory_sync",enabled?"1":"0"); Schedule(); }));
+        if(!_app.GroupSync.Active)panel.Children.Add(Toggle(L.T("目录同步兼容（Syncthing / format 2）"), DirectoryEnabled, enabled => { _app.Db.SetValue("legacy_directory_sync",enabled?"1":"0"); Schedule(); }));
         var name = new TextBox { Text = Str(_device["name"]), Width = 280 };
         name.LostFocus += (_, _) => { if (!string.IsNullOrWhiteSpace(name.Text)) { _device["name"] = name.Text.Trim(); File.WriteAllText(AppPaths.Device, _device.ToJsonString()); _lastWritten.Clear(); Schedule(); } };
         panel.Children.Add(Labeled(L.T("本机名称"), name));

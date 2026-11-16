@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sync_group_title">Multi-device group</string>
+    <string name="sync_group_recover">Recover group checkpoint</string>
+    <string name="sync_group_recover_help">First allow this member to recover on the main PC. Only unacknowledged local edits are resubmitted, keeping their original edit times.</string>
+    <string name="sync_group_help">Create a group on your main PC, then explicitly join it on other PCs and phones. Personal data syncs even without a file mapping. Joining disables legacy personal-data and directory sync.</string>
+    <string name="sync_group_pending">Pending uploads: %1$d</string>
+    <string name="sync_group_enabled">Group network sync</string>
+    <string name="sync_group_now">Sync group now</string>
+    <string name="sync_group_join">Join selected PC’s group</string>
+    <string name="sync_group_join_help">The selected paired PC must already be the group coordinator.</string>
     <string name="sync_conflict_queued">Queued: %1$s. Sync will submit this choice and check both versions before applying it. Other conflicts can still be selected.</string>
     <string name="sync_conflict_larger">Larger</string>
     <string name="sync_conflict_smaller">Smaller</string>

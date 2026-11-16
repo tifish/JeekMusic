@@ -1,5 +1,15 @@
 # Windows MCP 接口
 
+## 个人数据同步组（P2）
+
+新增 `sync_peers`、`sync_groups`，与设置页共用正式业务服务，完整工具集为 45 个。LAN 能力增加 `syncGroupProtocol=1`、`userDataFormat=3`，TLS v4／文件协议 3 保持独立。
+
+`sync_peers`：list 无其他参数；pair 必填 invitation；forget 必填 peerId，拒绝活动组上游。最多 32 个脱敏连接，邀请属于敏感输入。
+
+`sync_groups`：status/create/sync/pause/resume/recover/compact 仅接受 action；join 必填 peerId；remove/allow_recovery 必填 actorId。无关字段拒绝。状态包括 generation、durable cursor、pendingUploads、成员确认、clockAheadMs 和安全错误。加入保留旧编辑时间并停用 format 2／目录交换。compact 等待所有有效成员确认，不删除墓碑。恢复需主 PC 先 allow_recovery，只重提未确认修改并保留原 HLC。
+
+个人数据无需文件映射即可同步。Windows 主动文件副本属于 P3，本阶段不注册未实现的集合／文件控制工具。详情及验证脚本见[个人数据组说明](../../docs/personal-data-groups.md)。以下 P0／P1 小节保留各阶段历史边界。
+
 ## 多设备同步准备（P0）
 
 当前增加了[多设备共享合同基础](../../docs/sync-group-contract.md)和跨 Windows／Android 回归测试，尚未接入客户端服务或发布新的 LAN capabilities。现有 MCP 工具、参数 Schema 和同步行为保持原样；不提供尚未实现的 sync_groups、sync_collections 等占位工具。后续设备／组操作复用同一业务服务，并按[实施计划](../../docs/multi-device-sync-plan.md#7-界面与-windows-mcp)同时交付运行时描述、严格参数 Schema、文档与真实客户端验证。

@@ -49,10 +49,11 @@ class LanSyncService @Inject constructor(
     private val tree: DocumentTree,
     private val library: LibraryRepository,
     private val scanner: LibraryScanner,
-    private val db: JeekDatabase,
+    internal val db: JeekDatabase,
     private val playing: PlayingFiles,
-    private val sync: SyncService,
-    private val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
+    internal val sync: SyncService,
+    val groups: GroupSyncService,
+    internal val preferences: com.tinyfish.jeekmusic.data.preference.PreferenceService,
     val networkPolicy: SyncNetworkPolicy,
     private val mediaChanges: com.tinyfish.jeekmusic.data.scanner.SyncMediaChanges,
     @param:ApplicationScope private val scope: CoroutineScope,
@@ -65,6 +66,7 @@ class LanSyncService @Inject constructor(
     @Volatile private var activeFilePeer: String? = null
     fun selectPeer(peerId: String) { store.selectPeer(peerId); report() }
     fun forgetPeer(peerId: String) {
+        check(groups.status.value.optString("peerId")!=peerId) { "This PC is the active group upstream" }
         check(job?.isActive != true) { "Cancel sync first" }
         store.forgetPeer(peerId); report(); automation.configure()
     }
@@ -127,6 +129,7 @@ class LanSyncService @Inject constructor(
         currentCoroutineContext().ensureActive()
         if(store.read().optBoolean("autoCancelled") || networkPolicy.waitingForWifi)return false
         if(needed)startScheduled(reason)
+        else syncBackgroundMetadata()
         return needed
     }
     /** Refresh only known paths, then compare them to the acknowledged baseline.
@@ -283,21 +286,24 @@ class LanSyncService @Inject constructor(
     private fun protocol(peerId: String = store.selectedPeerId(), tracked: Boolean = false) = LanProtocol(store.connection(peerId), networkPolicy).also { if(tracked)transport = it }
 
     private suspend fun exchangeUserData(includeFeatures: Boolean) {
-        val peerId = store.primaryPeerId()
+        val group=groups.refresh()
+        val peerId = if(group.optBoolean("joined"))group.getString("peerId") else store.primaryPeerId()
         if (peerId.isEmpty()) return
         val client = protocol(peerId, tracked=true)
         try {
             client.use {
                 LanProtocol.requirePairedCapabilities(client.call("capabilities"))
-                sync.acceptLan(client.call("state", sync.exportLan(includeFeatures).put("includeFeatures", includeFeatures)))
+                if(group.optBoolean("joined"))groups.synchronize(client)
+                else sync.acceptLan(client.call("state", sync.exportLan(includeFeatures).put("includeFeatures", includeFeatures)))
             }
         } finally { if (transport === client) transport = null }
+        if(group.optBoolean("joined") && !group.optBoolean("paused"))preferences.synchronize(includeUserData=false,captureFeedback=false,fetchResults=false)
     }
 
-    /** No scan, audio hashing, inference or learning work. Also runs on unchanged file checkpoints. */
+    /** No scan, audio hashing, inference, feedback capture or model download; relays existing group learning events. */
     internal suspend fun syncBackgroundMetadata() = withContext(Dispatchers.IO) {
         gate.withLock {
-            if (!store.read().has("connection") || store.read().optBoolean("autoCancelled")) return@withLock
+            if ((!store.read().has("connection") && !groups.refresh().optBoolean("joined")) || store.read().optBoolean("autoCancelled")) return@withLock
             networkPolicy.requireAllowed()
             exchangeUserData(includeFeatures = false)
         }
@@ -319,6 +325,10 @@ class LanSyncService @Inject constructor(
             _status.value = LanStatus(text = context.getString(R.string.lan_paired_identity, connection.getString("name"), uri.endpoint))
         }
     }
+    suspend fun joinGroup(peer: String=store.selectedPeerId()) {
+        groups.join(peer);automation.configure();syncBackgroundMetadata();report()
+    }
+    suspend fun synchronizeGroup()=withContext(Dispatchers.IO) { gate.withLock { networkPolicy.requireAllowed();exchangeUserData(false);report() } }
     suspend fun roots(peerId: String = store.selectedPeerId()): List<JSONObject> = withContext(Dispatchers.IO) {
       try {
         protocol(peerId).use { client ->

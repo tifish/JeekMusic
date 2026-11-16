@@ -2,7 +2,7 @@
 
 文件同步在两端都存在时按文件修改时间、大小、软件最后编辑时间决定方向；删除与未知状态仍使用最后一次双方确认的基线。用户数据沿用 format 2 / SyncMerge，个人学习事件沿用协议3。无需云账号、中继或自动发现。公网监听、预算、部署边界见[公网部署说明](lan-public-deployment.md)，不会自动开放公网或桥接MCP。
 
-多 PC、多手机的后续架构、协议迁移和分期验收见[多设备同步设计与实施计划](multi-device-sync-plan.md)。该文档为设计草案，所述同步组、PC 同步客户端及新 MCP 能力尚未实现。
+多 PC、多手机的架构、迁移和分期验收见[实施计划](multi-device-sync-plan.md)。当前已接入[个人数据同步组（P2）](personal-data-groups.md)：主 PC 汇聚成员 PC／手机的个人数据，新增 sync_peers、sync_groups。Windows 主动文件副本与显式集合绑定仍属 P3；未加入组的链路继续使用下述旧格式行为。
 
 Android 的[多 PC 独立连接（P1）](multi-peer-connections.md)已实现：新增电脑不覆盖原配对，文件映射和退避按设备隔离；个人数据仍只与主电脑同步。同步组及 PC 出站同步继续按后续阶段交付。
 

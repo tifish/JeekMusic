@@ -42,7 +42,7 @@ object SyncMerge {
             .map { (_, list) -> list.maxBy { it.writtenAt } }
             .sortedBy { it.device.id }
 
-    fun merge(local: SyncState, remoteFiles: List<SyncFile>, selfId: String, now: Long): MergeResult {
+    fun merge(local: SyncState, remoteFiles: List<SyncFile>, selfId: String, now: Long, retainTombstones: Boolean = false): MergeResult {
         val remotes = latestPerDevice(remoteFiles, selfId)
         val changes = mutableListOf<SyncChange>()
         val replaced = mutableListOf<ReplacedPlaylist>()
@@ -79,7 +79,7 @@ object SyncMerge {
                 f.state.playlists[uid]?.let { if (best == null || it.updatedAt > best!!.updatedAt) { best = it; bestFrom = f } }
                 f.state.deletedPlaylists[uid]?.let { if (deletedAt == null || it > deletedAt!!) { deletedAt = it; deletedFrom = f } }
             }
-            if (deletedAt != null && now - deletedAt!! > RETENTION_MS) deletedAt = null
+            if (!retainTombstones && deletedAt != null && now - deletedAt!! > RETENTION_MS) deletedAt = null
             val alive = best != null && (deletedAt == null || best!!.updatedAt > deletedAt!!)
             val mine = local.playlists[uid]
             if (alive) {
@@ -113,7 +113,7 @@ object SyncMerge {
             var from: SyncFile? = null
             for (f in remotes) f.state.tagOverrides[ref]?.get(dim)?.let { if (best == null || it.updatedAt > best!!.updatedAt) { best = it; from = f } }
             val b = best!!
-            if (b.value == null && now - b.updatedAt > RETENTION_MS) continue
+            if (!retainTombstones && b.value == null && now - b.updatedAt > RETENTION_MS) continue
             overrides.getOrPut(ref) { mutableMapOf() }[dim] = b
             if (from != null && b.value != mine?.value) change("tag_override", "$ref|$dim", from!!)
         }
@@ -127,7 +127,7 @@ object SyncMerge {
             var from: SyncFile? = null
             for (f in remotes) f.state.lyricsOffsets[ref]?.let { if (best == null || it.updatedAt > best!!.updatedAt) { best = it; from = f } }
             val b = best!!
-            if (b.value == 0L && now - b.updatedAt > RETENTION_MS) continue
+            if (!retainTombstones && b.value == 0L && now - b.updatedAt > RETENTION_MS) continue
             offsets[ref] = b
             if (from != null && b.value != (mine?.value ?: 0L)) change("lyrics_offset", ref, from!!)
         }

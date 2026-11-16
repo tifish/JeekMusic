@@ -46,6 +46,10 @@ class SyncService @Inject constructor(
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
+    internal val groupReplica = GroupReplica(GroupSqlRows(db)) { System.currentTimeMillis() }
+    private var groupLibrarySignatures: List<String>? = null
+    @Volatile var groupActive = false
+        private set
     private val journal = AtomicFile(File(context.filesDir, "sync-state.json"))
     private var metadata = JSONObject()
     private var loaded = false
@@ -73,7 +77,7 @@ class SyncService @Inject constructor(
         started = true
         scope.launch(Dispatchers.IO) {
             merge(
-                db.invalidationTracker.createFlow("playlist", "playlist_item", "pinned_tab", "tag_override", "lyrics_offset", "track").map { Unit },
+                db.invalidationTracker.createFlow("playlist", "playlist_item", "pinned_tab", "tag_override", "lyrics_offset", "track", "track_language").map { Unit },
                 settings.settings.map { it.scan }.distinctUntilChanged().map { Unit },
             ).debounce(2_000).collect { syncNow() }
         }
@@ -102,6 +106,7 @@ class SyncService @Inject constructor(
         history = metadata.optJSONArray("history") ?: JSONArray()
         device = device.copy(id = metadata.optString("id").ifEmpty { device.id }, name = metadata.optString("name").ifEmpty { Build.MODEL })
         loaded = true
+        groupActive = groupReplica.active
         if (stored == null) saveJournal()
     }
 
@@ -176,6 +181,11 @@ class SyncService @Inject constructor(
         mutex.withLock {
             try {
                 ensureLoaded()
+                if(groupActive) {
+                    if(incoming!=null)throw GroupSyncException("upgrade_required")
+                    groupFrameUnlocked { true }
+                    return@withLock 0
+                }
                 val directory = directoryRequested && directoryEnabled
                 applyPendingRules()
                 if (scanner.busy.value) { if(incoming!=null) error("Library scan busy; retry user-data exchange"); return@withLock 0 }
@@ -301,7 +311,7 @@ class SyncService @Inject constructor(
         return false
     }
 
-    private suspend fun shareFeatures(folders: List<LibraryFolderEntity>, tracks: List<TrackEntity>, roots: List<BackupRefs.Root>, match: (String) -> String?, incoming: JSONObject? = null, export: Boolean = false): JSONObject {
+    private suspend fun shareFeatures(folders: List<LibraryFolderEntity>, tracks: List<TrackEntity>, roots: List<BackupRefs.Root>, match: (String) -> String?, incoming: JSONObject? = null, export: Boolean = false, notify: Boolean = true): JSONObject {
         if(folders.isEmpty() && incoming==null && !export) return JSONObject()
         val byKey = tracks.associateBy { it.trackKey }
         var imported = false
@@ -330,7 +340,7 @@ class SyncService @Inject constructor(
                 imported = true
             }
         }
-        if (imported) tags.recomputeAll()
+        if (imported && notify) tags.recomputeAll()
         if(folders.isEmpty() && !export) return JSONObject()
         val items = JSONObject()
         for (f in db.tagDao().allFeatures().filter { it.complete() && it.analyzerVersion == TagRepository.ANALYZER_VERSION }) {
@@ -357,6 +367,7 @@ class SyncService @Inject constructor(
     suspend fun exportLan(includeFeatures: Boolean = true): JSONObject = withContext(Dispatchers.IO) {
         mutex.withLock {
             ensureLoaded()
+            if(groupActive)throw GroupSyncException("upgrade_required")
             val folders = db.folderDao().all()
             val state = capture(folders) { it }
             val result = JSONObject().put("state", SyncFormat.toJson(SyncFile(device, System.currentTimeMillis(), state)))
@@ -380,8 +391,143 @@ class SyncService @Inject constructor(
         }
     }
     private val adapterSettings=context.getSharedPreferences("sync-adapter",Context.MODE_PRIVATE)
-    val directoryEnabled get()=adapterSettings.getBoolean("legacy_directory",true)
-    fun setDirectoryEnabled(enabled: Boolean) { adapterSettings.edit().putBoolean("legacy_directory",enabled).apply() }
+    val directoryEnabled get()=!groupActive && adapterSettings.getBoolean("legacy_directory",true)
+    fun setDirectoryEnabled(enabled: Boolean) { check(!enabled || !groupActive) { "Group sync requires format 3" };adapterSettings.edit().putBoolean("legacy_directory",enabled).apply() }
+
+    internal suspend fun <T> groupFrame(operation: suspend (GroupReplica)->T): T = withContext(Dispatchers.IO) {
+        mutex.withLock { ensureLoaded();groupFrameUnlocked(operation=operation) }
+    }
+    internal suspend fun joinGroup(server: JSONObject,actor: String,incarnation: String,peer: String)=withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded();metadata.put("group_root_bindings",server.optJSONObject("rootAliases") ?: JSONObject())
+        groupFrameUnlocked(peerHint=peer) { it.join(server,actor,incarnation,peer) }
+    } }
+    internal suspend fun updateGroupAliases(server: JSONObject)=withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded();metadata.put("group_root_bindings",server.optJSONObject("rootAliases") ?: JSONObject());saveJournal()
+    } }
+    suspend fun groupStatus(): JSONObject = withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded()
+        (if(groupReplica.active)groupReplica.info().put("joined",true) else JSONObject().put("joined",false))
+            .put("paused",metadata.optBoolean("group_paused"))
+    } }
+    internal suspend fun groupJoinIncarnation(peer: String): String = withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded();check(!groupReplica.active) { "Already joined a sync group" }
+        val pending=metadata.optJSONObject("group_join")
+        if(pending!=null && pending.optString("peerId")==peer)pending.getString("incarnation")
+        else UUID.randomUUID().toString().also { metadata.put("group_join",JSONObject().put("peerId",peer).put("incarnation",it));saveJournal() }
+    } }
+    suspend fun pauseGroup(value: Boolean) = withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded();metadata.put("group_paused",value);saveJournal()
+    } }
+    internal suspend fun groupRecoveryIncarnation(): String = withContext(Dispatchers.IO) { mutex.withLock {
+        ensureLoaded();check(groupReplica.active)
+        metadata.optString("group_recovery_incarnation").ifEmpty { UUID.randomUUID().toString().also {
+            metadata.put("group_recovery_incarnation",it);saveJournal()
+        } }
+    } }
+    internal suspend fun recoverGroup(server: JSONObject,incarnation: String)=groupFrame {
+        it.recover(server,incarnation);metadata.remove("group_recovery_incarnation")
+    }
+    private suspend fun <T> groupFrameUnlocked(peerHint: String?=null,operation: suspend (GroupReplica)->T): T {
+        applyPendingRules()
+        val folders=db.folderDao().all()
+        val roots=folders.map { BackupRefs.Root(it.volumeName,it.relativePath) }
+        val peer=peerHint ?: if(groupReplica.active)groupReplica.info().getString("peerId") else ""
+        val bindings=metadata.optJSONObject("group_root_bindings") ?: JSONObject()
+        fun canonical(value: String): String {
+            var reference=value
+            val prefix="peer:$peer/"
+            if(peer.isNotEmpty() && reference.startsWith(prefix))reference=reference.removePrefix(prefix)
+            if(reference.startsWith("root:") && peer.isNotEmpty() && (value.startsWith(prefix) || lan.primaryPeerId()==peer)) {
+                val root=reference.substringAfter("root:").substringBefore('/')
+                val collection=bindings.optString(root)
+                return if(collection.isNotEmpty())"collection:$collection/"+reference.substringAfter('/') else "peer:$peer/$reference"
+            }
+            if(reference.startsWith("root:"))return "peer:${lan.primaryPeerId()}/$reference"
+            return if(BackupRefs.isManagedReference(reference))reference else "device:${device.id}/$reference"
+        }
+        val tracks=db.trackDao().all()
+        val librarySignatures=tracks.map { "${it.trackKey}:${it.size}:${it.dateModified}:${it.durationMs}:${it.startMs}" }
+        val references=tracks.associate { track ->
+            val reference=reference(track.trackKey,roots)
+            track.trackKey to if(BackupRefs.isManagedReference(reference))canonical(reference) else "device:${device.id}/local:${track.trackKey}"
+        }
+        val index=references.entries.groupBy { it.value }.filterValues { it.size==1 }.mapValues { it.value.single().key }
+        fun match(value: String)=index[value] ?: index[canonical(value)]
+        suspend fun projection(): SyncState {
+            val captured=capture(folders,::canonical)
+            return if(metadata.optBoolean("pending_rules"))captured.copy(rules=previous.rules) else captured
+        }
+        suspend fun seeds(): Map<String,GroupSeed> {
+            val state=SyncFormat.stateToJson(projection())
+            state.put("vocal_languages",LanguageExchange(db).export { references[it] ?: canonical(reference(it,roots)) })
+            val caches=JSONArray();val byKey=tracks.associateBy { it.trackKey }
+            for(row in db.tagDao().allFeatures().filter { it.complete() && it.analyzerVersion==TagRepository.ANALYZER_VERSION }) {
+                val track=byKey[row.trackKey] ?: continue
+                if(row.signature!="${track.dateModified}:${track.size}")continue
+                caches.put(JSONObject().put("reference",references.getValue(track.trackKey)).put("analyzer_version",row.analyzerVersion)
+                    .put("size",track.size).put("duration_ms",track.durationMs).put("start_ms",track.startMs ?: 0L).put("updated_at",row.analyzedAt)
+                    .put("features",featureJson(row)))
+            }
+            state.put("analysis_cache",caches)
+            return GroupUserData.flatten(state)
+        }
+        var changed=false
+        try {
+            val result=db.withTransaction {
+                val existed=groupReplica.active
+                previous=SyncMerge.normalizeReferences(previous,::canonical)
+                if(existed && groupLibrarySignatures!=librarySignatures) { apply(MergeResult(projection(),emptyList(),emptyList()),::match);changed=true }
+                if(existed)groupReplica.capture(seeds())
+                val result=operation(groupReplica)
+                if(groupReplica.active) {
+                    if(!existed)groupReplica.capture(seeds())
+                    if(groupLibrarySignatures!=librarySignatures)groupReplica.reapplyCaches()
+                    while(true) {
+                        val mutations=groupReplica.pendingApply();if(mutations.isEmpty())break
+                        val local=projection()
+                        val newest=GroupUserData.flatten(SyncFormat.stateToJson(local)).values.maxOfOrNull { it.editedAtMs } ?: 0
+                        if(newest>=GroupSyncContract.MAX_INTEGER)throw GroupSyncException("clock_exhausted")
+                        val stamp=maxOf(System.currentTimeMillis(),newest+1)
+                        val changes=SyncFormat.stateFromJson(GroupUserData.materialize(mutations.filterNot { GroupUserData.isCache(it.key) },stamp))
+                        for(mutation in mutations.filter { GroupUserData.isCache(it.key) }) {
+                            val cache=GroupUserData.materialize(listOf(mutation),stamp)
+                            LanguageExchange(db).accept(cache.optJSONObject("vocal_languages"),::match)
+                            val entries=cache.optJSONArray("analysis_cache")
+                            if(entries!=null)repeat(entries.length()) { index ->
+                                val entry=entries.getJSONObject(index)
+                                val track=match(entry.getString("reference"))?.let { key -> tracks.singleOrNull { it.trackKey==key } }
+                                if(track!=null && entry.getLong("start_ms")== (track.startMs ?: 0L)) {
+                                    val items=JSONObject().put(entry.getString("reference"),entry)
+                                    shareFeatures(emptyList(),tracks,roots,::match,JSONObject().put("format",2).put("analyzer_version",entry.getInt("analyzer_version")).put("items",items),notify=false)
+                                }
+                            }
+                        }
+                        val merged=SyncMerge.merge(local,listOf(SyncFile(SyncDevice("group-projection","同步组","group","3"),stamp,changes)),device.id,stamp,retainTombstones=true)
+                        apply(merged,::match)
+                        if(changes.rules!=null)metadata.put("pending_rules",true)
+                        previous=merged.state
+                        groupReplica.projected(seeds(),mutations)
+                        changed=true
+                    }
+                    metadata.put("initialized",true)
+                    saveJournal()
+                }
+                result
+            }
+            groupActive=groupReplica.active
+            groupLibrarySignatures=librarySignatures
+            if(groupActive)adapterSettings.edit().putBoolean("legacy_directory",false).apply()
+            applyPendingRules()
+            if(changed)tags.recomputeAll()
+            return result
+        } catch(exception: Exception) { loaded=false;throw exception }
+    }
+    private fun featureJson(row: TrackFeaturesEntity)=JSONObject()
+        .put("bpm",row.bpm ?: JSONObject.NULL).put("bpm_confidence",row.bpmConfidence).put("loudness",row.loudness)
+        .put("loudness_range",row.loudnessRange).put("onset_rate",row.onsetRate).put("centroid_hz",row.centroidHz).put("low_ratio",row.lowRatio)
+        .put("vocal_score",row.vocalScore ?: JSONObject.NULL).put("classical_score",row.classicalScore ?: JSONObject.NULL)
+        .put("calm_level",row.calmLevel ?: JSONObject.NULL).put("energy_level",row.energyLevel ?: JSONObject.NULL).put("orchestra_level",row.orchestraLevel ?: JSONObject.NULL)
+        .put("analysis_evidence",row.analysisEvidence).put("analysis_attempts",row.analysisAttempts)
     suspend fun history(): List<Pair<Int, String>> = withContext(Dispatchers.IO) { mutex.withLock { ensureLoaded(); List(history.length()) { it to history.getJSONObject(it).getJSONObject("playlist").getString("name") } } }
     suspend fun restoreHistory(index: Int) = withContext(Dispatchers.IO) {
         mutex.withLock {

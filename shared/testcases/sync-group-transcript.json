@@ -1,0 +1,699 @@
+{
+  "description": "Independent hand-specified member transcript; fingerprints use length-prefixed UTF-8 SHA-256, not either client implementation.",
+  "server": {
+    "groupId": "group-a",
+    "generation": 1,
+    "coordinatorDeviceId": "pc-a"
+  },
+  "actorId": "phone-a",
+  "incarnation": "inc-a",
+  "peerId": "peer-a",
+  "now": 1000,
+  "steps": [
+    {
+      "description": "initial legacy values preserve their original times",
+      "action": "capture",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": "SPORT",
+              "updated_at": 20
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 100,
+            "updated_at": 10
+          }
+        }
+      },
+      "expected": {
+        "outbox": 3,
+        "pendingApply": 0,
+        "cursor": 0,
+        "generation": 1,
+        "firstOutbox": {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "offset:collection:music/曲目🎵.flac",
+          "version": {
+            "physicalMs": 10,
+            "logicalCounter": 0,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "inc-a",
+            "originSequence": 1
+          },
+          "payload": "100"
+        }
+      }
+    },
+    {
+      "description": "snapshot cannot erase a newer local deletion or pending outbox",
+      "action": "snapshot",
+      "page": {
+        "groupId": "group-a",
+        "generation": 1,
+        "snapshotId": "snapshot-a",
+        "head": 10,
+        "next": 3,
+        "hasMore": false,
+        "rows": [
+          {
+            "receipt": 1,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "offset:collection:music/曲目🎵.flac",
+              "version": {
+                "physicalMs": 15,
+                "logicalCounter": 0,
+                "originDeviceId": "pc-a",
+                "deviceIncarnation": "inc-pc",
+                "originSequence": 1
+              },
+              "payload": "250"
+            }
+          },
+          {
+            "receipt": 2,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "playlist:list-a",
+              "version": {
+                "physicalMs": 10,
+                "logicalCounter": 0,
+                "originDeviceId": "pc-a",
+                "deviceIncarnation": "inc-pc",
+                "originSequence": 2
+              },
+              "payload": "{\"items\":[],\"name\":\"old\"}"
+            }
+          },
+          {
+            "receipt": 3,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "tag:26:collection:music/曲目🎵.flac:MOOD",
+              "version": {
+                "physicalMs": 25,
+                "logicalCounter": 0,
+                "originDeviceId": "pc-a",
+                "deviceIncarnation": "inc-pc",
+                "originSequence": 3
+              },
+              "payload": "\"QUIET\""
+            }
+          }
+        ]
+      },
+      "expected": {
+        "outbox": 3,
+        "pendingApply": 2,
+        "cursor": 10,
+        "generation": 1
+      }
+    },
+    {
+      "description": "materialize remote values without changing origins",
+      "action": "project",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": "QUIET",
+              "updated_at": 100
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 250,
+            "updated_at": 100
+          }
+        }
+      },
+      "expected": {
+        "outbox": 3,
+        "pendingApply": 0,
+        "cursor": 10,
+        "generation": 1
+      }
+    },
+    {
+      "description": "receiving values does not create local edits",
+      "action": "capture",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": "QUIET",
+              "updated_at": 100
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 250,
+            "updated_at": 100
+          }
+        }
+      },
+      "expected": {
+        "outbox": 3,
+        "pendingApply": 0,
+        "cursor": 10,
+        "generation": 1
+      }
+    },
+    {
+      "description": "invalid receipt cannot discard an outbox record",
+      "action": "receipts",
+      "receipts": [
+        {
+          "originSequence": 1,
+          "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+          "receipt": 11
+        }
+      ],
+      "error": "receipt_mismatch",
+      "expected": {
+        "outbox": 3,
+        "pendingApply": 0,
+        "cursor": 10,
+        "generation": 1
+      }
+    },
+    {
+      "description": "verified receipts release only the acknowledged originals",
+      "action": "receipts",
+      "receipts": [
+        {
+          "originSequence": 1,
+          "fingerprint": "8f0446c7bc72a19b0c0c82a799bc4c6dd5e6f0342e7b60781958a09e89c6fd4b",
+          "receipt": 11
+        },
+        {
+          "originSequence": 2,
+          "fingerprint": "c261fd3c014b00657922456996baa881d08dbcc78f5b2b9c1b0f83be1ad5c340",
+          "receipt": 12
+        },
+        {
+          "originSequence": 3,
+          "fingerprint": "27eb06b9058cec4c409bb289048e6e86db1867db5f2af928bc1426d65bdf2961",
+          "receipt": 13
+        }
+      ],
+      "expected": {
+        "outbox": 0,
+        "pendingApply": 0,
+        "cursor": 10,
+        "generation": 1
+      }
+    },
+    {
+      "description": "new user edit follows observed clocks even with an older supplied wall stamp",
+      "action": "capture",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": "QUIET",
+              "updated_at": 100
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 300,
+            "updated_at": 5
+          }
+        }
+      },
+      "expected": {
+        "outbox": 1,
+        "pendingApply": 0,
+        "cursor": 10,
+        "generation": 1,
+        "firstOutbox": {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "offset:collection:music/曲目🎵.flac",
+          "version": {
+            "physicalMs": 1000,
+            "logicalCounter": 3,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "inc-a",
+            "originSequence": 4
+          },
+          "payload": "300"
+        }
+      }
+    },
+    {
+      "description": "duplicate own events and remote reset converge",
+      "action": "receive",
+      "page": {
+        "groupId": "group-a",
+        "generation": 1,
+        "head": 15,
+        "next": 15,
+        "hasMore": false,
+        "rows": [
+          {
+            "receipt": 11,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "offset:collection:music/曲目🎵.flac",
+              "version": {
+                "physicalMs": 10,
+                "logicalCounter": 0,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 1
+              },
+              "payload": "100"
+            }
+          },
+          {
+            "receipt": 12,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "playlist:list-a",
+              "version": {
+                "physicalMs": 30,
+                "logicalCounter": 0,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 2
+              },
+              "payload": null
+            }
+          },
+          {
+            "receipt": 13,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "tag:26:collection:music/曲目🎵.flac:MOOD",
+              "version": {
+                "physicalMs": 20,
+                "logicalCounter": 0,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 3
+              },
+              "payload": "\"SPORT\""
+            }
+          },
+          {
+            "receipt": 14,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "offset:collection:music/曲目🎵.flac",
+              "version": {
+                "physicalMs": 1000,
+                "logicalCounter": 3,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 4
+              },
+              "payload": "300"
+            }
+          },
+          {
+            "receipt": 15,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 1,
+              "key": "tag:26:collection:music/曲目🎵.flac:MOOD",
+              "version": {
+                "physicalMs": 2000,
+                "logicalCounter": 0,
+                "originDeviceId": "pc-a",
+                "deviceIncarnation": "inc-pc",
+                "originSequence": 4
+              },
+              "payload": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "outbox": 1,
+        "pendingApply": 1,
+        "cursor": 15,
+        "generation": 1,
+        "firstOutbox": {
+          "groupId": "group-a",
+          "generation": 1,
+          "key": "offset:collection:music/曲目🎵.flac",
+          "version": {
+            "physicalMs": 1000,
+            "logicalCounter": 3,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "inc-a",
+            "originSequence": 4
+          },
+          "payload": "300"
+        }
+      }
+    },
+    {
+      "description": "applying a reset leaves no pending business write",
+      "action": "project",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": null,
+              "updated_at": 2000
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 300,
+            "updated_at": 5
+          }
+        }
+      },
+      "expected": {
+        "outbox": 1,
+        "pendingApply": 0,
+        "cursor": 15,
+        "generation": 1
+      }
+    },
+    {
+      "description": "cleared annotation does not echo back",
+      "action": "capture",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": null,
+              "updated_at": 2000
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 300,
+            "updated_at": 5
+          }
+        }
+      },
+      "expected": {
+        "outbox": 1,
+        "pendingApply": 0,
+        "cursor": 15,
+        "generation": 1
+      }
+    },
+    {
+      "description": "generation reset preserves pending business origin",
+      "action": "reset",
+      "generation": 2,
+      "expected": {
+        "outbox": 1,
+        "pendingApply": 0,
+        "cursor": 0,
+        "generation": 2,
+        "firstOutbox": {
+          "groupId": "group-a",
+          "generation": 2,
+          "key": "offset:collection:music/曲目🎵.flac",
+          "version": {
+            "physicalMs": 1000,
+            "logicalCounter": 3,
+            "originDeviceId": "phone-a",
+            "deviceIncarnation": "inc-a",
+            "originSequence": 4
+          },
+          "payload": "300"
+        }
+      }
+    },
+    {
+      "description": "receipt fingerprint is independent of receive generation",
+      "action": "receipts",
+      "receipts": [
+        {
+          "originSequence": 4,
+          "fingerprint": "075338544c2bdd118be640a2e391a1b43daf94a69996f2e72b90410b6dd5a21a",
+          "receipt": 14
+        }
+      ],
+      "expected": {
+        "outbox": 0,
+        "pendingApply": 0,
+        "cursor": 0,
+        "generation": 2
+      }
+    },
+    {
+      "description": "previous generation cannot advance the new cursor",
+      "action": "receive",
+      "page": {
+        "groupId": "group-a",
+        "generation": 1,
+        "head": 15,
+        "next": 15,
+        "hasMore": false,
+        "rows": []
+      },
+      "error": "reset_required",
+      "expected": {
+        "outbox": 0,
+        "pendingApply": 0,
+        "cursor": 0,
+        "generation": 2
+      }
+    },
+    {
+      "description": "fresh snapshot preserves original versions through generation change",
+      "action": "snapshot",
+      "page": {
+        "groupId": "group-a",
+        "generation": 2,
+        "snapshotId": "snapshot-b",
+        "head": 15,
+        "next": 15,
+        "hasMore": false,
+        "rows": [
+          {
+            "receipt": 12,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 2,
+              "key": "playlist:list-a",
+              "version": {
+                "physicalMs": 30,
+                "logicalCounter": 0,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 2
+              },
+              "payload": null
+            }
+          },
+          {
+            "receipt": 14,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 2,
+              "key": "offset:collection:music/曲目🎵.flac",
+              "version": {
+                "physicalMs": 1000,
+                "logicalCounter": 3,
+                "originDeviceId": "phone-a",
+                "deviceIncarnation": "inc-a",
+                "originSequence": 4
+              },
+              "payload": "300"
+            }
+          },
+          {
+            "receipt": 15,
+            "mutation": {
+              "groupId": "group-a",
+              "generation": 2,
+              "key": "tag:26:collection:music/曲目🎵.flac:MOOD",
+              "version": {
+                "physicalMs": 2000,
+                "logicalCounter": 0,
+                "originDeviceId": "pc-a",
+                "deviceIncarnation": "inc-pc",
+                "originSequence": 4
+              },
+              "payload": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "outbox": 0,
+        "pendingApply": 0,
+        "cursor": 15,
+        "generation": 2
+      }
+    },
+    {
+      "description": "restored snapshot has no synthetic local changes",
+      "action": "capture",
+      "state": {
+        "deleted_playlists": [
+          {
+            "uid": "list-a",
+            "deleted_at": 30
+          }
+        ],
+        "tag_overrides": {
+          "collection:music/曲目🎵.flac": {
+            "MOOD": {
+              "value": null,
+              "updated_at": 2000
+            }
+          }
+        },
+        "lyrics_offsets": {
+          "collection:music/曲目🎵.flac": {
+            "offset_ms": 300,
+            "updated_at": 5
+          }
+        }
+      },
+      "expected": {
+        "outbox": 0,
+        "pendingApply": 0,
+        "cursor": 15,
+        "generation": 2
+      }
+    }
+  ],
+  "fingerprints": [
+    {
+      "mutation": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "offset:collection:music/曲目🎵.flac",
+        "version": {
+          "physicalMs": 10,
+          "logicalCounter": 0,
+          "originDeviceId": "phone-a",
+          "deviceIncarnation": "inc-a",
+          "originSequence": 1
+        },
+        "payload": "100"
+      },
+      "expected": "8f0446c7bc72a19b0c0c82a799bc4c6dd5e6f0342e7b60781958a09e89c6fd4b"
+    },
+    {
+      "mutation": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "playlist:list-a",
+        "version": {
+          "physicalMs": 30,
+          "logicalCounter": 0,
+          "originDeviceId": "phone-a",
+          "deviceIncarnation": "inc-a",
+          "originSequence": 2
+        },
+        "payload": null
+      },
+      "expected": "c261fd3c014b00657922456996baa881d08dbcc78f5b2b9c1b0f83be1ad5c340"
+    },
+    {
+      "mutation": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "tag:26:collection:music/曲目🎵.flac:MOOD",
+        "version": {
+          "physicalMs": 20,
+          "logicalCounter": 0,
+          "originDeviceId": "phone-a",
+          "deviceIncarnation": "inc-a",
+          "originSequence": 3
+        },
+        "payload": "\"SPORT\""
+      },
+      "expected": "27eb06b9058cec4c409bb289048e6e86db1867db5f2af928bc1426d65bdf2961"
+    },
+    {
+      "mutation": {
+        "groupId": "group-a",
+        "generation": 1,
+        "key": "offset:collection:music/曲目🎵.flac",
+        "version": {
+          "physicalMs": 1000,
+          "logicalCounter": 3,
+          "originDeviceId": "phone-a",
+          "deviceIncarnation": "inc-a",
+          "originSequence": 4
+        },
+        "payload": "300"
+      },
+      "expected": "075338544c2bdd118be640a2e391a1b43daf94a69996f2e72b90410b6dd5a21a"
+    },
+    {
+      "mutation": {
+        "groupId": "group-a",
+        "generation": 2,
+        "key": "offset:collection:music/曲目🎵.flac",
+        "version": {
+          "physicalMs": 1000,
+          "logicalCounter": 3,
+          "originDeviceId": "phone-a",
+          "deviceIncarnation": "inc-a",
+          "originSequence": 4
+        },
+        "payload": "300"
+      },
+      "expected": "075338544c2bdd118be640a2e391a1b43daf94a69996f2e72b90410b6dd5a21a"
+    }
+  ]
+}

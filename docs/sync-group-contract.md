@@ -1,5 +1,7 @@
 # 多设备同步 P0：共享合同基础 revision 1
 
+后续 P2 已将本合同接入持久化、认证网络、两端业务和 UI/MCP，见[个人数据组说明](personal-data-groups.md)。下面的“本阶段”指最初 P0 交付边界。
+
 本阶段实现跨 Windows／Android 的纯函数和共享夹具，不连接现有 LAN 服务、数据库、用户数据 format 2、文件比较或自动调度，不发布新的 capabilities。完整 format 3 envelope、认证、持久化和网络交互仍属于后续阶段，不能据此宣称多设备同步已可用。总体路线见[实施计划](multi-device-sync-plan.md)。
 
 实现：[C#](../desktop/src/JeekMusic.Core/Sync/GroupSyncContract.cs)、[Kotlin](../mobile/app/src/main/kotlin/com/tinyfish/jeekmusic/data/sync/GroupSyncContract.kt)。结构定义见 [JSON Schema](../shared/contracts/sync-group-v1.schema.json)，共享行为见[测试夹具](../shared/testcases/sync-group-contract.json)。revision 1 表示基础合同版本，不是传输号、文件协议号或用户数据 format。

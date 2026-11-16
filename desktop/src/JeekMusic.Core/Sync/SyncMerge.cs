@@ -145,7 +145,7 @@ public static class SyncMerge
         .Where(f => Number(f["format"]) == 2 && Id(f).Length > 0 && Id(f) != self)
         .GroupBy(Id).Select(g => g.MaxBy(f => Number(f["written_at"]))!).OrderBy(Id, StringComparer.Ordinal).ToList();
 
-    public static MergeResult Merge(JsonObject local, IEnumerable<JsonObject> files, string self, long now)
+    public static MergeResult Merge(JsonObject local, IEnumerable<JsonObject> files, string self, long now, bool retainTombstones = false)
     {
         var remotes = LatestPerDevice(files, self);
         var changes = new List<SyncChange>();
@@ -175,7 +175,7 @@ public static class SyncMerge
                 if (Find(file, "deleted_playlists") is { } tombstone && (deletedAt is null || Number(tombstone["deleted_at"]) > deletedAt))
                 { deletedAt = Number(tombstone["deleted_at"]); deletedFrom = file; }
             }
-            if (deletedAt is { } at && now - at > RetentionMs) deletedAt = null;
+            if (!retainTombstones && deletedAt is { } at && now - at > RetentionMs) deletedAt = null;
             if (best is not null && (deletedAt is null || Number(best["updated_at"]) > deletedAt))
             {
                 playlists.Add(best.DeepClone());
@@ -200,7 +200,7 @@ public static class SyncMerge
                 var mine = local["tag_overrides"]?[reference]?[dim]; var best = mine; JsonObject? from = null;
                 foreach (var file in remotes)
                     if (file["tag_overrides"]?[reference]?[dim] is { } candidate && (best is null || Number(candidate["updated_at"]) > Number(best["updated_at"]))) { best = candidate; from = file; }
-                if (best is null || best["value"] is null && now - Number(best["updated_at"]) > RetentionMs) continue;
+                if (best is null || !retainTombstones && best["value"] is null && now - Number(best["updated_at"]) > RetentionMs) continue;
                 if (overrides[reference] is null) overrides[reference] = new JsonObject();
                 overrides[reference]![dim] = best.DeepClone();
                 if (from is not null && !JsonNode.DeepEquals(best["value"], mine?["value"])) Change("tag_override", reference + "|" + dim, from);
@@ -214,7 +214,7 @@ public static class SyncMerge
             var mine = local["lyrics_offsets"]?[reference]; var best = mine; JsonObject? from = null;
             foreach (var file in remotes)
                 if (file["lyrics_offsets"]?[reference] is { } candidate && (best is null || Number(candidate["updated_at"]) > Number(best["updated_at"]))) { best = candidate; from = file; }
-            if (best is null || Number(best["offset_ms"]) == 0 && now - Number(best["updated_at"]) > RetentionMs) continue;
+            if (best is null || !retainTombstones && Number(best["offset_ms"]) == 0 && now - Number(best["updated_at"]) > RetentionMs) continue;
             offsets[reference] = best.DeepClone();
             if (from is not null && Number(best["offset_ms"]) != Number(mine?["offset_ms"])) Change("lyrics_offset", reference, from);
         }

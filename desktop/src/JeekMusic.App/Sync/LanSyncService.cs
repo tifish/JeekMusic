@@ -282,7 +282,7 @@ public sealed partial class LanSyncService : IDisposable
     {
         lock (_gate) return Port != 0 && _invitation is not null && DateTime.UtcNow < _invitationUntil && value.EndsWith("/" + _invitation, StringComparison.Ordinal);
     }
-    public void Revoke(string id) { lock (_gate) { Invalidate(id); Devices.Remove(id); _rates.Remove(id); _transfers.Remove(id); Save(); } Notify(); }
+    public void Revoke(string id) { lock (_gate) { Invalidate(id); Devices.Remove(id); _rates.Remove(id); _transfers.Remove(id); _app.GroupSync.Revoke(id); Save(); } Notify(); }
     public void Authorize(string id, JsonObject permissions, int credentialDays = 90) =>
         throw new NotSupportedException("Per-permission authorization is retired. Paired devices have all sync capabilities. Use revoke to remove access.");
     public void Configure(string bindAddress, int port)
@@ -329,8 +329,13 @@ public sealed partial class LanSyncService : IDisposable
     {
         if (!LanPairingPolicy.Keys.Contains(permission) || Devices[device] is not JsonObject paired || !LanPairingPolicy.HasCredential(paired)) throw new UnauthorizedAccessException();
     }
+    internal IReadOnlyDictionary<string,string> DeviceNames()
+    {
+        lock(_gate)return Devices.ToDictionary(p=>p.Key,p=>p.Value?["name"]?.GetValue<string>()??p.Key,StringComparer.Ordinal);
+    }
     void RequireOperation(string device, string? operation)
     {
+        _app.GroupSync.RequireGroupAccess(device,operation);
         if (operation == "capabilities") return;
         if(operation?.StartsWith("file_",StringComparison.Ordinal)==true) {
             Require(device,"readMusic");
@@ -338,7 +343,7 @@ public sealed partial class LanSyncService : IDisposable
             if(operation=="file_delete") { Require(device,"writeFiles");Require(device,"deleteFiles"); }
             return;
         }
-        if (operation is "state" or "preference_delta") Require(device, "writeSync");
+        if (operation is "state" or "preference_delta" || operation?.StartsWith("group_",StringComparison.Ordinal)==true) Require(device, "writeSync");
         else if (operation is "preference_training" or "preference_results")
         {
             Require(device, "readMusic");
@@ -579,7 +584,7 @@ public sealed partial class LanSyncService : IDisposable
                 try
                 {
                     using var errorDeadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); errorDeadline.CancelAfter(TimeSpan.FromSeconds(2));
-                    await WriteFrame(ssl, Error(e is UnauthorizedAccessException ? "unauthorized" : e is LanBusyException ? "busy" : e is FrameTooLargeException ? "upgrade_required" : "request_refused"), errorDeadline.Token);
+                    await WriteFrame(ssl, Error(e is UnauthorizedAccessException ? "unauthorized" : e is JeekMusic.Core.Sync.GroupSyncException group ? group.Code : e is LanBusyException ? "busy" : e is FrameTooLargeException ? "upgrade_required" : "request_refused"), errorDeadline.Token);
                 }
                 catch (Exception ignored) when (ignored is IOException or OperationCanceledException or ObjectDisposedException or InvalidOperationException or SocketException) { }
             }
@@ -608,10 +613,23 @@ public sealed partial class LanSyncService : IDisposable
         }
         cancel.ThrowIfCancellationRequested();
         var device = Authenticate(a).Device;
-        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["peerScheduleProtocol"]=1,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileDeltaProtocol"]=1,["fileAudioReuse"]=1,["localFileIndex"]=1,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
+        if (op == "capabilities") { lock (_gate) return new JsonObject { ["protocol"] = 4,["syncGroupProtocol"]=1,["userDataFormat"]=3,["groupActive"]=_app.GroupSync.Active,["peerScheduleProtocol"]=1,["fileProtocol"]=3,["contentHashing"]=false,["conflictProtocol"]=1,["conflictStatusProtocol"]=1,["syncNetworkPolicy"]=true,["syncPerformanceDiagnostics"]=true,["fileDeltaProtocol"]=1,["fileAudioReuse"]=1,["localFileIndex"]=1,["fileComparisonPolicy"]="mtime_then_size_then_last_edit",["comparison"]="size+mtime-exact", ["authorizationPolicy"] = LanPairingPolicy.Mode, ["userDataSyncReady"] = Merge is not null, ["permissions"] = LanPairingPolicy.Permissions(), ["expiresAt"] = null, ["credentialPolicy"]="until_revoked" }; }
         lock (_gate)
         {
             RequireOperation(device, op);
+        }
+        if(op?.StartsWith("group_",StringComparison.Ordinal)==true)
+        {
+            if(!modern)throw new JeekMusic.Core.Sync.GroupSyncException("upgrade_required");
+            if(!_work.Wait(0))throw Busy();
+            try
+            {
+                return await Dispatcher.UIThread.InvokeAsync(()=>_app.GroupSync.Handle(op,device,a,commit=>
+                {
+                    lock(_gate) { cancel.ThrowIfCancellationRequested();Authenticate(a);RequireOperation(device,op);commit(); }
+                }));
+            }
+            finally { _work.Release(); }
         }
         if(op?.StartsWith("file_",StringComparison.Ordinal)==true)return await DispatchFile(a,cancel,modern);
         if (op is not ("roots" or "state" or "preference_training" or "preference_results" or "preference_delta" or "tree" or "plan" or "plan_status" or "plan_cancel" or "manifest" or "read" or "verify")) throw new ArgumentException("Unknown operation");
@@ -629,7 +647,7 @@ public sealed partial class LanSyncService : IDisposable
                 if (file["format"]?.GetValue<int>() != 2 || file["device"]?["id"]?.GetValue<string>() != device) throw new UnauthorizedAccessException();
                 if (SyncMerge.ParseFile(file.ToJsonString()) is null) throw new ArgumentException("Invalid sync state");
                 if (!(admitted=_work.Wait(0))) throw Busy();
-                return await Dispatcher.UIThread.InvokeAsync(() => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); return Merge?.LanExchange(file, a["features"] as JsonObject, a["includeFeatures"]?.GetValue<bool>()??true, cancel, commit => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); commit(); } }) ?? throw new IOException("Sync merge not ready"); } });
+                return await Dispatcher.UIThread.InvokeAsync(() => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); return Merge?.LanExchange(file, a["features"] as JsonObject, a["includeFeatures"]?.GetValue<bool>()??true, cancel, commit => { lock (_gate) { cancel.ThrowIfCancellationRequested(); Authenticate(a); Require(device, "writeSync"); _app.GroupSync.RequireGroupAccess(device,"state"); commit(); } }) ?? throw new IOException("Sync merge not ready"); } });
             } catch(Exception ex) { MetadataFailed(device,ex);throw; }
             finally { if(admitted) _work.Release(); }
         }

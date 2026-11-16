@@ -6,7 +6,7 @@ namespace JeekMusic.Core.Library;
 /// </summary>
 public static class BackupRefs
 {
-    public static bool IsManagedReference(string reference) => new[] { "root:", "peer:", "collection:" }.Any(prefix => reference.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    public static bool IsManagedReference(string reference) => new[] { "root:", "peer:", "collection:", "device:" }.Any(prefix => reference.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     public sealed record Root(string VolumeName, string RelativePath);
 
     /// <summary>

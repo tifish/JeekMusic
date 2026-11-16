@@ -3,6 +3,14 @@ package com.tinyfish.jeekmusic.data.db
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `sync_group_row` (`kind` TEXT NOT NULL, `key` TEXT NOT NULL, `value` TEXT NOT NULL, `cursor` INTEGER NOT NULL, PRIMARY KEY(`kind`, `key`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_group_row_kind_cursor_key` ON `sync_group_row` (`kind`, `cursor`, `key`)")
+        db.execSQL("INSERT INTO `sync_group_row` (`kind`,`key`,`value`,`cursor`) VALUES ('quota','global','{\"rows\":0,\"bytes\":0}',0)")
+    }
+}
+
 val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `track_language` (`track_key` TEXT NOT NULL, `source` TEXT NOT NULL, `signature` TEXT NOT NULL, `state` TEXT NOT NULL, `languages` TEXT NOT NULL, `confidence` REAL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`track_key`, `source`), FOREIGN KEY(`track_key`) REFERENCES `track`(`track_key`) ON UPDATE CASCADE ON DELETE CASCADE)")

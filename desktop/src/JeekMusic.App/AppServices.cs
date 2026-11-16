@@ -39,6 +39,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     internal Func<IReadOnlyList<Track>, IReadOnlyDictionary<Core.Analysis.TagDimension, Core.Analysis.Tag?>, string?, Task>? CorrectSmartTags { get; set; }
     public Automation.McpServer Mcp { get; }
     public Sync.LanSyncService LanSync { get; }
+    public Sync.GroupSyncService GroupSync { get; }
     public Preferences.PreferenceService Preferences { get; }
     public WindowMessages Messages { get; } = new();
     public Taskbar Taskbar { get; } = new();
@@ -80,6 +81,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
         SleepTimer = new SleepTimer(Player);
         Lyrics = new LyricsService(Library);
         using (LifecycleTimings.Measure("startupWork.preferences")) Preferences = new Preferences.PreferenceService(this,db is null ? null : ":memory:");
+        GroupSync = new Sync.GroupSyncService(this);
         using (LifecycleTimings.Measure("startupWork.lan")) LanSync = createLan?.Invoke(this) ?? new Sync.LanSyncService(this);
         using (LifecycleTimings.Measure("startupWork.mcp")) Mcp = new Automation.McpServer(new Automation.McpTools(this));
         LifecycleTimings.Mark("startup.servicesReady");

@@ -118,6 +118,27 @@ class MigrationTest {
         }
     }
 
+    @Test fun migrate9To10PreservesBusinessAndRollsBackGroupAndBusinessTogether() {
+        helper.createDatabase(DB,9).use { db ->
+            db.execSQL("INSERT INTO playlist (id,name,created_at,updated_at) VALUES(1,'Preserved',10,20)")
+            db.execSQL("INSERT INTO tag_override(track_key,dimension,value) VALUES('song','VOICE','VOCAL')")
+            db.execSQL("INSERT INTO sync_journal(id,content) VALUES(1,'original')")
+        }
+        helper.runMigrationsAndValidate(DB,10,true,MIGRATION_9_10).use { db ->
+            fun scalar(sql: String)=db.query(sql).use { it.moveToFirst();it.getString(0) }
+            assertEquals("Preserved",scalar("SELECT name FROM playlist WHERE id=1"))
+            assertEquals("VOCAL",scalar("SELECT value FROM tag_override"))
+            assertEquals("original",scalar("SELECT content FROM sync_journal"))
+            assertEquals("0",scalar("SELECT count(*) FROM sync_group_row WHERE kind<>'quota'"))
+            db.beginTransaction()
+            try {
+                db.execSQL("UPDATE playlist SET name='Interrupted' WHERE id=1")
+                db.execSQL("INSERT INTO sync_group_row(kind,`key`,value,cursor) VALUES('meta','active','{}',0)")
+            } finally { db.endTransaction() }
+            assertEquals("Preserved",scalar("SELECT name FROM playlist WHERE id=1"))
+            assertEquals("0",scalar("SELECT count(*) FROM sync_group_row WHERE kind='meta'"))
+        }
+    }
     private companion object {
         const val DB = "migration-test.db"
     }

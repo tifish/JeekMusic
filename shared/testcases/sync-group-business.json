@@ -1,0 +1,26 @@
+{
+  "invalid": [
+    { "key": "offset:song", "payload": "1 trailing" },
+    { "key": "offset:song", "payload": "01" },
+    { "key": "offset:song", "payload": "1.5" },
+    { "key": "tag:4:song:VOICE", "payload": "'VOCAL'" },
+    { "key": "playlist:list", "payload": "{\"name\":\"a\",\"name\":\"b\",\"items\":[]}" },
+    { "key": "playlist:list", "payload": "{\"name\":\"a\",\"items\":[1]}" },
+    { "key": "rules", "payload": "{}" },
+    { "key": "navigation", "payload": "[1]" }
+  ],
+  "cacheState": {
+    "vocal_languages": {
+      "version": 1,
+      "items": {
+        "collection:music/song.flac": [
+          { "source": "MANUAL", "state": "auto", "languages": [], "confidence": null, "size": 100, "duration_ms": 2000, "start_ms": 0, "updated_at": 77 }
+        ]
+      }
+    },
+    "analysis_cache": [
+      { "reference": "collection:music/song.flac", "analyzer_version": 6, "size": 100, "duration_ms": 2000, "start_ms": 0, "features": { "bpm": 120.5 }, "updated_at": 70 },
+      { "reference": "collection:music/song.flac", "analyzer_version": 7, "size": 100, "duration_ms": 2000, "start_ms": 0, "features": { "bpm": 121 }, "updated_at": 71 }
+    ]
+  }
+}

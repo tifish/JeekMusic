@@ -35,7 +35,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var firstHint=0L
     private var failures=0
     private var workerOwned=false
-    private fun eligible()=service.store.peers().isNotEmpty() && (service.store.read().has("connection") || service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) })
+    private fun eligible()=service.store.peers().isNotEmpty() && (service.groups.status.value.optBoolean("joined") || service.store.read().has("connection") || service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) })
     private fun held()=service.store.read().optBoolean("autoCancelled")
     fun initialize() {
         synchronized(lock) { if(initialized)return;initialized=true }
@@ -62,6 +62,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     }
     fun configure() {
         scope.launch(Dispatchers.IO) {
+            service.groups.refresh()
             val enabled=eligible()
             service.localFileIndex.retainMappings(service.store.mappings().map { it.getString("key") }.toSet())
             // LAN-only Wi-Fi need not have validated internet. The production socket policy

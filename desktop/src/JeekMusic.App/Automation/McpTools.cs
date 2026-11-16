@@ -33,6 +33,8 @@ public sealed class McpTools
     internal JsonArray Catalog { get; } = BuildCatalog();
 
     internal static JsonArray BuildCatalog() => new(
+        Tool("sync_peers", "Manage outgoing Windows PC connections using the production TLS pairing service. list returns at most 32 redacted peers. pair requires a single-use jeeklan invitation (sensitive input; never log it); forget requires peerId and refuses the active group upstream. Does not remove music or revoke the remote credential.", "\"action\":{\"type\":\"string\",\"enum\":[\"list\",\"pair\",\"forget\"]},\"peerId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"invitation\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":450}", ["action"]),
+        Tool("sync_groups", "Manage the one explicit personal-data group through the same service as Settings. status returns role, generation, durable cursor, pending uploads, member acknowledgments and safe errors. create makes this PC the coordinator; join requires a paired outgoing peerId and preserves original timestamps on initial import. Joining disables legacy format-2 and directory writes. sync performs bounded push/receipt/snapshot/pull/ack; pause/resume affect group networking while local edits remain durable. remove requires actorId and coordinator role; advances generation and preserves tombstones. allow_recovery requires coordinator actorId approval; recover rebases only pending edits with original HLC and retains originals until receipt. compact waits for all active members. clockAheadMs diagnoses observed clock skew. No automatic mesh, implicit primary change or credentials in output.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"create\",\"join\",\"sync\",\"pause\",\"resume\",\"remove\",\"allow_recovery\",\"recover\",\"compact\"]},\"peerId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"actorId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}", ["action"]),
         Tool("open_files", "Open existing absolute local audio paths through the same file-association service. Requests playback before reading the first successfully opened file's immediate directory, then displays a session-only temporary folder with supported sibling audio files. No recursive scan, library registration or window activation. Explicit multi-file play order is preserved until a song is played from the folder list. Latest open wins; a late folder result never navigates away from user browsing. Response means scheduled; observe get_diagnostics.externalFiles (opening/loading/ready/failed), song_filter and get_status. Same service in development and production.", "\"paths\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":1000,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":32767,\"description\":\"Existing absolute local audio file path; directories are not accepted.\"}}", ["paths"]),
         Tool("lan_file_conflicts", "List persistent shared file conflicts (100 per page), open the same comparison window, or choose a captured version. local means PHONE, remote means PC. Returns both sizes/modifiedNs/deletion states, sizeComparison (larger/smaller/equal/unavailable) and modifiedComparison (newer/older/equal/unavailable) relative to the other side using exact integers, device, scope, path and immutable conflict id. choose records first-writer-wins intent; it does NOT mean files were changed. Foreground phone exchanges conflict status every 2 seconds and sends queued choices immediately; files apply through the reconciler after checking both versions again. Local UI updates on state changes; offline phone leaves choice pending. Stale IDs, changed PC files and opposite concurrent choices are rejected. Same UI service in development/AOT. No hashes or audio reads for list/choose.", "\"action\":{\"type\":\"string\",\"enum\":[\"list\",\"choose\",\"open\"]},\"id\":{\"type\":\"string\",\"minLength\":64,\"maxLength\":64},\"choice\":{\"type\":\"string\",\"enum\":[\"local\",\"remote\"]},\"offset\":{\"type\":\"integer\",\"minimum\":0}", ["action"]),
         Tool("preference_inventory", "status reads the bounded identity review page; register hashes at most six additional local recordings for explicit identity review, does not ask labels or consume attempt budget; freeze locks complete component-disjoint lists before evaluation: full workout frame 48/12/48; other heads may use compact training12/24/36, development8/sealed24 without requiring workout material. Incomplete identities/components fail closed; no title-based content matching, no component splitting, no inferred answers. Training pilot remains non-independent. Current deterministic sampling deviation is recorded in frozen manifest.", "\"action\":{\"type\":\"string\",\"enum\":[\"status\",\"register\",\"freeze\"]}", ["action"]),
@@ -155,6 +157,27 @@ public sealed class McpTools
 
     internal async Task<JsonObject> CallAsync(string name, JsonObject a)
     {
+        if(name is "sync_peers" or "sync_groups")
+        {
+            McpSession.Validate(a,Catalog.OfType<JsonObject>().Single(t=>t["name"]!.GetValue<string>()==name)["inputSchema"]!.AsObject());
+            var action=Required(a,"action").GetValue<string>();
+            var field=(name,action) switch { ("sync_peers","pair")=>"invitation",("sync_peers","forget") or ("sync_groups","join")=>"peerId",("sync_groups","remove") or ("sync_groups","allow_recovery")=>"actorId",_=>null };
+            if(a.Any(p=>p.Key!="action" && p.Key!=field) || (field is not null && !a.ContainsKey(field)))throw new ArgumentException("Invalid action arguments");
+            if(name=="sync_peers")
+            {
+                if(action=="pair")return await app.GroupSync.Pair(a["invitation"]!.GetValue<string>());
+                if(action=="forget")app.GroupSync.Forget(a["peerId"]!.GetValue<string>());
+                return new JsonObject { ["peers"]=app.GroupSync.Peers() };
+            }
+            if(action=="join")return await app.GroupSync.Join(a["peerId"]!.GetValue<string>());
+            if(action=="sync")return await app.GroupSync.Synchronize();
+            if(action=="recover")return await app.GroupSync.Recover();
+            return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(()=>action switch
+            {
+                "create"=>app.GroupSync.Create(),"pause"=>app.GroupSync.Pause(true),"resume"=>app.GroupSync.Pause(false),
+                "remove"=>app.GroupSync.RemoveMember(a["actorId"]!.GetValue<string>()),"allow_recovery"=>app.GroupSync.AllowRecovery(a["actorId"]!.GetValue<string>()),"compact"=>app.GroupSync.Compact(),_=>app.GroupSync.Status()
+            });
+        }
         if (name == "lan_sync_control" && a["externalAddress"] is not null && a["action"]?.GetValue<string>() != "external_address")
             throw new ArgumentException("externalAddress is only supported for external_address");
         if (name == "lan_sync_control" && a["action"]?.GetValue<string>() == "start")

@@ -117,18 +117,19 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     fun conflicts(id: String)=store.current(profile(),"answer").filter { dimension(it.getJSONObject("payload"))==activeDimension && it.getJSONObject("payload").getString("recordingId")==id }.map { e -> e.getJSONObject("payload").getString("answer")+" · "+e.getJSONObject("payload").getString("basis")+" · "+e.getString("deviceId").take(8) }
     suspend fun delete() { store.clearLearning(); tags.recomputeAll(); notifyChanged() }
     fun export()=JSONObject().put("protocol",PreferenceStore.VERSION).put("resetBoundary",JSONArray(store.resetBoundary)).put("generation",store.generation).put("events",JSONArray(store.read(profile(),evaluation=true))).toString()
-    suspend fun synchronize(includeUserData: Boolean=true)=withContext(Dispatchers.IO) { syncGate.withLock {
-        feedback.capture()
+    suspend fun synchronize(includeUserData: Boolean=true,captureFeedback: Boolean=true,fetchResults: Boolean=true)=withContext(Dispatchers.IO) { syncGate.withLock {
+        if(userData.groupStatus().optBoolean("paused"))return@withLock
+        if(captureFeedback)feedback.capture()
         syncState.value="syncing"
         try {
-        val connection=lan.read().getJSONObject("connection")
+        val connection=metadataConnection()
         val peer="pc:"+connection.getString("pin")
         var upload=(store.local("upload:$peer") ?: "0").toLong()
         var pages=0
         com.tinyfish.jeekmusic.data.sync.LanProtocol(connection, networkPolicy).use { client ->
             transport=client
             com.tinyfish.jeekmusic.data.sync.LanProtocol.requirePairedCapabilities(client.call("capabilities"))
-            if(includeUserData) userData.acceptLan(client.call("state",userData.exportLan(false).put("includeFeatures",false)))
+            if(includeUserData && !userData.groupStatus().optBoolean("joined")) userData.acceptLan(client.call("state",userData.exportLan(false).put("includeFeatures",false)))
             do {
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val page=store.page(upload)
@@ -146,7 +147,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
         } finally { transport=null }
         syncState.value="synced"; notifyChanged()
         // Old paired versions fail explicitly; labels already committed above remain available offline.
-        try { synchronizeResults() } finally { tags.recomputeAll() }
+        if(fetchResults)try { synchronizeResults() } finally { tags.recomputeAll() }
     } }
     suspend fun trainingStatus()=learningAction("status")
     private fun localHeads(): JSONArray {
@@ -171,9 +172,13 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
                 .put("state",store.current(activeProfile,"model").filter { dimension(it.getJSONObject("payload"))==d && it.getJSONObject("payload").optString("category")=="job" }.maxByOrNull { it.getLong("at") }?.getJSONObject("payload")?.optString("state") ?: "idle")
         })
     }
+    private suspend fun metadataConnection(): JSONObject {
+        val group=userData.groupStatus()
+        return if(group.optBoolean("joined"))lan.connection(group.getString("peerId")) else lan.read().getJSONObject("connection")
+    }
     private suspend fun synchronizeResults() {
         val generation=store.generation
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection"), networkPolicy).use { client ->
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(metadataConnection(), networkPolicy).use { client ->
             val cursor=DesktopResultCursor(store); var pages=0
             do {
                 currentCoroutineContext().ensureActive()
@@ -229,7 +234,7 @@ class PreferenceService @Inject constructor(@param:ApplicationContext private va
     suspend fun learningAction(action: String,downloadConfirmed: Boolean=false)=withContext(Dispatchers.IO) {
         require(action in listOf("status","learn","resume","cancel"))
         if(action!="status") synchronize()
-        com.tinyfish.jeekmusic.data.sync.LanProtocol(lan.read().getJSONObject("connection"), networkPolicy).use {
+        com.tinyfish.jeekmusic.data.sync.LanProtocol(metadataConnection(), networkPolicy).use {
             val response=it.call("preference_training",JSONObject().put("protocol",PreferenceStore.VERSION).put("action",action).put("downloadConfirmed",downloadConfirmed))
             val state=if(action=="status") response.optJSONObject("learning") ?: response else response
             response.optJSONArray("heads")?.let { store.setLocal("desktop-head-summaries",it.toString()) }

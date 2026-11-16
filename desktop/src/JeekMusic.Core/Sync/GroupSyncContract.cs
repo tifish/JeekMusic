@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace JeekMusic.Core.Sync;
 
-public sealed class GroupSyncException(string code) : Exception(code)
+public sealed class GroupSyncException(string code) : ArgumentException(code)
 {
     public string Code { get; } = code;
 }
@@ -14,8 +14,8 @@ public sealed record GroupReference(string CollectionId, string Path, int? CueTr
 public sealed record GroupMutation(string GroupId, long Generation, string Key, GroupVersion Version, string? Payload);
 
 /// <summary>
-/// Pure P0 contract primitives. Not wired to legacy format 2, file reconciliation or capabilities.
-/// Clock/sequence persistence, authentication, receipts and replay ledgers belong to the future group service.
+/// Shared group contract primitives. Clock/sequence persistence and receipts belong to GroupJournal/GroupReplica;
+/// authenticated client services own transport and business projection. Legacy format 2 is a separate adapter.
 /// </summary>
 public static class GroupSyncContract
 {

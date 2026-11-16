@@ -45,7 +45,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
             try { return callOnce(op,args) }
             catch(e: LanRemoteException) {
                 if(e.code != "busy" || !retriesBusy(op) || attempt == 2) throw e
-                close(); pause(30_000)
+                close(); pause(if(op.startsWith("group_") || op=="preference_delta")600L*(attempt+1) else 30_000)
             }
         }
         error("LAN retry budget exhausted")
@@ -76,7 +76,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
                 require(receive(4096).optBoolean("ready")) { "PC did not accept request" }
             }
             output!!.writeInt(bytes.size); output!!.write(bytes); output!!.flush()
-            var result = receive(if (op == "state") 32_000_000 else 2_000_000)
+            var result = receive(if (op == "state") 32_000_000 else if(op.startsWith("group_"))4_000_000 else 2_000_000)
             if (op in setOf("plan","file_probe","file_verify","file_ack","file_finish","file_delete","file_audio_layout","file_reuse_audio")) {
                 if(result.optBoolean("pending")) activePlan.set(result.getString("job"))
                 if(cancelled) cancelRemotePlan()
@@ -138,6 +138,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
     }
     companion object {
         internal fun retriesBusy(op: String): Boolean = op in setOf(
+            "group_info","group_join","group_push","group_pull","group_snapshot","group_snapshot_rows","group_ack","group_recover",
             "roots","tree","plan","plan_status","manifest","read","capabilities","state","preference_delta","preference_results",
             "file_open","file_revision","file_schedule","file_rows","file_baseline","file_probe","file_verify","file_ack",
             "file_begin","file_chunk","file_finish","file_delete","file_upload_status","file_read","file_abort",
@@ -158,7 +159,7 @@ internal class LanProtocol(private val connection: JSONObject, private val netwo
                 throw LanRemoteException("upgrade_required", "Upgrade the PC to enable all paired-device sync capabilities; no individual permission selection is needed.")
         }
 
-        internal fun requestLimit(op: String): Int = when(op) { "pair", "auth" -> 4096; "state" -> 32_000_000; "preference_delta" -> 4_000_000; "file_chunk" -> 512*1024; else -> 64 * 1024 }
+        internal fun requestLimit(op: String): Int = when(op) { "pair", "auth" -> 4096; "state" -> 32_000_000; "preference_delta", "group_push" -> 4_000_000; "file_chunk" -> 512*1024; else -> 64 * 1024 }
 
         fun sha(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         fun relative(path: String, root: Boolean = false): String {

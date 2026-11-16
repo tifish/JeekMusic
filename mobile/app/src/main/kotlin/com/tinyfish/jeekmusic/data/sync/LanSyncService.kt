@@ -62,6 +62,41 @@ class LanSyncService @Inject constructor(
     private class StopState { @Volatile var reason = "" }
     @Volatile private var stopState = StopState()
     @Volatile private var activeFileRoot: String? = null
+    @Volatile private var activeFilePeer: String? = null
+    fun selectPeer(peerId: String) { store.selectPeer(peerId); report() }
+    fun forgetPeer(peerId: String) {
+        check(job?.isActive != true) { "Cancel sync first" }
+        store.forgetPeer(peerId); report(); automation.configure()
+    }
+    private fun mappingPeer(mapping: JSONObject) = mapping.optString("peerId").ifEmpty { store.primaryPeerId() }
+    internal fun peerReady(peerId: String): Boolean {
+        val peer = store.peers().singleOrNull { it.getString("peerId") == peerId } ?: return false
+        val schedule = peer.optJSONObject("schedule")
+        return schedule?.optBoolean("cancelled") != true && (schedule?.optLong("backoffUntil") ?: 0) <= System.currentTimeMillis()
+    }
+    private fun resumePeer(peerId: String) = store.updatePeer(peerId) {
+        val state=it.optJSONObject("schedule") ?: JSONObject().also { value -> it.put("schedule",value) }
+        state.put("cancelled",false).put("backoffUntil",0)
+    }
+    private fun peerOutcome(peerId: String, error: Exception? = null) {
+        store.updatePeer(peerId) { peer ->
+            val schedule = peer.optJSONObject("schedule") ?: JSONObject().also { peer.put("schedule", it) }
+            if (error == null) schedule.put("failures", 0).put("backoffUntil", 0).put("lastSuccess", System.currentTimeMillis()).put("state", "idle").remove("lastError")
+            else {
+                val failures = (schedule.optInt("failures") + 1).coerceAtMost(6)
+                schedule.put("failures", failures).put("backoffUntil", System.currentTimeMillis() + minOf(900_000L, 30_000L * (1L shl (failures - 1))))
+                    .put("state", "backoff").put("lastError", if (error is LanRemoteException) error.code else error.javaClass.simpleName)
+            }
+        }
+        report()
+    }
+    private fun readyMappings(): List<JSONObject> {
+        val state=store.read()
+        val target=state.optString("manualPeerId").takeIf { state.optBoolean("manualPending") }.orEmpty()
+        return store.mappings().filter {
+            LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) && peerReady(mappingPeer(it)) && (target.isEmpty() || mappingPeer(it)==target)
+        }
+    }
     private val fileSynchronizer by lazy { LanFileSynchronizer(context,fileDatabase,playing,localFileIndex) }
     private val automation by lazy { LanAutoSync(context,scope,this) }
     val schedule get()=automation.state
@@ -77,11 +112,16 @@ class LanSyncService @Inject constructor(
         var needed=store.read().optBoolean("manualPending")
         gate.withLock {
             if(isSyncRunning())return false
-            for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }) {
+            for(mapping in readyMappings()) {
+                if (!peerReady(mappingPeer(mapping))) continue
+                try {
                 mediaChanges.check(mapping)
-                if(mapping.optString("directoryIdentity").isEmpty() || mapping.optBoolean("syncPending",true) || fileDatabase.pendingIssueCount(mapping.getString("key"))>0)needed=true
-                else if(localChanges(mapping))needed=true
-                if(pollFileRevision(mapping)!=mapping.optString("remoteRevision"))needed=true
+                var mappingNeeded=mapping.optString("directoryIdentity").isEmpty() || mapping.optBoolean("syncPending",true) || fileDatabase.pendingIssueCount(mapping.getString("key"))>0
+                if(!mappingNeeded && localChanges(mapping))mappingNeeded=true
+                if(pollFileRevision(mapping)!=mapping.optString("remoteRevision"))mappingNeeded=true
+                if(mappingNeeded)needed=true
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { peerOutcome(mappingPeer(mapping), e) }
             }
         }
         currentCoroutineContext().ensureActive()
@@ -119,18 +159,27 @@ class LanSyncService @Inject constructor(
         }
     }
     internal fun pollFileRevision(mapping: JSONObject): String {
-        LanProtocol(store.read().getJSONObject("connection"), networkPolicy).use { client ->
+        LanProtocol(store.connectionFor(mapping), networkPolicy).use { client ->
             val opened=client.call("file_open",JSONObject().put("fileProtocol",3).put("rootId",mapping.getString("rootId")).put("mapping",mapping.getString("key")).put("selection",mapping.getJSONArray("selection")))
             if(opened.optBoolean("deferred") || opened.optBoolean("conflict"))throw java.io.IOException("scope_unavailable")
             return client.call("file_revision",JSONObject().put("fileProtocol",3).put("scope",opened.getString("scope"))).getString("revision")
         }
     }
     internal fun reportFileSchedule(value: JSONObject) {
-        val connection=store.read().optJSONObject("connection") ?: return
         for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) })runCatching {
+            val connection=store.connectionFor(mapping)
+            if (!peerReady(mappingPeer(mapping))) return@runCatching
             LanProtocol(connection, networkPolicy).use { client ->
                 val schedule=JSONObject(value.toString()).put("paused",!mapping.optBoolean("enabled",true))
+                connection.optJSONObject("schedule")?.let { peer ->
+                    schedule.put("backoffUntil",maxOf(value.optLong("backoffUntil"),peer.optLong("backoffUntil")))
+                        .put("cancelled",value.optBoolean("cancelled") || peer.optBoolean("cancelled"))
+                        .put("lastSuccess",peer.optLong("lastSuccess",value.optLong("lastSuccess")))
+                }
+                schedule.put("running",value.optBoolean("running") && activeFilePeer==mappingPeer(mapping))
                 val capabilities=client.call("capabilities")
+                if(capabilities.optInt("peerScheduleProtocol")>=1) schedule.put("peerId",mappingPeer(mapping)).put("pairedComputerCount",store.peers().size)
+                    .put("metadataPeer",mappingPeer(mapping)==store.primaryPeerId())
                 if(capabilities.optInt("localFileIndex")<1)for(field in listOf("lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles"))schedule.remove(field)
                 if(capabilities.optInt("fileAudioReuse")<1)for(field in listOf("lastAudioReusedBytes","lastAudioReusedFiles"))schedule.remove(field)
                 if(capabilities.optInt("fileDeltaProtocol")<1)for(field in listOf("lastMetadataRows","lastIncremental"))schedule.remove(field)
@@ -161,15 +210,17 @@ class LanSyncService @Inject constructor(
     internal suspend fun exchangeConflictStatus(id: String?=null) {
         if(!conflictExchange.tryLock())return
         try {
-            val connection=store.read().optJSONObject("connection") ?: return
-            val enabled=store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }.map { it.getString("key") }.toSet()
+            val mappings=store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }.associateBy { it.getString("key") }
+            val enabled=mappings.keys
             if(enabled.isEmpty())return
             val rows=if(id!=null)listOfNotNull(fileDatabase.issue(id)) else fileDatabase.issuePage(conflictOffset).also { conflictOffset=if(it.size<100)0 else conflictOffset+100 }
             val current=rows.filter { it.optString("mapping") in enabled && it.optString("scope").isNotEmpty() }
             if(current.isEmpty())return
-            LanProtocol(connection, networkPolicy).use { client ->
-                if(client.call("capabilities").optInt("conflictStatusProtocol")<1)return
-                for((scopeId,group) in current.groupBy { it.getString("scope") }) {
+            for ((peerId,peerRows) in current.groupBy { mappingPeer(mappings.getValue(it.getString("mapping"))) }) {
+              if (!peerReady(peerId)) continue
+              try { LanProtocol(store.connection(peerId), networkPolicy).use { client ->
+                if(client.call("capabilities").optInt("conflictStatusProtocol")<1)return@use
+                for((scopeId,group) in peerRows.groupBy { it.getString("scope") }) {
                     fun call(op: String,args: JSONObject)=client.call(op,args.put("fileProtocol",3).put("scope",scopeId))
                     val snapshot=call("file_conflict_status",JSONObject().put("ids",JSONArray(group.map { it.getString("id") })))
                     val shared=snapshot.getJSONArray("rows")
@@ -195,6 +246,7 @@ class LanSyncService @Inject constructor(
                         if(missingConflictHints.add(missing.getString(index)))automation.hint("conflict_changed")
                     }
                 }
+              } } catch(e: CancellationException) { throw e } catch(_: Exception) { /* Other peers remain eligible. */ }
             }
         } finally { conflictExchange.unlock() }
     }
@@ -228,10 +280,12 @@ class LanSyncService @Inject constructor(
         }
         return value.take(separator)+": "+context.getString(resource)
     }
-    private fun protocol() = LanProtocol(store.read().getJSONObject("connection"), networkPolicy).also { transport?.close(); transport = it }
+    private fun protocol(peerId: String = store.selectedPeerId(), tracked: Boolean = false) = LanProtocol(store.connection(peerId), networkPolicy).also { if(tracked)transport = it }
 
     private suspend fun exchangeUserData(includeFeatures: Boolean) {
-        val client = protocol()
+        val peerId = store.primaryPeerId()
+        if (peerId.isEmpty()) return
+        val client = protocol(peerId, tracked=true)
         try {
             client.use {
                 LanProtocol.requirePairedCapabilities(client.call("capabilities"))
@@ -243,8 +297,7 @@ class LanSyncService @Inject constructor(
     /** No scan, audio hashing, inference or learning work. Also runs on unchanged file checkpoints. */
     internal suspend fun syncBackgroundMetadata() = withContext(Dispatchers.IO) {
         gate.withLock {
-            if (!store.read().has("connection") || store.read().optBoolean("autoCancelled") ||
-                store.mappings().none { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }) return@withLock
+            if (!store.read().has("connection") || store.read().optBoolean("autoCancelled")) return@withLock
             networkPolicy.requireAllowed()
             exchangeUserData(includeFeatures = false)
         }
@@ -254,7 +307,6 @@ class LanSyncService @Inject constructor(
         gate.withLock {
             require(job?.isActive != true) { "Cancel sync first" }
             val uri = LanInvitation.parse(invitation)
-            require(store.mappings().isEmpty() || store.read().optJSONObject("connection")?.optString("pin") == uri.pin) { "Remove existing mappings before pairing another PC" }
             val id = sync.lanDeviceId()
             val connection = JSONObject().put("host", uri.host).put("port", uri.port).put("pin", uri.pin).put("deviceId", id)
             val client = LanProtocol(connection, networkPolicy); transport = client
@@ -262,20 +314,23 @@ class LanSyncService @Inject constructor(
             client.close()
             require(response.optInt("protocol") == 4) { "Upgrade the PC for LAN protocol 4" }
             connection.put("token", response.getString("token")).put("name", response.optString("name", uri.host))
-            store.update { it.put("connection", connection) }; report()
+            store.addPeer(connection); report()
             automation.configure()
             _status.value = LanStatus(text = context.getString(R.string.lan_paired_identity, connection.getString("name"), uri.endpoint))
         }
     }
-    suspend fun roots(): List<JSONObject> = withContext(Dispatchers.IO) {
-        protocol().use { client ->
-            val a = client.call("roots").getJSONArray("roots"); List(a.length()) { a.getJSONObject(it) }
+    suspend fun roots(peerId: String = store.selectedPeerId()): List<JSONObject> = withContext(Dispatchers.IO) {
+      try {
+        protocol(peerId).use { client ->
+            val a = client.call("roots").getJSONArray("roots"); List(a.length()) { a.getJSONObject(it).put("peerId", peerId) }.also { peerOutcome(peerId) }
         }
+      } catch (e: CancellationException) { throw e }
+      catch (e: Exception) { peerOutcome(peerId,e);throw e }
     }
-    suspend fun directories(root: String, path: String): List<String> = withContext(Dispatchers.IO) {
+    suspend fun directories(root: String, path: String, peerId: String = store.selectedPeerId()): List<String> = withContext(Dispatchers.IO) {
         LanProtocol.relative(path, true)
         val result = mutableListOf<String>()
-        protocol().use { client ->
+        protocol(peerId).use { client ->
             do {
                 val page = client.call("tree", JSONObject().put("rootId", root).put("path", path).put("offset", result.size))
                 val a = page.getJSONArray("directories")
@@ -285,9 +340,9 @@ class LanSyncService @Inject constructor(
         }
         result
     }
-    suspend fun estimate(root: String, selected: Set<String>): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun estimate(root: String, selected: Set<String>, peerId: String = store.selectedPeerId()): JSONObject = withContext(Dispatchers.IO) {
         require(selected.isNotEmpty()) { "Choose at least one folder" }
-        protocol().use { it.call("plan", JSONObject().put("fileProtocol",3).put("rootId", root).put("selection", JSONArray(selected.toList()))) }
+        protocol(peerId).use { it.call("plan", JSONObject().put("fileProtocol",3).put("rootId", root).put("selection", JSONArray(selected.toList()))) }
     }
     /** SAF selection is mandatory, even though the current library supports local ExternalStorageProvider only. */
     suspend fun saveMapping(root: JSONObject, selected: Set<String>, target: Uri) = withContext(Dispatchers.IO) {
@@ -300,48 +355,71 @@ class LanSyncService @Inject constructor(
             require(selected.isNotEmpty()) { "Choose at least one folder" }
             selected.forEach { LanProtocol.relative(it, true) }
             val rootId = root.getString("rootId"); require(rootId.matches(Regex("[0-9a-f]{32}")))
+            val peerId = root.optString("peerId").ifEmpty { store.selectedPeerId() }
+            store.connection(peerId)
             context.contentResolver.takePersistableUriPermission(target, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             val id = DocumentsContract.getTreeDocumentId(target)
             val path = SafPaths.fromTreeDocumentId(id) ?: error("Unsupported local storage")
             val parent = LibraryFolderEntity(treeUri = target.toString(), treeDocumentId = id, volumeName = path.volumeName, relativePath = path.relativePath,
                 displayName = root.getString("name"), addedAt = System.currentTimeMillis())
-            LanMappingTargets.requireSeparate(store.mappings(), rootId, path.volumeName, path.relativePath)
+            LanMappingTargets.requireSeparate(store.mappings(), rootId, path.volumeName, path.relativePath, peerId)
             localBoundary(parent)
             library.registerSyncDestination(parent)
-            val old = store.mappings().firstOrNull { LanMappingTargets.isCurrent(it) && it.getString("rootId") == rootId && it.optString("treeUri") == target.toString() && it.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) }.toSet()==selected } }
+            val old = store.mappings().firstOrNull { LanMappingTargets.isCurrent(it) && mappingPeer(it) == peerId && it.getString("rootId") == rootId && it.optString("treeUri") == target.toString() && it.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it) }.toSet()==selected } }
             val mapping = JSONObject().put("layoutVersion",LanMappingTargets.VERSION).put("rootId", rootId).put("name", root.getString("name")).put("selection", JSONArray(selected.toList().sorted()))
                 .put("treeUri", target.toString()).put("documentId", id).put("volume", path.volumeName).put("relative", path.relativePath)
-                .put("key", old?.getString("key") ?: java.util.UUID.randomUUID().toString()).put("enabled", true)
+                .put("key", old?.getString("key") ?: java.util.UUID.randomUUID().toString()).put("enabled", true).put("peerId", peerId)
             old?.optString("directoryIdentity")?.takeIf { it.isNotEmpty() }?.let { mapping.put("directoryIdentity",it) }
             store.saveMapping(mapping); report()
+            resumePeer(peerId)
             automation.resume()
         } finally { gate.unlock() }
     }
-    fun setEnabled(root: String, enabled: Boolean) {
-        if(!enabled && activeFileRoot==root)cancelScheduled()
-        val mapping = store.mappings().single { it.getString("rootId") == root }; if(enabled) LanMappingTargets.requireCurrent(mapping); mapping.put("enabled", enabled); store.saveMapping(mapping); report()
-        if(enabled)automation.resume() else automation.configure()
+    fun setEnabled(root: String, enabled: Boolean, peerId: String = store.selectedPeerId()) {
+        if(!enabled && activeFileRoot==root && activeFilePeer==peerId)cancelScheduled()
+        val mapping = store.mappings().single { it.getString("rootId") == root && mappingPeer(it) == peerId }; if(enabled) LanMappingTargets.requireCurrent(mapping); mapping.put("enabled", enabled); store.saveMapping(mapping); report()
+        if(enabled) { resumePeer(peerId);automation.resume() } else automation.configure()
     }
-    fun forget(root: String) {
+    fun forget(root: String, peerId: String = store.selectedPeerId()) {
         check(job?.isActive != true) { "Cancel sync first" }
-        store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root })) }; report()
+        store.update { it.put("mappings", JSONArray(store.mappings().filterNot { m -> m.getString("rootId") == root && mappingPeer(m) == peerId })) }; report()
         automation.configure()
     }
-    fun cancel() { store.update { it.remove("manualPending") };automation.cancel();cancelScheduled();automation.report() }
-    fun start() { store.update { it.put("manualPending",true) };automation.hint("manual",manual=true) }
-    fun refresh() { scope.launch(Dispatchers.IO) { localFileIndex.requestRefresh();start() } }
+    fun cancel() = cancel(null)
+    fun cancel(peerId: String?) {
+        if (peerId == null) { store.update { it.remove("manualPending");it.remove("manualPeerId") };automation.cancel();cancelScheduled() }
+        else {
+            store.updatePeer(peerId) { peer -> val state=peer.optJSONObject("schedule") ?: JSONObject().also { peer.put("schedule",it) };state.put("cancelled",true).put("state","cancelled") }
+            if (activeFilePeer == peerId) cancelScheduled()
+            store.update { if(it.optString("manualPeerId")==peerId) { it.remove("manualPending");it.remove("manualPeerId") } }
+            report();automation.hint("peer_cancelled")
+        }
+        automation.report()
+    }
+    fun start() = start(null)
+    fun start(peerId: String?) {
+        if (peerId != null) store.connection(peerId)
+        for (peer in store.peers().filter { peerId == null || it.getString("peerId") == peerId }) store.updatePeer(peer.getString("peerId")) {
+            val schedule=it.optJSONObject("schedule") ?: JSONObject().also { value -> it.put("schedule",value) };schedule.put("cancelled",false).put("backoffUntil",0)
+        }
+        store.update { it.put("manualPending",true);if(peerId==null)it.remove("manualPeerId") else it.put("manualPeerId",peerId) }
+        automation.hint("manual",manual=true);report()
+    }
+    fun refresh() = refresh(null)
+    fun refresh(peerId: String?) { scope.launch(Dispatchers.IO) { localFileIndex.requestRefresh();start(peerId) } }
     @Synchronized internal fun startScheduled(reason: String) {
         if (job?.isCompleted == false) return
         if (networkPolicy.waitingForWifi) { _status.update { it.copy(running=false,text=context.getString(R.string.sync_wifi_waiting)) };return }
         val stop=StopState();stopState=stop
-        val includeUserData=reason=="manual" || store.read().optBoolean("manualPending")
+        val requestedPeer=store.read().optString("manualPeerId")
+        val includeUserData=(reason=="manual" || store.read().optBoolean("manualPending")) && (requestedPeer.isEmpty() || requestedPeer==store.primaryPeerId())
         fun stoppedText()=context.getString(when(stop.reason) { "background"->R.string.lan_background_waiting;"cancelled"->R.string.lan_cancelled;else->R.string.lan_interrupted })
         automation.begin(reason)
         // Status reporting is advisory. An offline PC must not delay the actual sync round
         // or occupy the mapping-edit gate before synchronization has even begun.
         automation.report()
         job = scope.launch(Dispatchers.IO) {
-            val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false
+            val metadataBefore=LanFileMetrics.metadataObservations.get();val hashBefore=LanFileMetrics.hashBytes.get();var completedBytes=0L;var fileRoundCompleted=false;var peerFailures=false
             val roundStarted=System.nanoTime();var preparationMs=0L;var firstTransferMs=-1L;var requests=0L;var cacheHit=false;var metadataRows=0L;var incremental=true;var reusedBytes=0L;var reusedFiles=0;var indexHits=0;var indexMisses=0;var indexRefreshed=0;var libraryReused=0
             _status.update { it.copy(running=true,text=context.getString(R.string.lan_verifying),quiet=reason!="manual") }
             try { gate.withLock {
@@ -355,13 +433,18 @@ class LanSyncService @Inject constructor(
                     recoverPending()
                     drainRefresh()
                     val actions=mutableMapOf<String,Int>();val conflicts=mutableListOf<JSONObject>();var deferredCount=0;var processed=0;var lastProgress=0L
-                    for (mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }) {
+                    val failedPeers=mutableSetOf<String>()
+                    for (mapping in readyMappings()) {
                         ensureActive()
+                        val peerId=mappingPeer(mapping)
+                        if (peerId in failedPeers || !peerReady(peerId)) continue
                         if(store.mappings().none { it.optString("key")==mapping.getString("key") && it.optBoolean("enabled",true) })continue
+                        try {
                         activeFileRoot=mapping.getString("rootId")
+                        activeFilePeer=peerId
                         mapping.put("syncPending",true);saveMappingRuntime(mapping)
                         val remoteRevision=pollFileRevision(mapping)
-                        val client=protocol()
+                        val client=protocol(peerId, tracked=true)
                         try {
                             val result=fileSynchronizer.synchronize(mapping,client,{ saveMappingRuntime(mapping);report() },{ path,progress ->
                                 if(progress.bytes>0 && firstTransferMs<0)firstTransferMs=(System.nanoTime()-roundStarted)/1_000_000
@@ -391,22 +474,39 @@ class LanSyncService @Inject constructor(
                             preparationMs+=result.preparationMillis;requests+=result.protocolRequests;cacheHit=result.manifestCacheHit;metadataRows+=result.metadataRows;incremental=incremental && result.incremental
                             for((action,count) in result.actions)actions[action]=(actions[action] ?: 0)+count
                             conflicts.addAll(result.conflicts.take(100-conflicts.size));deferredCount+=result.deferredCount;processed+=result.processed;done+=result.bytes;reusedBytes+=result.reusedBytes;reusedFiles+=result.reusedFiles
+                            if (result.deferredCount>0 || fileDatabase.pendingIssueCount(mapping.getString("key"))>0) {
+                                failedPeers.add(peerId);peerFailures=true;peerOutcome(peerId,java.io.IOException("file_pending"))
+                            }
                             for(reason in result.deferred.take((100-problems.size).coerceAtLeast(0)))problems+=fileProblem(reason)
                             _status.update { it.copy(fileActions=actions.toMap(),fileDeferredCount=deferredCount,fileProcessed=processed,fileReusedBytes=reusedBytes,fileReusedFiles=reusedFiles,lastReusedBytes=if(reusedFiles>0 && deferredCount==0)reusedBytes else it.lastReusedBytes,lastReusedFiles=if(reusedFiles>0 && deferredCount==0)reusedFiles else it.lastReusedFiles) }
-                        } finally { client.close();activeFileRoot=null }
-                        drainRefresh {
+                        } finally { client.close();activeFileRoot=null;activeFilePeer=null }
+                        drainRefresh(mapping.getString("key")) {
                             automation.phase("library_refresh")
                             _status.update { it.copy(text=context.getString(R.string.sync_library_refresh)) }
                         }
+                        if (peerId !in failedPeers) peerOutcome(peerId)
+                        } catch (e: CancellationException) { throw e }
+                        catch (e: Exception) {
+                            peerFailures=true;failedPeers.add(peerId);deferredCount++
+                            peerOutcome(peerId,e)
+                            problems += store.connection(peerId).optString("name",peerId.take(8))+": "+problem(e)
+                        } finally { activeFileRoot=null;activeFilePeer=null }
                     }
                     ensureActive()
                     fileRoundCompleted=true
+                    val waitingPeers=store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }
+                        .map(::mappingPeer).distinct().filter { store.connection(it).optJSONObject("schedule")?.optString("state")=="backoff" }
+                    if(waitingPeers.isNotEmpty()) {
+                        peerFailures=true
+                        for(peer in waitingPeers.filterNot { it in failedPeers }) problems+=store.connection(peer).optString("name",peer.take(8))+": "+context.getString(R.string.sync_retry_waiting)
+                    }
+                    store.update { it.remove("manualPeerId");if(!includeUserData)it.remove("manualPending") }
                     if(includeUserData) {
                         exchangeUserData(includeFeatures = true)
                         try { preferences.synchronize(includeUserData=false) } catch(e: CancellationException) { throw e } catch(e: Exception) { problems += if(e is LanRemoteException) problem(e) else "Personal preference delta pending: peer offline or older protocol" }
-                        store.update { it.remove("manualPending") }
+                        store.update { it.remove("manualPending");it.remove("manualPeerId") }
                     }
-                    _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
+                    _status.value = _status.value.copy(running=false,text=context.getString(if(problems.isEmpty() && _status.value.fileConflicts.isEmpty()) R.string.lan_done else R.string.lan_issues),done=done,total=0,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs,fileDeferredCount=deferredCount)
                 } catch (e: CancellationException) {
                     _status.value = _status.value.copy(running=false,text=stoppedText(),done=done,total=total,problems=problems,timeDetails=timeDetails,precisionNs=precisionNs)
                 } catch (e: Exception) {
@@ -426,7 +526,7 @@ class LanSyncService @Inject constructor(
                 // choice is not a successful idle state; retry with the normal bounded backoff.
                 val pending=store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) && fileDatabase.pendingIssueCount(it.getString("key"))>0 }
                 if(pending && currentCoroutineContext().isActive)automation.hint("conflict_pending")
-                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental,reusedBytes=reusedBytes,reusedFiles=reusedFiles,indexHits=indexHits,indexMisses=indexMisses,indexRefreshed=indexRefreshed,libraryReused=libraryReused)
+                automation.finish(currentCoroutineContext().isActive && fileRoundCompleted && !peerFailures && _status.value.fileDeferredCount==0 && !pending,LanFileMetrics.metadataObservations.get()-metadataBefore,LanFileMetrics.hashBytes.get()-hashBefore,completedBytes,handoff=stop.reason=="background",preparationMs=preparationMs,firstTransferMs=firstTransferMs,requests=requests,cacheHit=cacheHit,metadataRows=metadataRows,incremental=incremental,reusedBytes=reusedBytes,reusedFiles=reusedFiles,indexHits=indexHits,indexMisses=indexMisses,indexRefreshed=indexRefreshed,libraryReused=libraryReused,peerFailures=peerFailures || (stop.reason=="cancelled" && !store.read().optBoolean("autoCancelled")))
             }
         }
     }
@@ -449,11 +549,12 @@ class LanSyncService @Inject constructor(
         if(path.endsWith(".cue",true)) { paths.addAll(fileDatabase.cueAudio(mapping.getString("key"),path));paths.addAll(audio) }
         fileDatabase.queueRefresh(mapping.getString("key"),path,JSONObject().put("stamp",entry?.optString("stamp")).put("deleted",deleted).put("audio",JSONArray(audio.toList())).put("paths",JSONArray(paths.toList())))
     }
-    private suspend fun drainRefresh(onBatch: ()->Unit={}) {
+    private suspend fun drainRefresh(mappingKey: String? = null,onBatch: ()->Unit={}) {
         // Legacy refresh entries are inert, just like legacy file transactions.
         if(ledger.has("refresh")) { ledger.remove("refresh");saveLedger() }
-        for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optString("directoryIdentity").isNotEmpty() }) {
+        for(mapping in store.mappings().filter { LanMappingTargets.isCurrent(it) && it.optString("directoryIdentity").isNotEmpty() && (mappingKey==null || it.getString("key")==mappingKey) }) {
             val key=mapping.getString("key")
+            try {
             while(true) {
                 val queued=fileDatabase.refreshPaths(key);if(queued.isEmpty())break
                 onBatch()
@@ -483,6 +584,11 @@ class LanSyncService @Inject constructor(
                 // A cancellation/error safely repeats the batch on recovery.
                 flush()
                 fileDatabase.refreshed(key,queued)
+            }
+            } catch(e: CancellationException) { throw e }
+            catch(e: Exception) {
+                if(mappingKey!=null)throw e
+                peerOutcome(mappingPeer(mapping),e)
             }
         }
     }

@@ -51,8 +51,10 @@ fun LanSyncSettings(lan: LanSyncService) {
     val resources = LocalResources.current
     var mtimeAllowed by remember { mutableStateOf(Environment.isExternalStorageManager()) }
     LifecycleResumeEffect(Unit) { mtimeAllowed = Environment.isExternalStorageManager(); onPauseOrDispose {} }
-    val mappings = remember(revision) { lan.store.mappings() }
-    val connection = remember(revision) { lan.store.read().optJSONObject("connection") }
+    val peers = remember(revision) { lan.store.peers() }
+    val selectedPeer = remember(revision) { lan.store.selectedPeerId() }
+    val mappings = remember(revision) { lan.store.mappings().filter { it.optString("peerId") == selectedPeer } }
+    val connection = peers.singleOrNull { it.getString("peerId") == selectedPeer }
     val paired = connection != null
     var scanning by remember { mutableStateOf(false) }
     var cameraDenied by remember { mutableStateOf(false) }
@@ -70,6 +72,7 @@ fun LanSyncSettings(lan: LanSyncService) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var forget by remember { mutableStateOf<JSONObject?>(null) }
+    var forgetPeer by remember { mutableStateOf<JSONObject?>(null) }
     var details by rememberSaveable { mutableStateOf(false) }
     val enabledMappings = mappings.any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled", true) }
     suspend fun refreshRoots() {
@@ -84,6 +87,20 @@ fun LanSyncSettings(lan: LanSyncService) {
         SettingSummary(stringResource(R.string.lan_intro), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SettingSummary(connection?.let { stringResource(R.string.lan_paired_identity, it.optString("name", it.optString("host")), "${it.optString("host")}:${it.optInt("port")}") }
             ?: stringResource(R.string.sync_not_paired), Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_connection"))
+        for (peer in peers) {
+            val id=peer.getString("peerId")
+            val state=peer.optJSONObject("schedule")
+            val summary=if(state?.optBoolean("cancelled")==true) stringResource(R.string.sync_cancelled)
+                else if(state?.optString("state")=="backoff") stringResource(R.string.sync_retry_waiting)
+                else if(id==selectedPeer) stringResource(R.string.sync_peer_selected) else stringResource(R.string.sync_peer_select)
+            SettingItem(peer.optString("name",peer.optString("host")), summary="${peer.optString("host")}:${peer.optInt("port")}\n$summary", enabled=!busy,
+                modifier=Modifier.testTag("sync_peer_$id"),onClick={ lan.selectPeer(id);roots=null;rootsError=null })
+        }
+        if (paired) {
+            SettingItem(stringResource(R.string.sync_peer_forget),summary=stringResource(R.string.sync_peer_forget_help),
+                enabled=!busy && !status.running,modifier=Modifier.testTag("sync_peer_forget"),onClick={ forgetPeer=connection })
+            SettingSummary(stringResource(if(selectedPeer==lan.store.primaryPeerId()) R.string.sync_peer_primary else R.string.sync_peer_files_only),Modifier.padding(horizontal=16.dp,vertical=8.dp))
+        }
         SettingItem(stringResource(R.string.lan_scan), enabled = !busy && !status.running, modifier = Modifier.testTag("lan_scan"), onClick = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) scanning = true
             else cameraPermission.launch(Manifest.permission.CAMERA)
@@ -101,14 +118,14 @@ fun LanSyncSettings(lan: LanSyncService) {
         })
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
         for (m in mappings) {
-            key(m.getString("rootId")) {
+            key(m.getString("key")) {
                 val selected = m.getJSONArray("selection").let { a -> List(a.length()) { a.getString(it).ifEmpty { "/" } }.joinToString(", ") }
                 val current=LanMappingTargets.isCurrent(m)
                 SettingItem(m.getString("name"), summary = (if(current) targetLabel(Uri.parse(m.getString("treeUri"))) else m.getString("relative")+"\n"+stringResource(R.string.lan_mapping_reselect))+"\n"+selected, enabled = !status.running, onClick = { editing = m })
                 SwitchRow(title = stringResource(R.string.lan_enable), summary = stringResource(R.string.lan_pause_keep),
                     checked = current && m.optBoolean("enabled", true), enabled = current,
                     modifier = Modifier.testTag("lan_mapping_enabled_${m.getString("rootId")}"),
-                    onChange = { lan.setEnabled(m.getString("rootId"), it) })
+                    onChange = { lan.setEnabled(m.getString("rootId"), it, m.getString("peerId")) })
                 FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = !status.running, onClick = { forget = m }) { Text(stringResource(R.string.lan_forget)) }
                 }
@@ -136,9 +153,9 @@ fun LanSyncSettings(lan: LanSyncService) {
         if (schedule.lastSuccess > 0) SettingSummary(stringResource(R.string.sync_last_success,
             java.text.DateFormat.getDateTimeInstance().format(java.util.Date(schedule.lastSuccess))), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = paired && !busy && !status.running && enabledMappings, onClick = lan::start, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
-            OutlinedButton(enabled = paired && !busy && !status.running && enabledMappings, onClick = lan::refresh, modifier = Modifier.testTag("lan_refresh")) { Text(stringResource(R.string.sync_refresh_external)) }
-            OutlinedButton(enabled = status.running || (paired && enabledMappings && !schedule.cancelled), onClick = lan::cancel, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
+            Button(enabled = paired && !busy && !status.running && enabledMappings, onClick = { lan.start(selectedPeer) }, modifier = Modifier.testTag("lan_start")) { Text(stringResource(R.string.lan_start)) }
+            OutlinedButton(enabled = paired && !busy && !status.running && enabledMappings, onClick = { lan.refresh(selectedPeer) }, modifier = Modifier.testTag("lan_refresh")) { Text(stringResource(R.string.sync_refresh_external)) }
+            OutlinedButton(enabled = status.running || (paired && enabledMappings && !schedule.cancelled), onClick = { lan.cancel(selectedPeer) }, modifier = Modifier.testTag("lan_cancel")) { Text(stringResource(R.string.cancel)) }
         }
         if (status.running && !status.quiet) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("lan_progress"))
         if (!status.quiet && status.text.isNotBlank()) SettingSummary(status.text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lan_status"))
@@ -200,8 +217,11 @@ fun LanSyncSettings(lan: LanSyncService) {
         dismissButton = { TextButton(enabled = !busy, onClick = { choosingRoots = false }) { Text(stringResource(R.string.cancel)) } })
     editing?.let { root -> LanMappingDialog(lan, root, onDismiss = { editing = null }, onError = { error = it }) }
     forget?.let { m -> AlertDialog(onDismissRequest = { forget = null }, title = { Text(stringResource(R.string.lan_forget)) }, text = { Text(stringResource(R.string.lan_forget_confirm)) },
-        confirmButton = { TextButton(onClick = { lan.forget(m.getString("rootId")); forget = null }) { Text(stringResource(R.string.confirm)) } },
+        confirmButton = { TextButton(onClick = { lan.forget(m.getString("rootId"),m.getString("peerId")); forget = null }) { Text(stringResource(R.string.confirm)) } },
         dismissButton = { TextButton(onClick = { forget = null }) { Text(stringResource(R.string.cancel)) } }) }
+    forgetPeer?.let { peer -> AlertDialog(onDismissRequest={ forgetPeer=null },title={ Text(stringResource(R.string.sync_peer_forget)) },
+        text={ Text(stringResource(R.string.sync_peer_forget_help)) },confirmButton={ TextButton(onClick={ lan.forgetPeer(peer.getString("peerId"));forgetPeer=null }) { Text(stringResource(R.string.confirm)) } },
+        dismissButton={ TextButton(onClick={ forgetPeer=null }) { Text(stringResource(R.string.cancel)) } }) }
     error?.let { message -> AlertDialog(onDismissRequest = { error = null }, title = { Text(stringResource(R.string.lan_issues)) }, text = { Text(message) },
         confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.confirm)) } }) }
 }
@@ -230,7 +250,8 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) target = it }
     val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed -> if (allowed) picker.launch(target) else onError(resources.getString(R.string.permission_needed)) }
-    LaunchedEffect(path) { busy = true; try { children = lan.directories(root.getString("rootId"), path) } catch (e: CancellationException) { throw e } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false } }
+    val peerId=root.optString("peerId").ifEmpty { lan.store.selectedPeerId() }
+    LaunchedEffect(path,peerId) { busy = true; try { children = lan.directories(root.getString("rootId"), path,peerId) } catch (e: CancellationException) { throw e } catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false } }
     fun select(value: String) {
         selection = if (value in selection) selection - value else selection.filterNot { value.isEmpty() || it.startsWith("$value/") || it.isEmpty() || value.startsWith("$it/") }.toSet() + value
         estimate = null
@@ -250,7 +271,7 @@ private fun LanMappingDialog(lan: LanSyncService, root: JSONObject, onDismiss: (
             }
             Text(selection.joinToString("\n") { it.ifEmpty { "/" } })
             OutlinedButton(enabled = !busy && selection.isNotEmpty(), onClick = { scope.launch {
-                busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection); estimate = resources.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
+                busy = true; try { val plan = lan.estimate(root.getString("rootId"), selection,peerId); estimate = resources.getString(R.string.lan_estimate_format, plan.getInt("total"), plan.getLong("bytes")) }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) { onError(e.message.orEmpty()) } finally { busy = false }
             } }) { Text(stringResource(R.string.lan_estimate)) }

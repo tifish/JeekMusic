@@ -4,6 +4,12 @@
 
 当前增加了[多设备共享合同基础](../../docs/sync-group-contract.md)和跨 Windows／Android 回归测试，尚未接入客户端服务或发布新的 LAN capabilities。现有 MCP 工具、参数 Schema 和同步行为保持原样；不提供尚未实现的 sync_groups、sync_collections 等占位工具。后续设备／组操作复用同一业务服务，并按[实施计划](../../docs/multi-device-sync-plan.md#7-界面与-windows-mcp)同时交付运行时描述、严格参数 Schema、文档与真实客户端验证。
 
+## 手机多 PC 连接（P1）
+
+`lan_sync_status.peerScheduleProtocol=1`，LAN capabilities 同名字段为 1。手机的认证调度上报可增加 peerId（手机本地连接 ID，不是凭证）、pairedComputerCount（整数 1–32）、metadataPeer（布尔）。字段仍在 `fileSync.schedules[].schedule` 中按原 scope 查询，reportedAt 表示上报时间；不提供对其他 PC 的授权或控制。一个手机可保留多台 PC 的独立映射、取消与退避，当前查看的电脑不改变传输路由。该轮次 last* 文件计数仍是手机轮次聚合，不能据此视为每台 PC 的独立传输统计。
+
+既有 `lan_sync_status` 无参数，工具集和输入 Schema 保持兼容；只读诊断及描述更新共用于日常／正式版。手机连接旧 PC 时不发送未协商的额外字段。详情及真实客户端证据见[多 PC 独立连接](../../docs/multi-peer-connections.md)。本阶段没有发布 syncGroupProtocol、userDataFormat=3 或组管理占位工具。
+
 ## 外网扫码地址
 
 `lan_sync_control action=external_address`、必填 `externalAddress`，保存独立于监听地址的手机连接端点。例如 `{"action":"external_address","externalAddress":"music.example.com:45678"}`。接受 `域名:端口`、`tls://域名:端口`、`https://域名:端口`（https 省略端口时为 443），统一保存为 `tls://host:port`；空字符串清除。拒绝路径、账号、查询参数、IPv6、回环、未指定及广播/组播地址。保存不依赖 DNS 在线，不改监听、路由器或现有设备凭证，并使尚未使用的邀请码失效。

@@ -6,6 +6,19 @@ namespace JeekMusic.App.Tests;
 
 public sealed class LanFileSyncStoreTests
 {
+    [Fact] public void MultiComputerScheduleDiagnosticsAreBoundedAndRemainScopeLocal()
+    {
+        using var f=new Fixture();using var store=f.Store();
+        var first=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+        var second=Text(store.Open("phone","owner","root",Id(),[""])["scope"]);
+        store.Schedule(first,new() { ["schedule"]=new JsonObject { ["peerId"]="pc-a",["pairedComputerCount"]=2L,["metadataPeer"]=true } });
+        store.Schedule(second,new() { ["schedule"]=new JsonObject { ["peerId"]="pc-b",["pairedComputerCount"]=2L,["metadataPeer"]=false } });
+        Assert.Equal(2,store.Diagnostics()["schedules"]!.AsArray().Count);
+        foreach(var value in new JsonNode?[] { JsonValue.Create(0L),JsonValue.Create(33L),JsonValue.Create("2"),null })
+            Assert.Throws<ArgumentException>(()=>store.Schedule(first,new() { ["schedule"]=new JsonObject { ["pairedComputerCount"]=value?.DeepClone() } }));
+        Assert.Throws<ArgumentException>(()=>store.Schedule(first,new() { ["schedule"]=new JsonObject { ["metadataPeer"]="true" } }));
+        Assert.Throws<ArgumentException>(()=>store.Schedule(first,new() { ["schedule"]=new JsonObject { ["peerId"]="../other" } }));
+    }
     [Fact] public void PeerNetworkPolicyDiagnosticsAreOptionalAndBoolean()
     {
         using var f=new Fixture();using var store=f.Store();

@@ -35,7 +35,7 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     private var firstHint=0L
     private var failures=0
     private var workerOwned=false
-    private fun eligible()=service.store.read().has("connection") && service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) }
+    private fun eligible()=service.store.peers().isNotEmpty() && (service.store.read().has("connection") || service.store.mappings().any { LanMappingTargets.isCurrent(it) && it.optBoolean("enabled",true) })
     private fun held()=service.store.read().optBoolean("autoCancelled")
     fun initialize() {
         synchronized(lock) { if(initialized)return;initialized=true }
@@ -165,13 +165,15 @@ internal class LanAutoSync(private val context: Context,private val scope: Corou
     fun phase(stage: String) { synchronized(lock) {
         if(_state.value.running && _state.value.state!=stage) { _state.value=_state.value.copy(state=stage);report() }
     } }
-    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false,metadataRows: Long=0,incremental: Boolean=false,reusedBytes: Long=0,reusedFiles: Int=0,indexHits: Int=0,indexMisses: Int=0,indexRefreshed: Int=0,libraryReused: Int=0) {
+    fun finish(success: Boolean,metadata: Long,hash: Long,bytes: Long,handoff: Boolean=false,preparationMs: Long=0,firstTransferMs: Long=-1,requests: Long=0,cacheHit: Boolean=false,metadataRows: Long=0,incremental: Boolean=false,reusedBytes: Long=0,reusedFiles: Int=0,indexHits: Int=0,indexMisses: Int=0,indexRefreshed: Int=0,libraryReused: Int=0,peerFailures: Boolean=false) {
         synchronized(lock) {
             val old=_state.value;val now=System.currentTimeMillis()
             _state.value=old.copy(running=false,lastSuccess=if(success)now else old.lastSuccess,nextReconcile=0,lastMetadataObservations=metadata,lastHashBytes=hash,lastTransferBytes=bytes,lastPreparationMs=preparationMs,lastFirstTransferMs=firstTransferMs,lastProtocolRequests=requests,lastManifestCacheHit=cacheHit,lastMetadataRows=metadataRows,lastIncremental=incremental,lastAudioReusedBytes=reusedBytes,lastAudioReusedFiles=reusedFiles,lastLocalIndexHits=indexHits,lastLocalIndexMisses=indexMisses,lastLocalIndexRefreshedFiles=indexRefreshed,lastLibraryMetadataReusedFiles=libraryReused,state=if(held())"cancelled" else if(success)"idle" else "backoff")
             if(service.networkPolicy.waitingForWifi) _state.value=_state.value.copy(state="waiting_for_wifi",waitingForWifi=true,backoffUntil=0)
             else if(handoff && !held())_state.value=_state.value.copy(state="waiting_for_background",backoffUntil=0)
-            else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }else failed("retry_backoff")
+            else if(success) { failures=0;_state.value=_state.value.copy(backoffUntil=0) }
+            else if(peerFailures) _state.value=_state.value.copy(state="waiting_for_peers",backoffUntil=0)
+            else failed("retry_backoff")
             if(old.dirty && !held())hint("dirty_followup")
         }
         report()

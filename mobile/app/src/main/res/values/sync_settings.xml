@@ -1,4 +1,10 @@
 <resources>
+    <string name="sync_peer_selected">Currently viewing this computer</string>
+    <string name="sync_peer_select">View this computer and its folders</string>
+    <string name="sync_peer_forget">Forget this computer</string>
+    <string name="sync_peer_forget_help">Remove this connection and its folder mappings. Keep all local files. Revoke this device on the computer to remove its remote access.</string>
+    <string name="sync_peer_primary">Playlists, annotations and learning data sync with this primary computer.</string>
+    <string name="sync_peer_files_only">This connection syncs its selected folders. Personal data continues to sync with the primary computer.</string>
     <string name="sync_incremental_help">Automatic sync checks system media changes and edits made in JeekMusic. Use Refresh external files after editing lyrics, covers or CUE files in another app. Refresh scans the selected folders once.</string>
     <string name="sync_refresh_external">Refresh external files</string>
     <string name="sync_audio_reuse_help">When audio is identical, only changed tags are transferred. Other changes use the complete file.</string>

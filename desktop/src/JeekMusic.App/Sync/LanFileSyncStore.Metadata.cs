@@ -9,13 +9,15 @@ internal sealed partial class LanFileSyncStore
     public JsonObject Schedule(string scope,JsonObject args)
     {
         var row=args["schedule"]?.AsObject()??throw new ArgumentException("Schedule required");
-        var allowed=new HashSet<string> { "trigger","dirty","running","paused","cancelled","foreground","backoffUntil","lastSuccess","nextReconcile","lastMetadataObservations","lastHashBytes","lastTransferBytes","state","watchDirectories","watchFailed","wifiOnly","waitingForWifi","lastManifestCacheHit","lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastMetadataRows","lastIncremental","lastAudioReusedBytes","lastAudioReusedFiles","lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles" };
+        var allowed=new HashSet<string> { "trigger","dirty","running","paused","cancelled","foreground","backoffUntil","lastSuccess","nextReconcile","lastMetadataObservations","lastHashBytes","lastTransferBytes","state","watchDirectories","watchFailed","wifiOnly","waitingForWifi","lastManifestCacheHit","lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastMetadataRows","lastIncremental","lastAudioReusedBytes","lastAudioReusedFiles","lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles","peerId","pairedComputerCount","metadataPeer" };
         if(row.Count>allowed.Count || row.Any(p=>!allowed.Contains(p.Key)) || row.ToJsonString().Length>4096)throw new ArgumentException("Invalid schedule diagnostics");
         foreach(var p in row)if(p.Value is JsonObject or JsonArray || p.Value?.ToJsonString().Length>256)throw new ArgumentException("Invalid schedule diagnostic value");
-        foreach(var key in new[] { "wifiOnly","waitingForWifi","lastManifestCacheHit","lastIncremental" })
+        foreach(var key in new[] { "wifiOnly","waitingForWifi","lastManifestCacheHit","lastIncremental","metadataPeer" })
             if(row.ContainsKey(key) && (row[key] is not JsonValue value || !value.TryGetValue<bool>(out _)))throw new ArgumentException("Network policy diagnostics must be boolean");
         foreach(var key in new[] { "lastPreparationMs","lastFirstTransferMs","lastProtocolRequests","lastMetadataRows","lastAudioReusedBytes","lastAudioReusedFiles","lastLocalIndexHits","lastLocalIndexMisses","lastLocalIndexRefreshedFiles","lastLibraryMetadataReusedFiles" })
             if(row.ContainsKey(key) && (row[key] is not JsonValue value || !value.TryGetValue<long>(out var number) || number<(key=="lastFirstTransferMs"?-1:0)))throw new ArgumentException("Invalid performance diagnostic");
+        if(row.ContainsKey("peerId") && (row["peerId"] is not JsonValue identity || !identity.TryGetValue<string>(out var id) || id.Length is <1 or >64 || id.Any(c=>!char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_'))))throw new ArgumentException("Invalid peer diagnostic");
+        if(row.ContainsKey("pairedComputerCount") && (row["pairedComputerCount"] is not JsonValue count || !count.TryGetValue<long>(out var peerCount) || peerCount is <1 or >32))throw new ArgumentException("Invalid peer count");
         var copy=row.DeepClone().AsObject();copy["reportedAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();schedules[scope]=copy;
         return new() { ["accepted"]=true };
     }

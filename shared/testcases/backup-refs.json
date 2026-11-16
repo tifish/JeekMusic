@@ -8,6 +8,12 @@
     { "description": "嵌套时取最深的根", "roots": [ ["v", "Music/"], ["v", "Music/Pop/"] ], "trackKey": "v:Music/Pop/a.mp3", "expected": "a.mp3" }
   ],
   "match": [
+    { "description": "peer identity never suffix matches another peer", "refs": { "peer:pc-a/root:r/song.wav": "a", "ordinary/song.wav": "ordinary" }, "ref": "peer:pc-b/root:r/song.wav", "expected": null },
+    { "description": "peer reference exact match survives", "refs": { "peer:pc-a/root:r/song.wav": "a" }, "ref": "peer:pc-a/root:r/song.wav", "expected": "a" },
+    { "description": "managed peer cannot capture plain filename", "refs": { "peer:pc-a/root:r/song.wav": "a" }, "ref": "song.wav", "expected": null },
+    { "description": "collection identity never suffix matches", "refs": { "collection:c-a/song.wav": "a", "ordinary/song.wav": "ordinary" }, "ref": "collection:c-b/song.wav", "expected": null },
+    { "description": "managed collection cannot capture plain filename", "refs": { "collection:c-a/song.wav": "a" }, "ref": "song.wav", "expected": null },
+    { "description": "root identity cannot capture same filename", "refs": { "root:r/song.wav": "a", "ordinary/song.wav": "ordinary" }, "ref": "root:another/song.wav", "expected": null },
     { "description": "完全匹配优先", "refs": { "周杰伦/晴天.mp3": "k1", "Other/晴天.mp3": "k2" }, "ref": "周杰伦/晴天.mp3", "expected": "k1" },
     { "description": "层级不同时按后缀匹配：新设备上把整个 Music 拷进了 Backup/Music", "refs": { "Music/周杰伦/晴天.mp3": "k1", "Music/许巍/曾经的你.mp3": "k2" }, "ref": "周杰伦/晴天.mp3", "expected": "k1" },
     { "description": "只有文件名也能唯一匹配", "refs": { "Music/周杰伦/晴天.mp3": "k1", "Music/许巍/曾经的你.mp3": "k2" }, "ref": "曾经的你.mp3", "expected": "k2" },

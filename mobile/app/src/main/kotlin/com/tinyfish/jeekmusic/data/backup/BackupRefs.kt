@@ -5,6 +5,7 @@ package com.tinyfish.jeekmusic.data.backup
  * 音乐文件夹换了卷或换了上级目录（比如拷到新手机、挪到 SD 卡），依然能对上。
  */
 object BackupRefs {
+    fun isManagedReference(reference: String) = listOf("root:", "peer:", "collection:").any { reference.startsWith(it, ignoreCase = true) }
 
     data class Root(val volumeName: String, val relativePath: String)
 
@@ -27,11 +28,11 @@ object BackupRefs {
      */
     class Matcher(refToTrackKey: Map<String, String>) {
         private val exact = refToTrackKey
-        private val byFileName = refToTrackKey.entries.filterNot { it.key.startsWith("root:", ignoreCase = true) }.groupBy { it.key.substringAfterLast('/') }
+        private val byFileName = refToTrackKey.entries.filterNot { isManagedReference(it.key) }.groupBy { it.key.substringAfterLast('/') }
 
         fun match(ref: String): String? {
             exact[ref]?.let { return it }
-            if (ref.startsWith("root:", ignoreCase = true)) return null
+            if (isManagedReference(ref)) return null
             val candidates = byFileName[ref.substringAfterLast('/')].orEmpty()
             if (candidates.size == 1) return candidates.single().value
             if (candidates.isEmpty()) return null

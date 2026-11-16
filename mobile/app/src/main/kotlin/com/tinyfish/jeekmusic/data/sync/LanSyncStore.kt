@@ -6,6 +6,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,13 +35,61 @@ internal object LanBindings {
 @Singleton
 class LanSyncStore @Inject constructor(@param:ApplicationContext context: Context, private val ledger: LanSyncLedger,private val fileDatabase: LanFileDatabase=LanFileDatabase(context)) {
     private val file = AtomicFile(File(context.filesDir, "lan-sync.json"))
-    private var data = runCatching { JSONObject(file.readFully().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
+    private var data: JSONObject
+    init {
+        val bytes = try { file.readFully() } catch (e: FileNotFoundException) {
+            if (file.baseFile.exists() || File(file.baseFile.path + ".bak").exists() || File(file.baseFile.path + ".new").exists()) throw e
+            null
+        }
+        val original = bytes?.let { JSONObject(it.toString(Charsets.UTF_8)) } ?: JSONObject()
+        val migrated = LanPeerSettings.migrate(original)
+        if (migrated.toString() != original.toString()) {
+            if (bytes != null && original.optInt("schemaVersion") < LanPeerSettings.VERSION) {
+                val backup = AtomicFile(File(context.filesDir, "lan-sync-v1.json"))
+                if (!backup.baseFile.exists()) writeFile(backup, bytes)
+            }
+            writeFile(file, migrated.toString().toByteArray(Charsets.UTF_8))
+        }
+        data = migrated
+    }
+    private fun writeFile(target: AtomicFile, bytes: ByteArray) {
+        val stream = target.startWrite()
+        try {
+            stream.write(bytes); stream.fd.sync(); target.finishWrite(stream)
+            if (File(target.baseFile.path + ".new").exists() || !target.baseFile.readBytes().contentEquals(bytes))
+                throw IOException("Sync settings commit verification failed")
+        } catch (e: Exception) { target.failWrite(stream); throw e }
+    }
     @Synchronized fun read(): JSONObject = JSONObject(data.toString())
-    @Synchronized fun update(change: (JSONObject) -> Unit) {
-        val next = JSONObject(data.toString()); change(next)
-        val stream = file.startWrite()
-        try { stream.write(next.toString().toByteArray()); file.finishWrite(stream); data = next }
-        catch (e: Exception) { file.failWrite(stream); throw e }
+    @Synchronized fun update(acceptLegacyConnection: Boolean = true, change: (JSONObject) -> Unit) {
+        val next = JSONObject(data.toString())
+        val before = next.optJSONObject("connection")?.toString()
+        change(next)
+        if (acceptLegacyConnection && before != next.optJSONObject("connection")?.toString()) LanPeerSettings.importLegacyConnection(next)
+        LanPeerSettings.normalize(next)
+        writeFile(file, next.toString().toByteArray(Charsets.UTF_8)); data = next
+    }
+    fun peers(): List<JSONObject> = LanPeerSettings.rows(read())
+    fun primaryPeerId(): String = read().optString("primaryPeerId")
+    fun selectedPeerId(): String = read().optString("selectedPeerId")
+    fun connection(peerId: String = selectedPeerId()): JSONObject = peers().single { it.getString("peerId") == peerId }
+    fun connectionFor(mapping: JSONObject): JSONObject = connection(mapping.optString("peerId").ifEmpty { primaryPeerId() })
+    fun addPeer(connection: JSONObject): String {
+        var id = ""
+        update(false) { id = LanPeerSettings.add(it, connection) }
+        return id
+    }
+    fun selectPeer(peerId: String) = update(false) { state ->
+        require(LanPeerSettings.rows(state).any { it.getString("peerId") == peerId })
+        state.put("selectedPeerId", peerId)
+    }
+    fun updatePeer(peerId: String, change: (JSONObject) -> Unit) = update(false) { state ->
+        change(LanPeerSettings.rows(state).single { it.getString("peerId") == peerId })
+    }
+    fun forgetPeer(peerId: String) = update(false) { state ->
+        state.put("peers", JSONArray(LanPeerSettings.rows(state).filterNot { it.getString("peerId") == peerId }))
+        state.put("mappings", JSONArray(mappings().filterNot { it.optString("peerId") == peerId }))
+        if (state.optString("primaryPeerId") == peerId) state.put("primaryPeerId", "")
     }
     @Synchronized fun reference(trackKey: String): String? {
         val mappings = data.optJSONArray("mappings") ?: return null
@@ -48,7 +98,8 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
             if(!LanMappingTargets.isCurrent(m)) continue
             val prefix = m.optString("volume") + ":" + m.optString("relative")
             if (m.optString("relative").isNotEmpty() && trackKey.startsWith(prefix))
-                return "root:${m.getString("rootId")}/" + trackKey.removePrefix(prefix)
+                return (if (m.optString("peerId") == data.optString("primaryPeerId")) "" else "peer:${m.optString("peerId")}/") +
+                    "root:${m.getString("rootId")}/" + trackKey.removePrefix(prefix)
         }
         return null
     }
@@ -76,8 +127,9 @@ class LanSyncStore @Inject constructor(@param:ApplicationContext context: Contex
         return emptyList()
     }
     fun saveMapping(mapping: JSONObject) = update { state ->
+        if (!mapping.has("peerId") && state.optString("primaryPeerId").isNotEmpty()) mapping.put("peerId", state.getString("primaryPeerId"))
         val list = state.optJSONArray("mappings") ?: JSONArray()
-        val index = (0 until list.length()).firstOrNull { list.getJSONObject(it).getString("rootId") == mapping.getString("rootId") }
+        val index = (0 until list.length()).firstOrNull { LanPeerSettings.sameMapping(list.getJSONObject(it), mapping) }
         // Updating a switch or sync checkpoint must not move its folder under the user's finger.
         if (index == null) list.put(mapping) else list.put(index, mapping)
         state.put("mappings", list)

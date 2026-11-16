@@ -18,6 +18,36 @@ class LanSyncStoreTest {
         override fun getFilesDir(): File = isolated
     }
 
+    @Test fun persistedLegacyMigrationKeepsOriginalBackupAndTwoPeersAcrossRestart() {
+        val context = context()
+        val pin = "a".repeat(64)
+        val original = JSONObject().put("connection", JSONObject().put("pin", pin).put("token", "synthetic-original").put("host", "localhost").put("port", 10))
+            .put("mappings", JSONArray().put(JSONObject().put("rootId", "same").put("key", "original-key").put("scope", "original-scope")))
+        File(context.filesDir, "lan-sync.json").writeText(original.toString())
+        val store = LanSyncStore(context, LanSyncLedger(context))
+        assertEquals(original.toString(), File(context.filesDir, "lan-sync-v1.json").readText())
+        store.addPeer(JSONObject().put("pin", "b".repeat(64)).put("token", "synthetic-second").put("host", "localhost").put("port", 20))
+        store.saveMapping(JSONObject().put("peerId", "b".repeat(64)).put("rootId", "same").put("key", "second-key"))
+        val restarted = LanSyncStore(context, LanSyncLedger(context))
+        assertEquals(2, restarted.peers().size)
+        assertEquals(2, restarted.mappings().size)
+        assertEquals("original-key", restarted.mappings()[0].getString("key"))
+        assertEquals("original-scope", restarted.mappings()[0].getString("scope"))
+        assertEquals("synthetic-original", restarted.read().getJSONObject("connection").getString("token"))
+        restarted.forgetPeer(pin)
+        assertFalse(restarted.read().has("connection"))
+        assertEquals("second-key", restarted.mappings().single().getString("key"))
+        assertEquals(1, LanSyncStore(context, LanSyncLedger(context)).peers().size)
+    }
+
+    @Test fun malformedSettingsAreNotSilentlyReplacedWithEmptyConfiguration() {
+        val context = context()
+        val file = File(context.filesDir, "lan-sync.json")
+        file.writeText("{broken")
+        assertThrows(org.json.JSONException::class.java) { LanSyncStore(context, LanSyncLedger(context)) }
+        assertEquals("{broken", file.readText())
+    }
+
     @Test fun togglingMappingsKeepsOrderAndOtherFoldersUnchangedAcrossRestart() {
         val context = context()
         val store = LanSyncStore(context, LanSyncLedger(context))

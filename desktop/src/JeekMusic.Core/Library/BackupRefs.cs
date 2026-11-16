@@ -6,6 +6,7 @@ namespace JeekMusic.Core.Library;
 /// </summary>
 public static class BackupRefs
 {
+    public static bool IsManagedReference(string reference) => new[] { "root:", "peer:", "collection:" }.Any(prefix => reference.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     public sealed record Root(string VolumeName, string RelativePath);
 
     /// <summary>
@@ -37,13 +38,13 @@ public static class BackupRefs
         public Matcher(IReadOnlyDictionary<string, string> refToTrackKey)
         {
             _exact = refToTrackKey;
-            _byFileName = refToTrackKey.Where(e => !e.Key.StartsWith("root:", StringComparison.OrdinalIgnoreCase)).GroupBy(e => LastSegment(e.Key)).ToDictionary(g => g.Key, g => g.ToList());
+            _byFileName = refToTrackKey.Where(e => !IsManagedReference(e.Key)).GroupBy(e => LastSegment(e.Key)).ToDictionary(g => g.Key, g => g.ToList());
         }
 
         public string? Match(string reference)
         {
             if (_exact.TryGetValue(reference, out var exact)) return exact;
-            if (reference.StartsWith("root:", StringComparison.OrdinalIgnoreCase)) return null;
+            if (IsManagedReference(reference)) return null;
             if (!_byFileName.TryGetValue(LastSegment(reference), out var candidates)) return null;
             if (candidates.Count == 1) return candidates[0].Value;
             // 同名文件有多个时，取共同后缀段最多且唯一的那个

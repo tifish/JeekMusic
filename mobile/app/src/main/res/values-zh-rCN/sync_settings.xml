@@ -1,4 +1,10 @@
 <resources>
+    <string name="sync_peer_selected">当前查看的电脑</string>
+    <string name="sync_peer_select">查看这台电脑及其目录</string>
+    <string name="sync_peer_forget">忘记这台电脑</string>
+    <string name="sync_peer_forget_help">移除这台电脑的连接和目录映射，保留全部本机文件。若需撤销远端访问，请在电脑上撤销此设备。</string>
+    <string name="sync_peer_primary">歌单、标注和学习数据与这台主电脑同步。</string>
+    <string name="sync_peer_files_only">此连接同步所选目录；个人数据继续与主电脑同步。</string>
     <string name="sync_incremental_help">自动同步检查系统媒体变化和本软件内的编辑。在其他软件中修改歌词、封面或 CUE 后，请点击“刷新外部文件”，完整检查一次所选目录。</string>
     <string name="sync_refresh_external">刷新外部文件</string>
     <string name="sync_audio_reuse_help">音频相同时只传输变化的标签；其他变化自动传输完整文件。</string>

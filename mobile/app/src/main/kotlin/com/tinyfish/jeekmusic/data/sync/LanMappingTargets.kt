@@ -7,8 +7,8 @@ internal object LanMappingTargets {
     const val VERSION=2
     fun isCurrent(mapping: JSONObject)=mapping.optInt("layoutVersion")==VERSION
     fun requireCurrent(mapping: JSONObject) { require(isCurrent(mapping)) { "Reselect destination: old mapping layout is no longer executable; existing files are retained" } }
-    fun requireSeparate(mappings: List<JSONObject>, rootId: String, volume: String, relative: String) {
-        for (other in mappings.filter { isCurrent(it) && it.getString("rootId") != rootId }) {
+    fun requireSeparate(mappings: List<JSONObject>, rootId: String, volume: String, relative: String, peerId: String? = null) {
+        for (other in mappings.filter { isCurrent(it) && (it.getString("rootId") != rootId || (peerId != null && it.optString("peerId") != peerId)) }) {
             if (other.getString("volume") == volume) {
                 val candidate = relative.lowercase(java.util.Locale.ROOT)
                 val existing = other.getString("relative").lowercase(java.util.Locale.ROOT)

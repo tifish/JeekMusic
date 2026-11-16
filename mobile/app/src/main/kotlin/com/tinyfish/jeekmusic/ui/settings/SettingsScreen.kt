@@ -265,7 +265,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val checkingUpdate by viewModel.checkingUpdate.collectAsStateWithLifecycle()
     val lanStatus by viewModel.lan.status.collectAsStateWithLifecycle()
     val lanRevision by viewModel.lan.revision.collectAsStateWithLifecycle()
-    val paired = remember(lanRevision) { viewModel.lan.store.read().optJSONObject("connection") != null }
+    val paired = remember(lanRevision) { viewModel.lan.store.peers().isNotEmpty() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).systemBarsPadding().testTag("settings")) {
         SubScreenHeader(title = stringResource(page?.title ?: R.string.settings_title), onBack = goBack)

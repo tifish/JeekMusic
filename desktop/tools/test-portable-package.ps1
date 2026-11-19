@@ -27,7 +27,15 @@ if ($NativeAot) {
 }
 $start.EnvironmentVariables['DOTNET_HOST_TRACE'] = '1'
 $start.EnvironmentVariables['DOTNET_HOST_TRACEFILE'] = Join-Path $evidence 'host-trace.log'
-$p = [Diagnostics.Process]::Start($start)
+# Windows PowerShell uses Console.InputEncoding for redirected stdin. A UTF-8
+# preamble would become part of the bridge's first JSON-RPC request.
+$originalInputEncoding = [Console]::InputEncoding
+try {
+    [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
+    $p = [Diagnostics.Process]::Start($start)
+} finally {
+    [Console]::InputEncoding = $originalInputEncoding
+}
 $script:id = 0
 function Request([string]$method, $parameters) {
     $script:id++
@@ -37,7 +45,7 @@ function Request([string]$method, $parameters) {
     if (-not $read.Wait(45000)) { throw "MCP timeout: $method" }
     if (-not $read.Result) { throw "MCP disconnected: $($p.StandardError.ReadToEnd())" }
     $result = $read.Result | ConvertFrom-Json
-    if ($result.error) { throw ($result.error | ConvertTo-Json -Compress) }
+    if ($result.error) { throw "MCP ${method}: $($result.error | ConvertTo-Json -Compress)" }
     return $result.result
 }
 function Call([string]$name, $arguments = @{}) {

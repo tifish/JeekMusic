@@ -19,11 +19,11 @@ public static partial class Updater
                 try { Process.GetProcessById(pid).WaitForExit(15000); } catch (ArgumentException) { }
             }
             var source = AppPaths.AppDir;
+            var portableTarget = File.Exists(Path.Combine(appDir, "portable.json"));
             foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(source, file);
-                // An update must never ship or overwrite portable user data.
-                if (!IsPayloadFile(rel)) continue;
+                if (!IsPayloadFile(rel, portableTarget)) continue;
                 var target = Path.Combine(appDir, rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 for (var attempt = 0; ; attempt++)
@@ -43,6 +43,10 @@ public static partial class Updater
         }
     }
 
-    internal static bool IsPayloadFile(string relativePath) =>
-        !relativePath.Replace('\\', '/').StartsWith("data/", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsPayloadFile(string relativePath, bool portableTarget)
+    {
+        // Legacy ZIPs used LocalAppData. Adding the portable marker would switch to an empty data directory.
+        return !relativePath.Replace('\\', '/').StartsWith("data/", StringComparison.OrdinalIgnoreCase)
+            && (portableTarget || !relativePath.Equals("portable.json", StringComparison.OrdinalIgnoreCase));
+    }
 }

@@ -190,6 +190,10 @@ Windows 客户端内置 MCP 服务，Debug、Release 和 Native AOT 发布包使
 
 ## 工具
 
+### 桌面版更新检查
+
+`check_update` 接受空对象 `{}`。它通过与“设置 → 关于 → 检查更新”相同的服务查询 GitHub，并记录本次检查时间。返回 `currentVersion`、`releasesPage`、`available` 和 `update`。有新版本时，`update` 包含 `version`、`tag`、`downloadUrl`、字节数 `size`、可空的 `sha256` 和 `notes`。没有可用版本时，`update` 为 `null`。检查可以从开发版和正式版调用，下载和安装由桌面界面确认。
+
 ### 歌名复制快捷键诊断
 
 歌曲列表 Ctrl+C 将选中行的完整显示歌名写入系统剪贴板，多选按当前列表顺序以换行分隔，包含虚拟化行，保留重复条目；不可用播放列表行沿用界面显示名称。无选择不修改剪贴板，输入框保留原生文字复制。

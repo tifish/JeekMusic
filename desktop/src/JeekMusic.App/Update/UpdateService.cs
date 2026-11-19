@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -17,7 +19,10 @@ public sealed record UpdateInfo(int Version, string VersionName, string Notes, s
 /// </summary>
 public sealed class UpdateService(SettingsStore settings)
 {
-    const string ReleasesUrl = "https://api.github.com/repos/tifish/JeekMusic/releases?per_page=30";
+    const string RepoApi = "https://api.github.com/repos/tifish/JeekMusic";
+    const string TagPrefix = "desktop-v1.0.";
+    const string RefPrefix = "refs/tags/";
+    internal const string ReleasesPage = "https://github.com/tifish/JeekMusic/releases?q=desktop-v1.0";
     HttpClient? _http;
 
     HttpClient Http => _http ??= CreateClient();
@@ -47,30 +52,50 @@ public sealed class UpdateService(SettingsStore settings)
     {
         settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         settings.Save("update");
-        using var response = await Http.GetAsync(ReleasesUrl, ct);
+        var info = await FindReleaseAsync(Http, CurrentVersion, ct);
+        return !manual && info?.Version == settings.Current.SkippedUpdateVersion ? null : info;
+    }
+
+    internal static async Task<UpdateInfo?> FindReleaseAsync(HttpClient http, int currentVersion, CancellationToken ct = default)
+    {
+        // Matching refs contain only desktop tags, regardless of the number of Android releases.
+        using var response = await http.GetAsync(RepoApi + "/git/matching-refs/tags/" + TagPrefix, ct);
         response.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
-        UpdateInfo? best = null;
-        foreach (var r in doc.RootElement.EnumerateArray())
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+        var candidates = new List<(int Version, string Tag)>();
+        var prefix = RefPrefix + TagPrefix;
+        foreach (var entry in doc.RootElement.EnumerateArray())
         {
-            var tag = r.GetProperty("tag_name").GetString() ?? "";
-            if (!tag.StartsWith("desktop-v", StringComparison.Ordinal) || r.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
-            if (!int.TryParse(tag[(tag.LastIndexOf('.') + 1)..], out var version)) continue;
-            if (best is not null && version <= best.Version) continue;
-            foreach (var a in r.GetProperty("assets").EnumerateArray())
+            var reference = entry.GetProperty("ref").GetString();
+            if (reference?.StartsWith(prefix, StringComparison.Ordinal) == true
+                && int.TryParse(reference.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var version)
+                && version > currentVersion)
+                candidates.Add((version, reference[RefPrefix.Length..]));
+        }
+
+        foreach (var (version, tag) in candidates.OrderByDescending(candidate => candidate.Version))
+        {
+            using var release = await http.GetAsync(RepoApi + "/releases/tags/" + tag, ct);
+            if (release.StatusCode == HttpStatusCode.NotFound) continue;
+            release.EnsureSuccessStatusCode();
+            using var payload = await JsonDocument.ParseAsync(await release.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            var r = payload.RootElement;
+            if (r.GetProperty("draft").GetBoolean() || r.GetProperty("prerelease").GetBoolean()) continue;
+            var versionName = tag["desktop-v".Length..];
+            foreach (var asset in r.GetProperty("assets").EnumerateArray())
             {
-                var name = a.GetProperty("name").GetString() ?? "";
-                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
-                var digest = a.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String ? dg.GetString() : null;
-                best = new UpdateInfo(version, tag["desktop-v".Length..], r.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "",
-                    a.GetProperty("browser_download_url").GetString()!, a.GetProperty("size").GetInt64(),
+                if (asset.GetProperty("name").GetString() != $"JeekMusic-desktop-{versionName}-win-x64.zip"
+                    || asset.GetProperty("state").GetString() != "uploaded") continue;
+                var size = asset.GetProperty("size").GetInt64();
+                var download = asset.GetProperty("browser_download_url").GetString();
+                if (size <= 0 || string.IsNullOrEmpty(download)) continue;
+                var digest = asset.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String ? dg.GetString() : null;
+                return new UpdateInfo(version, versionName, r.TryGetProperty("body", out var body) ? body.GetString() ?? "" : "",
+                    download, size,
                     digest?.StartsWith("sha256:", StringComparison.Ordinal) == true ? digest[7..] : null, tag);
-                break;
             }
         }
-        if (best is null || best.Version <= CurrentVersion) return null;
-        if (!manual && best.Version == settings.Current.SkippedUpdateVersion) return null;
-        return best;
+        return null;
     }
 
     public void Skip(UpdateInfo info)

@@ -15,6 +15,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
     public static AppServices Current { get; private set; } = null!;
 
     public SettingsStore Settings { get; }
+    internal Update.UpdateService Updates { get; }
     public LibraryDb Db { get; }
     public LibraryService Library { get; }
     public Analysis.SmartTagService SmartTags { get; }
@@ -64,6 +65,7 @@ public sealed class AppServices : IDisposable, IAsyncDisposable
             Settings = settings ?? new SettingsStore();
             L.Initialize(Settings.Current.Language);
         }
+        Updates = new(Settings);
         using (LifecycleTimings.Measure("startupWork.libraryDb")) Db = db ?? new LibraryDb(AppPaths.Database);
         Library = new LibraryService(Db, Settings);
         SmartTags = new Analysis.SmartTagService(Library);

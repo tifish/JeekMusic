@@ -2,6 +2,14 @@
 
 Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则和同步协议。界面使用 Avalonia 12，发布为免安装的 Native AOT 程序；播放使用自行编译的音频版 LGPL libmpv。
 
+## 下载与更新
+
+在最新桌面版发布的 Assets 中下载 `JeekMusic-desktop-*-win-x64.zip`。将整个文件夹解压到可写目录后运行 `JeekMusic.exe`，无需安装 .NET。[下载 Windows 桌面版](https://github.com/tifish/JeekMusic/releases?q=desktop-v1.0)
+
+桌面客户端默认每天检查 GitHub 上的更新。“设置 → 关于”可以手动检查或关闭自动检查。确认下载后，选择重新启动即可更新，曲库和设置继续使用原有数据目录。1.0.248 等旧版通过程序内更新后继续使用 `%LOCALAPPDATA%\JeekMusic`。
+
+## 桌面功能
+
 界面默认使用简体中文。Windows 文本统一优先使用系统安装的 **Microsoft YaHei（微软雅黑）**，包括菜单、对话框和桌面歌词；缺少该字体时回退到 Segoe UI 及系统缺字回退。不下载或随包分发字体，图标继续使用 Segoe Fluent Icons / Segoe MDL2 Assets。英文界面沿用同一可读字体链。
 
 已实现文件夹曲库、艺术家和专辑浏览、播放列表、搜索和智能标签筛选、WASAPI 输出和独占模式、队列、托盘与快捷键、迷你播放器、桌面歌词、在线歌词与封面、多设备同步、自动更新及中英文界面。在线歌词和封面默认关闭。

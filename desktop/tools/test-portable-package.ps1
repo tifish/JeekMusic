@@ -1,4 +1,4 @@
-﻿param([string]$Exe = "$PSScriptRoot\..\..\bin\JeekMusic.exe", [switch]$Relocate)
+﻿param([string]$Exe = "$PSScriptRoot\..\..\bin\JeekMusic.exe", [switch]$Relocate, [switch]$NativeAot)
 $ErrorActionPreference = 'Stop'
 # -Relocate exercises native decoding/model loading with fresh data, no playback.
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -20,9 +20,11 @@ $start.RedirectStandardError = $true
 $start.StandardOutputEncoding = [Text.Encoding]::UTF8
 $start.WorkingDirectory = $env:TEMP
 $start.EnvironmentVariables.Remove('JEEKMUSIC_DATA')
-$start.EnvironmentVariables['DOTNET_ROOT'] = Join-Path $evidence 'no-global-dotnet'
-$start.EnvironmentVariables['DOTNET_ROOT_X64'] = Join-Path $evidence 'no-global-dotnet'
-$start.EnvironmentVariables['DOTNET_MULTILEVEL_LOOKUP'] = '0'
+if ($NativeAot) {
+    $start.EnvironmentVariables['DOTNET_ROOT'] = Join-Path $evidence 'no-global-dotnet'
+    $start.EnvironmentVariables['DOTNET_ROOT_X64'] = Join-Path $evidence 'no-global-dotnet'
+    $start.EnvironmentVariables['DOTNET_MULTILEVEL_LOOKUP'] = '0'
+}
 $start.EnvironmentVariables['DOTNET_HOST_TRACE'] = '1'
 $start.EnvironmentVariables['DOTNET_HOST_TRACEFILE'] = Join-Path $evidence 'host-trace.log'
 $p = [Diagnostics.Process]::Start($start)
@@ -53,6 +55,9 @@ try {
     $diagnostic = Call 'get_diagnostics'
     $diagnostic | ConvertTo-Json -Depth 80 | Set-Content (Join-Path $evidence 'diagnostics.json') -Encoding UTF8
     $appRoot = [IO.Path]::GetDirectoryName($Exe)
+    if ($NativeAot -and ($diagnostic.dotnetRuntime.kind -ne 'native-aot' -or (Test-Path (Join-Path $evidence 'host-trace.log')))) {
+        throw 'Expected a Native AOT package that does not invoke the .NET host'
+    }
     if (-not $diagnostic.portable) { throw 'Portable marker not recognized' }
     if ($diagnostic.dataDirectorySource -ne 'portable') { throw 'Portable data not selected' }
     if ($diagnostic.appDirectory.TrimEnd('\') -ne $appRoot) { throw 'Incorrect app root' }

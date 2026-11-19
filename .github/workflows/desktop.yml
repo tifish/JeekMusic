@@ -95,7 +95,7 @@ jobs:
       - name: Portable package relocation and model loading
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Relocate
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Exe publish/JeekMusic/JeekMusic.exe -Relocate
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test-portable-package.ps1 -Exe publish/JeekMusic/JeekMusic.exe -Relocate -NativeAot
 
       - name: Package
         run: |
@@ -114,9 +114,10 @@ jobs:
         if: env.PUBLISH == 'true'
         run: |
           # 上一个桌面端版本之后改动了 desktop/ 或 shared/ 的提交标题
-          last=$(git describe --tags --abbrev=0 --match 'desktop-v*' HEAD 2>/dev/null || true)
+          last=$(git describe --tags --abbrev=0 --match 'desktop-v*' --exclude "desktop-v$VERSION" HEAD 2>/dev/null || true)
           if [ -n "$last" ]; then range="$last..HEAD"; else range="-20"; fi
-          git log --no-merges --pretty='- %s' $range -- desktop shared > release-notes.md
+          printf 'Windows x64 免安装版。下载 ZIP 并解压到可写目录，运行 `JeekMusic.exe`。已有客户端可在“设置 → 关于”检查更新。\n\n' > release-notes.md
+          git log --no-merges --pretty='- %s' $range -- desktop shared .github/workflows/desktop.yml >> release-notes.md
 
 
       - uses: softprops/action-gh-release@v3
@@ -127,4 +128,5 @@ jobs:
           name: Jeek Music 桌面端 ${{ env.VERSION }}
           body_path: release-notes.md
           files: JeekMusic-desktop-${{ env.VERSION }}-win-x64.zip
+          fail_on_unmatched_files: true
           make_latest: false

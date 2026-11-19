@@ -33,6 +33,7 @@ public sealed class McpTools
     internal JsonArray Catalog { get; } = BuildCatalog();
 
     internal static JsonArray BuildCatalog() => new(
+        Tool("check_update", "Check GitHub for a newer published Windows x64 ZIP through the same service as Settings. Takes no arguments. Records the check time and ignores skipped versions, like a manual check. Returns current version, release page and available package metadata without opening a dialog, downloading or installing.", "", [], openWorld: true),
         Tool("sync_backups", "List, restore or purge durable backups for one outgoing Windows mappingId. List pages at most 100 retained receipts. Restore/purge requires paused mapping and receipt, checks native directory identity, and reuses conditional file recovery; restore refuses a live file edited since this backup. Purge requires an acknowledged transaction. Never deletes music during unbind. Production and development share this service.", """
         "action":{"type":"string","enum":["list","restore","purge"]},"mappingId":{"type":"string","minLength":32,"maxLength":32},"receipt":{"type":"string","minLength":64,"maxLength":64},"offset":{"type":"integer","minimum":0}
         """, ["action","mappingId"], destructive:true),
@@ -253,6 +254,26 @@ public sealed class McpTools
             await LanPairingQr.ValidatePhoneHost(host);
             var invitation = app.LanSync.Invite(host, saved?.Port ?? a["advertisedPort"]?.GetValue<int>(), a["permissions"] as JsonObject, a["credentialDays"]?.GetValue<int>() ?? 90);
             return new JsonObject { ["invitation"] = invitation, ["qrPngBase64"] = Convert.ToBase64String(LanPairingQr.Encode(invitation)) };
+        }
+        if (name == "check_update")
+        {
+            McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());
+            var info = await app.Updates.CheckAsync(manual: true);
+            return new JsonObject
+            {
+                ["currentVersion"] = Update.UpdateService.CurrentVersionName,
+                ["releasesPage"] = Update.UpdateService.ReleasesPage,
+                ["available"] = info is not null,
+                ["update"] = info is null ? null : new JsonObject
+                {
+                    ["version"] = info.VersionName,
+                    ["tag"] = info.Tag,
+                    ["downloadUrl"] = info.DownloadUrl,
+                    ["size"] = info.Size,
+                    ["sha256"] = info.Sha256,
+                    ["notes"] = info.Notes,
+                },
+            };
         }
         if (name != "set_smart_tags") return Call(name, a);
         McpSession.Validate(a, Catalog.OfType<JsonObject>().Single(t => t["name"]!.GetValue<string>() == name)["inputSchema"]!.AsObject());

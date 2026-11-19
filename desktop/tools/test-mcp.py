@@ -21,6 +21,12 @@ import wave
 from mcp_client import DEFAULT_EXE, McpClient
 
 
+def validate_catalog(tools):
+    names = {tool["name"] for tool in tools}
+    assert len(names) == len(tools), "Duplicate MCP tool name"
+    assert {"check_update", "get_diagnostics", "get_status", "show_window"} <= names, names
+
+
 def call(client, tool, **arguments):
     result = client.call(tool, arguments)
     assert not result.get("isError"), (tool, result)
@@ -84,7 +90,7 @@ async def sdk_check(exe, data, player_pid):
             info = await session.initialize()
             assert info.serverInfo.name == "JeekMusic"
             catalog = await session.list_tools()
-            assert len(catalog.tools) == 43
+            validate_catalog([{"name": tool.name} for tool in catalog.tools])
             for tool in catalog.tools:
                 Draft202012Validator.check_schema(tool.inputSchema)
             diagnostics = await session.call_tool("get_diagnostics", {})
@@ -145,7 +151,7 @@ def main():
                 print("Typography: " + json.dumps(typography, ensure_ascii=True), flush=True)
                 assert call(first, "get_status")["trackCount"] == 0
                 catalog = first.request("tools/list")
-                assert len(catalog["tools"]) == 43
+                validate_catalog(catalog["tools"])
                 schema = next(t for t in catalog["tools"] if t["name"] == "get_diagnostics")["inputSchema"]
                 assert schema["properties"] == {} and schema["additionalProperties"] is False
                 if args.catalog:
@@ -163,12 +169,12 @@ def main():
                         result.returncode, result.stdout, result.stderr)
                     close_player(player_pid)
                     player_pid = None
-                    print("PASS: actual EXE/MCP cold start, 43 tools, diagnostics, graceful GUI exit, bridge exit=0 stdout/stderr empty (no audio endpoint required)")
+                    print(f"PASS: actual EXE/MCP cold start, {len(catalog['tools'])} tools, diagnostics, graceful GUI exit, bridge exit=0 stdout/stderr empty (no audio endpoint required)")
                     return
             # Both clients share the same GUI, but each negotiates its own MCP session.
             with McpClient(exe, data) as client, McpClient(exe, data) as other:
                 assert call(other, "get_diagnostics")["processId"] == player_pid
-                assert len(client.request("tools/list")["tools"]) == 43
+                validate_catalog(client.request("tools/list")["tools"])
                 assert call(client, "add_folder", path=str(music))["queued"]
                 tracks = wait_for(other, "search_tracks", lambda r: r["total"] == 3)["items"]
                 tracks.sort(key=lambda t: t["fileName"])

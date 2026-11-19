@@ -57,14 +57,14 @@ properties.counter = 0
 
 
 def daily_signature():
-    assert (OUTPUT / "runtime/hostfxr.dll").is_file()
-    assert (OUTPUT / "runtime/coreclr.dll").is_file()
+    assert not (OUTPUT / "runtime/hostfxr.dll").exists()
+    assert not (OUTPUT / "runtime/coreclr.dll").exists()
     assert (OUTPUT / "Models/yamnet.onnx").is_file()
     assert (OUTPUT / "portable.json").is_file()
     assert not list((OUTPUT / "runtime").rglob("*.pdb"))
     assert not list((OUTPUT / "runtime").rglob("*.lib"))
     config = json.loads((OUTPUT / "runtime/JeekMusic.runtimeconfig.json").read_text())
-    assert config["runtimeOptions"].get("includedFrameworks")
+    assert config["runtimeOptions"]["framework"]["name"] == "Microsoft.NETCore.App"
     return {name: hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest() for name in
             ("JeekMusic.exe", "runtime/JeekMusic.dll", "runtime/JeekMusic.runtimeconfig.json", "runtime/JeekMusic.deps.json")}
 

@@ -85,15 +85,17 @@ class WorkflowGuards(unittest.TestCase):
 
             def request(self, method):
                 calls.append(method)
-                return {"tools": [{"name": "get_diagnostics", "inputSchema": {
-                    "properties": {}, "additionalProperties": False}}] + [{"name": f"tool{i}"} for i in range(tool_count - 1)]}
+                return {"tools": [{"name": name, "inputSchema": {
+                    "properties": {}, "additionalProperties": False}} for name in tool_names]}
 
-        # Match the current 43-tool contract, and exercise failure cleanup too.
+        # Exercise discovery and failure cleanup for incomplete or duplicate catalogs.
         # A fake client must never send a real signal to its invented PID, even
         # when a catalog assertion fails before graceful shutdown.
-        for tool_count in (43, 24, 39, 40, 41, 42):
+        required = ("check_update", "get_diagnostics", "get_status", "show_window")
+        for tool_names, valid in ((required, True), (required + ("an_added_tool",), True),
+                                  (required[1:], False), (required + ("check_update",), False)):
             calls.clear()
-            with self.subTest(tool_count=tool_count), \
+            with self.subTest(tool_names=tool_names), \
                  patch.object(sys, "argv", ["test-mcp.py", "--exe", __file__]), \
                  patch.object(mcp, "McpClient", Client), \
                  patch.object(mcp, "close_player") as close, \
@@ -102,7 +104,7 @@ class WorkflowGuards(unittest.TestCase):
                  patch.object(mcp.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as process, \
                  patch.object(mcp.wave, "open") as audio, \
                  contextlib.redirect_stdout(io.StringIO()):
-                if tool_count == 43:
+                if valid:
                     mcp.main()
                     close.assert_called_once_with(12345)
                     kill.assert_not_called()

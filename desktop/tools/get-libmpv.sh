@@ -18,19 +18,33 @@ if [ "${1:-}" = "--lgpl" ]; then
     repo="${JEEK_REPO:-tifish/JeekMusic}"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL "${auth[@]}" "https://api.github.com/repos/$repo/releases?per_page=100" -o "$tmp/releases.json"
-    # 最新的 libmpv-lgpl-* 发布（是 prerelease，不会出现在 releases/latest 里）
-    read -r tag url < <(python -c "
-import json, sys
+    # Follow pages until a libmpv release is found, even after many app releases.
+    read -r tag url < <(GITHUB_TOKEN="$GITHUB_TOKEN" python - "$repo" <<'PY'
+import json
+import os
+import sys
+from itertools import count
+from urllib.request import Request, urlopen
+
 sys.stdout.reconfigure(newline='\n')
-with open(sys.argv[1], encoding='utf-8') as f: releases = json.load(f)
-rels = [r for r in releases if r['tag_name'].startswith('libmpv-lgpl-') and not r['draft']]
-rels.sort(key=lambda r: r['created_at'], reverse=True)
-for r in rels:
-    for a in r['assets']:
-        if a['name'] == 'libmpv-lgpl-x86_64.zip':
-            print(r['tag_name'], a['browser_download_url']); sys.exit(0)
-sys.exit(1)" "$tmp/releases.json") || { echo "找不到 libmpv-lgpl-* 发布（先运行 .github/workflows/libmpv.yml）" >&2; exit 1; }
+headers = {'User-Agent': 'JeekMusic-build', 'Accept': 'application/vnd.github+json'}
+if token := os.environ.get('GITHUB_TOKEN'):
+    headers['Authorization'] = f'Bearer {token}'
+for page in count(1):
+    url = f'https://api.github.com/repos/{sys.argv[1]}/releases?per_page=100&page={page}'
+    with urlopen(Request(url, headers=headers), timeout=30) as response:
+        releases = json.load(response)
+        has_next = 'rel="next"' in response.headers.get('Link', '')
+    candidates = [r for r in releases if r['tag_name'].startswith('libmpv-lgpl-') and not r['draft']]
+    for release in sorted(candidates, key=lambda r: r['created_at'], reverse=True):
+        for asset in release['assets']:
+            if asset['name'] == 'libmpv-lgpl-x86_64.zip' and asset['state'] == 'uploaded':
+                print(release['tag_name'], asset['browser_download_url'])
+                sys.exit(0)
+    if not has_next:
+        break
+PY
+    ) || { echo "找不到 libmpv-lgpl-* 发布（先运行 .github/workflows/libmpv.yml）" >&2; exit 1; }
     echo "下载 $tag"
     curl -fL --progress-bar "${auth[@]}" -o "$tmp/libmpv.zip" "$url"
     python - "$tmp/libmpv.zip" "$here/native" <<'PY'

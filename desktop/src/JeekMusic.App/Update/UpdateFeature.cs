@@ -19,7 +19,7 @@ public sealed class UpdateFeature : IFeature
 
     public void Start(AppServices app, Shell shell)
     {
-        _service = new UpdateService(app.Settings);
+        _service = app.Updates;
         UpdateService.CleanUp();
         SettingsWindow.ExtraSections += () => SettingsWindow.Register(L.T("关于"), 1000, c => AboutSection(c, shell));
         DispatcherTimer.RunOnce(() =>

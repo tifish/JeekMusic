@@ -528,9 +528,10 @@ Main
 
 ### 15.2 程序内更新（Updater）
 
-- 检查：`GET /repos/tifish/JeekMusic/releases?per_page=20`，取标签以 `desktop-v` 开头的最新一个，比较末尾的提交数；每天最多一次，可以关闭（需求 UP-2）
-- 下载 zip 到 `%LOCALAPPDATA%\JeekMusic\update\`，用 Release 资源的 `digest`（SHA-256）校验，解压到 `update\new\`
+- 检查：通过 `git/matching-refs/tags/desktop-v1.0.` 查询 Windows 标签，按数字版本降序请求 `releases/tags/<tag>`，选择高于当前版本、已正式发布且含 Windows x64 ZIP 的版本。每天最多自动检查一次，可以关闭（需求 UP-2）
+- 下载 zip 到数据目录的 `update\`，用 Release 资源的 `digest`（SHA-256）校验，解压到 `update\new\`
 - 替换：用户确认后退出前启动 `update\new\JeekMusic.exe --apply-update <程序目录> <进程 ID>`：它等原进程退出，把自己目录里的文件复制到程序目录（覆盖），启动程序目录里的新版本，然后退出；新版本启动时删掉 `update\`
+- 已有绿色版更新后继续使用程序目录下的 `data/`。旧版的程序目录缺少 `portable.json` 时，更新过程跳过此文件，重启后继续使用旧版的本地应用数据目录。
 - 程序目录不可写（比如放在 Program Files）时提示用户手动更新
 
 ### 15.3 libmpv

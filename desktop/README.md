@@ -4,7 +4,7 @@ Windows 本地音乐播放器，与 [Android 端](../mobile/)共用曲库规则�
 
 ## 下载与更新
 
-在最新桌面版发布的 Assets 中下载 `JeekMusic-desktop-*-win-x64.zip`。将整个文件夹解压到可写目录后运行 `JeekMusic.exe`，无需安装 .NET。[下载 Windows 桌面版](https://github.com/tifish/JeekMusic/releases?q=desktop-v1.0)
+在最新桌面版发布的 Assets 中下载 `JeekMusic-desktop-*-win-x64.zip`。ZIP 的可执行文件和原生库均为 Windows x64。将整个文件夹解压到可写目录后运行 `JeekMusic.exe`，无需安装 .NET。[下载 Windows 桌面版](https://github.com/tifish/JeekMusic/releases?q=desktop-v1.0)
 
 桌面客户端默认每天检查 GitHub 上的更新。“设置 → 关于”可以手动检查或关闭自动检查。确认下载后，选择重新启动即可更新，曲库和设置继续使用原有数据目录。1.0.248 等旧版通过程序内更新后继续使用 `%LOCALAPPDATA%\JeekMusic`。
 

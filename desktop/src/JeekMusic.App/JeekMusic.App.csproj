@@ -49,11 +49,15 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="z440.atl.core" />
     <PackageReference Include="Whisper.net" />
-    <PackageReference Include="Whisper.net.Runtime.NoAvx" />
+    <!-- The NuGet build targets copy every architecture, even for a win-x64 publish. -->
+    <PackageReference Include="Whisper.net.Runtime.NoAvx" ExcludeAssets="build" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="$(PkgWhisper_net_Runtime_NoAvx)\build\win-x64\*.dll" Condition="'$(PkgWhisper_net_Runtime_NoAvx)' != ''"
+          Link="runtimes\noavx\win-x64\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Models\yamnet.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="portable.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\..\..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

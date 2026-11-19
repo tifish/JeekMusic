@@ -103,6 +103,7 @@ jobs:
           cd publish
           7z a -tzip "../JeekMusic-desktop-$VERSION-win-x64.zip" JeekMusic > /dev/null
           cd ..
+          python desktop/tools/test-windows-package.py "JeekMusic-desktop-$VERSION-win-x64.zip"
           ls -la *.zip
 
       - uses: actions/upload-artifact@v7

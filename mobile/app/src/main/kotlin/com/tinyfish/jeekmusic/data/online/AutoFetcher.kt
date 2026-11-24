@@ -30,6 +30,7 @@ class AutoFetcher @Inject constructor(
             if (s.onlineLyrics && networkAllows(context, s.lyricsFetchMode)) add(DownloadKind.LYRICS)
         }
         if (kinds.isEmpty()) return@withContext
+        if (DownloadKind.LYRICS in kinds) fetcher.refreshLocalCache()
         val plan = fetcher.plan(listOf(track), kinds, explicit = false, quick = true) ?: return@withContext
         Log.i(TAG, "fetching for ${track.title}: cover=${plan.coverTargets.isNotEmpty()} lyrics=${plan.lyricsTargets.isNotEmpty()}")
         val outcome = fetcher.execute(plan, explicit = false)

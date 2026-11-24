@@ -38,6 +38,7 @@ public sealed class McpSessionTests
         var description = tool["description"]!.GetValue<string>();
         Assert.Contains("virtualized", description); Assert.Contains("200-song", description);
         Assert.Contains("no forced overwrite", description); Assert.Contains("save settings", description);
+        Assert.Contains("same-name .lrc", description); Assert.Contains("deleted after successful write", description);
         Assert.True(tool["annotations"]!["destructiveHint"]!.GetValue<bool>());
         Assert.True(tool["annotations"]!["openWorldHint"]!.GetValue<bool>());
         var schema = tool["inputSchema"]!;

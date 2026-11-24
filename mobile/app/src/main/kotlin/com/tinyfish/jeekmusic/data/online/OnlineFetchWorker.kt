@@ -60,6 +60,7 @@ class OnlineFetchWorker(context: Context, params: WorkerParameters) : CoroutineW
         val targetIds = inputData.getString(KEY_TARGETS)?.let(ListDownloadScheduler::readTargets)
         val explicit = targetIds != null
         val fetcher = deps.fetcher()
+        if (DownloadKind.LYRICS in kinds) fetcher.refreshLocalCache()
 
         setProgress(workDataOf(KEY_CHECKING to true))
         val tracks = targetIds?.chunked(SQL_CHUNK)?.flatMap { deps.trackDao().byIds(it) } ?: deps.trackDao().all()

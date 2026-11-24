@@ -211,11 +211,13 @@ public sealed class ResourceBatchTests
         var album = h.App.Library.Snapshot.Albums[albumKey];
         var track = album[0];
         var path = h.App.Library.PathOf(track)!;
-        File.WriteAllText(Path.ChangeExtension(path, ".lrc"), "[00:00.00]Local fixture lyrics");
+        var lrcPath = Path.ChangeExtension(path, ".lrc");
+        File.WriteAllText(lrcPath, "[00:00.00]Local fixture lyrics");
         var before = File.ReadAllBytes(path);
-        h.App.Settings.Current.LyricsSaveLocation = LyricsSaveLocation.Embed;
-        // Existing local/cache lyrics are skipped even when the configured destination is embedding.
+        h.App.Settings.Current.LyricsSaveLocation = LyricsSaveLocation.Sidecar;
+        // Existing same-name .lrc is used directly without modifying audio when save location is not Embed.
         Assert.False(await feature.Fetch(track, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(lrcPath));
         Assert.Equal(before, File.ReadAllBytes(path));
         using var bitmap = new SKBitmap(8, 8); bitmap.Erase(SKColors.Teal);
         using var image = SKImage.FromBitmap(bitmap); using var jpeg = image.Encode(SKEncodedImageFormat.Jpeg, 90);
@@ -239,6 +241,206 @@ public sealed class ResourceBatchTests
         Assert.Equal(savedBytes, File.ReadAllBytes(path));
         LibraryRefresh.Stop();
     });
+
+    [Theory]
+    [InlineData(LyricsSaveLocation.Sidecar)]
+    [InlineData(LyricsSaveLocation.HiddenFolder)]
+    [InlineData(LyricsSaveLocation.AppCache)]
+    public Task ExistingSidecarLyricsUsedDirectlyWithoutEmbeddingWhenNotEmbedMode(LyricsSaveLocation location) => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        var feature = Configure(h);
+        var track = PrepareAudioTrack(h, h.Track(0), clearLyricsCache: true);
+        var path = h.App.Library.PathOf(track)!;
+        var lrcPath = Path.ChangeExtension(path, ".lrc");
+        // Seed a stale null lyrics cache and a negative miss record before dropping the sidecar file.
+        Assert.Null(h.App.Lyrics.Load(track));
+        h.App.Db.CacheLyrics(track.TrackKey, null, false, null);
+        File.WriteAllText(lrcPath, "[00:01.00]Direct sidecar lyric");
+        var before = File.ReadAllBytes(path);
+        h.App.Settings.Current.LyricsSaveLocation = location;
+        var notified = 0;
+        h.App.Lyrics.Changed += t => { if (t.TrackKey == track.TrackKey) notified++; };
+
+        Assert.False(await feature.Fetch(track, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(lrcPath));
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(1, notified);
+        Assert.Equal("Direct sidecar lyric", h.App.Lyrics.Load(track)?.Text.Lines[0].Text);
+        Assert.Null(h.App.Db.CachedLyrics(track.TrackKey));
+        LibraryRefresh.Stop();
+    });
+
+    [Fact]
+    public Task ExistingSidecarLyricsEmbedsAndDeletesSidecarInEmbedModeAndSkipsOnRepeat() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        var feature = Configure(h);
+        var track = PrepareAudioTrack(h, h.Track(0), clearLyricsCache: true);
+        var path = h.App.Library.PathOf(track)!;
+        var lrcPath = Path.ChangeExtension(path, ".lrc");
+        var mtimeBefore = File.GetLastWriteTimeUtc(path);
+        // GBK encoded sidecar + stale null memory cache + stale miss record.
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        const string lrcText = "[00:01.00]本地同名歌词\r\n[00:05.00]第二行";
+        Assert.Null(h.App.Lyrics.Load(track));
+        h.App.Db.CacheLyrics(track.TrackKey, null, false, null);
+        File.WriteAllBytes(lrcPath, System.Text.Encoding.GetEncoding(936).GetBytes(lrcText));
+        h.App.Settings.Current.LyricsSaveLocation = LyricsSaveLocation.Embed;
+
+        var job = feature.Batches.Reserve([track], DownloadKind.Lyrics, "track_ids", "fixture");
+        await feature.Batches.Run(job);
+
+        Assert.Equal(1, job.Saved); Assert.Equal(0, job.Failed);
+        Assert.False(File.Exists(lrcPath));
+        Assert.Equal(mtimeBefore, File.GetLastWriteTimeUtc(path));
+        Assert.Equal(lrcText.Replace("\r\n", "\n"), TagReader.ReadLyrics(path)?.Replace("\r\n", "\n"));
+        // Even with the pre-refresh Track object (HasEmbeddedLyrics == false), LyricsService immediately reads the embedded lyrics.
+        var loaded = h.App.Lyrics.Load(track);
+        Assert.NotNull(loaded);
+        Assert.Equal(L.T("内嵌歌词"), loaded!.Source);
+        Assert.Equal("本地同名歌词", loaded.Text.Lines[0].Text);
+        Assert.Null(h.App.Db.CachedLyrics(track.TrackKey));
+        Assert.False(File.Exists(Lyrics.LyricsService.HiddenPath(h.App.Library.Snapshot.Folder(track.FolderId)!, track)));
+
+        // Fetching again sees embedded lyrics and does not rewrite the audio file.
+        var afterFirst = File.ReadAllBytes(path);
+        Assert.False(await feature.Fetch(track, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.Equal(afterFirst, File.ReadAllBytes(path));
+
+        // External / temporary-folder track (FolderId == 0) also embeds and deletes its same-name .lrc.
+        var extDir = Path.Combine(Path.GetTempPath(), "jeekmusic-ext-sidecar-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(extDir);
+        try
+        {
+            var extAudio = Path.Combine(extDir, "external.flac");
+            var extLrc = Path.Combine(extDir, "external.lrc");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "tag-writer-silence.flac"), extAudio, true);
+            File.WriteAllText(extLrc, "[00:02.00]External sidecar lyric");
+            var external = h.App.Library.OpenExternal(extAudio);
+            Assert.Equal(0, external.FolderId);
+            Assert.True(await feature.Fetch(external, DownloadKind.Lyrics, CancellationToken.None));
+            Assert.False(File.Exists(extLrc));
+            Assert.Equal("[00:02.00]External sidecar lyric", TagReader.ReadLyrics(extAudio));
+            Assert.Equal("External sidecar lyric", h.App.Lyrics.Load(external)?.Text.Lines[0].Text);
+            Assert.False(await feature.Fetch(external, DownloadKind.Lyrics, CancellationToken.None));
+        }
+        finally { try { Directory.Delete(extDir, true); } catch { } }
+        LibraryRefresh.Stop();
+    });
+
+    [Fact]
+    public Task SidecarEmbedDefersWhilePlayingAndPreservesFileOnUnsupportedFormatOrCueOrHigherPriority() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        var feature = Configure(h);
+        h.App.Settings.Current.LyricsSaveLocation = LyricsSaveLocation.Embed;
+
+        // 1. Playing (in-use) track defers embedding, keeps sidecar until idle, does not duplicate to hidden/cache.
+        var playing = PrepareAudioTrack(h, h.Track(0), clearLyricsCache: true);
+        var playingPath = h.App.Library.PathOf(playing)!;
+        var playingLrc = Path.ChangeExtension(playingPath, ".lrc");
+        File.WriteAllText(playingLrc, "[00:02.00]Deferred sidecar");
+        bool inUse = true;
+        feature.IsFileInUseOverride = t => inUse && t.TrackKey == playing.TrackKey;
+        Assert.False(await feature.Fetch(playing, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(playingLrc));
+        Assert.Null(h.App.Db.CachedLyrics(playing.TrackKey));
+        Assert.False(File.Exists(Lyrics.LyricsService.HiddenPath(h.App.Library.Snapshot.Folder(playing.FolderId)!, playing)));
+        inUse = false;
+        await feature.FlushPending();
+        Assert.False(File.Exists(playingLrc));
+        Assert.Equal("[00:02.00]Deferred sidecar", TagReader.ReadLyrics(playingPath));
+
+        // 2. Unsupported extension keeps sidecar intact and does not copy to hidden/cache.
+        var folder = h.App.Library.Snapshot.Folder(playing.FolderId)!;
+        var unsupportedPath = Path.Combine(folder.Root, "unsupported.dsf");
+        var unsupportedLrc = Path.Combine(folder.Root, "unsupported.lrc");
+        File.WriteAllBytes(unsupportedPath, [1, 2, 3, 4]);
+        File.WriteAllText(unsupportedLrc, "[00:03.00]Keep sidecar");
+        using (var tx = h.App.Db.Begin())
+        {
+            h.App.Db.ReplaceFile(tx, folder.Id, "", "unsupported.dsf", [new Track
+            {
+                TrackKey = "unsupported-dsf", FolderId = folder.Id, Dir = "", FileName = "unsupported.dsf",
+                Title = "Unsupported", ArtistDisplay = "Fixture"
+            }]);
+            tx.Commit();
+        }
+        h.App.Library.RebuildSnapshot(); h.Wait(() => h.App.Library.ByKey("unsupported-dsf") is not null);
+        var unsupported = h.App.Library.ByKey("unsupported-dsf")!;
+        Assert.False(await feature.Fetch(unsupported, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(unsupportedLrc));
+        Assert.Null(h.App.Db.CachedLyrics(unsupported.TrackKey));
+        Assert.False(File.Exists(Lyrics.LyricsService.HiddenPath(folder, unsupported)));
+
+        // 3. CUE track keeps its sidecar untouched.
+        var cueTrack = PrepareAudioTrack(h, h.Track(1), clearLyricsCache: true, cueTrackNo: 1, title: "Cue Song");
+        var cueLrc = Path.Combine(folder.Root, "01. Cue Song.lrc");
+        File.WriteAllText(cueLrc, "[00:04.00]Cue sidecar");
+        Assert.False(await feature.Fetch(cueTrack, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(cueLrc));
+        Assert.Null(TagReader.ReadLyrics(h.App.Library.PathOf(cueTrack)!));
+
+        // 4. Higher-priority hidden folder lyrics are not overwritten by older sidecar.
+        var manual = PrepareAudioTrack(h, h.Track(2), clearLyricsCache: true);
+        var manualPath = h.App.Library.PathOf(manual)!;
+        var manualLrc = Path.ChangeExtension(manualPath, ".lrc");
+        var hiddenPath = Lyrics.LyricsService.HiddenPath(folder, manual);
+        Directory.CreateDirectory(Path.GetDirectoryName(hiddenPath)!);
+        File.WriteAllText(hiddenPath, "[00:00.00]Manual replacement");
+        File.WriteAllText(manualLrc, "[00:00.00]Older sidecar");
+        Assert.False(await feature.Fetch(manual, DownloadKind.Lyrics, CancellationToken.None));
+        Assert.True(File.Exists(manualLrc));
+        Assert.True(File.Exists(hiddenPath));
+        Assert.Null(TagReader.ReadLyrics(manualPath));
+        LibraryRefresh.Stop();
+    });
+
+    [Fact]
+    public Task CombinedCoverAndSidecarLyricsEmbedInOneFlowAndDeleteSidecar() => Run(async () =>
+    {
+        using var h = new PlayingVisibilityTests.Harness();
+        var feature = Configure(h);
+        var track = PrepareAudioTrack(h, h.Track(0), clearLyricsCache: true);
+        var path = h.App.Library.PathOf(track)!;
+        var lrcPath = Path.ChangeExtension(path, ".lrc");
+        File.WriteAllText(lrcPath, "[00:01.00]Combined sidecar lyric");
+        using var bitmap = new SKBitmap(8, 8); bitmap.Erase(SKColors.Orange);
+        using var image = SKImage.FromBitmap(bitmap); using var jpeg = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+        File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(path)!, "cover.jpg"), jpeg.ToArray());
+        h.App.Settings.Current.CoverSaveMode = CoverSaveMode.Embed;
+        h.App.Settings.Current.LyricsSaveLocation = LyricsSaveLocation.Embed;
+
+        await feature.FetchPair(track, covers: true, lyrics: true, CancellationToken.None);
+
+        Assert.False(File.Exists(lrcPath));
+        Assert.True(TagReader.Read(path).HasCover);
+        Assert.Equal("[00:01.00]Combined sidecar lyric", TagReader.ReadLyrics(path));
+        Assert.Null(h.App.Db.CachedLyrics(track.TrackKey));
+        LibraryRefresh.Stop();
+    });
+
+    static Track PrepareAudioTrack(PlayingVisibilityTests.Harness h, Track original, bool clearLyricsCache = false, int? cueTrackNo = null, string? title = null)
+    {
+        var key = "sidecar-test-" + Guid.NewGuid();
+        var path = h.App.Library.PathOf(original)!;
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "tag-writer-silence.flac"), path, true);
+        using (var tx = h.App.Db.Begin())
+        {
+            h.App.Db.ReplaceFile(tx, original.FolderId, "", original.FileName, [new Track
+            {
+                TrackKey = key, FolderId = original.FolderId, FileName = original.FileName, Dir = "",
+                Title = title ?? original.Title, ArtistDisplay = "Fixture artist", Album = "Fixture album",
+                AlbumKey = key + "-album", CueTrackNo = cueTrackNo
+            }]);
+            tx.Commit();
+        }
+        if (clearLyricsCache) h.App.Db.DeleteCachedLyrics(key);
+        h.App.Library.RebuildSnapshot();
+        h.Wait(() => h.App.Library.ByKey(key) is not null);
+        return h.App.Library.ByKey(key)!;
+    }
 
     static OnlineFeature Configure(PlayingVisibilityTests.Harness h)
     {

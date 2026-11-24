@@ -1,13 +1,15 @@
-"""Verify production resource-batch MCP with isolated offline tracks and cached lyrics.
+"""Verify production resource-batch MCP with isolated tracks, cached lyrics and local sidecar .lrc embedding.
 
-No network sources, audio playback, user library, settings migration or media writes.
+No network sources, audio playback, user library, settings migration or user-media writes.
 Use --exe to run the same checks against a NativeAOT publish directory.
 """
 import argparse
 from contextlib import closing
 from importlib import util
 import json
+import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -18,6 +20,59 @@ from mcp_client import DEFAULT_EXE, McpClient
 spec = util.spec_from_file_location("startup_checks", Path(__file__).with_name("test-mcp.py"))
 startup = util.module_from_spec(spec)
 spec.loader.exec_module(startup)
+
+FIXTURE_FLAC = Path(__file__).resolve().parents[1] / "tests" / "JeekMusic.App.Tests" / "Fixtures" / "tag-writer-silence.flac"
+
+
+def verify_sidecar_embed(exe: Path):
+    player_pid = None
+    with tempfile.TemporaryDirectory(prefix="jeekmusic-sidecar-embed-") as temp:
+        root = Path(temp)
+        data = root / "data"
+        music = root / "music"
+        data.mkdir()
+        music.mkdir()
+        audio = music / "sidecar-song.flac"
+        lrc = music / "sidecar-song.lrc"
+        shutil.copyfile(FIXTURE_FLAC, audio)
+        lyric_text = "[00:01.00]Isolated sidecar lyric\n[00:04.00]Second line"
+        lrc.write_text(lyric_text, encoding="utf-8", newline="\n")
+        mtime_before = audio.stat().st_mtime_ns
+        (data / "settings.json").write_text(json.dumps({
+            "closeAction": "Exit", "autoUpdateCheck": False, "analysisMode": "Manual",
+            "onlineLyrics": True, "onlineCovers": False, "lyricsFetchMode": "Manual",
+            "coverFetchMode": "Manual", "lyricsSaveLocation": "Embed", "lyricsEmbedded": True,
+            "lyricsSources": [], "coverSources": [],
+        }), encoding="utf-8")
+        try:
+            with McpClient(exe, data) as client:
+                diagnostic = startup.call(client, "get_diagnostics")
+                player_pid = diagnostic["processId"]
+                startup.wait_for(client, "get_diagnostics", lambda d: d["resourceBatch"]["state"] != "unavailable")
+                startup.call(client, "add_folder", path=str(music))
+                startup.wait_for(client, "search_tracks", lambda r: r["total"] == 1)
+                track = startup.call(client, "search_tracks")["items"][0]
+                assert lrc.exists()
+                startup.call(client, "fetch_resources", action="start", kind="lyrics", scope="track_ids", trackIds=[track["id"]])
+                state = startup.wait_for(client, "fetch_resources", lambda s: not s["busy"], action="status")
+                assert state["state"] == "completed", state
+                assert state["totalUnits"] == state["processedUnits"] == 1, state
+                assert state["savedUnits"] == 1 and state["failedUnits"] == 0, state
+                assert not lrc.exists(), "sidecar .lrc should be deleted after embedding"
+                embedded_bytes = audio.read_bytes()
+                assert lyric_text.encode("utf-8") in embedded_bytes
+                assert abs(audio.stat().st_mtime_ns - mtime_before) < 10_000_000
+                # Second fetch sees embedded lyrics and skips without rewriting the file.
+                startup.call(client, "fetch_resources", action="start", kind="lyrics", scope="track_ids", trackIds=[track["id"]])
+                second = startup.wait_for(client, "fetch_resources", lambda s: not s["busy"], action="status")
+                assert second["state"] == "completed" and second["savedUnits"] == 0 and second["failedUnits"] == 0, second
+                assert audio.read_bytes() == embedded_bytes
+                startup.close_player(player_pid)
+                player_pid = None
+        finally:
+            if player_pid is not None:
+                subprocess.run(["taskkill", "/PID", str(player_pid), "/F"], capture_output=True, timeout=10)
+            time.sleep(.5)
 
 
 def main():
@@ -53,10 +108,11 @@ def main():
                 player_pid = diagnostic["processId"]
                 startup.wait_for(client, "get_diagnostics", lambda d: d["resourceBatch"]["state"] != "unavailable")
                 catalog = client.request("tools/list")["tools"]
-                assert len(catalog) == 26
+                assert len(catalog) == 51, len(catalog)
                 tool = next(t for t in catalog if t["name"] == "fetch_resources")
                 assert tool["inputSchema"]["additionalProperties"] is False
                 assert tool["annotations"]["openWorldHint"] and tool["annotations"]["destructiveHint"]
+                assert "same-name .lrc" in tool["description"]
                 assert startup.call(client, "fetch_resources", action="status")["state"] == "idle"
                 invalid = [dict(action="start", kind="lyrics", scope="current_list"),
                     dict(action="start", kind="lyrics", scope="track_ids", trackIds=[1, 999]),
@@ -85,7 +141,8 @@ def main():
                     assert settings_before.get(key) == settings_after.get(key), key
                 startup.close_player(player_pid)
                 player_pid = None
-            print("PASS: 26 production tools, frozen explicit batch, duplicate tracks, cached-lyrics skip, status/cancel, errors/empty/disabled-online validation, unchanged save settings/cache/queue; no network or playback")
+            verify_sidecar_embed(args.exe)
+            print("PASS: 51 production tools, frozen explicit batch, duplicate tracks, cached-lyrics skip, sidecar .lrc embed+delete+repeat skip, status/cancel, errors/empty/disabled-online validation, unchanged save settings/cache/queue; no network or playback")
         finally:
             if player_pid is not None:
                 subprocess.run(["taskkill", "/PID", str(player_pid), "/F"], capture_output=True, timeout=10)

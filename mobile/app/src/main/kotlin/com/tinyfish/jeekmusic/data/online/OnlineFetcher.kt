@@ -12,6 +12,7 @@ import com.tinyfish.jeekmusic.data.db.TrackEntity
 import com.tinyfish.jeekmusic.data.lyrics.LyricsRepository
 import com.tinyfish.jeekmusic.data.settings.CoverSaveMode
 import com.tinyfish.jeekmusic.data.settings.FetchMode
+import com.tinyfish.jeekmusic.data.settings.LyricsSaveLocation
 import com.tinyfish.jeekmusic.data.settings.SettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -36,11 +37,20 @@ class OnlineFetcher @Inject constructor(
 ) {
     /**
      * 一组歌要做的事。[key] 是"没找到封面"记录用的键（专辑，没有专辑时是歌曲）；
-     * [coverTargets] 是还需要封面的文件（同专辑的都算上），[lyricsTargets] 是还没有歌词的歌。
+     * [coverTargets] 是还需要封面的文件（同专辑的都算上），[lyricsTargets] 是需要获取或嵌入同名 .lrc 的歌，
+     * [sidecarLyrics] 是已有同名 .lrc 且保存方式为写入音乐文件时直接采用的内容（不联网）。
      */
-    data class Plan(val key: String, val coverTargets: List<TrackEntity>, val lyricsTargets: List<TrackEntity>)
+    data class Plan(
+        val key: String,
+        val coverTargets: List<TrackEntity>,
+        val lyricsTargets: List<TrackEntity>,
+        val sidecarLyrics: Map<Long, String> = emptyMap(),
+    )
 
     data class Outcome(val coverSaved: Boolean, val coverExtracted: Boolean, val lyricsSaved: Int)
+
+    /** 刷新本地目录缓存，确保能发现新放入的同名 .lrc。 */
+    fun refreshLocalCache() = lyrics.invalidateAllDirectories()
 
     /**
      * [explicit]：用户明确要求的（列表下载），不跳过最近没找到的。
@@ -60,13 +70,30 @@ class OnlineFetcher @Inject constructor(
         } else {
             emptyList()
         }
+        val sidecarLyrics = LinkedHashMap<Long, String>()
         val lyricsTargets = if (DownloadKind.LYRICS in kinds) {
-            // 没有艺术家的歌只凭歌名很容易配错，不查。先看最近没找到的（只查数据库），hasLyrics 可能要读文件
-            group.filter { it.artistDisplay.isNotBlank() && (explicit || !lyrics.recentlyNotFound(it)) && !lyrics.hasLyrics(it) }
+            val embedLyrics = settings.current().lyricsSaveLocation == LyricsSaveLocation.EMBED
+            buildList {
+                for (track in group) {
+                    val sidecar = lyrics.activeSidecarText(track)
+                    if (sidecar != null) {
+                        if (embedLyrics && lyrics.embedsInFile(track)) {
+                            sidecarLyrics[track.id] = sidecar
+                            add(track)
+                        }
+                        continue
+                    }
+                    // 没有艺术家的歌只凭歌名很容易配错，不查。先看最近没找到的（只查数据库），hasLyrics 可能要读文件
+                    if (track.artistDisplay.isNotBlank() && (explicit || !lyrics.recentlyNotFound(track)) && !lyrics.hasLyrics(track)) {
+                        add(track)
+                    }
+                }
+            }
         } else {
             emptyList()
         }
-        Plan(first.albumKey ?: first.trackKey, coverTargets, lyricsTargets).takeIf { coverTargets.isNotEmpty() || lyricsTargets.isNotEmpty() }
+        Plan(first.albumKey ?: first.trackKey, coverTargets, lyricsTargets, sidecarLyrics)
+            .takeIf { coverTargets.isNotEmpty() || lyricsTargets.isNotEmpty() }
     }
 
     /** 获取并保存；"没找到封面"的记录由调用方 [CoverMissLog.save]。 */
@@ -96,9 +123,13 @@ class OnlineFetcher @Inject constructor(
             }
         }
 
-        // 歌词：逐首查
+        // 歌词：已有同名 .lrc 直接使用，否则逐首在线查
         val texts = LinkedHashMap<TrackEntity, String>()
         for (t in plan.lyricsTargets) {
+            plan.sidecarLyrics[t.id]?.let {
+                texts[t] = it
+                continue
+            }
             runCatching { lyrics.fetchOnline(t) }
                 .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "lyrics fetch failed: ${t.title}", it) }
                 .getOrNull()?.let { texts[t] = it }
@@ -112,9 +143,20 @@ class OnlineFetcher @Inject constructor(
         }
         val saved = image?.let { store.save(coverTargets, it, coverMode, also) }
         val alsoDone = saved?.alsoDone.orEmpty()
-        for ((t, text) in texts) if (t.fileKey in alsoDone) lyrics.onEmbedded(t) else lyrics.save(t, text)
+        var lyricsSaved = 0
+        for ((t, text) in texts) {
+            if (t.fileKey in alsoDone) {
+                lyrics.onEmbedded(t)
+                lyricsSaved++
+            } else if (t.id in plan.sidecarLyrics) {
+                if (lyrics.embedSidecar(t, text)) lyricsSaved++
+            } else {
+                lyrics.save(t, text)
+                lyricsSaved++
+            }
+        }
         if (alsoDone.isNotEmpty()) Log.i(TAG, "wrote cover and lyrics together into ${alsoDone.size} file(s)")
-        Outcome(coverSaved = saved != null, coverExtracted = extracted && saved != null, lyricsSaved = texts.size)
+        Outcome(coverSaved = saved != null, coverExtracted = extracted && saved != null, lyricsSaved = lyricsSaved)
     }
 
     private companion object {

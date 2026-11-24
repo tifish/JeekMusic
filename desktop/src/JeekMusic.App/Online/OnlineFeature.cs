@@ -30,7 +30,8 @@ public sealed partial class OnlineFeature : IFeature
     readonly Lock _ioGate = new();
     volatile bool _stopped;
     readonly HashSet<string> _pendingCovers = new();
-    readonly Dictionary<string, (Track track, string text)> _pendingLyrics = new();
+    readonly Dictionary<string, (Track track, string text, bool fromSidecar)> _pendingLyrics = new();
+    readonly Dictionary<string, string> _stagedSidecar = new();
     readonly SemaphoreSlim _writes = new(1, 1);
     readonly SemaphoreSlim _fetches = new(1, 1);
     internal ResourceBatch Batches { get; private set; } = null!;
@@ -87,7 +88,8 @@ public sealed partial class OnlineFeature : IFeature
         catch (Exception e) { Log.Warn("cover", "加载专辑封面失败", e); }
     }
 
-    bool InUse(Track t) => _app.Player.IsFileInUse(t);
+    internal Func<Track, bool>? IsFileInUseOverride { get; set; }
+    bool InUse(Track t) => IsFileInUseOverride?.Invoke(t) ?? _app.Player.IsFileInUse(t);
 
     async Task LoadCover(Track t)
     {
@@ -152,8 +154,30 @@ public sealed partial class OnlineFeature : IFeature
         }
         else
         {
-            if (await Task.Run(() => _app.Lyrics.Load(t), ct) is not null) return false;
+            var existing = await Task.Run(() => _app.Lyrics.InspectFresh(t), ct);
             ct.ThrowIfCancellationRequested();
+            if (existing is not null)
+            {
+                if (existing.Origin == LyricsOrigin.Sidecar && !t.IsCue && _app.Settings.Current.LyricsSaveLocation == LyricsSaveLocation.Embed)
+                {
+                    if (stageLyrics)
+                    {
+                        if (_app.Library.PathOf(t) is { } path && File.Exists(path) && TagWriter.CanWrite(path))
+                        {
+                            lock (_stagedSidecar) _stagedSidecar[t.TrackKey] = existing.RawText;
+                            return true;
+                        }
+                    }
+                    else if (await EmbedSidecarLyrics(t, existing.RawText, ct))
+                    {
+                        return true;
+                    }
+                }
+                if (existing.Origin == LyricsOrigin.Sidecar && _app.Db.CachedLyrics(t.TrackKey) is { content: null })
+                    _app.Db.DeleteCachedLyrics(t.TrackKey);
+                if (existing.CacheChanged && !_stopped) _app.Lyrics.NotifyChanged(t);
+                return false;
+            }
             if (_app.Db.CachedLyrics(t.TrackKey) is { content: null, fetchedAt: var miss } && now - miss < retry) return false;
             var found = await LyricsClient.BestAsync(t.Title, t.ArtistDisplay, t.Album, t.DurationMs / 1000, ct);
             ct.ThrowIfCancellationRequested();
@@ -163,9 +187,61 @@ public sealed partial class OnlineFeature : IFeature
         return true;
     }
 
+    string? StagedLyricsFor(Track track)
+    {
+        if (_app.Db.CachedLyrics(track.TrackKey)?.content is { } cached) return cached;
+        lock (_stagedSidecar) return _stagedSidecar.GetValueOrDefault(track.TrackKey);
+    }
+
+    async Task<bool> EmbedSidecarLyrics(Track t, string text, CancellationToken ct)
+    {
+        if (_app.Library.PathOf(t) is not { } path || !File.Exists(path) || !TagWriter.CanWrite(path))
+            return false;
+        await _writes.WaitAsync(ct);
+        bool embedded = false, deferred = false;
+        try
+        {
+            await Task.Run(() =>
+            {
+                lock (_ioGate)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    _lifetime.Token.ThrowIfCancellationRequested();
+                    if (InUse(t))
+                    {
+                        lock (_pendingLyrics) _pendingLyrics[t.TrackKey] = (t, text, true);
+                        deferred = true;
+                        return;
+                    }
+                    _app.Library.Watcher.Ignore(path);
+                    if (TagWriter.Write(path, null, text))
+                    {
+                        if (t.FolderId != 0)
+                        {
+                            var info = new FileInfo(path);
+                            _app.Db.MarkEmbedded(t.FolderId, t.Dir, t.FileName, false, true, info.Length, info.LastWriteTimeUtc.Ticks);
+                            LibraryRefresh.Soon(_app.Library);
+                        }
+                        CleanEmbeddedLyrics(t);
+                        embedded = true;
+                    }
+                }
+            }, ct);
+        }
+        finally { _writes.Release(); }
+        if (!_stopped && embedded) _app.Lyrics.Invalidate(t);
+        if (!_stopped && deferred && t.FolderId != 0)
+        {
+            _app.Settings.Current.LyricsEmbedded = false;
+            _app.Settings.Save("online-migration");
+        }
+        return embedded;
+    }
+
     public async Task SaveCover(Track t, byte[] bytes)
     {
         await _writes.WaitAsync(_lifetime.Token);
+        List<Track> embeddedLyrics = [];
         try
         {
             var tracks = Covers.AlbumOf(t);
@@ -178,11 +254,15 @@ public sealed partial class OnlineFeature : IFeature
                     var lyrics = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     if (mode == CoverSaveMode.Embed && _app.Settings.Current.LyricsSaveLocation == LyricsSaveLocation.Embed)
                         foreach (var track in tracks.Where(t => !t.IsCue))
-                            if (_app.Library.PathOf(track) is { } path && _app.Db.CachedLyrics(track.TrackKey)?.content is { } text) lyrics[path] = text;
+                            if (_app.Library.PathOf(track) is { } path && StagedLyricsFor(track) is { } text) lyrics[path] = text;
                     var result = Covers.Save(tracks, bytes, mode, lyrics);
                     if (result is not null)
                         foreach (var track in tracks)
-                            if (_app.Library.PathOf(track) is { } path && result.AlsoDone.Contains(path)) CleanEmbeddedLyrics(track);
+                            if (_app.Library.PathOf(track) is { } path && result.AlsoDone.Contains(path))
+                            {
+                                CleanEmbeddedLyrics(track);
+                                embeddedLyrics.Add(track);
+                            }
                     return result;
                 }
             });
@@ -194,6 +274,7 @@ public sealed partial class OnlineFeature : IFeature
             }
         }
         finally { _writes.Release(); }
+        if (!_stopped) foreach (var track in embeddedLyrics) _app.Lyrics.Invalidate(track);
     }
 
     public async Task SaveLyrics(Track t, string text, LyricsSaveLocation? location = null, bool staging = false)
@@ -244,7 +325,7 @@ public sealed partial class OnlineFeature : IFeature
         }
         if (mode == LyricsSaveLocation.Embed && !t.IsCue && _app.Library.PathOf(t) is { } path)
         {
-            if (InUse(t)) { lock (_pendingLyrics) _pendingLyrics[t.TrackKey] = (t, text); }
+            if (InUse(t)) { lock (_pendingLyrics) _pendingLyrics[t.TrackKey] = (t, text, false); }
             else
             {
                 _app.Library.Watcher.Ignore(path);
@@ -281,11 +362,11 @@ public sealed partial class OnlineFeature : IFeature
 
     static void TryDeleteLyrics(string path)
     {
-        try { File.Delete(path); }
+        try { if (File.Exists(path)) File.Delete(path); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warn("lyrics", "清理旧歌词失败", e); }
     }
 
-    async Task FlushPending()
+    internal async Task FlushPending()
     {
         try
         {
@@ -297,6 +378,7 @@ public sealed partial class OnlineFeature : IFeature
             }
             if (covers.Count > 0)
             {
+                List<Track> embeddedLyrics = [];
                 await _writes.WaitAsync(_lifetime.Token);
                 try { await Task.Run(() => { lock (_ioGate)
                 {
@@ -304,18 +386,23 @@ public sealed partial class OnlineFeature : IFeature
                     var staged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     if (_app.Settings.Current.LyricsSaveLocation == LyricsSaveLocation.Embed)
                         foreach (var t in covers.SelectMany(Covers.AlbumOf).Where(t => !t.IsCue))
-                            if (_app.Library.PathOf(t) is { } path && _app.Db.CachedLyrics(t.TrackKey)?.content is { } text) staged[path] = text;
-                    Covers.EmbedDownloaded(covers, _lifetime.Token, staged, CleanEmbeddedLyrics);
+                            if (_app.Library.PathOf(t) is { } path && StagedLyricsFor(t) is { } text) staged[path] = text;
+                    Covers.EmbedDownloaded(covers, _lifetime.Token, staged, t => { CleanEmbeddedLyrics(t); embeddedLyrics.Add(t); });
                 } }); }
                 finally { _writes.Release(); }
+                if (!_stopped) foreach (var t in embeddedLyrics) _app.Lyrics.Invalidate(t);
             }
-            List<(Track track, string text)> lyrics;
+            List<(Track track, string text, bool fromSidecar)> lyrics;
             lock (_pendingLyrics)
             {
                 lyrics = _pendingLyrics.Values.Where(x => !InUse(x.track)).ToList();
                 foreach (var x in lyrics) _pendingLyrics.Remove(x.track.TrackKey);
             }
-            foreach (var x in lyrics) await SaveLyrics(x.track, x.text);
+            foreach (var x in lyrics)
+            {
+                if (x.fromSidecar) await EmbedSidecarLyrics(x.track, x.text, _lifetime.Token);
+                else await SaveLyrics(x.track, x.text);
+            }
         }
         catch (Exception e) { Log.Warn("online", "延迟写入失败", e); }
     }
@@ -416,6 +503,7 @@ public sealed partial class OnlineFeature : IFeature
                         _app.Db.ClearLyricsCache();
                         _app.Lyrics.ClearMemoryCache();
                         lock (_pendingLyrics) _pendingLyrics.Clear();
+                        lock (_stagedSidecar) _stagedSidecar.Clear();
                     } }
                     finally { _writes.Release(); }
                 }

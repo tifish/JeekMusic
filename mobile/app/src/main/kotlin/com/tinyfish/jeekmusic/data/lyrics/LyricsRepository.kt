@@ -160,6 +160,31 @@ class LyricsRepository @Inject constructor(
     }
 
     /**
+     * 若歌曲当前生效的本地歌词是同目录同名 .lrc（即没有更高优先级的隐藏目录或应用内缓存有效歌词），
+     * 返回其解码后的原文；否则返回 null。
+     */
+    suspend fun activeSidecarText(track: TrackEntity): String? = withContext(Dispatchers.IO) {
+        val folder = folderDao.byId(track.folderId) ?: return@withContext null
+        if (readLrc(folder, DocumentTree.appPath(folder, LYRICS_DIR), track) != null) return@withContext null
+        if (lyricsDao.cached(track.trackKey)?.content?.let { LrcParser.parse(it) }?.lines?.isNotEmpty() == true) return@withContext null
+        val text = findLrc(folder, track.relativePath, track)?.let { readText(folder, it) } ?: return@withContext null
+        text.takeIf { LrcParser.parse(it).lines.isNotEmpty() }
+    }
+
+    /**
+     * 把已有同名 .lrc 的内容直接嵌入音乐文件，写入成功后删除该 .lrc 文件。
+     * 写入失败或播放中推迟时不删除 .lrc，也不复制到隐藏目录或缓存（原 .lrc 继续可用）。
+     */
+    suspend fun embedSidecar(track: TrackEntity, text: String): Boolean = withContext(Dispatchers.IO) {
+        if (track.cueTrackNo != null || !editor.canEdit()) return@withContext false
+        val folder = folderDao.byId(track.folderId) ?: return@withContext false
+        if (!embed(folder, track, text)) return@withContext false
+        deleteDownloaded(folder, track)
+        changed()
+        true
+    }
+
+    /**
      * 有没有歌词：先看曲库里记下的、目录列表和缓存；都没有时再读一次文件确认内嵌歌词——
      * 以前本 App 写入的歌词没有更新 has_embedded_lyrics，扫描又因为修改时间、大小没变而跳过这些文件。
      * 读到了就记下来，下次不用再读。

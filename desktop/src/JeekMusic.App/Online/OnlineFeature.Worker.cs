@@ -100,7 +100,7 @@ public sealed partial class OnlineFeature
         }
     }
 
-    async Task FetchPair(Track track, bool covers, bool lyrics, CancellationToken ct)
+    internal async Task FetchPair(Track track, bool covers, bool lyrics, CancellationToken ct)
     {
         var settings = _app.Settings.Current;
         bool combined = covers && lyrics && settings.CoverSaveMode == CoverSaveMode.Embed && settings.LyricsSaveLocation == LyricsSaveLocation.Embed;
@@ -117,9 +117,17 @@ public sealed partial class OnlineFeature
         finally
         {
             // If no artwork was found, persist the staged lyrics on their own.
-            if (combined && !ct.IsCancellationRequested && !_stopped)
+            if (combined)
+            {
                 foreach (var item in lyricTracks)
-                    if (_app.Db.CachedLyrics(item.TrackKey)?.content is { } text) await SaveLyrics(item, text);
+                {
+                    string? sidecarText;
+                    lock (_stagedSidecar) _stagedSidecar.Remove(item.TrackKey, out sidecarText);
+                    if (ct.IsCancellationRequested || _stopped) continue;
+                    if (sidecarText is not null) await EmbedSidecarLyrics(item, sidecarText, ct);
+                    else if (_app.Db.CachedLyrics(item.TrackKey)?.content is { } text) await SaveLyrics(item, text);
+                }
+            }
         }
     }
 
@@ -135,9 +143,11 @@ public sealed partial class OnlineFeature
         }
         if (missing.Count == 0) return false;
         await _writes.WaitAsync(ct);
+        List<Track> embeddedLyrics = [];
+        bool result;
         try
         {
-            return await Task.Run(() =>
+            result = await Task.Run(() =>
             {
                 lock (_ioGate)
                 {
@@ -146,16 +156,22 @@ public sealed partial class OnlineFeature
                     var staged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     if (mode == CoverSaveMode.Embed && _app.Settings.Current.LyricsSaveLocation == LyricsSaveLocation.Embed)
                         foreach (var t in missing.Where(t => !t.IsCue))
-                            if (_app.Library.PathOf(t) is { } path && _app.Db.CachedLyrics(t.TrackKey)?.content is { } text) staged[path] = text;
+                            if (_app.Library.PathOf(t) is { } path && StagedLyricsFor(t) is { } text) staged[path] = text;
                     var saved = Covers.Save(missing, image, mode, staged, preserveShared: true);
                     if (saved is not null)
                         foreach (var t in missing)
-                            if (_app.Library.PathOf(t) is { } path && saved.AlsoDone.Contains(path)) CleanEmbeddedLyrics(t);
+                            if (_app.Library.PathOf(t) is { } path && saved.AlsoDone.Contains(path))
+                            {
+                                CleanEmbeddedLyrics(t);
+                                embeddedLyrics.Add(t);
+                            }
                     return saved is not null;
                 }
             }, ct);
         }
         finally { _writes.Release(); }
+        if (!_stopped) foreach (var t in embeddedLyrics) _app.Lyrics.Invalidate(t);
+        return result;
     }
 
     async Task EmbedPrevious(IReadOnlyList<Track> tracks, CancellationToken ct)
@@ -188,13 +204,16 @@ public sealed partial class OnlineFeature
         }
         if (covers)
         {
+            List<Track> embeddedLyrics = [];
             await _writes.WaitAsync(ct);
             try { await Task.Run(() => { lock (_ioGate) { ct.ThrowIfCancellationRequested(); Covers.EmbedDownloaded(tracks, ct, staged, t =>
             {
                 CleanEmbeddedLyrics(t);
+                embeddedLyrics.Add(t);
                 if (_app.Library.PathOf(t) is { } path) staged.Remove(path);
             }); } }, ct); }
             finally { _writes.Release(); }
+            if (!_stopped) foreach (var t in embeddedLyrics) _app.Lyrics.Invalidate(t);
         }
         foreach (var track in tracks)
         {
@@ -223,11 +242,22 @@ public sealed partial class OnlineFeature
 
     void CleanEmbeddedLyrics(Track track)
     {
-        if (_app.Library.Snapshot.Folder(track.FolderId) is not { } folder) return;
-        foreach (var side in LyricsService.SidecarNames(track).Select(n => Path.Combine(folder.Root + track.Dir, n)).Append(LyricsService.HiddenPath(folder, track)))
-            TryDeleteLyrics(side);
+        _app.Lyrics.NoteEmbedded(track);
+        if (_app.Library.PathOf(track) is { } audioPath && Path.GetDirectoryName(audioPath) is { } dir)
+            foreach (var side in LyricsService.SidecarNames(track).Select(n => Path.Combine(dir, n)))
+            {
+                _app.Library.Watcher.Ignore(side);
+                TryDeleteLyrics(side);
+            }
+        if (_app.Library.Snapshot.Folder(track.FolderId) is { } folder)
+        {
+            var hidden = LyricsService.HiddenPath(folder, track);
+            _app.Library.Watcher.Ignore(hidden);
+            TryDeleteLyrics(hidden);
+        }
         _app.Db.DeleteCachedLyrics(track.TrackKey);
         lock (_pendingLyrics) _pendingLyrics.Remove(track.TrackKey);
+        lock (_stagedSidecar) _stagedSidecar.Remove(track.TrackKey);
     }
 
     async Task<bool> EnsureOnline(Window owner, DownloadKind kind)

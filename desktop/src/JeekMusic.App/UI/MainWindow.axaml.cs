@@ -51,10 +51,14 @@ public partial class MainWindow : Window
         Progress.AddHandler(PointerCaptureLostEvent, (_, _) => _vm.Player.EndSeek(Progress.Value), RoutingStrategies.Bubble, handledEventsToo: true);
 
         FilterButton.Click += (_, _) => ShowFilterMenu();
+        SearchClearButton.Click += (_, _) => { _vm.SearchText = ""; SearchBox.Focus(); };
+        PlayAllButton.Click += (_, _) => PlayAll(shuffle: false);
+        ShuffleAllButton.Click += (_, _) => PlayAll(shuffle: true);
         WelcomeAddFolder.Click += async (_, _) => await AddFolder();
         LocateButton.Click += (_, _) => LocatePlaying();
         ListMoreButton.Click += (_, _) => ShowListMenu();
         ArtistPinButton.Click += (_, _) => { if (_vm.CurrentArtistKey is { } key) TogglePin(key); };
+        NowCover.PointerPressed += (_, e) => { if (e.GetCurrentPoint(NowCover).Properties.IsLeftButtonPressed) SetLyricsPanel(!LyricsHost.IsVisible); };
         NowTitle.PointerPressed += (_, _) => LocatePlaying();
         NowArtist.Click += (_, _) => { if (_app.Player.CurrentTrack is { } t) GoToArtist(t); };
 

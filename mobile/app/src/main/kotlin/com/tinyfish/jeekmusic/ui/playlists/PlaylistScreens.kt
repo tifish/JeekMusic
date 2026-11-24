@@ -13,7 +13,12 @@ import com.tinyfish.jeekmusic.data.settings.SongSort
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import kotlinx.coroutines.flow.combine
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.tinyfish.jeekmusic.ui.components.PlayShuffleBar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -132,13 +137,39 @@ fun PlaylistListScreen(onOpen: (Long) -> Unit, viewModel: PlaylistListViewModel 
             else -> LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("playlist_list"), state = listState) {
                 items(list, key = { it.playlist.id }) { (playlist, count) ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { onOpen(playlist.id) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 1.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onOpen(playlist.id) }
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(painterResource(R.drawable.ic_queue), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(16.dp))
-                        Text(playlist.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-                        Text(songCount(count), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_queue),
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                            Text(songCount(count), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(
+                            painterResource(R.drawable.ic_chevron_right),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        )
                     }
                 }
             }
@@ -206,6 +237,13 @@ class PlaylistDetailViewModel @AssistedInject constructor(
         player.play(QueueSource.Playlist(playlistId), playlist.value?.name.orEmpty(), available, start)
     }
 
+    fun playAll(shuffle: Boolean) {
+        val available = entries.value.orEmpty().mapNotNull { it.track }
+        if (available.isNotEmpty()) {
+            player.play(QueueSource.Playlist(playlistId), playlist.value?.name.orEmpty(), available, 0, shuffle = shuffle)
+        }
+    }
+
     fun remove(entry: PlaylistEntry) = viewModelScope.launch { repository.removeItem(playlistId, entry.item.id) }
 
     /** 多选后"从播放列表移除"（需求 F-10）：去掉这些歌的所有条目，不动文件。 */
@@ -263,12 +301,27 @@ fun PlaylistDetailScreen(
         val reorderLocked by viewModel.reorderLocked.collectAsStateWithLifecycle()
 
         val items = remember(list) { list.toMutableStateList() }
+        val hasAvailable = items.any { it.track != null }
         val listState = rememberLazyListState()
         val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-            items.add(to.index, items.removeAt(from.index))
+            val offset = if (hasAvailable) 1 else 0
+            val fromIndex = from.index - offset
+            val toIndex = to.index - offset
+            if (fromIndex in items.indices && toIndex in items.indices) {
+                items.add(toIndex, items.removeAt(fromIndex))
+            }
         }
+        val currentRow = items.indexOfFirst { it.track?.id == currentTrackId }.let { if (it >= 0) it + (if (hasAvailable) 1 else 0) else -1 }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("playlist_tracks"), state = listState) {
+                if (hasAvailable) {
+                    item(key = "actions") {
+                        PlayShuffleBar(
+                            onPlayAll = { viewModel.playAll(shuffle = false) },
+                            onShuffle = { viewModel.playAll(shuffle = true) },
+                        )
+                    }
+                }
                 items(items, key = { it.item.id }) { entry ->
                     ReorderableItem(reorderState, key = entry.item.id) {
                         val track = entry.track
@@ -304,7 +357,7 @@ fun PlaylistDetailScreen(
                     }
                 }
             }
-            LocateCurrentButton(listState, items.indexOfFirst { it.track?.id == currentTrackId }, Modifier.align(Alignment.BottomEnd))
+            LocateCurrentButton(listState, currentRow, Modifier.align(Alignment.BottomEnd))
         }
     }
 

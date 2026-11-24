@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Interactivity;
 using System.Text.Json.Nodes;
@@ -28,7 +29,7 @@ public sealed class LyricsPanel : UserControl
     readonly Border _coverBox;
     readonly TextBlock _title = new() { FontSize = 18, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
     readonly TextBlock _subtitle = new() { Opacity = 0.65, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Cursor = new Cursor(StandardCursorType.Hand) };
-    readonly StackPanel _lines = new() { Spacing = 10, Margin = new Thickness(16, 0) };
+    readonly StackPanel _lines = new() { Spacing = 13, Margin = new Thickness(16, 0) };
     readonly ScrollViewer _scroll;
     readonly Border _locator;
     readonly TextBlock _locatorTime = new() { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
@@ -72,11 +73,16 @@ public sealed class LyricsPanel : UserControl
         _player = player;
         _seekRevision = player.Service.SeekRevision;
         _lyrics = lyrics;
+        var placeholder = new TextBlock { Text = Icons.Music, Classes = { "glyph" }, FontSize = 48, Opacity = 0.35, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         _coverBox = new Border
         {
-            Width = 220, Height = 220, CornerRadius = new CornerRadius(8), ClipToBounds = true, HorizontalAlignment = HorizontalAlignment.Center,
-            Background = new SolidColorBrush(Color.FromArgb(30, 128, 128, 128)), Child = _cover,
+            Width = 216, Height = 216, CornerRadius = new CornerRadius(12), ClipToBounds = true, HorizontalAlignment = HorizontalAlignment.Center,
+            BorderThickness = new Thickness(1),
+            BoxShadow = BoxShadows.Parse("0 6 20 0 #33000000"),
+            Child = new Panel { Children = { placeholder, _cover } },
         };
+        _coverBox[!Border.BackgroundProperty] = new DynamicResourceExtension("SubtleBadgeBackgroundBrush");
+        _coverBox[!Border.BorderBrushProperty] = new DynamicResourceExtension("SurfaceBorderSubtleBrush");
         _subtitle.PointerPressed += (_, _) => { if (_track is not null) AlbumRequested?.Invoke(_track); };
         _scroll = new ScrollViewer
         {
@@ -111,14 +117,23 @@ public sealed class LyricsPanel : UserControl
             if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End) Manual();
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
-        var play = new Button { Content = Icons.Play, Classes = { "icon" }, Padding = new Thickness(6, 2) };
+        var play = new Button { Content = Icons.Play, Classes = { "icon", "play-primary", "mini" }, Width = 28, Height = 28, FontSize = 12 };
         ToolTip.SetTip(play, L.T("跳转到此句并恢复跟随"));
         play.Click += (_, _) => SeekToCenter();
+        var locatorLine = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
+        locatorLine[!Border.BackgroundProperty] = new DynamicResourceExtension("ArtistAccentSubtleBrush");
+        _locatorTime.FontWeight = FontWeight.SemiBold;
+        _locatorTime[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("ArtistAccentBrush");
+        var timeBadge = new Border { CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 2), VerticalAlignment = VerticalAlignment.Center, Child = _locatorTime };
+        timeBadge[!Border.BackgroundProperty] = new DynamicResourceExtension("SurfaceCardBrush");
         _locator = new Border
         {
             IsVisible = false, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = true, Margin = new Thickness(8, 0),
-            BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 128, 128, 128)),
-            Child = new DockPanel { Children = { Dock(play, Avalonia.Controls.Dock.Right), _locatorTime } },
+            Child = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+                Children = { timeBadge, SetCol(locatorLine, 1), SetCol(play, 2) },
+            },
         };
         _resumeFollow = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _resumeFollow.Tick += (_, _) => ResumeFollowIfDue();
@@ -147,29 +162,40 @@ public sealed class LyricsPanel : UserControl
 
         Button Small(string text, string tip, Action action)
         {
-            var b = new Button { Content = text, Padding = new Thickness(8, 2), FontSize = 12, Background = Brushes.Transparent };
+            var b = new Button { Content = text, Padding = new Thickness(10, 4), FontSize = 12, CornerRadius = new CornerRadius(12), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = new Cursor(StandardCursorType.Hand) };
             ToolTip.SetTip(b, tip);
             b.Click += (_, _) => action();
             return b;
         }
-        var toolbar = new StackPanel
+        var toolbar = new Border
         {
-            Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 4,
-            Children =
+            CornerRadius = new CornerRadius(16), Padding = new Thickness(6, 3), Margin = new Thickness(0, 6, 0, 4),
+            HorizontalAlignment = HorizontalAlignment.Center, BorderThickness = new Thickness(1),
+            Child = new StackPanel
             {
-                Small("−0.5s", L.T("歌词提前 0.5 秒"), () => ChangeOffset(-500)), _offsetText, Small("+0.5s", L.T("歌词推后 0.5 秒"), () => ChangeOffset(500)),
-                Small(L.T("整页"), L.T("切换整页 / 侧栏"), () => FullPageToggled?.Invoke()),
+                Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 2,
+                Children =
+                {
+                    Small("−0.5s", L.T("歌词提前 0.5 秒"), () => ChangeOffset(-500)), _offsetText, Small("+0.5s", L.T("歌词推后 0.5 秒"), () => ChangeOffset(500)),
+                    new Border { Width = 1, Height = 14, Margin = new Thickness(4, 0), Opacity = 0.2, Background = Brushes.Gray },
+                    Small(L.T("整页"), L.T("切换整页 / 侧栏"), () => FullPageToggled?.Invoke()),
+                },
             },
         };
+        toolbar[!Border.BackgroundProperty] = new DynamicResourceExtension("SurfaceCardBrush");
+        toolbar[!Border.BorderBrushProperty] = new DynamicResourceExtension("SurfaceBorderSubtleBrush");
 
         var lyricsArea = new Panel { Children = { _scroll, _locator, _empty } };
-        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*,Auto"), Margin = new Thickness(8, 8, 8, 4) };
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*,Auto"), Margin = new Thickness(14, 14, 14, 8) };
         Row(_coverBox, 0);
-        Row(new StackPanel { Margin = new Thickness(0, 12, 0, 8), Spacing = 2, Children = { _title, _subtitle } }, 1);
+        Row(new StackPanel { Margin = new Thickness(0, 14, 0, 10), Spacing = 3, Children = { _title, _subtitle } }, 1);
         Row(lyricsArea, 3);
         Row(toolbar, 4);
         void Row(Control c, int row) { Grid.SetRow(c, row); grid.Children.Add(c); }
-        Content = grid;
+        var container = new Border { BorderThickness = new Thickness(1, 0, 0, 0), Child = grid };
+        container[!Border.BackgroundProperty] = new DynamicResourceExtension("SurfacePanelBrush");
+        container[!Border.BorderBrushProperty] = new DynamicResourceExtension("SurfaceBorderSubtleBrush");
+        Content = container;
 
         _player.TrackChanged += t => Load(t);
         _player.PositionUpdated += OnPosition;
@@ -179,16 +205,16 @@ public sealed class LyricsPanel : UserControl
         Load(_player.Track);
     }
 
-    static Control Dock(Control c, Dock dock)
+    static Control SetCol(Control c, int col)
     {
-        DockPanel.SetDock(c, dock);
+        Grid.SetColumn(c, col);
         return c;
     }
 
     /// <summary>整页时封面放大。</summary>
     public bool FullPage
     {
-        set { _coverBox.Width = _coverBox.Height = value ? 320 : 220; }
+        set { _coverBox.Width = _coverBox.Height = value ? 300 : 216; }
     }
 
     public bool OnlineSearchAvailable { get; set; }
@@ -237,10 +263,22 @@ public sealed class LyricsPanel : UserControl
         _empty.IsVisible = false;
         foreach (var line in _found.Text.Lines)
         {
-            var panel = new StackPanel { Spacing = 2, Tag = line, HorizontalAlignment = HorizontalAlignment.Stretch };
-            panel.Children.Add(new TextBlock { Text = line.Text, FontSize = 16, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.7 });
+            var panel = new StackPanel { Spacing = 3, Tag = line, HorizontalAlignment = HorizontalAlignment.Stretch };
+            panel.Children.Add(new TextBlock { Text = line.Text, FontSize = 15.5, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.56 });
             if (line.Translation is { Length: > 0 } tr)
-                panel.Children.Add(new TextBlock { Text = tr, FontSize = 13, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.55 });
+                panel.Children.Add(new TextBlock { Text = tr, FontSize = 13, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Opacity = 0.45 });
+            if (_found.Text.Synced)
+            {
+                panel.Cursor = new Cursor(StandardCursorType.Hand);
+                panel.DoubleTapped += (_, e) =>
+                {
+                    if (_found is null) return;
+                    ResetManual();
+                    _player.Service.Seek(TimeSpan.FromMilliseconds(Math.Max(0, line.TimeMs + _found.OffsetMs)));
+                    OnSeek();
+                    e.Handled = true;
+                };
+            }
             _lines.Children.Add(panel);
         }
         OnPosition(_player.Service.Position);
@@ -265,12 +303,16 @@ public sealed class LyricsPanel : UserControl
     static void Style(Control c, bool current)
     {
         if (c is not StackPanel p) return;
+        var idx = 0;
         foreach (var tb in p.Children.OfType<TextBlock>())
         {
-            tb.Opacity = current ? 1 : 0.7;
+            tb.Opacity = current ? (idx == 0 ? 1 : 0.85) : (idx == 0 ? 0.56 : 0.45);
             tb.FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal;
+            if (current && idx == 0) tb[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("ArtistAccentBrush");
+            else tb.ClearValue(TextBlock.ForegroundProperty);
+            idx++;
         }
-        if (p.Children.FirstOrDefault() is TextBlock main) main.FontSize = current ? 19 : 16;
+        if (p.Children.FirstOrDefault() is TextBlock main) main.FontSize = current ? 19.5 : 15.5;
     }
 
     bool DisplayVisible => VisualRoot is not null && IsEffectivelyVisible && VisualRoot is not Window { WindowState: WindowState.Minimized };

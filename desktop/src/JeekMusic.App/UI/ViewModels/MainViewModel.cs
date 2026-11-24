@@ -261,6 +261,8 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _contentSubtitle = "";
     [ObservableProperty] private string _hintText = "";
     [ObservableProperty] private IReadOnlyList<SongRow> _rows = [];
+    public bool HasPlayableRows => Rows.Any(r => r.Available);
+    partial void OnRowsChanged(IReadOnlyList<SongRow> value) => OnPropertyChanged(nameof(HasPlayableRows));
     [ObservableProperty] private bool _isPlaylistView;
     [ObservableProperty] private bool _isFolderView;
     [ObservableProperty] private bool _isAlbumView;
@@ -577,11 +579,13 @@ public sealed partial class MainViewModel : ObservableObject
     // ── 搜索（需求 S-1、S-2）──
 
     [ObservableProperty] private string _searchText = "";
+    public bool HasSearchText => !string.IsNullOrEmpty(SearchText);
     readonly DispatcherTimer _searchDebounce = new() { Interval = TimeSpan.FromMilliseconds(150) };
     NavTarget? _beforeSearch;
 
     partial void OnSearchTextChanged(string value)
     {
+        OnPropertyChanged(nameof(HasSearchText));
         if (_navigating) return;
         ViewRevision++;
         _searchDebounce.Stop();

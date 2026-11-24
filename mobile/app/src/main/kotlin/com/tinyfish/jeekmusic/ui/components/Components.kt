@@ -21,10 +21,16 @@ import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.analysis.Tag
 import com.tinyfish.jeekmusic.analysis.TagDimension
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.foundation.lazy.LazyListState
 import kotlin.math.abs
 import androidx.compose.foundation.gestures.scrollBy
@@ -73,16 +79,21 @@ import com.tinyfish.jeekmusic.playback.MediaItemMapper
  * 占位图始终画在下面、图片叠在上面，避免 SubcomposeAsyncImage 在长列表中的子组合开销（docs/design.md §5.7）。
  */
 @Composable
-fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp = 6.dp) {
+fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp = 10.dp) {
+    val shape = RoundedCornerShape(cornerRadius)
     Box(
-        modifier.size(size).clip(RoundedCornerShape(cornerRadius)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        modifier
+            .size(size)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), shape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painterResource(R.drawable.ic_music_note),
             contentDescription = null,
-            modifier = Modifier.size(size / 2),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(size * 0.46f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
         )
         if (uri != null) {
             // 换过封面的歌曲在 URI 上加版本号，只有这些封面会重新加载（需求 C-3）
@@ -99,7 +110,7 @@ fun Artwork(uri: Uri?, size: Dp, modifier: Modifier = Modifier, cornerRadius: Dp
 }
 
 /**
- * 歌曲列表项（docs/design.md §5.7）。长按打开"更多"菜单。只接收不可变数据，"正在播放"通过 [isCurrent] 单独传入。
+ * 歌曲列表项（docs/design.md §5.7）。长按或点右侧更多按钮打开"更多"菜单。只接收不可变数据，"正在播放"通过 [isCurrent] 单独传入。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -115,13 +126,16 @@ fun TrackRow(
 ) {
     val highlight = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     val openMenu = LocalTrackMenu.current
-    // 多选时（需求 F-10）点击和长按都是选中 / 取消；平时长按打开"更多"菜单，菜单里的"多选"从这首歌开始
+    // 多选时（需求 F-10）点击和长按都是选中 / 取消；平时长按或点击右侧按钮打开"更多"菜单
     val selecting = selection?.active == true
     val selected = selection?.isSelected(track.id) == true
+    val rowShape = RoundedCornerShape(14.dp)
     Row(
         modifier
             .fillMaxWidth()
-            // 正在播放的歌整行加底色，一眼就能找到（需求 U-11）；选中的用另一种底色
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(rowShape)
+            // 正在播放的歌整行加柔和圆角底色，一眼就能找到（需求 U-11）；选中的用另一种底色
             .background(
                 when {
                     selected -> MaterialTheme.colorScheme.secondaryContainer
@@ -129,15 +143,22 @@ fun TrackRow(
                     else -> Color.Transparent
                 },
             )
+            .then(
+                if (isCurrent && !selected) {
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), rowShape)
+                } else {
+                    Modifier
+                },
+            )
             .combinedClickable(
                 onClick = { if (selecting) selection.toggle(track) else onClick() },
                 onLongClick = { if (selecting) selection.toggle(track) else openMenu(track, selection?.let { s -> { s.start(track) } }) },
             )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 10.dp, end = if (selecting) 12.dp else 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selecting) {
-            Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
+            Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(end = 10.dp))
         }
         when {
             leading != null -> leading()
@@ -147,13 +168,13 @@ fun TrackRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 track.title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = highlight,
-                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
@@ -161,15 +182,62 @@ fun TrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.width(8.dp))
         Text(
             formatDuration(track.durationMs),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (!selecting) {
+            IconButton(
+                onClick = { openMenu(track, selection?.let { s -> { s.start(track) } }) },
+                modifier = Modifier.size(34.dp),
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_more_vert),
+                    contentDescription = stringResource(R.string.action_more),
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                )
+            }
+        }
+    }
+}
+
+/** 列表顶部一键播放 / 随机播放胶囊操作栏。 */
+@Composable
+fun PlayShuffleBar(
+    onPlayAll: () -> Unit,
+    onShuffle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Button(
+            onClick = onPlayAll,
+            modifier = Modifier.weight(1f).height(42.dp),
+            shape = RoundedCornerShape(21.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+        ) {
+            Icon(painterResource(R.drawable.ic_play), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.action_play_all), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        FilledTonalButton(
+            onClick = onShuffle,
+            modifier = Modifier.weight(1f).height(42.dp),
+            shape = RoundedCornerShape(21.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+        ) {
+            Icon(painterResource(R.drawable.ic_shuffle), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.action_shuffle), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -382,20 +450,20 @@ private const val FOLLOW_PAUSE_MS = 3_000L
 
 /** 正在播放的那一行的底色。 */
 @Composable
-fun currentRowColor(): Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+fun currentRowColor(): Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
 
 /** 盖在正在播放的歌的封面上：半透明遮罩加一个"正在播放"图标。 */
 @Composable
-fun NowPlayingMark(size: Dp) {
+fun NowPlayingMark(size: Dp, cornerRadius: Dp = 10.dp) {
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.45f)),
+        Modifier.size(size).clip(RoundedCornerShape(cornerRadius)).background(Color.Black.copy(alpha = 0.45f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painterResource(R.drawable.ic_equalizer),
             contentDescription = stringResource(R.string.now_playing_mark),
             tint = Color.White,
-            modifier = Modifier.size(size / 2),
+            modifier = Modifier.size(size * 0.48f),
         )
     }
 }

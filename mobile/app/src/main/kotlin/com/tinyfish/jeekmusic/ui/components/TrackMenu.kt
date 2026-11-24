@@ -261,9 +261,18 @@ fun TrackMenuHost(
             modifier = Modifier.testTag("track_menu"),
         ) {
             Column(Modifier.navigationBarsPadding().verticalScrollWithScrollbar(rememberScrollState())) {
-                Text(current.title, Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(trackSubtitle(current), Modifier.padding(horizontal = 24.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Artwork(com.tinyfish.jeekmusic.playback.MediaItemMapper.artworkUri(current.id), 48.dp, cornerRadius = 10.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(current.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(trackSubtitle(current), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 viewModel.onSelect?.let { select ->
                     MenuItem(R.drawable.ic_checklist, R.string.menu_select) { viewModel.dismiss(); select() }
                 }
@@ -303,10 +312,10 @@ fun TrackMenuHost(
                 MenuItem(R.drawable.ic_info, R.string.menu_song_info) { dialogTrack = current; dialog = MenuDialog.Info; viewModel.dismiss() }
                 // CUE 整轨里的歌共用一个文件，不能单独做文件操作（需求 F-10）
                 if (current.cueTrackNo == null) {
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     MenuItem(R.drawable.ic_edit, R.string.file_rename) { fileActions.renaming = current; viewModel.dismiss() }
                     MenuItem(R.drawable.ic_drive_file_move, R.string.menu_move_file) { fileActions.moving = listOf(current); viewModel.dismiss() }
-                    MenuItem(R.drawable.ic_delete, R.string.menu_delete_file) { fileActions.trashing = listOf(current); viewModel.dismiss() }
+                    MenuItem(R.drawable.ic_delete, R.string.menu_delete_file, danger = true) { fileActions.trashing = listOf(current); viewModel.dismiss() }
                 }
             }
         }
@@ -344,14 +353,16 @@ fun TrackMenuHost(
 }
 
 @Composable
-private fun MenuItem(icon: Int, label: Int, onClick: () -> Unit) {
+private fun MenuItem(icon: Int, label: Int, danger: Boolean = false, onClick: () -> Unit) {
+    val tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val textColor = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(painterResource(icon), contentDescription = null, tint = tint)
         Spacer(Modifier.width(20.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, color = textColor)
     }
 }
 

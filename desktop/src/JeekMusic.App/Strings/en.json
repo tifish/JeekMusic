@@ -1,4 +1,6 @@
 {
+  "清除搜索": "Clear search",
+  "展开 / 收起歌词": "Show / hide lyrics",
   "同步组仅提供显式创建的曲库集合。请在上方创建集合。": "The group shares explicitly created music collections. Create a collection above.",
   "当前为组成员，文件使用上方绑定的主 PC 连接。": "This PC is a group member. Files use the main PC connection bound above.",
   "已同步": "Synced",

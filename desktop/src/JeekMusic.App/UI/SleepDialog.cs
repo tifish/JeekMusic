@@ -57,8 +57,7 @@ public static class SleepDialog
         var presets = new WrapPanel();
         foreach (var m in new[] { 15, 30, 45, 60, 90 })
         {
-            var b = new Button { Content = L.F($"{m} 分钟"), Margin = new Thickness(0, 0, 6, 6) };
-            if (m == prefs.LastMinutes) b.Classes.Add("accent");
+            var b = new Button { Content = L.F($"{m} 分钟"), Margin = new Thickness(0, 0, 6, 6), Classes = { m == prefs.LastMinutes ? "pill-accent" : "pill-subtle" } };
             b.Click += (_, _) => StartMinutes(m);
             presets.Children.Add(b);
         }

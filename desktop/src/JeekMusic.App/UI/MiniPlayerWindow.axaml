@@ -4,30 +4,34 @@
         xmlns:ui="using:JeekMusic.UI"
         x:Class="JeekMusic.UI.MiniPlayerWindow"
         x:DataType="vm:PlayerViewModel"
-        Title="Jeek Music" Width="360" Height="112" CanResize="False"
+        Title="Jeek Music" Width="376" Height="112" CanResize="False"
         ExtendClientAreaToDecorationsHint="True"
         TransparencyLevelHint="Mica" Background="Transparent"
         Icon="avares://JeekMusic/Assets/JeekMusic.ico">
     <!-- 迷你播放器（需求 PC-4）：编译绑定，兼容 Native AOT -->
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,Auto" Margin="10,10,10,4">
-        <Border Grid.RowSpan="2" Width="64" Height="64" CornerRadius="4" ClipToBounds="True"
-                Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
-            <Panel>
-                <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="24" HorizontalAlignment="Center" Opacity="0.5" />
-                <Image Source="{Binding Cover}" Stretch="UniformToFill" />
-            </Panel>
-        </Border>
-        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,4,0">
-            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-            <TextBlock Text="{Binding Artist}" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis" />
-            <ProgressBar Height="3" MinHeight="3" Margin="0,6,0,0" Maximum="{Binding DurationSeconds}" Value="{Binding PositionSeconds}" />
-        </StackPanel>
-        <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（Z）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（Z）&apos;}" />
-            <Button Classes="icon" FontSize="20" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" AutomationProperties.Name="{ui:Tr &apos;播放 / 暂停&apos;}" ToolTip.Tip="{ui:Tr &apos;播放 / 暂停&apos;}" />
-            <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（X）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（X）&apos;}" />
-            <ToggleButton x:Name="PinButton" Classes="icon" Content="{x:Static ui:Icons.Pin}" AutomationProperties.Name="{ui:Tr &apos;总在最前&apos;}" ToolTip.Tip="{ui:Tr &apos;总在最前&apos;}" />
-            <Button x:Name="RestoreButton" Classes="icon" Content="{x:Static ui:Icons.Expand}" AutomationProperties.Name="{ui:Tr &apos;回到主窗口&apos;}" ToolTip.Tip="{ui:Tr &apos;回到主窗口&apos;}" />
-        </StackPanel>
-    </Grid>
+    <Border Background="{DynamicResource SurfaceCardBrush}" Padding="10,8,10,6">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,Auto">
+            <Border Grid.RowSpan="2" Width="66" Height="66" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center"
+                    Background="{DynamicResource SubtleBadgeBackgroundBrush}"
+                    BorderThickness="1" BorderBrush="{DynamicResource SurfaceBorderSubtleBrush}"
+                    BoxShadow="0 2 10 0 #26000000">
+                <Panel>
+                    <TextBlock Classes="glyph" Text="{x:Static ui:Icons.Music}" FontSize="24" HorizontalAlignment="Center" Opacity="0.45" />
+                    <Image Source="{Binding Cover}" Stretch="UniformToFill" />
+                </Panel>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,4,0" Spacing="2">
+                <TextBlock Text="{Binding Title}" FontSize="14.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Artist}" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis" />
+                <ProgressBar Height="3" MinHeight="3" CornerRadius="2" Margin="0,6,0,0" Maximum="{Binding DurationSeconds}" Value="{Binding PositionSeconds}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4" Margin="0,4,0,0">
+                <Button Classes="icon" Content="{x:Static ui:Icons.Previous}" Command="{Binding PreviousCommand}" AutomationProperties.Name="{ui:Tr &apos;上一首（Z）&apos;}" ToolTip.Tip="{ui:Tr &apos;上一首（Z）&apos;}" />
+                <Button Classes="icon play-primary mini" Content="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}" AutomationProperties.Name="{ui:Tr &apos;播放 / 暂停&apos;}" ToolTip.Tip="{ui:Tr &apos;播放 / 暂停&apos;}" />
+                <Button Classes="icon" Content="{x:Static ui:Icons.Next}" Command="{Binding NextCommand}" AutomationProperties.Name="{ui:Tr &apos;下一首（X）&apos;}" ToolTip.Tip="{ui:Tr &apos;下一首（X）&apos;}" />
+                <ToggleButton x:Name="PinButton" Classes="icon" Content="{x:Static ui:Icons.Pin}" AutomationProperties.Name="{ui:Tr &apos;总在最前&apos;}" ToolTip.Tip="{ui:Tr &apos;总在最前&apos;}" />
+                <Button x:Name="RestoreButton" Classes="icon" Content="{x:Static ui:Icons.Expand}" AutomationProperties.Name="{ui:Tr &apos;回到主窗口&apos;}" ToolTip.Tip="{ui:Tr &apos;回到主窗口&apos;}" />
+            </StackPanel>
+        </Grid>
+    </Border>
 </Window>

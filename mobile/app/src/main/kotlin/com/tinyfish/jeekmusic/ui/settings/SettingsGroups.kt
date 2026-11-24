@@ -1,5 +1,6 @@
 package com.tinyfish.jeekmusic.ui.settings
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
@@ -16,18 +17,22 @@ import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.ui.components.SectionHeader
 
 /** Flat destinations; Back always returns to the settings overview. */
-internal enum class SettingsPage(@param:StringRes val title: Int, @param:StringRes val summary: Int) {
-    LIBRARY(R.string.settings_group_library, R.string.settings_group_library_hint),
-    PLAYBACK(R.string.settings_playback, R.string.settings_low_power),
-    APPEARANCE(R.string.settings_appearance, R.string.settings_group_appearance_summary),
-    LYRICS(R.string.settings_lyrics, R.string.settings_group_online_summary),
-    COVERS(R.string.settings_covers, R.string.settings_group_online_summary),
-    PREFERENCE(R.string.preference_title, R.string.preference_home_summary),
-    ANALYSIS(R.string.settings_moods, R.string.settings_group_analysis_summary),
-    DEVICES(R.string.settings_group_devices, R.string.settings_group_device_summary),
+internal enum class SettingsPage(
+    @param:StringRes val title: Int,
+    @param:StringRes val summary: Int,
+    @param:DrawableRes val icon: Int,
+) {
+    LIBRARY(R.string.settings_group_library, R.string.settings_group_library_hint, R.drawable.ic_folder),
+    PLAYBACK(R.string.settings_playback, R.string.settings_low_power, R.drawable.ic_equalizer),
+    APPEARANCE(R.string.settings_appearance, R.string.settings_group_appearance_summary, R.drawable.ic_push_pin),
+    LYRICS(R.string.settings_lyrics, R.string.settings_group_online_summary, R.drawable.ic_lyrics),
+    COVERS(R.string.settings_covers, R.string.settings_group_online_summary, R.drawable.ic_image),
+    PREFERENCE(R.string.preference_title, R.string.preference_home_summary, R.drawable.ic_bolt),
+    ANALYSIS(R.string.settings_moods, R.string.settings_group_analysis_summary, R.drawable.ic_filter_list),
+    DEVICES(R.string.settings_group_devices, R.string.settings_group_device_summary, R.drawable.ic_refresh),
     // Saved destination alias for upgrades; never shown on the overview.
-    DATA(R.string.settings_group_devices, R.string.settings_group_device_summary),
-    ABOUT(R.string.settings_group_about, R.string.settings_group_about_summary),
+    DATA(R.string.settings_group_devices, R.string.settings_group_device_summary, R.drawable.ic_refresh),
+    ABOUT(R.string.settings_group_about, R.string.settings_group_about_summary, R.drawable.ic_info),
 }
 
 @Composable
@@ -97,8 +102,13 @@ private fun SettingsHomeGroup(
             Column {
                 pages.forEachIndexed { index, page ->
                     if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    SettingItem(stringResource(page.title), summary = summary(page), onClick = { onOpen(page) },
-                        modifier = Modifier.testTag("settings_group_${page.name.lowercase()}"))
+                    SettingItem(
+                        stringResource(page.title),
+                        summary = summary(page),
+                        icon = page.icon,
+                        onClick = { onOpen(page) },
+                        modifier = Modifier.testTag("settings_group_${page.name.lowercase()}"),
+                    )
                 }
             }
         }

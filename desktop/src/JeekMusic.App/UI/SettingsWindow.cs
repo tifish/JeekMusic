@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using JeekMusic.Core.Library;
@@ -52,20 +53,24 @@ public sealed class SettingsWindow : Window
     SettingsWindow(AppServices app, MainWindow main)
     {
         Title = L.T("设置");
-        Width = 860;
-        Height = 640;
-        MinWidth = 640;
-        MinHeight = 420;
+        Width = 880;
+        Height = 660;
+        MinWidth = 660;
+        MinHeight = 440;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        TransparencyLevelHint = [WindowTransparencyLevel.Mica];
         Icon = main.Icon;
         _ctx = new SettingsContext(app, this, main);
-        _list = new ListBox { Width = 180, Background = Brushes.Transparent, Margin = new Thickness(8) };
+        _list = new ListBox { Width = 196, Background = Brushes.Transparent, Margin = new Thickness(10, 12), Classes = { "settings-nav" } };
         foreach (var s in Sections.OrderBy(s => s.Order)) _list.Items.Add(s.Title);
         _content = new ContentControl();
         _list.SelectionChanged += (_, _) => Build();
+        var sidebar = new Border { BorderThickness = new Thickness(0, 0, 1, 0), Child = _list };
+        sidebar[!Border.BackgroundProperty] = new DynamicResourceExtension("SurfacePanelBrush");
+        sidebar[!Border.BorderBrushProperty] = new DynamicResourceExtension("SurfaceBorderSubtleBrush");
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        grid.Children.Add(_list);
-        var scroll = new ScrollViewer { Content = _content, Padding = new Thickness(16, 12, 24, 24) };
+        grid.Children.Add(sidebar);
+        var scroll = new ScrollViewer { Content = _content, Padding = new Thickness(24, 18, 28, 28) };
         Grid.SetColumn(scroll, 1);
         grid.Children.Add(scroll);
         Content = grid;
@@ -159,16 +164,21 @@ public sealed class SettingsWindow : Window
                     await c.App.Library.RemoveFolderAsync(f.Id);
                     Fill();
                 };
-                list.Children.Add(new Grid
+                var rowCard = new Border
                 {
-                    ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-                    Children =
+                    Classes = { "settings-card" }, Padding = new Thickness(12, 9),
+                    Child = new Grid
                     {
-                        new TextBlock { Text = f.Root.TrimEnd('\\') + (f.Available ? "" : L.T("（不可用）")), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
-                        Col(new TextBlock { Text = Text.Count(count), Opacity = 0.6, Margin = new Thickness(12, 0), VerticalAlignment = VerticalAlignment.Center }, 1),
-                        Col(remove, 2),
+                        ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                        Children =
+                        {
+                            new TextBlock { Text = f.Root.TrimEnd('\\') + (f.Available ? "" : L.T("（不可用）")), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+                            Col(new TextBlock { Text = Text.Count(count), Opacity = 0.62, Margin = new Thickness(12, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 12 }, 1),
+                            Col(remove, 2),
+                        },
                     },
-                });
+                };
+                list.Children.Add(rowCard);
             }
             if (list.Children.Count == 0) list.Children.Add(Note(L.T("还没有添加音乐文件夹。")));
         }

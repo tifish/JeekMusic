@@ -10,7 +10,11 @@ import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.filter.TagFilterRepository
 import com.tinyfish.jeekmusic.data.settings.TagFilter
 import com.tinyfish.jeekmusic.ui.components.FilterEmptyMessage
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.tinyfish.jeekmusic.ui.components.PlayShuffleBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -115,8 +119,16 @@ private fun EmptyLibrary() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(painterResource(R.drawable.ic_folder), contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.size(16.dp))
+        Box(
+            Modifier
+                .size(80.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(R.drawable.ic_folder), contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(Modifier.size(20.dp))
         Text(stringResource(R.string.empty_library_title), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.size(8.dp))
         Text(
@@ -126,7 +138,7 @@ private fun EmptyLibrary() {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.size(24.dp))
-        Button(onClick = addFolder, modifier = Modifier.testTag("add_folder")) {
+        Button(onClick = addFolder, shape = RoundedCornerShape(24.dp), modifier = Modifier.testTag("add_folder")) {
             Text(stringResource(R.string.action_add_folder))
         }
     }
@@ -135,13 +147,39 @@ private fun EmptyLibrary() {
 @Composable
 private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(R.drawable.ic_folder), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.width(16.dp))
-        Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-        Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(
+            Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painterResource(R.drawable.ic_folder),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(
+            painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        )
     }
 }
 
@@ -173,8 +211,10 @@ class FolderViewModel @AssistedInject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** 点击歌曲：当前文件夹的歌曲（不含子文件夹）作为队列（需求 F-5）。 */
-    fun play(index: Int) {
-        content.value?.tracks?.let { player.play(QueueSource.Folder(route.folderId, route.relativePath, recursive = false), route.title, it, index) }
+    fun play(index: Int, shuffle: Boolean = false) {
+        content.value?.tracks?.takeIf { it.isNotEmpty() }?.let {
+            player.play(QueueSource.Folder(route.folderId, route.relativePath, recursive = false), route.title, it, index, shuffle = shuffle)
+        }
     }
 
     /** 这个文件夹及子文件夹里的歌（按当前筛选），批量下载封面、歌词用。 */
@@ -244,9 +284,19 @@ fun FolderScreen(
                     viewModel.saveScroll(index, offset)
                 }
         }
-        val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + data.folders.size else -1 }
+        val hasPlayAction = data.tracks.isNotEmpty() || data.folders.isNotEmpty()
+        val headerOffset = if (hasPlayAction) 1 else 0
+        val currentRow = data.tracks.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + data.folders.size + headerOffset else -1 }
         Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("folder_content"), state = listState) {
+            if (hasPlayAction) {
+                item(key = "actions", contentType = "actions") {
+                    PlayShuffleBar(
+                        onPlayAll = { if (data.tracks.isNotEmpty()) viewModel.play(0) else viewModel.playAllRecursive(shuffle = false) },
+                        onShuffle = { if (data.tracks.isNotEmpty()) viewModel.play(0, shuffle = true) else viewModel.playAllRecursive(shuffle = true) },
+                    )
+                }
+            }
             items(data.folders, key = { "dir:" + it.relativePath }, contentType = { "folder" }) { node ->
                 FolderRow(
                     name = node.name,

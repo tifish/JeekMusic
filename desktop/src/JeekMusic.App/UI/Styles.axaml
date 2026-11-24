@@ -9,11 +9,35 @@
                 <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#FFF1D6" />
                 <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#FFE6B5" />
                 <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#A5650D" />
+                <SolidColorBrush x:Key="SurfacePanelBrush" Color="#F5F6F9" />
+                <SolidColorBrush x:Key="SurfaceCardBrush" Color="#F8F9FC" />
+                <SolidColorBrush x:Key="SurfaceCardHoverBrush" Color="#EEF1F6" />
+                <SolidColorBrush x:Key="SurfaceInputBrush" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="SurfaceInputHoverBrush" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="SurfaceBorderSubtleBrush" Color="#1A000000" />
+                <SolidColorBrush x:Key="SubtleBadgeBackgroundBrush" Color="#0F000000" />
+                <SolidColorBrush x:Key="SubtleHoverBrush" Color="#12000000" />
+                <SolidColorBrush x:Key="RowHoverBrush" Color="#0A000000" />
+                <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#EB1E2025" />
+                <SolidColorBrush x:Key="ToastForegroundBrush" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="SliderTrackBrush" Color="#24000000" />
             </ResourceDictionary>
             <ResourceDictionary x:Key="Dark">
                 <SolidColorBrush x:Key="CurrentTrackBackgroundBrush" Color="#3F321E" />
                 <SolidColorBrush x:Key="CurrentTrackHoveredBackgroundBrush" Color="#514027" />
                 <SolidColorBrush x:Key="CurrentTrackBorderBrush" Color="#DBA650" />
+                <SolidColorBrush x:Key="SurfacePanelBrush" Color="#1A1C21" />
+                <SolidColorBrush x:Key="SurfaceCardBrush" Color="#1F2228" />
+                <SolidColorBrush x:Key="SurfaceCardHoverBrush" Color="#2A2E37" />
+                <SolidColorBrush x:Key="SurfaceInputBrush" Color="#262930" />
+                <SolidColorBrush x:Key="SurfaceInputHoverBrush" Color="#2F343E" />
+                <SolidColorBrush x:Key="SurfaceBorderSubtleBrush" Color="#1FFFFFFF" />
+                <SolidColorBrush x:Key="SubtleBadgeBackgroundBrush" Color="#16FFFFFF" />
+                <SolidColorBrush x:Key="SubtleHoverBrush" Color="#18FFFFFF" />
+                <SolidColorBrush x:Key="RowHoverBrush" Color="#0FFFFFFF" />
+                <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#F02B303A" />
+                <SolidColorBrush x:Key="ToastForegroundBrush" Color="#F5F7FA" />
+                <SolidColorBrush x:Key="SliderTrackBrush" Color="#2EFFFFFF" />
             </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
         <SolidColorBrush x:Key="ArtistAccentBrush" Color="{DynamicResource SystemAccentColor}" />
@@ -37,7 +61,7 @@
             <ControlTemplate>
                 <Border Background="{TemplateBinding Background}">
                     <Border Width="1" HorizontalAlignment="Center" Margin="0,8"
-                            Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+                            Background="{DynamicResource SurfaceBorderSubtleBrush}" />
                 </Border>
             </ControlTemplate>
         </Setter>
@@ -49,11 +73,15 @@
         <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
     </Style>
 
+    <!-- 艺术家栏 -->
     <Style Selector="ListBox.artist-list > ListBoxItem">
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.artist-list > ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
     </Style>
     <Style Selector="ListBox.artist-list > ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
@@ -78,7 +106,6 @@
         <Setter Property="Opacity" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
     </Style>
-
     <Style Selector="TextBlock.artist-index.current">
         <Setter Property="Opacity" Value="1" />
         <Setter Property="FontWeight" Value="Bold" />
@@ -100,22 +127,186 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="9,7" />
         <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
-        <Setter Property="FontSize" Value="16" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="CornerRadius" Value="8" />
         <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+    </Style>
+    <Style Selector="Button.icon:disabled /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.icon:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Opacity" Value="0.32" />
     </Style>
     <Style Selector="Button.icon.large">
         <Setter Property="FontSize" Value="20" />
         <Setter Property="Padding" Value="12,10" />
     </Style>
+    <!-- 播放 / 暂停主控圆钮 -->
+    <Style Selector="Button.play-primary">
+        <Setter Property="Width" Value="38" />
+        <Setter Property="Height" Value="38" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="19" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.play-primary /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CornerRadius" Value="19" />
+    </Style>
+    <Style Selector="Button.play-primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight1}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.play-primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark1}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.play-primary.mini">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="Button.play-primary.mini /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
     <!-- 打开的开关按钮：主题色实心圆底、反色图标（同移动端 U-11：只改颜色看不出来） -->
     <Style Selector="ToggleButton.icon:checked /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
         <Setter Property="Foreground" Value="White" />
     </Style>
+
+    <!-- 胶囊操作按钮（播放全部 / 随机播放 / 筛选） -->
+    <Style Selector="Button.pill-accent">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="13,6" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.pill-accent /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.pill-accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight1}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.pill-subtle">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SubtleBadgeBackgroundBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.pill-subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+    </Style>
+
+    <!-- 顶栏筛选按钮 -->
+    <Style Selector="Button.filter-btn">
+        <Setter Property="Background" Value="{DynamicResource SubtleBadgeBackgroundBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.filter-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+    </Style>
+    <Style Selector="Button.filter-btn.active /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.filter-btn.active">
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- 顶栏圆角搜索框 -->
+    <Style Selector="TextBox.search-box">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Background" Value="{DynamicResource SurfaceInputBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBox.search-box:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource SurfaceInputHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+    </Style>
+    <Style Selector="TextBox.search-box:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource SurfaceInputHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+
+    <!-- 音频格式徽章 & 播放器链接 -->
+    <Style Selector="Button.format-badge">
+        <Setter Property="Background" Value="{DynamicResource SubtleBadgeBackgroundBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.format-badge:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+    </Style>
+    <Style Selector="Button.link-subtle">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Opacity" Value="0.72" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.link-subtle:pointerover">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
+    </Style>
+
+    <!-- 精致播放进度 / 音量滑块 -->
+    <Style Selector="Slider.player-slider:horizontal /template/ RepeatButton#PART_DecreaseButton">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="CornerRadius" Value="2,0,0,2" />
+    </Style>
+    <Style Selector="Slider.player-slider:horizontal /template/ RepeatButton#PART_IncreaseButton">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="CornerRadius" Value="0,2,2,0" />
+    </Style>
+    <Style Selector="Slider.player-slider /template/ Thumb">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="CornerRadius" Value="7" />
+    </Style>
+    <Style Selector="Slider.player-slider:pointerover /template/ Thumb">
+        <Setter Property="Width" Value="15" />
+        <Setter Property="Height" Value="15" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
     <Style Selector="TextBlock.glyph">
         <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
-        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontSize" Value="15" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.secondary">
@@ -136,10 +327,31 @@
     <Style Selector="DataGridColumnHeader">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Padding" Value="12,0,4,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        <Setter Property="Padding" Value="12,0,6,0" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+    </Style>
+    <Style Selector="DataGridColumnHeader /template/ Rectangle#VerticalSeparator">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="DataGridColumnHeader:pointerover">
+        <Setter Property="Background" Value="{DynamicResource RowHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
     </Style>
     <Style Selector="DataGridCell">
         <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="DataGridCell:current /template/ Rectangle#FocusVisual">
+        <Setter Property="Stroke" Value="{DynamicResource ArtistAccentBrush}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="DataGrid#Table DataGridRow:not(.current):not(:selected):pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource RowHoverBrush}" />
+        <Setter Property="Opacity" Value="1" />
     </Style>
     <!-- Paint the existing full-row layer, not the title cell. Selection retains its
          theme fill/opacity; the current-track outline also survives horizontal scroll. -->
@@ -171,8 +383,36 @@
     <Style Selector="TreeViewItem.droptarget">
         <Setter Property="Background" Value="{DynamicResource SystemAccentColorDark2}" />
     </Style>
-    <!-- 导航栏 -->
     <Style Selector="TreeViewItem">
         <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style Selector="TreeView#NavTree TreeViewItem /template/ Border#PART_LayoutRoot">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Margin" Value="4,1" />
+    </Style>
+
+    <!-- 设置与弹窗卡片 / 侧栏样式 -->
+    <Style Selector="ListBox.settings-nav > ListBoxItem">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12,9" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="FontSize" Value="13.5" />
+    </Style>
+    <Style Selector="ListBox.settings-nav > ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+    </Style>
+    <Style Selector="ListBox.settings-nav > ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ArtistAccentSubtleBrush}" />
+    </Style>
+    <Style Selector="ListBox.settings-nav > ListBoxItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ArtistAccentBrush}" />
+    </Style>
+    <Style Selector="Border.settings-card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="14,12" />
     </Style>
 </Styles>

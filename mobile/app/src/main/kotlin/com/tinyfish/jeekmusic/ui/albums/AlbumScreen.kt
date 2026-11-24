@@ -6,7 +6,11 @@ import com.tinyfish.jeekmusic.ui.components.SelectionBar
 import com.tinyfish.jeekmusic.ui.components.ListMoreButton
 import com.tinyfish.jeekmusic.ui.components.rememberListDownload
 import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import com.tinyfish.jeekmusic.ui.components.PlayShuffleBar
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -85,9 +89,9 @@ class AlbumViewModel @AssistedInject constructor(
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun play(index: Int) {
+    fun play(index: Int, shuffle: Boolean = false) {
         val title = info.value?.name.orEmpty()
-        tracks.value?.let { player.play(QueueSource.Album(albumKey), title, it, index) }
+        tracks.value?.takeIf { it.isNotEmpty() }?.let { player.play(QueueSource.Album(albumKey), title, it, index, shuffle = shuffle) }
     }
 }
 
@@ -133,10 +137,15 @@ fun AlbumScreen(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("album_tracks"), state = listState) {
                 item(key = "header") {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Artwork(MediaItemMapper.artworkUri(album.coverTrackId, large = true), 112.dp, cornerRadius = 12.dp)
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Artwork(
+                            MediaItemMapper.artworkUri(album.coverTrackId, large = true),
+                            120.dp,
+                            cornerRadius = 14.dp,
+                            modifier = Modifier.shadow(8.dp, RoundedCornerShape(14.dp), clip = false),
+                        )
                         Spacer(Modifier.width(16.dp))
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(album.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(
                                 album.artist.ifEmpty { stringResource(R.string.unknown_artist) },
@@ -151,6 +160,14 @@ fun AlbumScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+                if (list.isNotEmpty()) {
+                    item(key = "actions") {
+                        PlayShuffleBar(
+                            onPlayAll = { viewModel.play(0) },
+                            onShuffle = { viewModel.play(0, shuffle = true) },
+                        )
                     }
                 }
                 items(rows, key = { if (it is IndexedValue<*>) (it.value as TrackEntity).id else it }) { row ->

@@ -1,17 +1,12 @@
 package com.tinyfish.jeekmusic.ui.nowplaying
 
-import androidx.compose.foundation.systemGestureExclusion
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import com.tinyfish.jeekmusic.ui.components.formatDuration
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,29 +14,41 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tinyfish.jeekmusic.R
 import com.tinyfish.jeekmusic.ui.components.Artwork
+import com.tinyfish.jeekmusic.ui.components.formatDuration
 
 /**
- * 底部常驻迷你播放条（需求 T-7）：封面、标题、艺术家、上一首 / 播放暂停 / 下一首，点击展开播放页。
- * 调整进度（需求 T-7）：顶部的进度条有圆点标出当前位置，进度条所在的 28dp 高的区域内按下即跳到手指位置、
+ * 底部悬浮迷你播放条（需求 T-7）：封面、标题、艺术家、上一首 / 播放暂停 / 下一首，点击展开播放页。
+ * 调整进度（需求 T-7）：顶部的进度条有圆点标出当前位置，进度条所在的 24dp 高的区域内按下即跳到手指位置、
  * 拖动时圆点跟着手指；在播放条其他地方左右拖动则按距离相对调整。拖动时副标题显示目标时间，松手后才跳转。
  */
 @Composable
@@ -58,12 +65,22 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
 
     val currentProgress by rememberUpdatedState(progress)
 
-    Surface(tonalElevation = 3.dp, modifier = Modifier.testTag("mini_player")) {
-        // 整个播放条都能左右拖动，按拖动距离相对调整进度（拖满一个屏宽 = 整首歌）；点击仍然打开播放页
-        Column(
-            Modifier
-                .navigationBarsPadding()
-                .pointerInput(duration) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 6.dp,
+            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth().testTag("mini_player"),
+        ) {
+            // 整个播放条都能左右拖动，按拖动距离相对调整进度（拖满一个屏宽 = 整首歌）；点击仍然打开播放页
+            Column(
+                Modifier.pointerInput(duration) {
                     if (duration <= 0) return@pointerInput
                     detectHorizontalDragGestures(
                         onDragStart = { seek.dragging = currentProgress },
@@ -74,50 +91,76 @@ fun MiniPlayer(viewModel: PlayerViewModel, onExpand: () -> Unit) {
                         seek.dragging = ((seek.dragging ?: currentProgress) + dragAmount / size.width).coerceIn(0f, 1f)
                     }
                 },
-        ) {
-            SeekStrip(
-                progress = progress,
-                dragging = dragFraction != null,
-                enabled = duration > 0,
-                onDrag = { seek.dragging = it },
-                onRelease = { seek.release()?.let { viewModel.seekTo((it * duration).toLong()) } },
-                onCancel = { seek.cancel() },
-            )
-            Row(
-                Modifier.fillMaxWidth().clickable(onClick = onExpand).padding(start = 12.dp, end = 4.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(nowPlaying.artworkUri, 44.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(nowPlaying.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        dragFraction?.let { "${formatDuration((it * duration).toLong())} / ${formatDuration(duration)}" }
-                            ?: nowPlaying.artist ?: stringResource(R.string.unknown_artist),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = viewModel::previous) {
-                    Icon(painterResource(R.drawable.ic_skip_previous), contentDescription = stringResource(R.string.action_previous))
-                }
-                IconButton(onClick = viewModel::togglePlayPause, modifier = Modifier.testTag("mini_play_pause")) {
-                    Icon(
-                        painterResource(if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
-                        contentDescription = stringResource(if (state.isPlaying) R.string.action_pause else R.string.action_play),
-                    )
-                }
-                IconButton(onClick = viewModel::next) {
-                    Icon(painterResource(R.drawable.ic_skip_next), contentDescription = stringResource(R.string.action_next))
+                SeekStrip(
+                    progress = progress,
+                    dragging = dragFraction != null,
+                    enabled = duration > 0,
+                    onDrag = { seek.dragging = it },
+                    onRelease = { seek.release()?.let { viewModel.seekTo((it * duration).toLong()) } },
+                    onCancel = { seek.cancel() },
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExpand)
+                        .padding(start = 12.dp, end = 8.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Artwork(nowPlaying.artworkUri, 44.dp, cornerRadius = 10.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            nowPlaying.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            dragFraction?.let { "${formatDuration((it * duration).toLong())} / ${formatDuration(duration)}" }
+                                ?: nowPlaying.artist ?: stringResource(R.string.unknown_artist),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = if (dragFraction != null) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
+                            color = if (dragFraction != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = viewModel::previous, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            painterResource(R.drawable.ic_skip_previous),
+                            contentDescription = stringResource(R.string.action_previous),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(2.dp))
+                    FilledTonalIconButton(
+                        onClick = viewModel::togglePlayPause,
+                        modifier = Modifier.size(40.dp).testTag("mini_play_pause"),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
+                        Icon(
+                            painterResource(if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                            contentDescription = stringResource(if (state.isPlaying) R.string.action_pause else R.string.action_play),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(2.dp))
+                    IconButton(onClick = viewModel::next, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            painterResource(R.drawable.ic_skip_next),
+                            contentDescription = stringResource(R.string.action_next),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
         }
     }
 }
-
-private val SeekTouchHeight = 8.dp
 
 /**
  * 迷你播放条顶部的进度条：圆点标出当前位置；整条 [StripHeight] 高的区域都是热区，
@@ -135,7 +178,7 @@ private fun SeekStrip(
     onCancel: () -> Unit,
 ) {
     val active = MaterialTheme.colorScheme.primary
-    val inactive = active.copy(alpha = 0.25f)
+    val inactive = active.copy(alpha = 0.2f)
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnRelease by rememberUpdatedState(onRelease)
     val currentOnCancel by rememberUpdatedState(onCancel)
@@ -143,7 +186,7 @@ private fun SeekStrip(
         Modifier
             .fillMaxWidth()
             .height(StripHeight)
-            // 从屏幕左右边缘开始拖动时，不触发系统的"返回"手势（只排除这 28dp 高的一条，系统上限是每边 200dp）
+            // 从屏幕左右边缘开始拖动时，不触发系统的"返回"手势（只排除这 24dp 高的一条，系统上限是每边 200dp）
             .systemGestureExclusion()
             .testTag("mini_seek")
             .pointerInput(enabled) {
@@ -173,15 +216,14 @@ private fun SeekStrip(
             .drawBehind {
                 val inset = StripInset.toPx()
                 val y = size.height / 2
-                val track = (if (dragging) 6.dp else 4.dp).toPx()
+                val track = (if (dragging) 5.dp else 3.dp).toPx()
                 val x = inset + (size.width - 2 * inset) * progress
                 drawLine(inactive, Offset(inset, y), Offset(size.width - inset, y), strokeWidth = track, cap = StrokeCap.Round)
                 drawLine(active, Offset(inset, y), Offset(x, y), strokeWidth = track, cap = StrokeCap.Round)
-                // 当前位置：明显的圆点，拖动时放大
-                drawCircle(active, radius = (if (dragging) 9.dp else 6.dp).toPx(), center = Offset(x, y))
+                drawCircle(active, radius = (if (dragging) 7.5.dp else 4.5.dp).toPx(), center = Offset(x, y))
             },
     )
 }
 
-private val StripHeight = 28.dp
-private val StripInset = 12.dp
+private val StripHeight = 24.dp
+private val StripInset = 14.dp

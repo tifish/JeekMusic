@@ -23,10 +23,16 @@ public static class QueueFlyout
         var flyout = new Flyout { Placement = PlacementMode.TopEdgeAlignedRight, ShowMode = FlyoutShowMode.Standard };
         var list = new StackPanel { Spacing = 0 };
         var scroll = new ScrollViewer { Content = list, Width = 420, MaxHeight = 560 };
-        var header = new TextBlock { FontSize = 16, FontWeight = FontWeight.SemiBold, Margin = new Thickness(8, 4, 8, 8) };
-        var clear = new Button { Content = L.T("清空队列"), HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(10, 2) };
+        var header = new TextBlock { FontSize = 16, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        var clear = new Button { Content = L.T("清空队列"), Classes = { "pill-subtle" }, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 4), FontSize = 12 };
         clear.Click += (_, _) => { app.Player.Queue.Clear(); app.Player.Pause(); };
-        flyout.Content = new StackPanel { Children = { new Grid { Children = { header, clear } }, scroll } };
+        var topBar = new Border
+        {
+            Padding = new Thickness(10, 6, 10, 10), BorderThickness = new Thickness(0, 0, 0, 1), Margin = new Thickness(0, 0, 0, 4),
+            Child = new Grid { Children = { header, clear } },
+        };
+        topBar[!Border.BorderBrushProperty] = new DynamicResourceExtension("SurfaceBorderSubtleBrush");
+        flyout.Content = new StackPanel { Children = { topBar, scroll } };
 
         Control? currentRow = null;
         TextBlock? currentTitle = null;
@@ -56,27 +62,32 @@ public static class QueueFlyout
             }
         }
 
-        Control Section(string text) => new TextBlock { Text = text, Opacity = 0.6, FontSize = 12, Margin = new Thickness(8, 10, 8, 4) };
+        Control Section(string text)
+        {
+            var tb = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold, FontSize = 11.5, Margin = new Thickness(10, 12, 10, 4) };
+            tb[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("ArtistAccentBrush");
+            return tb;
+        }
 
         Control Row(int index, Track? track, bool current, bool played)
         {
-            var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal };
+            var title = new TextBlock { Text = track?.Title ?? L.T("（不可用）"), TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal, FontSize = 13.5 };
             ToolTip.SetTip(title, title.Text);
             if (current)
             {
                 currentTitle = title;
                 AutomationProperties.SetHelpText(title, Text.PlaybackStatus(app.Player.IsPlaying));
             }
-            var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.6, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
-            var remove = new Button { Content = Icons.Close, Classes = { "icon" }, FontSize = 10, Padding = new Thickness(6) };
+            var artist = new TextBlock { Text = track is null ? "" : Text.Artist(track), Opacity = 0.62, FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis };
+            var remove = new Button { Content = Icons.Close, Classes = { "icon" }, FontSize = 10, Padding = new Thickness(6), Opacity = 0.7 };
             remove.Click += (_, _) => app.Player.Queue.RemoveAt(index);
-            var handle = new TextBlock { Text = "", Classes = { "glyph" }, Opacity = 0.5, Margin = new Thickness(6, 0), Cursor = new Cursor(StandardCursorType.SizeNorthSouth) };
+            var handle = new TextBlock { Text = "", Classes = { "glyph" }, Opacity = 0.45, Margin = new Thickness(6, 0, 8, 0), Cursor = new Cursor(StandardCursorType.SizeNorthSouth) };
             var grid = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("3,*,Auto,Auto"), Background = Brushes.Transparent,
-                Opacity = played ? 0.55 : 1, Tag = index,
+                Opacity = played ? 0.52 : 1, Tag = index,
             };
-            var text = new StackPanel { Margin = new Thickness(8, 4), Children = { title, artist } };
+            var text = new StackPanel { Margin = new Thickness(10, 6), Spacing = 1, Cursor = new Cursor(StandardCursorType.Hand), Children = { title, artist } };
             if (current)
             {
                 grid[!Panel.BackgroundProperty] = new DynamicResourceExtension("CurrentTrackBackgroundBrush");

@@ -9,13 +9,23 @@ import com.tinyfish.jeekmusic.ui.components.verticalScrollbar
 import com.tinyfish.jeekmusic.data.library.QueueSourceRepository
 import com.tinyfish.jeekmusic.playback.QueueSource
 import kotlinx.coroutines.flow.combine
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -120,30 +130,53 @@ fun SearchScreen(onBack: () -> Unit, onSourceChanged: (String, String) -> Unit =
     }
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconButton(onClick = onBack) {
                 Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
             }
-            TextField(
-                value = query,
-                onValueChange = ::changeQuery,
-                placeholder = { Text(stringResource(R.string.search_hint)) },
-                singleLine = true,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                ),
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { changeQuery("") }) {
-                            Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.cancel))
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.weight(1f),
+            ) {
+                TextField(
+                    value = query,
+                    onValueChange = ::changeQuery,
+                    placeholder = { Text(stringResource(R.string.search_hint), maxLines = 1) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    leadingIcon = {
+                        Icon(
+                            painterResource(R.drawable.ic_search),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { changeQuery("") }) {
+                                Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.cancel))
+                            }
                         }
-                    }
-                },
-                modifier = Modifier.weight(1f).focusRequester(focus).testTag("search_field"),
-            )
+                    },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("search_field"),
+                )
+            }
         }
-        val data = results ?: return@Column
+        val data = results
+        if (data == null) {
+            CenteredMessage(stringResource(R.string.search_empty_prompt))
+            return@Column
+        }
         if (selection.active) SelectionBar(selection, tracks = { data.tracks })
         if (data.artists.isEmpty() && data.tracks.isEmpty()) {
             CenteredMessage(stringResource(R.string.search_no_results))
@@ -160,12 +193,30 @@ fun SearchScreen(onBack: () -> Unit, onSourceChanged: (String, String) -> Unit =
                 item { SectionHeader(stringResource(R.string.search_artists)) }
                 items(data.artists, key = { "a:" + it.nameKey }) { artist ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { navigator.openArtist(artist.nameKey) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 1.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { navigator.openArtist(artist.nameKey) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(painterResource(R.drawable.ic_person), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text(artist.name, Modifier.weight(1f).padding(start = 16.dp))
-                        Text(songCount(artist.trackCount), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                artist.name.take(1).uppercase(),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(artist.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(songCount(artist.trackCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }

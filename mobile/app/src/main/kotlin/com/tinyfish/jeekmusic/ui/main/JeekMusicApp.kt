@@ -53,6 +53,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TabRowDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.activity.compose.ReportDrawnWhen
@@ -275,7 +277,17 @@ private fun MainScreen(viewModel: MainViewModel) {
                 val currentKey = tabs.getOrNull(pagerState.currentPage)?.key
                 PrimaryScrollableTabRow(
                     selectedTabIndex = shown.indexOfFirst { it.key == currentKey }.coerceAtLeast(0),
-                    edgePadding = 8.dp,
+                    edgePadding = 12.dp,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    indicator = {
+                        TabRowDefaults.PrimaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(shown.indexOfFirst { it.key == currentKey }.coerceAtLeast(0), matchContentSize = true),
+                            width = Dp.Unspecified,
+                            height = 3.dp,
+                            shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp),
+                        )
+                    },
+                    divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)) },
                 ) {
                     shown.forEachIndexed { index, tab ->
                         key(tab.key) {
@@ -333,8 +345,18 @@ private fun MainScreen(viewModel: MainViewModel) {
                 }
                 val conflictCount by viewModel.lan.conflictCount.collectAsStateWithLifecycle()
                 val pendingConflictCount by viewModel.lan.pendingConflictCount.collectAsStateWithLifecycle()
-                if(conflictCount>0) TextButton(onClick={ viewModel.open(TopRoute.SyncConflicts) },modifier=Modifier.fillMaxWidth().testTag("sync_conflict_notice")) {
-                    SyncConflictSummary(conflictCount,pendingConflictCount)
+                if (conflictCount > 0) {
+                    Surface(
+                        onClick = { viewModel.open(TopRoute.SyncConflicts) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).testTag("sync_conflict_notice"),
+                    ) {
+                        Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            SyncConflictSummary(conflictCount, pendingConflictCount)
+                        }
+                    }
                 }
                 // 只组合当前页，避免固定标签很多时拖慢启动和滑动（docs/design.md §5.1）
                 HorizontalPager(state = pagerState, beyondViewportPageCount = 0, key = { tabs.getOrNull(it)?.key ?: it }) { page ->
@@ -459,19 +481,21 @@ private fun TagFilterButton(viewModel: MainViewModel) {
     val reversed by viewModel.sortReversed.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     val active = filter.isActive || sort != SongSort.MODIFIED || reversed
-    // 有筛选或排序时整个按钮用主题色填充（需求 U-11）
+    // 有筛选或排序时整个按钮用主题色填充（需求 U-11）；平时用柔和胶囊底色提升辨识度
+    val containerColor = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
     val color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         Row(
             Modifier
+                .padding(start = 6.dp)
                 .clip(CircleShape)
-                .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
+                .background(containerColor)
                 .clickable { open = true }
                 .testTag("top_filter")
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color)
+            Icon(painterResource(R.drawable.ic_filter_list), contentDescription = stringResource(R.string.action_filter), tint = color, modifier = Modifier.size(20.dp))
             if (active) {
                 // 比如"非运动·纯音乐·按歌名"；放不下时末尾显示省略号，连一个字都放不下就只显示图标
                 val label = listOfNotNull(filterLabel(filter).takeIf { filter.isActive }, (sortLabel(sort) + if (reversed) " ↕" else "").takeIf { sort != SongSort.MODIFIED || reversed })
@@ -485,7 +509,7 @@ private fun TagFilterButton(viewModel: MainViewModel) {
                             val placeable = measurable.measure(constraints)
                             layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
                         }
-                        .padding(start = 2.dp),
+                        .padding(start = 4.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = color,
                     maxLines = 1,

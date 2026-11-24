@@ -27,10 +27,11 @@ internal sealed class SmartTagDialog : Window
         MaxHeight = 720;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var panel = new StackPanel { Spacing = 16 };
+        var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(new TextBlock
         {
             Text = targets.Length == 1 ? targets[0].Title : L.F($"已选择 {targets.Length} 首歌曲"),
+            FontSize = 16, FontWeight = FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap, MaxHeight = 52, TextTrimming = TextTrimming.CharacterEllipsis,
         });
         var apply = new Button { Name = "ApplyTags", Content = L.T("应用"), IsDefault = true, IsEnabled = false, MinWidth = 80,
@@ -72,7 +73,8 @@ internal sealed class SmartTagDialog : Window
             Add(L.T("保持不变"), "Keep", true, null);
             foreach (var tag in Core.Analysis.Tags.Of(dimension)) Add(Text.TagName(tag.ToString()), tag.ToString(), false, tag);
             Add(L.T("恢复自动"), "Auto", false, null);
-            group.Children.Add(options); panel.Children.Add(group);
+            group.Children.Add(options);
+            panel.Children.Add(new Border { Classes = { "settings-card" }, Child = group });
         }
         var error = new TextBlock { Name = "TagSaveError", TextWrapping = TextWrapping.Wrap, IsVisible = false };
         var footer = new StackPanel { Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { error,

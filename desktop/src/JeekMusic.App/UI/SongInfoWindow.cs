@@ -40,20 +40,30 @@ public static class SongInfoWindow
         for (var i = 0; i < rows.Count; i++)
         {
             grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            var label = new TextBlock { Text = rows[i].Item1, Opacity = 0.65, Margin = new Thickness(0, 3, 16, 3) };
-            var value = new SelectableTextBlock { Text = rows[i].Item2, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3) };
+            var label = new TextBlock { Text = rows[i].Item1, Opacity = 0.62, FontSize = 12.5, Margin = new Thickness(0, 5, 18, 5), VerticalAlignment = VerticalAlignment.Top };
+            var value = new SelectableTextBlock { Text = rows[i].Item2, FontSize = 13, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 5) };
             Grid.SetRow(label, i);
             Grid.SetRow(value, i);
             Grid.SetColumn(value, 1);
             grid.Children.Add(label);
             grid.Children.Add(value);
         }
-        var close = new Button { Content = L.T("关闭"), IsCancel = true, IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0), MinWidth = 80 };
+        var header = new StackPanel
+        {
+            Spacing = 2, Margin = new Thickness(0, 0, 0, 12),
+            Children =
+            {
+                new TextBlock { Text = t.Title, FontSize = 18, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = Text.Artist(t), Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis },
+            },
+        };
+        var card = new Border { Classes = { "settings-card" }, Child = grid };
+        var close = new Button { Content = L.T("关闭"), Classes = { "pill-subtle" }, IsCancel = true, IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0), MinWidth = 88, HorizontalContentAlignment = HorizontalAlignment.Center };
         var w = new Window
         {
-            Title = L.T("歌曲信息"), Width = 560, SizeToContent = SizeToContent.Height, MaxHeight = 760, ShowInTaskbar = false,
+            Title = L.T("歌曲信息"), Width = 580, SizeToContent = SizeToContent.Height, MaxHeight = 760, ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new ScrollViewer { Content = new StackPanel { Margin = new Thickness(20), Children = { grid, close } } },
+            Content = new ScrollViewer { Content = new StackPanel { Margin = new Thickness(22), Children = { header, card, close } } },
         };
         close.Click += (_, _) => w.Close();
         await w.ShowDialog(owner);

@@ -59,6 +59,7 @@ public sealed partial class PlayerViewModel : ObservableObject
     public string Title => Track?.Title ?? "Jeek Music";
     public string Artist => Track is { } t ? Text.Artist(t) : "";
     public string Album => Track?.Album ?? "";
+    public bool HasArtistAndAlbum => !string.IsNullOrEmpty(Artist) && !string.IsNullOrEmpty(Album);
     public string ArtistAlbum => Track is { } t ? (t.Album is { Length: > 0 } a ? $"{Text.Artist(t)} — {a}" : Text.Artist(t)) : "";
 
     [ObservableProperty] private Bitmap? _cover;
@@ -206,6 +207,7 @@ public sealed partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Artist));
         OnPropertyChanged(nameof(Album));
+        OnPropertyChanged(nameof(HasArtistAndAlbum));
         OnPropertyChanged(nameof(ArtistAlbum));
         OnPropertyChanged(nameof(FormatText));
         OnPropertyChanged(nameof(OutputModeTip));

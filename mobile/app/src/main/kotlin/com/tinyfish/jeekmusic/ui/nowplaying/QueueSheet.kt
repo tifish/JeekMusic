@@ -10,6 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -78,18 +84,34 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxHeight(0.85f)) {
-            Text(
-                stringResource(R.string.queue_title) + "  " + stringResource(R.string.queue_count, state.currentIndex + 1, state.queue.size),
-                Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    stringResource(R.string.queue_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ) {
+                    Text(
+                        stringResource(R.string.queue_count, state.currentIndex + 1, state.queue.size),
+                        Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
             LazyColumn(state = listState, modifier = Modifier.verticalScrollbar(listState).testTag("queue_list")) {
                 itemsIndexed(items, key = { _, item -> item.uid }) { index, item ->
                     if (index == firstManual || index == firstSource) {
                         Text(
                             if (index == firstManual) stringResource(R.string.queue_section_manual) else sourceHeader,
-                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp),
-                            style = MaterialTheme.typography.labelLarge,
+                            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -97,12 +119,19 @@ fun QueueSheet(viewModel: PlayerViewModel, state: PlayerUiState, onDismiss: () -
                     }
                     ReorderableItem(reorderState, key = item.uid) { isDragging ->
                         val current = item.uid == state.queue.getOrNull(state.currentIndex)?.uid
-                        Surface(tonalElevation = if (isDragging) 6.dp else 0.dp) {
+                        val rowShape = RoundedCornerShape(14.dp)
+                        Surface(
+                            tonalElevation = if (isDragging) 6.dp else 0.dp,
+                            shape = rowShape,
+                            color = Color.Transparent,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp),
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth()
+                                    .clip(rowShape)
                                     .background(if (current) currentRowColor() else Color.Transparent)
                                     .clickable { viewModel.skipTo(state.queue.indexOfFirst { it.uid == item.uid }) }
-                                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                    .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(

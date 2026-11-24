@@ -41,6 +41,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Arrangement
+import com.tinyfish.jeekmusic.ui.components.PlayShuffleBar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -158,23 +161,37 @@ fun ArtistListScreen(
 @Composable
 private fun ArtistRow(artist: ArtistEntity, onClick: () -> Unit) {
     val name = artistName(artist)
+    val paletteIndex = (artist.nameKey.hashCode() and 0x7fffffff) % 3
+    val (avatarBg, avatarFg) = when (paletteIndex) {
+        0 -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+        1 -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+    }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 32.dp, top = 8.dp, bottom = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 28.dp, top = 1.dp, bottom = 1.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+            Modifier.size(42.dp).clip(CircleShape).background(avatarBg),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 name.take(1).uppercase(),
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = avatarFg,
                 style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
             )
         }
-        Spacer(Modifier.width(16.dp))
-        Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-        Text(songCount(artist.trackCount), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            Text(songCount(artist.trackCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -238,9 +255,15 @@ private fun LetterIndex(letters: List<String>, listState: LazyListState, headerI
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // 每个字母占相同高度，和 touch() 中按高度均分的换算一致，气泡也能对准字母
-            letters.forEach {
+            letters.forEachIndexed { index, letter ->
+                val isCurrent = index == shown
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(it, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        letter,
+                        fontSize = 10.5.sp,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    )
                 }
             }
         }
@@ -316,8 +339,8 @@ class ArtistDetailViewModel @AssistedInject constructor(
     val currentTrackId: StateFlow<Long?> = player.state.map { it.nowPlaying?.trackId }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun play(index: Int, title: String) {
-        tracks.value?.let { player.play(QueueSource.Artist(nameKey), title, it, index) }
+    fun play(index: Int, title: String, shuffle: Boolean = false) {
+        tracks.value?.takeIf { it.isNotEmpty() }?.let { player.play(QueueSource.Artist(nameKey), title, it, index, shuffle = shuffle) }
     }
 }
 
@@ -375,9 +398,18 @@ fun ArtistDetailScreen(
             )
         }
         val data = tracks ?: return@Column
-        val currentRow = data.indexOfFirst { it.id == currentTrackId }
+        val headerOffset = if (data.isNotEmpty()) 1 else 0
+        val currentRow = data.indexOfFirst { it.id == currentTrackId }.let { if (it >= 0) it + headerOffset else -1 }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().verticalScrollbar(listState, draggable = true).testTag("artist_tracks"), state = listState) {
+                if (data.isNotEmpty()) {
+                    item(key = "actions", contentType = "actions") {
+                        PlayShuffleBar(
+                            onPlayAll = { viewModel.play(0, name) },
+                            onShuffle = { viewModel.play(0, name, shuffle = true) },
+                        )
+                    }
+                }
                 itemsIndexed(data, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
                     TrackRow(
                         track = track,
